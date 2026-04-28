@@ -1,0 +1,4 @@
+provider: github
+owner: mafatah
+repo: time-flow-admin
+updaterCacheDirName: timeflow-updater 

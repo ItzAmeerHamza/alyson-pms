@@ -1,0 +1,188 @@
+{
+  "name": "time-flow-desktop-agent",
+  "version": "1.0.182",
+  "description": "Alyson Time Doctor Agent - Employee time tracking and productivity monitoring",
+  "main": "src/main.js",
+  "author": "Ebdaa Digital Technology",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mafatah/time-flow-admin.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "electron": "electron .",
+    "generate:icons": "node scripts/generate-icons.mjs",
+    "setup-python": "bash scripts/setup-python-deps.sh",
+    "bundle-python": "bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1",
+    "bundle-python-windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-python-windows.ps1",
+    "prebuild": "node scripts/setup-dist.js && node generate-env-config.js --build && (bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1)",
+    "prebuild:mac": "node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/build-swift-helper.sh",
+    "prebuild:win": "node generate-env-config.js --build && powershell -ExecutionPolicy Bypass -File scripts/bundle-python-windows.ps1",
+    "build": "npm run prebuild && electron-builder",
+    "postbuild": "node ../scripts/cleanup-electron-build.cjs",
+    "build:mac": "npm run prebuild:mac && electron-builder --mac --publish never",
+    "build:dmg": "npm run prebuild:mac && electron-builder --mac dmg --publish never",
+    "build:win": "node generate-env-config.js --build && electron-builder --win --config.npmRebuild=false",
+    "clean": "rm -rf dist/ build/",
+    "test-mac": "electron test-mac-permissions.js",
+    "test-screenshot": "node test-screenshot.js",
+    "postinstall": "electron-builder install-app-deps && bash scripts/setup-python-deps.sh"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
+    "active-win": "^8.2.1",
+    "axios": "^1.13.2",
+    "dotenv": "^16.6.1",
+    "electron-updater": "^6.6.2",
+    "keytar": "^7.9.0",
+    "node-cron": "^4.2.1",
+    "screenshot-desktop": "^1.14.0"
+  },
+  "devDependencies": {
+    "@mapbox/node-pre-gyp": "^2.0.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^26.8.1",
+    "electron-rebuild": "^3.2.9",
+    "node-gyp": "^11.5.0",
+    "sharp": "^0.34.5"
+  },
+  "build": {
+    "appId": "com.ebdaa.work-time-agent",
+    "productName": "Alyson Time Doctor",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "config/**/*",
+      "renderer/**/*",
+      "python-libs/**/*",
+      "python-windows/**/*",
+      "load-config.js",
+      "env-config.js",
+      "config.json",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "helpers",
+        "to": "helpers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "python-windows",
+        "to": "python-windows",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "src/**/*.py",
+      "src/platform/**/*",
+      "python-windows/**/*",
+      "node_modules/active-win/**/*",
+      "node_modules/keytar/**/*",
+      "node_modules/screenshot-desktop/**/*"
+    ],
+    "afterPack": "scripts/after-pack.js",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.png",
+      "identity": "Ebdaa Digital Technology (6GW49LK9V9)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
+      "notarize": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "NSCameraUsageDescription": "Alyson Time Doctor needs camera access for screenshot monitoring",
+        "NSMicrophoneUsageDescription": "Alyson Time Doctor needs microphone access for activity detection",
+        "NSScreenCaptureDescription": "Alyson Time Doctor needs screen recording permission for productivity monitoring",
+        "NSAccessibilityUsageDescription": "Alyson Time Doctor needs accessibility permission for activity monitoring"
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "allowElevation": true,
+      "perMachine": false,
+      "include": "installer.nsh"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    },
+    "dmg": {
+      "title": "Install Alyson Time Doctor v${version}",
+      "icon": "assets/icon.png",
+      "background": null,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "mafatah",
+      "repo": "time-flow-admin",
+      "releaseType": "release"
+    }
+  }
+}

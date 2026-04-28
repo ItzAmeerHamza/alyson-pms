@@ -1,0 +1,32 @@
+# Environment variables - NEVER commit these!
+.env
+.env.local
+.env.development
+.env.production
+
+# Node modules
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+logs/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+tmp/
+temp/
+
+# Bundled Python (generated at build time by bundle-python-*.sh)
+python-macos/
+python-windows/
+python-libs/
+dist

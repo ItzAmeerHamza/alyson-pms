@@ -1,0 +1,113 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Build outputs (will be rebuilt on Railway)
+backend/dist/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+backend/.env
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation and non-essential files
+*.md
+ADMIN_SCREENS_VERIFICATION.md
+AI_SCREENSHOT_ANALYSIS_SOLUTION.md
+APP_URL_TRACKING_FIXES_SUMMARY.md
+AUTO_UPDATE_FIX_v1.0.26.md
+AUTO_UPDATE_GUIDE.md
+AUTOMATED_EMAIL_REPORTS.md
+BACKEND_DEPLOYMENT_GUIDE.md
+BROWSER_PERFORMANCE_FIXES.md
+COMPLETE_CROSS_PLATFORM_AUDIT.md
+COMPLETE_RELEASE_GUIDE.md
+COMPREHENSIVE_DEBUG_CONSOLE_v2.0.md
+COMPREHENSIVE_TEST_CASES.md
+CRITICAL_FIXES_SUMMARY.md
+CRITICAL_MEMORY_CRASH_FIX_v1.0.32.md
+CROSS_PLATFORM_ACTIVITY_FIXES.md
+CROSS_PLATFORM_INPUT_DETECTION.md
+CROSS_PLATFORM_URL_DETECTION_ANALYSIS.md
+DASHBOARD_ZEROS_FIX_GUIDE.md
+DATABASE_FIXES_SUMMARY.md
+DEMO_AUTOMATED_REPORTS.md
+DEPLOYMENT.md
+DESKTOP_AGENT_GUIDE.md
+DESKTOP_APP_SETUP.md
+DESKTOP_LAPTOP_CLOSURE_FIX.md
+DETAILED_LOGGING_SUMMARY.md
+DMG_BUILD_INSTRUCTIONS.md
+DMG_URL_CAPTURE_FIX.md
+EMAIL_REPORTS_QUICK_FIX_GUIDE.md
+EMAIL_REPORTS_SETUP_GUIDE.md
+EMAIL_SETUP_GUIDE.md
+ENHANCED_DEBUG_CONSOLE_v1.0.32.md
+ENHANCED_IDLE_DETECTION_SUMMARY.md
+ENHANCED_URL_DETECTION_SUMMARY.md
+FINAL_EMAIL_SETUP_STEPS.md
+FINAL_VERIFICATION_SUMMARY.md
+RAILWAY_AI_AUTOMATION_SETUP.md
+AI_ANALYSIS_ALL_SCREENSHOTS_SUMMARY.md
+
+# Test files
+*.test.*
+*.spec.*
+test/
+tests/
+__tests__/
+
+# Build scripts and configs not needed in production
+*.config.js
+*.config.ts
+vitest.config.*
+eslint.config.*
+
+# Desktop app files
+desktop-agent/
+public/downloads/
+releases/
+local-builds/
+
+# Scripts directory (contains local development scripts)
+scripts/
+
+# Development files
+*.cjs
+activity_monitor_test.*
+debug-*
+check-*
+apply-*
+create-*
+fix-*
+emergency-*
+final-*
+comprehensive-*
+test-*
+trigger-*
+
+# Database exports
+*.json
+database-export-*
+
+# Temp files
+*.tmp
+*.temp 

@@ -1,0 +1,32 @@
+# Desktop agent build artifacts
+desktop-agent/dist/
+desktop-agent/build/
+desktop-agent/node_modules/
+desktop-agent/python-libs/
+desktop-agent/python-windows/
+
+# Backend
+backend/dist/
+backend/node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+*.dmg
+*.exe
+*.AppImage
+*.zip
+*.blockmap
+*.tar.gz
+*.tgz
+
+# Large files
+public/downloads/
+releases/
+local-builds/
+
+# Misc
+.git/
+node_modules/
+*.log

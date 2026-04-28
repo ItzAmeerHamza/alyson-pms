@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["DOM", "DOM.Iterable", "WebWorker", "ES2020"],
+    "types": ["vite/client"],
+    "typeRoots": ["./types", "./node_modules/@types"],
+    "jsx": "react-jsx",
+    "module": "es2020",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src", "src/global.d.ts"]
+}

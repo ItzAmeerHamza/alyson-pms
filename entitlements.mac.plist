@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Basic entitlements for execution -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    
+    <!-- Hardware access permissions -->
+    <key>com.apple.security.device.microphone</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.device.screen-recording</key>
+    <true/>
+    <key>com.apple.security.personal-information.screen-capture</key>
+    <true/>
+    
+    <!-- Network access -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    
+    <!-- File system access -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+    
+    <!-- AppleScript and automation permissions -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    
+    <!-- Browser scripting targets for URL detection -->
+    <key>com.apple.security.scripting-targets</key>
+    <dict>
+        <key>com.apple.systemevents</key>
+        <array>
+            <string>com.apple.systemevents.appleevents</string>
+        </array>
+        <key>com.google.Chrome</key>
+        <array>
+            <string>com.google.Chrome.appleevents</string>
+        </array>
+        <key>com.apple.Safari</key>
+        <array>
+            <string>com.apple.Safari.appleevents</string>
+        </array>
+        <key>com.microsoft.edgemac</key>
+        <array>
+            <string>com.microsoft.edgemac.appleevents</string>
+        </array>
+        <key>org.mozilla.firefox</key>
+        <array>
+            <string>org.mozilla.firefox.appleevents</string>
+        </array>
+        <key>company.thebrowser.Browser</key>
+        <array>
+            <string>company.thebrowser.Browser.appleevents</string>
+        </array>
+    </dict>
+    
+    <!-- Disable app sandbox for full functionality -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    
+    <!-- Additional permissions for comprehensive access -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+    <key>com.apple.security.personal-information.addressbook</key>
+    <true/>
+    <key>com.apple.security.personal-information.photos-library</key>
+    <true/>
+</dict>
+</plist>

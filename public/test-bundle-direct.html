@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Bundle Test</title>
+</head>
+<body>
+    <h1>Direct Bundle Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testBundles() {
+            const results = document.getElementById('results');
+            
+            const bundlePaths = [
+                '/assets/index-Dg4k3RGd.js',
+                '/assets/index-wvEYJeXC.js',
+                '/assets/index.js'
+            ];
+            
+            for (const path of bundlePaths) {
+                try {
+                    console.log(`Testing: ${path}`);
+                    const response = await fetch(path);
+                    const text = await response.text();
+                    
+                    const div = document.createElement('div');
+                    div.style.margin = '20px 0';
+                    div.style.padding = '10px';
+                    div.style.border = '1px solid #ccc';
+                    
+                    if (text.startsWith('<!DOCTYPE') || text.includes('<html')) {
+                        div.style.backgroundColor = '#ffebee';
+                        div.innerHTML = `
+                            <h3 style="color: red;">❌ ${path}</h3>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>Content-Type:</strong> ${response.headers.get('content-type')}</p>
+                            <p><strong>Problem:</strong> Returning HTML instead of JavaScript!</p>
+                            <details>
+                                <summary>HTML Content Preview:</summary>
+                                <pre style="background: #f5f5f5; padding: 10px; overflow: auto;">${text.substring(0, 500)}...</pre>
+                            </details>
+                        `;
+                    } else {
+                        div.style.backgroundColor = '#e8f5e8';
+                        div.innerHTML = `
+                            <h3 style="color: green;">✅ ${path}</h3>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>Content-Type:</strong> ${response.headers.get('content-type')}</p>
+                            <p><strong>Size:</strong> ${text.length} characters</p>
+                            <p><strong>Starts with:</strong> ${text.substring(0, 100)}...</p>
+                        `;
+                    }
+                    
+                    results.appendChild(div);
+                    
+                } catch (error) {
+                    const div = document.createElement('div');
+                    div.style.margin = '20px 0';
+                    div.style.padding = '10px';
+                    div.style.border = '1px solid #ccc';
+                    div.style.backgroundColor = '#ffebee';
+                    div.innerHTML = `
+                        <h3 style="color: red;">❌ ${path}</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                    `;
+                    results.appendChild(div);
+                }
+            }
+        }
+        
+        // Run test immediately
+        testBundles();
+    </script>
+</body>
+</html> 

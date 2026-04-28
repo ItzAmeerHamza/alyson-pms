@@ -1,0 +1,5 @@
+provider: github
+owner: mafatah
+repo: time-flow-admin
+releaseType: release
+

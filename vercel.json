@@ -1,0 +1,133 @@
+{
+  "buildCommand": "npm run build:dev",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/(.*\\.js)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.css)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.ico)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.png)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.jpg)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.svg)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/(.*\\.woff.*)",
+      "destination": "/$1"
+    },
+    {
+      "source": "/supabase/auth/(.*)",
+      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/auth/$1"
+    },
+    {
+      "source": "/supabase/rest/(.*)",
+      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/rest/$1"
+    },
+    {
+      "source": "/supabase/storage/(.*)",
+      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/storage/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
+    {
+      "source": "/(.*\\.css)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/css"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.js)",
+      "headers": [
+        {
+          "key": "Content-Type", 
+          "value": "application/javascript"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.html)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/html"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.dmg)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-apple-diskimage"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.exe)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-msdownload"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.AppImage)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-executable"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment"
+        }
+      ]
+    }
+  ]
+}

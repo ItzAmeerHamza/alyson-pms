@@ -1,0 +1,51 @@
+{
+  "name": "ebdaa-work-time-agent",
+  "version": "95.2.0",
+  "description": "Work Time Agent - Employee time tracking and productivity monitoring",
+  "main": "src/main.js",
+  "author": "Ebdaa Digital Technology",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mafatah/time-flow-admin.git"
+  },
+  "scripts": {
+    "start": "./node_modules/.bin/electron .",
+    "safe-start": "./scripts/safe-start.sh",
+    "electron": "./node_modules/.bin/electron .",
+    "prebuild": "node generate-env-config.js --build",
+    "build": "npm run prebuild && electron-builder",
+    "build:win": "npm run prebuild && electron-builder --win",
+    "test-win": "node test-windows-platform.js",
+    "test-screenshot": "node test-screenshot.js",
+    "app:probe": "DEBUG_APP=1 node test-app-detection.js",
+    "app:quick": "DEBUG_APP=1 node quick-app-test.js",
+    "probe:app": "node scripts/probe-app-detection.js",
+    "probe:app:verbose": "PROBE_VERBOSE=1 node scripts/probe-app-detection.js",
+    "dev:mem": "EXPOSE_GC=1 MEM_PROFILER=1 MEM_CSV=1 MEM_INTERVAL_MS=5000 electron . --js-flags=\"--expose-gc\" --enable-precise-memory-info --inspect=9229",
+    "mem:snapshot": "node scripts/memory-snapshot.js",
+    "mem:demo": "node scripts/demo-memory-profiler.js",
+    "mem:live": "node scripts/live-memory-monitor.js",
+    "mem:report": "node scripts/memory-analysis-report.js",
+    "perf:report": "node scripts/perf-report.js",
+    "perf:test": "node scripts/automated-perf-test.js",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "active-win": "^8.2.1",
+    "axios": "^1.9.0",
+    "dotenv": "^16.6.1",
+    "electron-updater": "^6.6.2",
+    "keytar": "^7.9.0",
+    "node-cron": "^4.0.7",
+    "screenshot-desktop": "^1.14.0"
+  },
+  "devDependencies": {
+    "chai": "^5.2.1",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
+    "mocha": "^11.7.1",
+    "sinon": "^21.0.0"
+  }
+}

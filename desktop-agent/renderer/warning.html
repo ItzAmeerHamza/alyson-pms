@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Notification</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .warning-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            max-width: 450px;
+            width: 100%;
+            overflow: hidden;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .warning-header {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .warning-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-size: 16px;
+            color: white;
+        }
+
+        .severity-critical { background: #dc3545; }
+        .severity-high { background: #fd7e14; }
+        .severity-medium { background: #ffc107; color: #000; }
+        .severity-low { background: #20c997; }
+
+        .warning-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+        }
+
+        .warning-badges {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-critical { background: #dc3545; color: white; }
+        .badge-high { background: #fd7e14; color: white; }
+        .badge-medium { background: #ffc107; color: #000; }
+        .badge-low { background: #20c997; color: white; }
+        .badge-outline { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .close-btn:hover {
+            background: #e9ecef;
+        }
+
+        .warning-content {
+            padding: 20px;
+        }
+
+        .warning-message {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #495057;
+        }
+
+        .warning-message.severity-critical {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+
+        .warning-message.severity-high {
+            background: #fff3cd;
+            border-color: #fd7e14;
+            color: #856404;
+        }
+
+        .warning-message.severity-medium {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+
+        .warning-message.severity-low {
+            background: #d1ecf1;
+            border-color: #20c997;
+            color: #0c5460;
+        }
+
+        .response-section {
+            margin-bottom: 16px;
+        }
+
+        .response-toggle {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #6c757d;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            margin: 0 auto;
+            width: fit-content;
+        }
+
+        .response-toggle:hover {
+            background: #e9ecef;
+        }
+
+        .response-field {
+            margin-top: 12px;
+            display: none;
+        }
+
+        .response-field.show {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .response-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .response-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.2s;
+        }
+
+        .response-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
+        }
+
+        .warning-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 1px solid #dee2e6;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .progress-section {
+            border-top: 1px solid #e9ecef;
+            padding: 16px 20px;
+            background: #f8f9fa;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .progress-label {
+            font-size: 11px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .progress-counter {
+            font-size: 11px;
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .helper-text {
+            font-size: 11px;
+            color: #6c757d;
+            text-align: center;
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="warning-container">
+        <div class="warning-header">
+            <div style="display: flex; align-items: center; flex: 1;">
+                <div class="warning-icon" id="warningIcon">⚠️</div>
+                <div>
+                    <h2 class="warning-title" id="warningTitle">Loading...</h2>
+                    <div class="warning-badges" id="warningBadges"></div>
+                </div>
+            </div>
+            <button class="close-btn" id="closeBtn">×</button>
+        </div>
+
+        <div class="warning-content">
+            <div class="warning-message" id="warningMessage">
+                Loading warning message...
+            </div>
+
+            <div class="response-section">
+                <button class="response-toggle" id="responseToggle">
+                    <span>💬</span>
+                    <span>Add Response (Optional)</span>
+                </button>
+                <div class="response-field" id="responseField">
+                    <label class="response-label" for="responseText">Your Response (Optional)</label>
+                    <textarea 
+                        class="response-textarea" 
+                        id="responseText" 
+                        placeholder="Share any feedback, concerns, or acknowledgment..."></textarea>
+                </div>
+            </div>
+
+            <div class="warning-actions">
+                <button class="btn btn-primary" id="acknowledgeBtn">
+                    <span>✓</span>
+                    <span id="acknowledgeBtnText">Acknowledge</span>
+                </button>
+                <button class="btn btn-secondary" id="dismissBtn">
+                    <span>Dismiss</span>
+                </button>
+            </div>
+
+            <div class="progress-section" id="progressSection" style="display: none;">
+                <div class="progress-header">
+                    <span class="progress-label">Notification Progress</span>
+                    <span class="progress-counter" id="progressCounter">1 / 1</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <div class="helper-text" id="helperText">
+                Please acknowledge this notification to proceed with starting your timer.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Warning data and state
+        let currentWarningData = null;
+        let showingResponse = false;
+        let isLoading = false;
+
+        // Elements
+        const warningIcon = document.getElementById('warningIcon');
+        const warningTitle = document.getElementById('warningTitle');
+        const warningBadges = document.getElementById('warningBadges');
+        const warningMessage = document.getElementById('warningMessage');
+        const responseToggle = document.getElementById('responseToggle');
+        const responseField = document.getElementById('responseField');
+        const responseText = document.getElementById('responseText');
+        const acknowledgeBtn = document.getElementById('acknowledgeBtn');
+        const acknowledgeBtnText = document.getElementById('acknowledgeBtnText');
+        const dismissBtn = document.getElementById('dismissBtn');
+        const closeBtn = document.getElementById('closeBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressCounter = document.getElementById('progressCounter');
+        const progressFill = document.getElementById('progressFill');
+        const helperText = document.getElementById('helperText');
+
+        // Severity configurations
+        const severityConfig = {
+            critical: { icon: '🚨', color: 'critical' },
+            high: { icon: '⚠️', color: 'high' },
+            medium: { icon: '⚠️', color: 'medium' },
+            low: { icon: 'ℹ️', color: 'low' }
+        };
+
+        // Event listeners
+        responseToggle.addEventListener('click', toggleResponseField);
+        acknowledgeBtn.addEventListener('click', handleAcknowledge);
+        dismissBtn.addEventListener('click', handleDismiss);
+        closeBtn.addEventListener('click', handleClose);
+
+        function toggleResponseField() {
+            showingResponse = !showingResponse;
+            if (showingResponse) {
+                responseField.classList.add('show');
+                responseText.focus();
+            } else {
+                responseField.classList.remove('show');
+                responseText.value = '';
+            }
+        }
+
+        function setLoading(loading) {
+            isLoading = loading;
+            document.body.classList.toggle('loading', loading);
+            acknowledgeBtn.disabled = loading;
+            dismissBtn.disabled = loading;
+            
+            if (loading) {
+                acknowledgeBtnText.textContent = 'Processing...';
+            } else {
+                acknowledgeBtnText.textContent = 'Acknowledge';
+            }
+        }
+
+        function updateDisplay(warningData) {
+            currentWarningData = warningData;
+            const { warning, currentIndex, totalWarnings, trigger, isLast } = warningData;
+            
+            // Update title and icon
+            warningTitle.textContent = warning.title;
+            const severityInfo = severityConfig[warning.severity] || severityConfig.medium;
+            warningIcon.textContent = severityInfo.icon;
+            warningIcon.className = `warning-icon severity-${severityInfo.color}`;
+
+            // Update badges
+            warningBadges.innerHTML = `
+                <span class="badge badge-${severityInfo.color}">${warning.severity.toUpperCase()}</span>
+                ${totalWarnings > 1 ? `<span class="badge badge-outline">${currentIndex + 1} of ${totalWarnings}</span>` : ''}
+            `;
+
+            // Update message
+            warningMessage.textContent = warning.message;
+            warningMessage.className = `warning-message severity-${warning.severity}`;
+
+            // Update progress
+            if (totalWarnings > 1) {
+                progressSection.style.display = 'block';
+                progressCounter.textContent = `${currentIndex + 1} / ${totalWarnings}`;
+                const progressPercent = ((currentIndex + 1) / totalWarnings) * 100;
+                progressFill.style.width = `${progressPercent}%`;
+            } else {
+                progressSection.style.display = 'none';
+            }
+
+            // Update helper text
+            const helperTexts = {
+                timer_start: 'Please acknowledge this notification to proceed with starting your timer.',
+                login: 'Welcome! Please review these important notifications.',
+                manual: 'This notification was manually triggered by your administrator.'
+            };
+            helperText.textContent = helperTexts[trigger] || helperTexts.timer_start;
+
+            // Reset response field
+            showingResponse = false;
+            responseField.classList.remove('show');
+            responseText.value = '';
+        }
+
+        function handleAcknowledge() {
+            if (isLoading) return;
+            setLoading(true);
+            
+            const response = responseText.value.trim() || null;
+            window.electronAPI.acknowledgeWarning({ response });
+        }
+
+        function handleDismiss() {
+            if (isLoading) return;
+            setLoading(true);
+            
+            const response = responseText.value.trim() || null;
+            window.electronAPI.dismissWarning({ response });
+        }
+
+        function handleClose() {
+            window.electronAPI.cancelWarning();
+        }
+
+        // Listen for warning data from main process
+        window.electronAPI.onDisplayWarning(updateDisplay);
+
+        // Listen for response completion to reset loading state
+        window.electronAPI.onWarningResponse(() => {
+            setLoading(false);
+        });
+    </script>
+</body>
+</html> 

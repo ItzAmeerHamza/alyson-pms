@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v1.0.173)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-agent/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop-agent
+        run: npm ci --ignore-scripts
+
+      - name: Import Apple Developer Certificate
+        env:
+          CSC_LINK: ${{ secrets.APPLE_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CSC_KEY_PASSWORD }}
+        run: |
+          CERT_FILE=$(mktemp /tmp/cert.XXXXXX.p12)
+          echo "$CSC_LINK" | base64 --decode > "$CERT_FILE"
+          KEYCHAIN_PATH=$(mktemp -d)/build.keychain
+          security create-keychain -p "temp-password" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security unlock-keychain -p "temp-password" "$KEYCHAIN_PATH"
+          security import "$CERT_FILE" -k "$KEYCHAIN_PATH" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "temp-password" "$KEYCHAIN_PATH"
+          rm -f "$CERT_FILE"
+
+      - name: Generate env config
+        working-directory: desktop-agent
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node generate-env-config.js --build
+
+      - name: Build macOS (DMG + ZIP)
+        working-directory: desktop-agent
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.APPLE_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --mac --publish never
+
+      - name: Notarize DMGs
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for DMG in desktop-agent/dist/*.dmg; do
+            echo "Notarizing $DMG..."
+            xcrun notarytool submit "$DMG" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$DMG"
+            echo "Done: $DMG"
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-artifacts
+          path: |
+            desktop-agent/dist/*.dmg
+            desktop-agent/dist/*.zip
+            desktop-agent/dist/latest-mac.yml
+          retention-days: 1
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-agent/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop-agent
+        run: npm ci --ignore-scripts
+
+      - name: Generate env config
+        working-directory: desktop-agent
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node generate-env-config.js --build
+
+      - name: Build Windows (NSIS)
+        working-directory: desktop-agent
+        run: npx electron-builder --win --publish never
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            desktop-agent/dist/*.exe
+            desktop-agent/dist/latest.yml
+          retention-days: 1
+
+  publish:
+    name: Publish Release
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-artifacts
+          path: release-assets
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: release-assets
+
+      - name: Get version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "refs/heads/main" ]; then
+            TAG="${{ inputs.version }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          draft: false
+          prerelease: false
+          files: release-assets/**/*
+          token: ${{ secrets.GITHUB_TOKEN }}

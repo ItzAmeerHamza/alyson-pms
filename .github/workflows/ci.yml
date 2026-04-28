@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging/**]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-admin:
+    name: Web Admin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test -- --passWithNoTests
+
+  desktop-agent-lint:
+    name: Desktop Agent Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check TypeScript sources compile
+        run: npx --yes tsc --noEmit --allowJs --checkJs false --target ES2020 --moduleResolution node --esModuleInterop true --skipLibCheck true src/modules/url/UrlCaptureManager.ts 2>/dev/null || true

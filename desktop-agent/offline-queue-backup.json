@@ -1,0 +1,331 @@
+{
+  "appLogs": [
+    {
+      "id": "app_logs_1754227684835_ms0g56j6w",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:28:04.835Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:04.835Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227725084_vsdx0mo4r",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Terminal",
+          "window_title": "Inspector",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:28:45.084Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:45.084Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227727552_avguf9epa",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:28:47.552Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:47.552Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227735348_g2r6xzsc3",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:28:55.348Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:55.348Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227739248_9bssy5mlv",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:28:59.248Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:59.248Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227769171_l6tfz3zbc",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:29:29.171Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:29.171Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227774875_1f06csv6n",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:29:34.875Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:34.875Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227790818_5wnywfofi",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:29:50.818Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:50.818Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227793992_23kx3y4d0",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:29:53.992Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:53.992Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227794393_d6c062xpq",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:29:54.393Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:54.393Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227936328_9peibmsgx",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:32:16.328Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:32:16.328Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227937205_h3tin1bhr",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:32:17.205Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:32:17.205Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227945907_i4qo7e77y",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:32:25.907Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:32:25.907Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227957711_0zztfuh7w",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Cursor",
+          "window_title": "time-flow-admin",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:32:37.711Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:32:37.711Z",
+      "retries": 0
+    },
+    {
+      "id": "app_logs_1754227996458_3auxg2y95",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "app_name": "Electron",
+          "window_title": "No Window",
+          "app_path": null,
+          "timestamp": "2025-08-03T13:33:16.458Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:33:16.458Z",
+      "retries": 0
+    }
+  ],
+  "urlLogs": [
+    {
+      "id": "url_logs_1754227688822_yy01qct1c",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:28:08.822Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:28:08.822Z",
+      "retries": 0
+    },
+    {
+      "id": "url_logs_1754227748768_3b20joc3o",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:29:08.768Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:29:08.768Z",
+      "retries": 0
+    },
+    {
+      "id": "url_logs_1754227807180_jk0a0k8ff",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:30:07.180Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:30:07.180Z",
+      "retries": 0
+    },
+    {
+      "id": "url_logs_1754227867403_abwcjxtuy",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:31:07.403Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:31:07.403Z",
+      "retries": 0
+    },
+    {
+      "id": "url_logs_1754227927398_6emsrcec1",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:32:07.398Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:32:07.398Z",
+      "retries": 0
+    },
+    {
+      "id": "url_logs_1754227987312_hj8pxl8ii",
+      "logs": [
+        {
+          "user_id": "0c3d3092-913e-436f-a352-3378e558c34f",
+          "time_log_id": "0d591331-0186-4cbe-ac1b-bed037d03a62",
+          "site_url": "https://www.propertyfinder.eg/ar/plp/%D9%84%D9%84%D8%A8%D9%8A%D8%B9/%D8%AA%D8%A7%D9%88%D9%86-%D9%87%D8%A7%D9%88%D8%B3-%D9%84%D9%84%D8%A8%D9%8A%D8%B9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D9%85%D8%AF%D9%8A%D9%86%D8%A9-%D8%A7%D9%84%D9%82%D8%A7%D9%87%D8%B1%D8%A9-%D8%A7%D9%84%D8%AC%D8%AF%D9%8A%D8%AF%D8%A9-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%83%D9%85%D8%A8%D9%88%D9%86%D8%AF%D8%A7%D8%AA-%D8%A7%D9%84%D8%AA%D8%AC%D9%85%D8%B9-%D8%A7%D9%84%D8%AE%D8%A7%D9%85%D8%B3-%D9%81%D9%8A%D9%84%D9%8A%D8%AA-7647419.html",
+          "title": "Untitled",
+          "domain": "www.propertyfinder.eg",
+          "browser": "Safari",
+          "timestamp": "2025-08-03T13:33:07.312Z"
+        }
+      ],
+      "timestamp": "2025-08-03T13:33:07.312Z",
+      "retries": 0
+    }
+  ],
+  "screenshots": [],
+  "timeLogs": [],
+  "idleLogs": [],
+  "fraudAlerts": []
+}

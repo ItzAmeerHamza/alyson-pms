@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Check for large files before commit
+echo "🔍 Checking for large files..."
+
+# Find files larger than 10MB (excluding node_modules and .git)
+LARGE_FILES=$(find . -type f -size +10M \
+  ! -path "./node_modules/*" \
+  ! -path "./.git/*" \
+  ! -path "*/node_modules/*" \
+  ! -path "*/.git/*" \
+  2>/dev/null)
+
+if [ ! -z "$LARGE_FILES" ]; then
+  echo "❌ Found large files (>10MB) that should not be committed:"
+  echo "$LARGE_FILES"
+  echo ""
+  echo "Please add these to .gitignore or remove them before committing."
+  exit 1
+fi
+
+# Check for installer binaries
+INSTALLER_FILES=$(git diff --cached --name-only | grep -E '\.(dmg|exe|AppImage|deb|rpm)$' || true)
+
+if [ ! -z "$INSTALLER_FILES" ]; then
+  echo "❌ Found installer files that should not be committed:"
+  echo "$INSTALLER_FILES"
+  echo ""
+  echo "Installer files should be uploaded to GitHub Releases, not committed to git."
+  exit 1
+fi
+
+# Check for diagnostic files
+DIAGNOSTIC_FILES=$(git diff --cached --name-only | grep -E 'diagnostic.*\.json$' || true)
+
+if [ ! -z "$DIAGNOSTIC_FILES" ]; then
+  echo "⚠️  Warning: Found diagnostic files:"
+  echo "$DIAGNOSTIC_FILES"
+  echo ""
+  echo "Consider removing these before committing (they're typically temporary)."
+  # Don't exit, just warn
+fi
+
+echo "✓ No large files or installers detected"
+

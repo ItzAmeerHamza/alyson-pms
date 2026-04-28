@@ -1,0 +1,29 @@
+# TimeFlow Cursor Rules
+
+This repository uses rule cards under `.cursor/rules/*.mdc` to auto-attach targeted guidance. Highlights are summarized below; see individual cards for scoped rules.
+
+## Agent/User Rules
+
+- Prefer absolute paths in tool calls; preserve existing indentation; keep edits minimal and focused.
+- Use brief status updates and concise end summaries; refer to changes as "edits".
+- Cite existing code using the special file header format; use fenced blocks with language tags for new snippets.
+- Default to semantic search for discovery, exact grep for symbols; parallelize independent reads/searches.
+- Proceed without blocking unless confirmation is strictly required.
+
+## Project Rules (Overview)
+
+- Build/Release: Code-sign macOS DMGs, notarize and staple; sign Windows EXEs with EV cert; publish signed artifacts to GitHub Releases; update download URLs post-release.
+- Desktop Agent: Consolidated managers for activity, screenshots, URL capture; centralize IPC; avoid raw setInterval; keep platform code under `src/platform/*`.
+- Web Admin: React + TypeScript; reuse shadcn/ui; colocate data access in features; keep hooks under `src/hooks` and types under `src/types`.
+- Backend: NestJS modularity, DI, typed DTOs and schema; fast deterministic tests under `backend/test`.
+- Supabase: Functions in `supabase/functions`; timestamped, idempotent migrations with RLS; no secrets in repo.
+
+For complete, auto-attached rules, see:
+- `.cursor/rules/agent-behavior.mdc`
+- `.cursor/rules/projectrule.mdc`
+- `.cursor/rules/desktop-agent.mdc`
+- `.cursor/rules/web-admin.mdc`
+- `.cursor/rules/backend.mdc`
+- `.cursor/rules/supabase.mdc`
+
+

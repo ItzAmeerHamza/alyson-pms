@@ -1,0 +1,46 @@
+name: Build Staging Test (Windows EXE)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows-staging:
+    name: Build Windows EXE (Staging)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/multi-device-sessions
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-agent/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop-agent
+        run: npm ci --ignore-scripts
+
+      - name: Generate env config (staging)
+        working-directory: desktop-agent
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node generate-env-config.js --build
+
+      - name: Build Windows NSIS installer
+        working-directory: desktop-agent
+        run: npx electron-builder --win --publish never
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorkTime-Windows-Staging
+          path: |
+            desktop-agent/dist/*.exe
+            desktop-agent/dist/latest.yml
+          retention-days: 7

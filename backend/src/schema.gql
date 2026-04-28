@@ -1,0 +1,19 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type ScreenshotCaptured {
+  id: String!
+  image_url: String!
+  captured_at: String!
+  activity_percent: Float
+  userId: String!
+}
+
+type Query {
+  health: String!
+}
+
+type Subscription {
+  screenshotCaptured(userId: String): ScreenshotCaptured!
+}
