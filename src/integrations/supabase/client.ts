@@ -11,14 +11,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing required Supabase environment variables. Please check your .env file.')
 }
 
-// In production, route through Vercel rewrites to avoid blocked supabase.co domains.
-// The /supabase/* paths are proxied to the real Supabase in vercel.json.
-const isProduction = typeof window !== 'undefined'
-  && window.location.hostname !== 'localhost'
-  && window.location.hostname !== '127.0.0.1'
-const effectiveUrl = isProduction
-  ? `${window.location.origin}/supabase`
-  : supabaseUrl
+// Use Supabase directly (Vercel rewrites/proxies can cause auth/key mismatches).
+const effectiveUrl = supabaseUrl
 
 export const supabase = createClient<Database>(
   effectiveUrl,

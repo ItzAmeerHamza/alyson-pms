@@ -36,18 +36,6 @@
       "destination": "/$1"
     },
     {
-      "source": "/supabase/auth/(.*)",
-      "destination": "/api/supabase/auth/$1"
-    },
-    {
-      "source": "/supabase/rest/(.*)",
-      "destination": "/api/supabase/rest/$1"
-    },
-    {
-      "source": "/supabase/storage/(.*)",
-      "destination": "/api/supabase/storage/$1"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
