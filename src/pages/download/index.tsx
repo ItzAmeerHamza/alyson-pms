@@ -11,7 +11,7 @@ import {
   ExternalLink
 } from "lucide-react";
 
-const GITHUB_REPO = 'mafatah/time-flow-admin';
+const GITHUB_REPO = 'ItzAmeerHamza/alyson-pms';
 const BASE = `https://github.com/${GITHUB_REPO}/releases/download`;
 const FALLBACK_VER = '1.0.182';
 
@@ -32,9 +32,9 @@ function buildFallbackDownloads(v: string) {
   return {
     version: v,
     date: new Date().toLocaleDateString(),
-    windows:   { url: `${BASE}/v${v}/Work-Time-Setup-${v}.exe`,  filename: `Work-Time-Setup-${v}.exe`,  size: 89_839_416 } as DownloadEntry,
-    armDmg:    { url: `${BASE}/v${v}/Work-Time-${v}-arm64.dmg`,  filename: `Work-Time-${v}-arm64.dmg`,  size: 112_024_511 } as DownloadEntry,
-    x64Dmg:    { url: `${BASE}/v${v}/Work-Time-${v}.dmg`,        filename: `Work-Time-${v}.dmg`,        size: 119_542_248 } as DownloadEntry,
+    windows:   { url: `${BASE}/v${v}/Alyson-Time-Doctor-Setup-${v}.exe`,  filename: `Alyson-Time-Doctor-Setup-${v}.exe`,  size: 89_839_416 } as DownloadEntry,
+    armDmg:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}-arm64.dmg`,  filename: `Alyson-Time-Doctor-${v}-arm64.dmg`,  size: 112_024_511 } as DownloadEntry,
+    x64Dmg:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,        filename: `Alyson-Time-Doctor-${v}.dmg`,        size: 119_542_248 } as DownloadEntry,
   };
 }
 
@@ -65,9 +65,9 @@ const DownloadPage = () => {
         setVersion(v || fb.version);
         if (data.published_at) setReleaseDate(new Date(data.published_at).toLocaleDateString());
 
-        const w = mk(find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i));
-        const arm = mk(find(/arm64\.dmg$/i));
-        const x64 = mk(findX64Dmg());
+        const w = mk(find(/Alyson-Time-Doctor-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i));
+        const arm = mk(find(/Alyson-Time-Doctor-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i));
+        const x64 = mk(find(/Alyson-Time-Doctor-.*\.dmg$/i) ?? findX64Dmg());
 
         if (w) setWinDl(w);
         if (arm) setArmDl(arm);

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Download, Monitor, Apple, CheckCircle, AlertCircle } from 'lucide-react';
 
-const GITHUB_REPO = 'mafatah/time-flow-admin';
+const GITHUB_REPO = 'ItzAmeerHamza/alyson-pms';
 const BASE = `https://github.com/${GITHUB_REPO}/releases/download`;
 const FALLBACK_VER = '1.0.182';
 
@@ -17,10 +17,10 @@ function buildFallback(v: string): ReleaseInfo {
   return {
     version: v,
     downloadUrls: {
-      windows:    { url: `${BASE}/v${v}/Work-Time-Setup-${v}.exe`,        filename: `Work-Time-Setup-${v}.exe`,        size: 89_839_416 },
-      'mac-arm':  { url: `${BASE}/v${v}/Work-Time-${v}-arm64.dmg`,       filename: `Work-Time-${v}-arm64.dmg`,        size: 112_024_511 },
-      'mac-intel':{ url: `${BASE}/v${v}/Work-Time-${v}.dmg`,             filename: `Work-Time-${v}.dmg`,              size: 119_542_248 },
-      mac:        { url: `${BASE}/v${v}/Work-Time-${v}.dmg`,             filename: `Work-Time-${v}.dmg`,              size: 119_542_248 },
+      windows:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-Setup-${v}.exe`,        filename: `Alyson-Time-Doctor-Setup-${v}.exe`,        size: 89_839_416 },
+      'mac-arm':  { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}-arm64.dmg`,       filename: `Alyson-Time-Doctor-${v}-arm64.dmg`,        size: 112_024_511 },
+      'mac-intel':{ url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,             filename: `Alyson-Time-Doctor-${v}.dmg`,              size: 119_542_248 },
+      mac:        { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,             filename: `Alyson-Time-Doctor-${v}.dmg`,              size: 119_542_248 },
     },
   };
 }
@@ -47,9 +47,9 @@ async function fetchLatestRelease(): Promise<ReleaseInfo> {
       const mk = (a?: typeof assets[0]) =>
         a ? { url: a.browser_download_url, filename: a.name, size: a.size } : undefined;
 
-      const winAsset = find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i);
-      const armDmg = find(/arm64\.dmg$/i);
-      const x64Dmg = findX64Dmg();
+      const winAsset = find(/Alyson-Time-Doctor-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i);
+      const armDmg = find(/Alyson-Time-Doctor-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i);
+      const x64Dmg = find(/Alyson-Time-Doctor-.*\.dmg$/i) ?? findX64Dmg();
 
       const downloadUrls: ReleaseInfo['downloadUrls'] = {};
       if (winAsset) downloadUrls.windows = mk(winAsset)!;
