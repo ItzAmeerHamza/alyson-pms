@@ -37,15 +37,15 @@
     },
     {
       "source": "/supabase/auth/(.*)",
-      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/auth/$1"
+      "destination": "/api/supabase/auth/$1"
     },
     {
       "source": "/supabase/rest/(.*)",
-      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/rest/$1"
+      "destination": "/api/supabase/rest/$1"
     },
     {
       "source": "/supabase/storage/(.*)",
-      "destination": "https://fkpiqcxkmrtaetvfgcli.supabase.co/storage/$1"
+      "destination": "/api/supabase/storage/$1"
     },
     {
       "source": "/(.*)",
