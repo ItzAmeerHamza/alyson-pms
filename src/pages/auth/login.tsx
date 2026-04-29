@@ -12,7 +12,7 @@ import EbdaaTimeLogo from "@/components/ui/timeflow-logo";
 import DesktopDownload from "@/components/ui/desktop-download";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Loader2, Building2 } from "lucide-react";
+import { Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { loginFormSchema, type LoginFormValues } from "@/lib/schemas";
@@ -25,13 +25,14 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [organizationValidated, setOrganizationValidated] = useState(false);
   const [organizationName, setOrganizationName] = useState<string | null>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      company: "ebdaadt",
+      company: "Revcloud",
       email: "",
       password: "",
       rememberMe: false,
@@ -131,7 +132,7 @@ export default function LoginPage() {
                           </FormLabel>
                           <FormControl>
                             <Input 
-                              placeholder="ebdaadt" 
+                              placeholder="Revcloud" 
                               {...field} 
                               onChange={(e) => {
                                 field.onChange(e);
@@ -168,7 +169,24 @@ export default function LoginPage() {
                         <FormItem>
                           <FormLabel>Password</FormLabel>
                           <FormControl>
-                            <Input type="password" placeholder="••••••••" {...field} />
+                            <div className="relative">
+                              <Input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="••••••••"
+                                {...field}
+                                className="pr-10"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setShowPassword((v) => !v)}
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </Button>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>

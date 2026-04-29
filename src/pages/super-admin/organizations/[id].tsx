@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Building2, Users, UserPlus, Shield, Loader2 } from "lucide-react";
+import { ArrowLeft, Building2, Eye, EyeOff, Loader2, Shield, UserPlus, Users } from "lucide-react";
 
 interface Organization {
   id: string;
@@ -65,6 +65,7 @@ export default function OrganizationDetailPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserData, setNewUserData] = useState({
     email: "",
     full_name: "",
@@ -478,13 +479,26 @@ export default function OrganizationDetailPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="user-password">Password</Label>
-              <Input
-                id="user-password"
-                type="password"
-                placeholder="••••••••"
-                value={newUserData.password}
-                onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
-              />
+              <div className="relative">
+                <Input
+                  id="user-password"
+                  type={showNewUserPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={newUserData.password}
+                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowNewUserPassword((v) => !v)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                  aria-label={showNewUserPassword ? "Hide password" : "Show password"}
+                >
+                  {showNewUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
             </div>
             <div className="space-y-2">

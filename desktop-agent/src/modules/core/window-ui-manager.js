@@ -50,7 +50,7 @@ class WindowUIManager {
       icon: path.join(__dirname, '../../../assets/icon.png'),
       show: false,
       titleBarStyle: 'default',
-      title: 'Alyson Time Doctor',
+      title: 'Alyson PM',
       backgroundColor: '#ffffff'
     });
 
@@ -138,7 +138,7 @@ class WindowUIManager {
     // Simplified tray menu - only Toggle Monitoring Tools and Quit
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Alyson Time Doctor Agent',
+        label: 'Alyson PM Agent',
         enabled: false
       },
       { type: 'separator' },
@@ -162,7 +162,7 @@ class WindowUIManager {
       }
     ]);
     
-    this.tray.setToolTip('Alyson Time Doctor');
+    this.tray.setToolTip('Alyson PM');
     this.tray.setContextMenu(contextMenu);
     
     // Handle tray click

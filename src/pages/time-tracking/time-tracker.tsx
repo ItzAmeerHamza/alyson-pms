@@ -61,7 +61,7 @@ export default function TimeTrackerPage() {
       // Perform initial friendly health check on page load
       setTimeout(() => {
         toast({
-          title: '👋 Welcome to Alyson Time Doctor!',
+          title: '👋 Welcome to Alyson PM!',
           description: 'Performing a quick system check to ensure everything is ready...',
         });
         performComprehensiveHealthCheck().catch(error => {

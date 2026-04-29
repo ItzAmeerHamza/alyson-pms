@@ -380,7 +380,7 @@ const Sidebar = () => {
         <div className="flex items-center mb-3">
           <EbdaaTimeLogo size={36} />
           <div className="ml-3">
-            <h1 className="text-xl font-bold text-sidebar-foreground">Alyson Time Doctor</h1>
+            <h1 className="text-xl font-bold text-sidebar-foreground">Alyson PM</h1>
             <p className="text-sm text-primary font-medium">
               {isAdmin ? 'Admin Console' : 'Employee Portal'}
             </p>

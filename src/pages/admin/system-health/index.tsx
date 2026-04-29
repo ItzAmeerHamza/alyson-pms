@@ -377,7 +377,7 @@ export default function SystemHealthPage() {
             System Health
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Real-time status of all Alyson Time Doctor automated services and pipelines
+            Real-time status of all Alyson PM automated services and pipelines
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

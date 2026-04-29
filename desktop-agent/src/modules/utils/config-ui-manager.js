@@ -1,10 +1,10 @@
 /**
  * CONFIGURATION & UI UTILITIES MANAGER MODULE
  * 
- * Manages configuration and UI-related utility functions for the Alyson Time Doctor desktop agent.
+ * Manages configuration and UI-related utility functions for the Alyson PM desktop agent.
  * This includes settings fetching, tray creation, and UI initialization.
  * 
- * Part of Alyson Time Doctor Desktop Agent modular refactoring
+ * Part of Alyson PM Desktop Agent modular refactoring
  */
 
 class ConfigUIManager {
@@ -99,7 +99,7 @@ class ConfigUIManager {
           }
           new this.Notification({
             title: 'Project Selection Required',
-            body: 'Please open the Alyson Time Doctor app and select a project before starting tracking from the menu bar.'
+            body: 'Please open the Alyson PM app and select a project before starting tracking from the menu bar.'
           }).show();
           return;
         }

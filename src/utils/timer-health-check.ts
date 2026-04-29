@@ -471,14 +471,14 @@ class TimerHealthChecker {
     if ('Notification' in window) {
       // Check notification permission
       if (Notification.permission === 'granted') {
-        new Notification('Alyson Time Doctor - System Update', {
+        new Notification('Alyson PM - System Update', {
           body: message,
           icon: '/favicon.ico'
         });
       } else if (Notification.permission !== 'denied') {
         Notification.requestPermission().then(permission => {
           if (permission === 'granted') {
-            new Notification('Alyson Time Doctor - System Update', {
+            new Notification('Alyson PM - System Update', {
               body: message,
               icon: '/favicon.ico'
             });

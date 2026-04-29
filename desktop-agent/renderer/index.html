@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alyson Time Doctor</title>
+    <title>Alyson PM</title>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
     <style>
@@ -82,6 +82,42 @@
             font-size: 16px;
             transition: all 0.2s;
             background: #f8fafc;
+        }
+
+        .password-field {
+            position: relative;
+        }
+
+        .password-field .form-input {
+            padding-right: 48px;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .password-toggle:hover {
+            background: rgba(100, 116, 139, 0.12);
+            color: #334155;
+        }
+
+        .password-toggle:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.18);
         }
 
         .form-input:focus {
@@ -3483,7 +3519,7 @@
                 color: #0f172a;
                 margin-bottom: 16px;
                 text-shadow: none;
-            ">Alyson Time Doctor</h1>
+            ">Alyson PM</h1>
             <div style="
                 width: 40px;
                 height: 40px;
@@ -4133,14 +4169,14 @@
     <div id="loginContainer" class="login-container">
         <div class="login-card fade-in">
             <div class="login-header">
-                <h1 class="login-logo">Alyson Time Doctor</h1>
+                <h1 class="login-logo">Alyson PM</h1>
                 <p class="login-subtitle">Employee Desktop Portal</p>
             </div>
 
             <form id="loginForm">
                 <div class="form-group">
                     <label class="form-label" for="loginCompany">Company <span style="font-weight: normal; color: #94a3b8;">(optional)</span></label>
-                    <input type="text" id="loginCompany" class="form-input" placeholder="ebdaadt" value="ebdaadt">
+                    <input type="text" id="loginCompany" class="form-input" placeholder="Revcloud" value="Revcloud">
                     <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Leave default if you're unsure</p>
                 </div>
 
@@ -4149,9 +4185,13 @@
                     <input type="email" id="loginEmail" class="form-input" placeholder="Enter your email" required>
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group password-field">
                     <label class="form-label" for="loginPassword">Password</label>
                     <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required>
+                    <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password">
+                        <i data-lucide="eye" class="pw-eye"></i>
+                        <i data-lucide="eye-off" class="pw-eye-off" style="display:none"></i>
+                    </button>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
@@ -4225,7 +4265,7 @@
         <!-- SIDEBAR -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="app-logo">Alyson Time Doctor</div>
+                <div class="app-logo">Alyson PM</div>
                 <div class="app-subtitle">Core Monitoring</div>
             </div>
 
@@ -6279,6 +6319,37 @@
         }, 2000);
         
     })();
+    </script>
+
+    <script>
+        // Password visibility toggle (login)
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const input = document.getElementById('loginPassword');
+                const btn = document.getElementById('toggleLoginPassword');
+                if (!input || !btn) return;
+
+                const eye = btn.querySelector('.pw-eye');
+                const eyeOff = btn.querySelector('.pw-eye-off');
+
+                const setState = (show) => {
+                    input.type = show ? 'text' : 'password';
+                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                    if (eye) eye.style.display = show ? 'none' : 'inline-block';
+                    if (eyeOff) eyeOff.style.display = show ? 'inline-block' : 'none';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                };
+
+                let showing = false;
+                setState(showing);
+                btn.addEventListener('click', () => {
+                    showing = !showing;
+                    setState(showing);
+                });
+            } catch (e) {
+                console.warn('⚠️ Failed to wire password toggle:', e?.message || e);
+            }
+        });
     </script>
 </body>
 </html>

@@ -38,7 +38,9 @@ import {
   Copy,
   Send,
   MoreHorizontal,
-  Users as UsersIcon
+  Users as UsersIcon,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import { AssignProjectsDialog } from "./components/assign-projects-dialog";
@@ -86,6 +88,7 @@ export default function UsersManagement() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [showCreateUserPassword, setShowCreateUserPassword] = useState(false);
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false);
   const [isEditEmailDialogOpen, setIsEditEmailDialogOpen] = useState(false);
   const [isPasswordResetDialogOpen, setIsPasswordResetDialogOpen] = useState(false);
@@ -1126,7 +1129,24 @@ export default function UsersManagement() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="Enter password" {...field} />
+                      <div className="relative">
+                        <Input
+                          type={showCreateUserPassword ? "text" : "password"}
+                          placeholder="Enter password"
+                          {...field}
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowCreateUserPassword((v) => !v)}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                          aria-label={showCreateUserPassword ? "Hide password" : "Show password"}
+                        >
+                          {showCreateUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -184,7 +184,7 @@ class AppLifecycleManager {
       
       // Show notification that app is still running
       if (global.trayManager && global.trayManager.showNotification) {
-        global.trayManager.showNotification('Alyson Time Doctor', 'App continues running in background. Click the tray icon to restore.');
+        global.trayManager.showNotification('Alyson PM', 'App continues running in background. Click the tray icon to restore.');
       }
       
       console.log('📱 [APP-LIFECYCLE] Window hidden to tray - use tray or dock icon to restore');

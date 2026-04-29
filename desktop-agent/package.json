@@ -1,7 +1,7 @@
 {
-  "name": "time-flow-desktop-agent",
+  "name": "alyson-pm-desktop-agent",
   "version": "1.0.182",
-  "description": "Alyson Time Doctor Agent - Employee time tracking and productivity monitoring",
+  "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "Ebdaa Digital Technology",
   "repository": {
@@ -48,7 +48,7 @@
   },
   "build": {
     "appId": "com.ebdaa.work-time-agent",
-    "productName": "Alyson Time Doctor",
+    "productName": "Alyson PM",
     "directories": {
       "output": "dist"
     },
@@ -116,10 +116,10 @@
         }
       ],
       "extendInfo": {
-        "NSCameraUsageDescription": "Alyson Time Doctor needs camera access for screenshot monitoring",
-        "NSMicrophoneUsageDescription": "Alyson Time Doctor needs microphone access for activity detection",
-        "NSScreenCaptureDescription": "Alyson Time Doctor needs screen recording permission for productivity monitoring",
-        "NSAccessibilityUsageDescription": "Alyson Time Doctor needs accessibility permission for activity monitoring"
+        "NSCameraUsageDescription": "Alyson PM needs camera access for screenshot monitoring",
+        "NSMicrophoneUsageDescription": "Alyson PM needs microphone access for activity detection",
+        "NSScreenCaptureDescription": "Alyson PM needs screen recording permission for productivity monitoring",
+        "NSAccessibilityUsageDescription": "Alyson PM needs accessibility permission for activity monitoring"
       }
     },
     "win": {
@@ -157,7 +157,7 @@
       "category": "Utility"
     },
     "dmg": {
-      "title": "Install Alyson Time Doctor v${version}",
+      "title": "Install Alyson PM v${version}",
       "icon": "assets/icon.png",
       "background": null,
       "window": {

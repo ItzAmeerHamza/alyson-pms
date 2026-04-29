@@ -3985,7 +3985,7 @@ if (isElectronContext && ipcMain) {
           // FIX: Wait for app to be ready before creating notification
           if (app.isReady()) {
             const notification = new Notification({
-              title: 'Alyson Time Doctor Agent',
+              title: 'Alyson PM Agent',
               body: 'Desktop Agent is already running and has been brought to the front.',
               silent: false
             });
@@ -3994,7 +3994,7 @@ if (isElectronContext && ipcMain) {
         } else if (tray) {
           // If no window but tray exists, show notification
           const notification = new Notification({
-            title: 'Alyson Time Doctor Agent',
+            title: 'Alyson PM Agent',
             body: 'Desktop Agent is already running in the system tray.',
             silent: false
           });
@@ -4409,7 +4409,7 @@ if (isElectronContext && ipcMain) {
 
   // Global permission shortcut will be registered after app is ready
 
-  safeLog('✅ Alyson Time Doctor Agent ready');
+  safeLog('✅ Alyson PM Agent ready');
   safeLog('🔬 Debug Console: Right-click tray icon → Debug Console, or press Ctrl+Shift+D');
   safeLog('🔒 Permission Request: Press Ctrl+Shift+P to manage screen recording permissions');
 
@@ -5132,7 +5132,7 @@ if (isElectronContext && ipcMain) {
                 spellcheck: false
               },
               icon: global.getIconPath ? global.getIconPath('icon.png') : path.join(__dirname, '../assets/icon.png'),
-              title: 'Alyson Time Doctor',
+              title: 'Alyson PM',
               titleBarStyle: 'hiddenInset',
               backgroundColor: '#ffffff',
               resizable: true,
@@ -5958,7 +5958,7 @@ if (isElectronContext && ipcMain) {
     global.eventHandlerManager.initializeAllEventHandlers();
   }
 
-  console.log('📱 Alyson Time Doctor Desktop Agent initialized');
+  console.log('📱 Alyson PM Desktop Agent initialized');
 
   // Initialize components
   // Helper function for warning manager to get main window
@@ -6783,7 +6783,7 @@ if (isElectronContext && ipcMain) {
 
   // === NODE.JS STANDALONE MODE ===
   if (!isElectronContext) {
-    console.log('🚀 Starting Alyson Time Doctor Agent in Node.js mode...');
+    console.log('🚀 Starting Alyson PM Agent in Node.js mode...');
 
     // Initialize components for Node.js mode
     async function initNodeJsMode() {
@@ -6868,7 +6868,7 @@ if (isElectronContext && ipcMain) {
           console.log('⚠️ No user_id found - URL capture may not work properly');
         }
 
-        console.log('✅ Alyson Time Doctor Agent running in Node.js mode');
+        console.log('✅ Alyson PM Agent running in Node.js mode');
         console.log('📊 Monitoring app and URL activity...');
 
         // Start periodic database status reporting

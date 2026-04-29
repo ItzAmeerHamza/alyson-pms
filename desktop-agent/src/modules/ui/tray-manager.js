@@ -149,7 +149,7 @@ class TrayManager {
     this._setStoppedIcon();
     
     // Set tooltip
-    this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
+    this.tray.setToolTip('⏹ Alyson PM — Not Tracking');
     
     // Create initial menu
     this.updateMenu();
@@ -388,7 +388,7 @@ class TrayManager {
       if (process.platform === 'darwin') {
         this.tray.setTitle('');
       }
-      this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
+      this.tray.setToolTip('⏹ Alyson PM — Not Tracking');
     }
     console.log('⏱️ [TRAY] Timer stopped');
   }
@@ -414,7 +414,7 @@ class TrayManager {
         });
       } else {
         menuItems.push({
-          label: 'Alyson Time Doctor Agent  —  Idle',
+          label: 'Alyson PM Agent  —  Idle',
           enabled: false
         });
       }
@@ -676,7 +676,7 @@ class TrayManager {
         // Still send a silent welcome notification (works if allowed, harmless if not)
         try {
           new this.Notification({
-            title: 'Alyson Time Doctor Agent',
+            title: 'Alyson PM Agent',
             body: 'Notifications enabled — you\'ll be alerted on auto-stop.',
             silent: true
           }).show();
@@ -690,7 +690,7 @@ class TrayManager {
       // No dialog — just fire the notification and mark as checked
       try {
         new this.Notification({
-          title: 'Alyson Time Doctor Agent',
+          title: 'Alyson PM Agent',
           body: 'Notifications enabled — you\'ll be alerted on auto-stop.',
           silent: true
         }).show();

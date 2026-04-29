@@ -71,7 +71,7 @@ class AppInitializationManager {
     const WarningManager = require('../ui/warning-manager');
     this.warningManager = new WarningManager(this.supabaseService, this.config);
     
-    console.log('📱 Alyson Time Doctor Agent initialized');
+    console.log('📱 Alyson PM Agent initialized');
     
     // Load saved system state and offline queue on startup
     this.loadSystemState();

@@ -64,7 +64,7 @@ class PermissionUtilsManager {
       type: 'info',
       title: 'Screen Recording Permission Setup',
       message: 'Manual Permission Setup Required',
-      detail: 'To enable App and URL capture features:\n\n1. Open System Settings/Preferences\n2. Go to Privacy & Security → Screen Recording\n3. Click the "+" button\n4. Add "Electron" app\n5. Enable the checkbox\n6. Restart Alyson Time Doctor\n\nWould you like to open System Settings now?',
+      detail: 'To enable App and URL capture features:\n\n1. Open System Settings/Preferences\n2. Go to Privacy & Security → Screen Recording\n3. Click the "+" button\n4. Add "Electron" app\n5. Enable the checkbox\n6. Restart Alyson PM\n\nWould you like to open System Settings now?',
       buttons: ['Open System Settings', 'I\'ll Do It Later'],
       defaultId: 0
     }).then(result => {

@@ -25,14 +25,14 @@ export function SystemCheckTest() {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Alyson Time Doctor System Check Test
+          Alyson PM System Check Test
         </h1>
         
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">System Check Dialog Test</h2>
           <p className="text-gray-600 mb-4">
             This test demonstrates the comprehensive system check dialog that validates 
-            all Alyson Time Doctor tracking components before allowing users to start tracking.
+            all Alyson PM tracking components before allowing users to start tracking.
           </p>
           
           <div className="space-y-4">

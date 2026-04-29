@@ -32,9 +32,9 @@ function buildFallbackDownloads(v: string) {
   return {
     version: v,
     date: new Date().toLocaleDateString(),
-    windows:   { url: `${BASE}/v${v}/Alyson-Time-Doctor-Setup-${v}.exe`,  filename: `Alyson-Time-Doctor-Setup-${v}.exe`,  size: 89_839_416 } as DownloadEntry,
-    armDmg:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}-arm64.dmg`,  filename: `Alyson-Time-Doctor-${v}-arm64.dmg`,  size: 112_024_511 } as DownloadEntry,
-    x64Dmg:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,        filename: `Alyson-Time-Doctor-${v}.dmg`,        size: 119_542_248 } as DownloadEntry,
+    windows:   { url: `${BASE}/v${v}/Alyson-PM-Setup-${v}.exe`,           filename: `Alyson-PM-Setup-${v}.exe`,           size: 89_839_416 } as DownloadEntry,
+    armDmg:    { url: `${BASE}/v${v}/Alyson-PM-${v}-arm64.dmg`,           filename: `Alyson-PM-${v}-arm64.dmg`,           size: 112_024_511 } as DownloadEntry,
+    x64Dmg:    { url: `${BASE}/v${v}/Alyson-PM-${v}.dmg`,                 filename: `Alyson-PM-${v}.dmg`,                 size: 119_542_248 } as DownloadEntry,
   };
 }
 
@@ -65,9 +65,9 @@ const DownloadPage = () => {
         setVersion(v || fb.version);
         if (data.published_at) setReleaseDate(new Date(data.published_at).toLocaleDateString());
 
-        const w = mk(find(/Alyson-Time-Doctor-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i));
-        const arm = mk(find(/Alyson-Time-Doctor-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i));
-        const x64 = mk(find(/Alyson-Time-Doctor-.*\.dmg$/i) ?? findX64Dmg());
+        const w = mk(find(/Alyson-PM-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i));
+        const arm = mk(find(/Alyson-PM-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i));
+        const x64 = mk(find(/Alyson-PM-.*\.dmg$/i) ?? findX64Dmg());
 
         if (w) setWinDl(w);
         if (arm) setArmDl(arm);
@@ -118,10 +118,10 @@ const DownloadPage = () => {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Download Alyson Time Doctor
+            Download Alyson PM
           </h1>
           <p className="text-xl text-gray-600 mb-6">
-            Professional employee time tracking desktop application
+            Project management desktop application
           </p>
           <div className="flex justify-center items-center gap-4 mb-8">
             <Badge variant="secondary" className="text-lg px-4 py-2">
@@ -193,7 +193,7 @@ const DownloadPage = () => {
               <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
                 <li>Download the appropriate DMG file for your Mac</li>
                 <li>Open the downloaded DMG file</li>
-                <li>Drag "Alyson Time Doctor.app" to your Applications folder</li>
+                <li>Drag "Alyson PM.app" to your Applications folder</li>
                 <li>Eject the DMG and launch the app from Applications</li>
                 <li>If prompted about security, go to System Preferences &rarr; Security &amp; Privacy &rarr; "Open Anyway"</li>
               </ol>

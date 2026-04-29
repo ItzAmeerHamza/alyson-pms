@@ -1,10 +1,10 @@
 {
-  "name": "time-flow",
+  "name": "alyson-pm",
   "private": true,
   "version": "1.0.118",
   "type": "module",
   "author": "Ebdaa Digital Technology",
-  "description": "Work Time - Employee time tracking and productivity monitoring application",
+  "description": "Alyson PM - Project management platform",
   "overrides": {
     "nan": "2.16.0"
   },

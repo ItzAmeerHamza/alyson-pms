@@ -17,10 +17,10 @@ function buildFallback(v: string): ReleaseInfo {
   return {
     version: v,
     downloadUrls: {
-      windows:    { url: `${BASE}/v${v}/Alyson-Time-Doctor-Setup-${v}.exe`,        filename: `Alyson-Time-Doctor-Setup-${v}.exe`,        size: 89_839_416 },
-      'mac-arm':  { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}-arm64.dmg`,       filename: `Alyson-Time-Doctor-${v}-arm64.dmg`,        size: 112_024_511 },
-      'mac-intel':{ url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,             filename: `Alyson-Time-Doctor-${v}.dmg`,              size: 119_542_248 },
-      mac:        { url: `${BASE}/v${v}/Alyson-Time-Doctor-${v}.dmg`,             filename: `Alyson-Time-Doctor-${v}.dmg`,              size: 119_542_248 },
+      windows:    { url: `${BASE}/v${v}/Alyson-PM-Setup-${v}.exe`,                filename: `Alyson-PM-Setup-${v}.exe`,                size: 89_839_416 },
+      'mac-arm':  { url: `${BASE}/v${v}/Alyson-PM-${v}-arm64.dmg`,                filename: `Alyson-PM-${v}-arm64.dmg`,                size: 112_024_511 },
+      'mac-intel':{ url: `${BASE}/v${v}/Alyson-PM-${v}.dmg`,                      filename: `Alyson-PM-${v}.dmg`,                      size: 119_542_248 },
+      mac:        { url: `${BASE}/v${v}/Alyson-PM-${v}.dmg`,                      filename: `Alyson-PM-${v}.dmg`,                      size: 119_542_248 },
     },
   };
 }
@@ -47,9 +47,9 @@ async function fetchLatestRelease(): Promise<ReleaseInfo> {
       const mk = (a?: typeof assets[0]) =>
         a ? { url: a.browser_download_url, filename: a.name, size: a.size } : undefined;
 
-      const winAsset = find(/Alyson-Time-Doctor-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i);
-      const armDmg = find(/Alyson-Time-Doctor-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i);
-      const x64Dmg = find(/Alyson-Time-Doctor-.*\.dmg$/i) ?? findX64Dmg();
+      const winAsset = find(/Alyson-PM-Setup-.*\.exe$/i) ?? find(/Setup[-.].*\.exe$/i) ?? find(/\.exe$/i);
+      const armDmg = find(/Alyson-PM-.*-arm64\.dmg$/i) ?? find(/arm64\.dmg$/i);
+      const x64Dmg = find(/Alyson-PM-.*\.dmg$/i) ?? findX64Dmg();
 
       const downloadUrls: ReleaseInfo['downloadUrls'] = {};
       if (winAsset) downloadUrls.windows = mk(winAsset)!;
@@ -283,7 +283,7 @@ const DesktopDownload: React.FC<DesktopDownloadProps> = ({ variant = 'compact', 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />
-            Alyson Time Doctor Desktop App
+            Alyson PM Desktop App
           </CardTitle>
           <CardDescription>
             Download the enterprise-ready desktop application with zero security warnings. Professional terminal-based installation bypasses all macOS Gatekeeper prompts for seamless deployment.

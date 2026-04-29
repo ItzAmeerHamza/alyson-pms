@@ -96,7 +96,7 @@ class InputMonitor {
             emitJSON([
                 "type": "permission_denied",
                 "message": "Accessibility permission required - AXIsProcessTrusted() returned false",
-                "fix": "System Settings > Privacy & Security > Accessibility > enable Alyson Time Doctor"
+                "fix": "System Settings > Privacy & Security > Accessibility > enable Alyson PM"
             ])
             exit(2) // Exit code 2 = permission denied
         }

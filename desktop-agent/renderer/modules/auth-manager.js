@@ -101,6 +101,8 @@ class AuthManager {
       if (companyInput && rememberedCompany) {
         companyInput.value = rememberedCompany;
         console.log('🏢 Auto-filled company from localStorage:', rememberedCompany);
+      } else if (companyInput && !companyInput.value) {
+        companyInput.value = 'Revcloud';
       }
       
       if (rememberMeCheckbox && rememberMeChecked) {
@@ -448,7 +450,7 @@ class AuthManager {
         // Trigger onboarding guide for first-time user experience
         // Note: The userLoggedIn event listener in renderer-modular.js will handle showing main app
         window.dispatchEvent(new Event('userLoggedIn'));
-        this.notificationManager.showNotification('Login successful! Welcome to Alyson Time Doctor.', 'success');
+        this.notificationManager.showNotification('Login successful! Welcome to Alyson PM.', 'success');
 
       } else {
         throw new Error('No user data returned from authentication');

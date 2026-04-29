@@ -15,15 +15,15 @@ const EbdaaTimeLogo: React.FC<EbdaaTimeLogoProps> = ({
     <div className={`flex items-center gap-2 ${className}`}>
       <img
         src="/alysonlogo.svg"
-        alt="Alyson Time Doctor"
+        alt="Alyson PM"
         style={{ height: size, width: 'auto' }}
         className="shrink-0"
       />
       
       {showText && (
         <div className="flex flex-col">
-          <span className="font-bold text-lg text-primary">Alyson Time Doctor</span>
-          <span className="text-xs text-muted-foreground">Time Tracking</span>
+          <span className="font-bold text-lg text-primary">Alyson PM</span>
+          <span className="text-xs text-muted-foreground">Project Management</span>
         </div>
       )}
     </div>
