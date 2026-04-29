@@ -266,8 +266,8 @@ class ForceUpdater {
     
     autoUpdater.setFeedURL({
       provider: 'github',
-      owner: 'mafatah',
-      repo: 'time-flow-admin',
+      owner: 'ItzAmeerHamza',
+      repo: 'alyson-pms',
       releaseType: 'release'
     });
     
