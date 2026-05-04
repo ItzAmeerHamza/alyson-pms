@@ -28,6 +28,12 @@ export class AiScreenshotAnalyzerProcessor {
           screenshot_id,
           use_ai: true,
           generate_description: true,
+          ...(typeof job.data?.visual_scene_transcript === 'string'
+            ? { visual_scene_transcript: job.data.visual_scene_transcript }
+            : {}),
+          ...(typeof job.data?.screenshot_intelligence_text_mode === 'string'
+            ? { screenshot_intelligence_text_mode: job.data.screenshot_intelligence_text_mode }
+            : {}),
         },
       });
 
@@ -101,6 +107,12 @@ export class AiScreenshotAnalyzerProcessor {
           generate_description: true,
           force_ai: true,
           force_vision: true,
+          ...(typeof job.data?.visual_scene_transcript === 'string'
+            ? { visual_scene_transcript: job.data.visual_scene_transcript }
+            : {}),
+          ...(typeof job.data?.screenshot_intelligence_text_mode === 'string'
+            ? { screenshot_intelligence_text_mode: job.data.screenshot_intelligence_text_mode }
+            : {}),
         },
       });
 

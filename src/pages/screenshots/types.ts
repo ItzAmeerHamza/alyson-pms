@@ -40,6 +40,15 @@ export interface Screenshot {
     meeting_detected?: boolean;
     analysis_method?: string;
     image_description?: string | null;
+    /** Rich structured vision output (workforce / distraction / browser context) when vision model returns the intelligence schema */
+    screenshot_intelligence?: Record<string, unknown>;
+    /** deepseek_text = JSON from DeepSeek chat without pixels; multimodal = VISION_API_* or VL */
+    screenshot_intelligence_source?: 'deepseek_text' | 'multimodal';
+    /** True only when a multimodal API actually saw image pixels */
+    pixels_vision_used?: boolean;
+    /** Legacy: true only for pixel vision; prefer pixels_vision_used + description_source */
+    vision_used?: boolean;
+    description_source?: 'vision' | 'screenshot_intelligence_text' | 'text-fallback' | string;
   };
   // Alert integration
   alert_id?: string;

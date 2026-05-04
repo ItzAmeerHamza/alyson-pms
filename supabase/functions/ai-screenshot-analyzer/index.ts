@@ -1,5 +1,5 @@
 /**
- * AI Screenshot Analyzer — pattern + DeepSeek (text + optional vision only)
+ * AI Screenshot Analyzer — pattern + DeepSeek text + vision (VL + fallbacks)
  *
  * Runs on Supabase Edge (Deno). Configure via Edge Function secrets, e.g.:
  *   supabase secrets set DEEPSEEK_API_KEY=sk-...
@@ -7,10 +7,19 @@
  * Secrets:
  * - DEEPSEEK_API_KEY — required for LLM text (window title / app). Optional vault: get_secret('DEEPSEEK_API_KEY')
  * - DEEPSEEK_MODEL — optional; default deepseek-v4-flash
- * - DEEPSEEK_API_BASE — optional; default https://api.deepseek.com
+ * - DEEPSEEK_API_BASE — optional; default https://api.deepseek.com (chat/completions — text-only for v4 flash/pro)
  * - Request body (optional): deepseek_model, deepseek_vision_model — must be deepseek-v4-flash or deepseek-v4-pro
- * - DEEPSEEK_VISION_MODEL — fallback vision model id when body omits deepseek_vision_model
- * - SCREENSHOTS_STORAGE_BUCKET — optional; default screenshots (loads image bytes via service role + file_path)
+ * - DEEPSEEK_VISION_MODEL — chat multimodal fallback model id (often still text-only on DeepSeek chat)
+ * - DEEPSEEK_VL_API_URL — optional full URL for a vision API that accepts { image_url, prompt }; not set = skip (official api.deepseek.com chat is text-only; verify any VL host before use)
+ * - DEEPSEEK_VL_API_KEY — optional; defaults to DEEPSEEK_API_KEY if unset
+ * - DEEPSEEK_VL_DISABLED — if "true", skip VL and use fallbacks only
+ * - VISION_API_BASE + VISION_API_KEY + VISION_MODEL — optional OpenAI-compatible /v1/chat/completions for true multimodal (e.g. gpt-4o-mini)
+ * - VISION_MAX_TOKENS — optional cap for vision JSON responses (default 8192)
+ * - INTELLIGENCE_TEXT_MAX_TOKENS — optional cap for DeepSeek text-only screenshot_intelligence (default 8192)
+ * - SCREENSHOT_INTELLIGENCE_TEXT_MODE — off | fallback | always (default fallback). fallback = run DeepSeek text JSON when multimodal did not produce screenshot_intelligence.
+ * - Request body (optional): visual_scene_transcript — text description/OCR/transcript of the screen; used with DeepSeek chat (no pixels).
+ * - Request body (optional): screenshot_intelligence_text_mode — overrides env for one request.
+ * - SCREENSHOTS_STORAGE_BUCKET — optional; default screenshots (signed URL for VL when file_path is set)
  */
 
 /// <reference types="./types.d.ts" />
@@ -49,6 +58,7 @@ function getDeepSeekChatUrl(): string {
 
 /** Only models we allow from request body (prevents arbitrary model injection). */
 const ALLOWED_DEEPSEEK_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro']);
+const ANALYZER_RUNTIME_VERSION = '5.3.1-intelligence-metadata-flags';
 
 function pickDeepseekModel(preferred: unknown, fallback: string): string {
   const p = typeof preferred === 'string' ? preferred.trim() : '';
@@ -79,6 +89,476 @@ function screenshotsBucket(): string {
   return Deno.env.get('SCREENSHOTS_STORAGE_BUCKET') || 'screenshots';
 }
 
+function visionJsonMaxTokens(): number {
+  const n = Number(Deno.env.get('VISION_MAX_TOKENS') || '8192');
+  return Number.isFinite(n) && n >= 256 ? Math.min(32768, Math.floor(n)) : 8192;
+}
+
+function intelligenceTextMaxTokens(): number {
+  const n = Number(Deno.env.get('INTELLIGENCE_TEXT_MAX_TOKENS') || '8192');
+  return Number.isFinite(n) && n >= 256 ? Math.min(32768, Math.floor(n)) : 8192;
+}
+
+type IntelligencePixelSource = 'openai_compatible' | 'deepseek_vl';
+
+function toStrArray(v: unknown): string[] {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (!t) return [];
+    try {
+      const p = JSON.parse(t);
+      if (Array.isArray(p)) return p.map((x) => String(x).trim()).filter(Boolean);
+    } catch { /* ignore */ }
+    return t.split(/[,;|]/).map((s) => s.trim()).filter(Boolean);
+  }
+  return [String(v)];
+}
+
+function clampConfidence01(n: unknown): number | null {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return null;
+  if (x > 1 && x <= 100) return Math.max(0, Math.min(1, x / 100));
+  return Math.max(0, Math.min(1, x));
+}
+
+/** Normalize sloppy model output (string vs array, confidence scales). */
+function coerceScreenshotIntelligenceShape(intel: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...intel };
+
+  if (out.meta != null && typeof out.meta === 'object') {
+    const m = { ...(out.meta as Record<string, unknown>) };
+    for (const k of ['image_pixel_width', 'image_pixel_height'] as const) {
+      const n = Number(m[k]);
+      if (Number.isFinite(n)) m[k] = Math.round(n);
+    }
+    const ar = Number(m.aspect_ratio);
+    if (Number.isFinite(ar)) m.aspect_ratio = Math.round(ar * 10000) / 10000;
+    out.meta = m;
+  }
+
+  if (out.host_os_ui != null && typeof out.host_os_ui === 'object') {
+    const h = out.host_os_ui as Record<string, unknown>;
+    out.host_os_ui = { ...h, evidence: toStrArray(h.evidence) };
+  }
+
+  if (out.active_surface != null && typeof out.active_surface === 'object') {
+    const s = out.active_surface as Record<string, unknown>;
+    out.active_surface = {
+      ...s,
+      chrome_category_rows_visible: toStrArray(s.chrome_category_rows_visible),
+      example_visible_game_titles: toStrArray(s.example_visible_game_titles),
+      ui_badges_observed: toStrArray(s.ui_badges_observed),
+    };
+  }
+
+  if (out.open_tabs_signals != null && typeof out.open_tabs_signals === 'object') {
+    const t = out.open_tabs_signals as Record<string, unknown>;
+    out.open_tabs_signals = {
+      ...t,
+      work_adjacent_favicons_inferred: toStrArray(t.work_adjacent_favicons_inferred),
+    };
+  }
+
+  for (const key of ['primary_activity_hypothesis', 'secondary_context'] as const) {
+    const o = out[key];
+    if (o != null && typeof o === 'object') {
+      const r = { ...(o as Record<string, unknown>) };
+      const c = clampConfidence01(r.confidence_0_1);
+      if (c != null) r.confidence_0_1 = c;
+      out[key] = r;
+    }
+  }
+
+  if (out.sprint_matching_hints != null && typeof out.sprint_matching_hints === 'object') {
+    const sp = out.sprint_matching_hints as Record<string, unknown>;
+    out.sprint_matching_hints = {
+      ...sp,
+      suggested_feature_fields_for_ticket_matching: toStrArray(sp.suggested_feature_fields_for_ticket_matching),
+    };
+  }
+
+  if (out.attributes_flat != null && typeof out.attributes_flat === 'object') {
+    const f = out.attributes_flat as Record<string, unknown>;
+    const d = clampConfidence01(f.distraction_risk_score_suggested_0_1);
+    out.attributes_flat = {
+      ...f,
+      ...(d != null ? { distraction_risk_score_suggested_0_1: d } : {}),
+    };
+  }
+
+  const cls = out.classifications;
+  const clsArr = Array.isArray(cls) ? cls : [];
+  out.classifications = clsArr.map((item) => {
+    if (item != null && typeof item === 'object') {
+      const it = item as Record<string, unknown>;
+      const c = clampConfidence01(it.confidence_0_1) ?? 0.5;
+      return {
+        label: String(it.label ?? 'unknown'),
+        confidence_0_1: c,
+        rationale: String(it.rationale ?? ''),
+      };
+    }
+    return { label: String(item), confidence_0_1: 0.5, rationale: '' };
+  });
+
+  out.feature_vector_suggestions = toStrArray(out.feature_vector_suggestions);
+
+  if (out.analysis_method_note != null) {
+    out.analysis_method_note = String(out.analysis_method_note);
+  }
+
+  return out;
+}
+
+function finalizeIntelligenceObject(
+  intel: Record<string, unknown>,
+  ctx: {
+    pixelSource?: IntelligencePixelSource | null;
+    textOnly?: boolean;
+    transcriptSupplied?: boolean;
+  },
+): Record<string, unknown> {
+  const coerced = coerceScreenshotIntelligenceShape(intel);
+  const existing = coerced.analysis_method_note;
+  if (typeof existing === 'string' && existing.trim().length > 0) {
+    return coerced;
+  }
+  let note: string;
+  if (ctx.pixelSource === 'openai_compatible') {
+    note =
+      'Multimodal: model saw pixels via OpenAI-compatible chat completions (VISION_API_*). Confidences are pixel-grounded subject to model quality.';
+  } else if (ctx.pixelSource === 'deepseek_vl') {
+    note =
+      'Multimodal: model saw pixels via DeepSeek VL (or compatible) HTTP vision endpoint. Confidences are pixel-grounded subject to model quality.';
+  } else if (ctx.textOnly) {
+    note = ctx.transcriptSupplied
+      ? 'Text-only: api.deepseek.com chat/completions (no image input). Structured JSON from visual_scene_transcript plus window/app/URL metadata. Confidences are NOT pixel-grounded; calibrate downstream.'
+      : 'Text-only: api.deepseek.com chat/completions (no image input). Inferred from window title, app name, and URL metadata only — no visual transcript. Confidences are NOT pixel-grounded; high uncertainty for on-screen content.';
+  } else {
+    note = 'Analysis method could not be classified; treat confidences cautiously.';
+  }
+  return { ...coerced, analysis_method_note: note };
+}
+
+function applyIntelligencePostProcess(
+  intel: Record<string, unknown> | null | undefined,
+  ctx: Parameters<typeof finalizeIntelligenceObject>[1],
+): Record<string, unknown> | null {
+  if (!intel || typeof intel !== 'object') return null;
+  return finalizeIntelligenceObject(intel as Record<string, unknown>, ctx);
+}
+
+function readU32BE(bytes: Uint8Array, offset: number): number {
+  return (
+    (bytes[offset] << 24) |
+    (bytes[offset + 1] << 16) |
+    (bytes[offset + 2] << 8) |
+    bytes[offset + 3]
+  ) >>> 0;
+}
+
+/** PNG / JPEG dimension + MIME sniff (no full decode). */
+function sniffImageMeta(bytes: Uint8Array, storagePath?: string | null): {
+  image_file_format_mime: string;
+  image_pixel_width: number;
+  image_pixel_height: number;
+  aspect_ratio: number;
+  approx_file_type_note: string | null;
+} | null {
+  if (bytes.length < 24) return null;
+  let mime = '';
+  let w = 0;
+  let h = 0;
+
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    mime = 'image/png';
+    w = readU32BE(bytes, 16);
+    h = readU32BE(bytes, 20);
+  } else if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    mime = 'image/jpeg';
+    let i = 2;
+    while (i < bytes.length - 9) {
+      if (bytes[i] !== 0xff) {
+        i++;
+        continue;
+      }
+      const marker = bytes[i + 1];
+      if (marker === 0xd8 || marker === 0xd9) {
+        i += 2;
+        continue;
+      }
+      const segLen = (bytes[i + 2] << 8) | bytes[i + 3];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        h = (bytes[i + 5] << 8) | bytes[i + 6];
+        w = (bytes[i + 7] << 8) | bytes[i + 8];
+        break;
+      }
+      i += 2 + segLen;
+    }
+  } else {
+    return null;
+  }
+
+  if (!w || !h) return null;
+  const ext = storagePath?.split('.').pop()?.toLowerCase() || '';
+  let approx_file_type_note: string | null = null;
+  if (ext === 'png' && mime === 'image/jpeg') approx_file_type_note = 'extension_says_png_but_content_is_jpeg';
+  else if ((ext === 'jpg' || ext === 'jpeg') && mime === 'image/png') {
+    approx_file_type_note = 'extension_says_jpg_but_content_is_png';
+  }
+
+  const aspect_ratio = Math.round((w / h) * 10000) / 10000;
+  return { image_file_format_mime: mime, image_pixel_width: w, image_pixel_height: h, aspect_ratio, approx_file_type_note };
+}
+
+function mergeServerMetaIntoIntelligence(
+  intel: Record<string, unknown>,
+  serverMeta: NonNullable<ReturnType<typeof sniffImageMeta>>,
+): Record<string, unknown> {
+  const prev = (intel.meta && typeof intel.meta === 'object') ? intel.meta as Record<string, unknown> : {};
+  const meta = {
+    ...prev,
+    source: 'employee_screenshot',
+    image_file_format_mime: serverMeta.image_file_format_mime,
+    image_pixel_width: serverMeta.image_pixel_width,
+    image_pixel_height: serverMeta.image_pixel_height,
+    aspect_ratio: serverMeta.aspect_ratio,
+    approx_file_type_note: serverMeta.approx_file_type_note ?? prev.approx_file_type_note ?? null,
+  };
+  return { ...intel, meta };
+}
+
+function briefLineFromIntelligence(intel: Record<string, unknown>): string {
+  const p = intel.primary_activity_hypothesis as Record<string, unknown> | undefined;
+  const a = intel.active_surface as Record<string, unknown> | undefined;
+  const parts = [
+    p?.fine_label != null ? String(p.fine_label) : '',
+    p?.coarse_label != null ? String(p.coarse_label) : '',
+    a?.brand_visible != null ? String(a.brand_visible) : '',
+    p?.rationale != null ? String(p.rationale).slice(0, 220) : '',
+  ].filter(Boolean);
+  return parts.join(' — ').slice(0, 600) || 'screenshot_intelligence';
+}
+
+function extractFirstJsonObject(s: string): string | null {
+  const start = s.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      continue;
+    }
+    if (c === '{') depth++;
+    if (c === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function isScreenshotIntelligenceShape(obj: Record<string, unknown>): boolean {
+  return (
+    obj.meta != null &&
+    typeof obj.meta === 'object' &&
+    obj.primary_activity_hypothesis != null &&
+    typeof obj.primary_activity_hypothesis === 'object'
+  );
+}
+
+function mapIntelligenceToCategory(parsed: Record<string, unknown>): string | undefined {
+  const primary = parsed.primary_activity_hypothesis as Record<string, unknown> | undefined;
+  const attrs = parsed.attributes_flat as Record<string, unknown> | undefined;
+  const surface = parsed.active_surface as Record<string, unknown> | undefined;
+  const coarse = String(primary?.coarse_label || '').toLowerCase();
+  const fine = String(primary?.fine_label || '').toLowerCase();
+  const fg = String(attrs?.foreground_domain_category || '').toLowerCase();
+  const pageFam = String(surface?.page_family || '').toLowerCase();
+
+  if (fg.includes('game') || coarse.includes('game') || fine.includes('game') || pageFam.includes('game')) {
+    return 'gaming';
+  }
+  if (fg.includes('social') || coarse.includes('social')) return 'social_media';
+  if (fg.includes('shop')) return 'shopping';
+  if (coarse.includes('communication') || fg.includes('communication')) return 'communication';
+  if (
+    fg.includes('video') || fg.includes('stream') || coarse.includes('entertainment') ||
+    coarse.includes('recreational') || pageFam.includes('media')
+  ) {
+    return 'entertainment';
+  }
+  if (
+    attrs?.focus_on_work_surface === true || coarse.includes('development') || coarse.includes('work') ||
+    fg.includes('dev') || fg.includes('productive')
+  ) {
+    return 'productive';
+  }
+  return 'other';
+}
+
+function normalizeIntelligenceVisionPayload(parsed: Record<string, unknown>, model: string): any {
+  const primary = parsed.primary_activity_hypothesis as Record<string, unknown> | undefined;
+  const attrs = parsed.attributes_flat as Record<string, unknown> | undefined;
+  const surface = parsed.active_surface as Record<string, unknown> | undefined;
+  const category = mapIntelligenceToCategory(parsed);
+  const d0 = attrs?.distraction_risk_score_suggested_0_1;
+  const distraction_score = typeof d0 === 'number' ? clampScore(Math.round(d0 * 100)) : undefined;
+  const conf = clampConfidence01(primary?.confidence_0_1) ?? 0.85;
+  const rationale = String(primary?.rationale || '');
+  const brand = surface?.brand_visible != null ? String(surface.brand_visible) : '';
+  const fine = primary?.fine_label != null ? String(primary.fine_label) : '';
+  const coarse = primary?.coarse_label != null ? String(primary.coarse_label) : '';
+  const detected_content = [fine || coarse, brand, rationale].filter(Boolean).join(' — ').slice(0, 500);
+
+  const privacy = parsed.privacy_and_policy_signals as Record<string, unknown> | undefined;
+  const privacy_concerns: string[] = [];
+  if (privacy?.visible_secrets_likely === true) privacy_concerns.push('possible_secrets_visible');
+  if (privacy?.pii_on_screen_likely === true) privacy_concerns.push('possible_pii_visible');
+
+  const focusWork = attrs?.focus_on_work_surface === true;
+  const is_work_related =
+    focusWork ||
+    category === 'productive' ||
+    category === 'communication' ||
+    (category === 'other' && coarse.includes('work'));
+
+  return {
+    success: true as const,
+    screenshot_intelligence: parsed,
+    detected_content: detected_content || rationale.slice(0, 500),
+    category,
+    is_work_related,
+    confidence: conf,
+    privacy_concerns,
+    is_idle: false,
+    productivity_score: distraction_score != null ? clampScore(100 - distraction_score) : undefined,
+    distraction_score,
+    model,
+  };
+}
+
+function intelligenceSchemaJsonBlock(): string {
+  return `{
+  "analysis_method_note": string,
+  "meta": {
+    "source": "employee_screenshot",
+    "image_file_format_mime": string,
+    "image_pixel_width": number,
+    "image_pixel_height": number,
+    "aspect_ratio": number,
+    "approx_file_type_note": string | null
+  },
+  "host_os_ui": { "os_family": string, "evidence": string[] },
+  "browser_context": {
+    "browser_family": string,
+    "active_url_host": string | null,
+    "active_url_scheme_https_assumed": boolean,
+    "chrome_profile_badge_text": string | null,
+    "install_pwa_prompt_visible": boolean,
+    "tab_strip_density": string,
+    "estimated_open_tabs": string
+  },
+  "active_surface": {
+    "surface_type": string,
+    "page_family": string,
+    "brand_visible": string | null,
+    "chrome_category_rows_visible": string[],
+    "example_visible_game_titles": string[],
+    "ui_badges_observed": string[],
+    "global_search_present": boolean,
+    "auth_cta_present": boolean,
+    "status_bar_link_preview_host": string | null,
+    "status_bar_link_preview_path_hint": string | null
+  },
+  "open_tabs_signals": { "work_adjacent_favicons_inferred": string[], "interpretation": string },
+  "primary_activity_hypothesis": {
+    "coarse_label": string,
+    "fine_label": string,
+    "confidence_0_1": number,
+    "rationale": string
+  },
+  "secondary_context": { "label": string, "confidence_0_1": number, "rationale": string },
+  "privacy_and_policy_signals": {
+    "visible_secrets_likely": boolean,
+    "pii_on_screen_likely": boolean,
+    "screen_contents_safe_for_basic_ml_features": boolean,
+    "caution": string
+  },
+  "sprint_matching_hints": {
+    "foreground_suggests_work_story_match": boolean,
+    "suggested_feature_fields_for_ticket_matching": string[],
+    "current_foreground_match_feasibility": string
+  },
+  "attributes_flat": {
+    "foreground_domain_category": string,
+    "work_browser_profile": boolean,
+    "multitasking_tab_load_high": boolean,
+    "focus_on_work_surface": boolean,
+    "distraction_risk_score_suggested_0_1": number,
+    "potential_context_switch_cost_high": boolean
+  },
+  "classifications": [ { "label": string, "confidence_0_1": number, "rationale": string } ],
+  "feature_vector_suggestions": string[]
+}`;
+}
+
+/** Multimodal / pixel-based instructions (vision API). */
+function buildScreenshotIntelligencePrompt(serverMetaHint: string): string {
+  return `You are analyzing a single employee desktop screenshot for workforce analytics, distraction risk, and (optional) work-item matching.
+
+Respond with ONLY one JSON object (no markdown, no prose). Include every top-level key in the schema below. Use null for unknown scalars, [] for arrays you cannot infer, and false/true only when justified by visible evidence.
+
+All confidence_0_1 fields must be numbers between 0 and 1 (not 0–100). Arrays must be JSON arrays (not comma-separated strings).
+
+Schema (types describe shape; replace with concrete values):
+${intelligenceSchemaJsonBlock()}
+
+Set analysis_method_note to state clearly that the model had access to the image pixels and which cues you used (e.g. URL bar, tab strip, page content).
+
+Guidelines:
+- Infer OS from window chrome (traffic lights, menu bar, taskbar style).
+- Read URL bar / status-bar link preview when legible; otherwise null.
+- Tab favicons: name inferred services conservatively (e.g. "github" only if octocat-like icon is clear).
+- distraction_risk_score_suggested_0_1: higher when foreground is clearly non-work entertainment/games/social.
+- classifications: 3–6 items covering foreground vs background tabs, profile cues, and sprint-alignment.
+${serverMetaHint}`;
+}
+
+/** DeepSeek chat/completions only — no image bytes. */
+function buildScreenshotIntelligenceTextPrompt(
+  transcriptBlock: string,
+  serverMetaHint: string,
+): string {
+  return `You are producing structured employee screenshot analytics for workforce and distraction modeling.
+
+You do NOT have access to the raw image. You MUST infer conservatively from the textual evidence provided (visual transcript and/or window metadata only).
+
+Respond with ONLY one JSON object (no markdown, no prose). Include every top-level key in the schema below.
+
+All confidence_0_1 fields must be numbers between 0 and 1. Prefer lower confidence when evidence is thin. Arrays must be JSON arrays.
+
+Schema:
+${intelligenceSchemaJsonBlock()}
+
+Set analysis_method_note explicitly: state that this run used DeepSeek chat completions with text-only input (no pixels), and summarize what inputs you received (transcript yes/no, metadata fields used).
+
+Textual inputs for this request:
+${transcriptBlock}
+${serverMetaHint}`;
+}
+
 /** Base64 for data URLs without blowing the stack on large buffers. */
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -96,7 +576,10 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 async function resolveVisionImageInput(
   supabase: any,
   screenshot: { image_url?: string | null; file_path?: string | null },
-): Promise<{ imageUrl: string; source: 'storage' | 'public_url' } | { error: string }> {
+): Promise<
+  | { imageUrl: string; source: 'storage' | 'public_url'; imageBytes?: Uint8Array; storagePath?: string }
+  | { error: string }
+> {
   const path = screenshot.file_path?.trim();
   if (path) {
     const bucket = screenshotsBucket();
@@ -108,7 +591,7 @@ async function resolveVisionImageInput(
         const mime =
           ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
         const dataUrl = `data:${mime};base64,${uint8ArrayToBase64(buf)}`;
-        return { imageUrl: dataUrl, source: 'storage' };
+        return { imageUrl: dataUrl, source: 'storage', imageBytes: buf, storagePath: path };
       } catch (e: any) {
         console.warn('Vision: storage blob decode failed:', e?.message);
       }
@@ -127,6 +610,85 @@ async function resolveVisionImageInput(
       ? `Could not read screenshot file from storage and image_url is missing`
       : 'No file_path or image_url for vision',
   };
+}
+
+/**
+ * HTTPS URL the VL API can fetch (VL endpoints reject data: URLs).
+ * Prefer signed URL from Storage; else public http(s) image_url on the row.
+ */
+async function resolveRemoteImageUrlForVl(
+  supabase: any,
+  screenshot: { image_url?: string | null; file_path?: string | null },
+): Promise<string | null> {
+  const path = screenshot.file_path?.trim();
+  if (path) {
+    const bucket = screenshotsBucket();
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 600);
+    if (!error && data?.signedUrl) return data.signedUrl;
+    console.warn('VL: createSignedUrl failed:', error?.message);
+  }
+  const pub = screenshot.image_url?.trim();
+  if (pub && /^https?:\/\//i.test(pub)) return pub;
+  return null;
+}
+
+function getDeepSeekVlVisionUrl(): string {
+  const u = (Deno.env.get('DEEPSEEK_VL_API_URL') || '').trim();
+  return u.replace(/\/$/, '');
+}
+
+function getDeepSeekVlToken(): string {
+  return (Deno.env.get('DEEPSEEK_VL_API_KEY') || '').trim() || getDeepSeekToken();
+}
+
+function visionOpenAiCompatibleUrl(): string | null {
+  const b = (Deno.env.get('VISION_API_BASE') || '').trim();
+  if (!b) return null;
+  return `${b.replace(/\/$/, '')}/chat/completions`;
+}
+
+function getOpenAiCompatibleVisionToken(): string {
+  return (Deno.env.get('VISION_API_KEY') || '').trim();
+}
+
+function getOpenAiCompatibleVisionModel(): string {
+  return (Deno.env.get('VISION_MODEL') || 'gpt-4o-mini').trim();
+}
+
+/** Window titles that are useless for LLM context (prefer active_window_title when present). */
+const WINDOW_TITLE_SENTINELS = new Set([
+  '',
+  'no window',
+  'unknown',
+  'untitled',
+  '(unknown)',
+  'n/a',
+]);
+
+function pickBestWindowTitle(bodyWindowTitle: unknown, screenshot: Record<string, unknown>): string {
+  const candidates = [
+    typeof bodyWindowTitle === 'string' ? bodyWindowTitle.trim() : '',
+    String(screenshot.window_title || '').trim(),
+    String(screenshot.active_window_title || '').trim(),
+  ];
+  for (const c of candidates) {
+    const t = c.trim();
+    if (!t) continue;
+    if (WINDOW_TITLE_SENTINELS.has(t.toLowerCase())) continue;
+    return t;
+  }
+  return candidates.map((c) => c.trim()).find(Boolean) || '';
+}
+
+function pickBestActiveUrl(screenshot: Record<string, unknown>): string {
+  return String(screenshot.url || '').trim();
+}
+
+/** True when multimodal path actually consumed pixels (not DeepSeek text-only intelligence). */
+function isMultimodalVisionResult(visionResult: { vision_route?: string; success?: boolean } | null): boolean {
+  if (!visionResult?.success) return false;
+  const r = visionResult.vision_route;
+  return r === 'openai-compatible' || r === 'deepseek-vl' || r === 'deepseek-chat';
 }
 
 // Categories that trigger alerts
@@ -171,18 +733,28 @@ Deno.serve(async (req: Request) => {
       `[ai-screenshot-analyzer] deepseek_configured=${deepseekConfigured} text_model=${textModelForRequest} vision_model=${visionModelForRequest}`,
     );
 
-    const { 
-      screenshot_id, 
-      user_id, 
-      window_title, 
+    const {
+      screenshot_id,
+      user_id,
+      window_title,
       app_name,
-      use_ai = true,        // Enable DeepSeek text analysis
-      use_vision,           // Enable vision analysis (auto-detected if not specified)
+      use_ai = true, // Enable DeepSeek text analysis
+      use_vision, // Enable vision analysis (auto-detected if not specified)
       create_alerts = true, // Enable alert creation
       force_vision = false, // Force vision analysis regardless of conditions
-      force_ai = false,     // Force AI text classification even if patterns are confident
-      generate_description  // If true, run vision to generate a human-readable description
+      force_ai = false, // Force AI text classification even if patterns are confident
+      generate_description, // If true, run vision to generate a human-readable description
+      /** Text description/OCR of the screen for DeepSeek chat (no pixels). */
+      visual_scene_transcript,
+      /** off | fallback | always — overrides SCREENSHOT_INTELLIGENCE_TEXT_MODE for this request. */
+      screenshot_intelligence_text_mode,
     } = requestBody;
+
+    const rawIntelMode = screenshot_intelligence_text_mode ?? Deno.env.get('SCREENSHOT_INTELLIGENCE_TEXT_MODE') ?? 'fallback';
+    const intelligenceTextMode = (['off', 'fallback', 'always'].includes(String(rawIntelMode).toLowerCase())
+      ? String(rawIntelMode).toLowerCase()
+      : 'fallback') as 'off' | 'fallback' | 'always';
+    const visualSceneTranscript = typeof visual_scene_transcript === 'string' ? visual_scene_transcript : '';
 
     if (!screenshot_id) {
       return new Response(
@@ -207,8 +779,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const titleToAnalyze = window_title || screenshot.window_title || '';
+    const titleToAnalyze = pickBestWindowTitle(window_title, screenshot);
     const appToAnalyze = app_name || screenshot.app_name || '';
+    const urlForIntelligence = pickBestActiveUrl(screenshot);
     const imageUrl = screenshot.image_url;
     const hasScreenshotImage = !!(
       String(screenshot.image_url || '').trim() || String(screenshot.file_path || '').trim()
@@ -231,6 +804,8 @@ Deno.serve(async (req: Request) => {
     let visionResult = null;
     let textUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
     let visionUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
+    let intelligenceTextUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
+    let serverSniffMeta: NonNullable<ReturnType<typeof sniffImageMeta>> | null = null;
 
     const textApiToken = getTextApiToken();
     const CONFIDENCE_THRESHOLD = 90;
@@ -356,7 +931,22 @@ Deno.serve(async (req: Request) => {
             visionResult = { success: false, error: resolvedVision.error };
           } else {
             console.log(`Vision image loaded via ${resolvedVision.source}`);
-            visionResult = await analyzeWithVision(resolvedVision.imageUrl, visionModelForRequest);
+            const remoteVlUrl = await resolveRemoteImageUrlForVl(supabase, screenshot);
+            const sniff =
+              'imageBytes' in resolvedVision && resolvedVision.imageBytes
+                ? sniffImageMeta(resolvedVision.imageBytes, resolvedVision.storagePath ?? screenshot.file_path)
+                : null;
+            serverSniffMeta = sniff;
+            visionResult = await analyzeWithVision(resolvedVision.imageUrl, visionModelForRequest, {
+              remoteHttpsImageUrl: remoteVlUrl,
+              serverSniffMeta: sniff,
+            });
+            if (visionResult?.success && visionResult.screenshot_intelligence && serverSniffMeta) {
+              visionResult.screenshot_intelligence = mergeServerMetaIntoIntelligence(
+                visionResult.screenshot_intelligence as Record<string, unknown>,
+                serverSniffMeta,
+              );
+            }
           }
         }
         if (visionResult?.usage) {
@@ -395,6 +985,58 @@ Deno.serve(async (req: Request) => {
       console.log(`⏭️ Skipping vision: pattern confidence ${analysis.confidence_score}% >= ${CONFIDENCE_THRESHOLD}%`);
     }
 
+    // Step 3b: DeepSeek text-only screenshot_intelligence (api.deepseek.com has no image input on chat).
+    if (!serverSniffMeta && screenshot.file_path?.trim()) {
+      const bytes = await downloadScreenshotBytesForMeta(supabase, screenshot);
+      if (bytes) serverSniffMeta = sniffImageMeta(bytes, screenshot.file_path);
+    }
+
+    const visionHadIntelligence =
+      !!visionResult?.success &&
+      !!visionResult.screenshot_intelligence &&
+      typeof visionResult.screenshot_intelligence === 'object';
+
+    // `always` currently matches `fallback`: text JSON runs only when multimodal did not yield screenshot_intelligence.
+    const shouldRunTextIntelligence =
+      intelligenceTextMode !== 'off' && !!textApiToken && !visionHadIntelligence;
+
+    if (shouldRunTextIntelligence) {
+      try {
+        const metaHint = serverSniffMeta
+          ? `\nKnown from file bytes (use for meta.*): image_pixel_width=${serverSniffMeta.image_pixel_width}, image_pixel_height=${serverSniffMeta.image_pixel_height}, image_file_format_mime=${serverSniffMeta.image_file_format_mime}, aspect_ratio=${serverSniffMeta.aspect_ratio}` +
+            (serverSniffMeta.approx_file_type_note
+              ? `, approx_file_type_note=${JSON.stringify(serverSniffMeta.approx_file_type_note)}`
+              : '')
+          : '\nNo local image dimensions/MIME available; set meta fields cautiously or use null where allowed.';
+
+        const tr = await analyzeScreenshotIntelligenceDeepSeekText(
+          textApiToken,
+          textModelForRequest,
+          visualSceneTranscript,
+          titleToAnalyze,
+          appToAnalyze,
+          urlForIntelligence,
+          metaHint,
+        );
+        if (tr.success) {
+          if (serverSniffMeta && tr.screenshot_intelligence) {
+            tr.screenshot_intelligence = mergeServerMetaIntoIntelligence(
+              tr.screenshot_intelligence as Record<string, unknown>,
+              serverSniffMeta,
+            );
+          }
+          visionResult = tr;
+          if (tr.usage) intelligenceTextUsage = tr.usage;
+          analysis = mergeVisionAnalysis(analysis, tr);
+          console.log('✅ Screenshot intelligence (DeepSeek text-only) completed');
+        } else {
+          console.warn('⚠️ DeepSeek text intelligence skipped:', tr.error);
+        }
+      } catch (e: any) {
+        console.warn('⚠️ DeepSeek text intelligence failed:', e?.message);
+      }
+    }
+
     // Step 4: Check for consecutive duplicates
     let consecutiveDuplicateCount = 0;
     if (screenshot.is_duplicate) {
@@ -428,16 +1070,75 @@ Deno.serve(async (req: Request) => {
     }
 
     // Step 6: Update screenshot with analysis results
-    const imageDescription =
-      (visionResult?.success && typeof visionResult.detected_content === 'string' && visionResult.detected_content.trim().length > 0)
-        ? visionResult.detected_content.trim()
+    const intelligenceObj =
+      visionResult?.success && visionResult.screenshot_intelligence &&
+      typeof visionResult.screenshot_intelligence === 'object'
+        ? (visionResult.screenshot_intelligence as Record<string, unknown>)
         : null;
+    const hasVisionDescription =
+      visionResult?.success &&
+      (!!intelligenceObj ||
+        (typeof visionResult.detected_content === 'string' && visionResult.detected_content.trim().length > 0));
+    const isDeepseekTextIntelligence = visionResult?.vision_route === 'deepseek-text-intelligence';
+    const pixelsVisionUsed = isMultimodalVisionResult(visionResult);
+    const fallbackTextDescription = [
+      appToAnalyze ? `App: ${appToAnalyze}` : '',
+      titleToAnalyze ? `Window: ${titleToAnalyze}` : '',
+      analysis?.activity_type ? `Activity: ${analysis.activity_type}` : '',
+      analysis?.reasoning?.[0] ? `Hint: ${analysis.reasoning[0]}` : '',
+      analysis?.reasoning?.[1] ? `Note: ${analysis.reasoning[1]}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ')
+      .trim();
+    let imageDescription: string | null = intelligenceObj
+      ? briefLineFromIntelligence(intelligenceObj)
+      : hasVisionDescription && typeof visionResult?.detected_content === 'string'
+        ? visionResult.detected_content.trim()
+        : (fallbackTextDescription ||
+            (aiEnhanced
+              ? 'AI text classification only (vision did not run or is not supported for this model).'
+              : null));
+    if (!imageDescription && aiEnhanced) {
+      imageDescription =
+        'AI summary: classification completed without a text summary (check app/window fields on the row).';
+    }
 
     const deepseek_usage = buildDeepseekUsagePayload(
       textUsage,
       visionUsage,
       textModelForRequest,
       visionModelForRequest,
+      intelligenceTextUsage,
+    );
+
+    const visionErrStr = visionResult?.success
+      ? null
+      : (typeof visionResult?.error === 'string'
+        ? visionResult.error
+        : visionResult?.error != null
+          ? JSON.stringify(visionResult.error)
+          : null);
+
+    /** Keys we set last — never let `...analysis` overwrite them (model JSON can reuse names). */
+    const META_OUR_KEYS = new Set([
+      'image_description',
+      'screenshot_intelligence',
+      'screenshot_intelligence_source',
+      'analyzed_at',
+      'analysis_version',
+      'source',
+      'ai_enhanced',
+      'vision_used',
+      'pixels_vision_used',
+      'vision_reason',
+      'vision_error',
+      'description_source',
+      'deepseek_usage',
+      'analyzer_meta_version',
+    ]);
+    const analysisForMeta = Object.fromEntries(
+      Object.entries(analysis as Record<string, unknown>).filter(([k]) => !META_OUR_KEYS.has(k)),
     );
 
     const updateData: any = {
@@ -451,17 +1152,31 @@ Deno.serve(async (req: Request) => {
       is_work_related: !ALERT_CATEGORIES.includes(analysis.category),
       consecutive_duplicate_count: consecutiveDuplicateCount,
       ai_metadata: {
-        ...analysis,
+        ...analysisForMeta,
         image_description: imageDescription,
         analyzed_at: new Date().toISOString(),
-        analysis_version: '5.0.0-deepseek-only',
+        analysis_version: ANALYZER_RUNTIME_VERSION,
         source: 'ai-screenshot-analyzer',
         ai_enhanced: aiEnhanced,
-        vision_used: !!visionResult?.success,
+        vision_used: pixelsVisionUsed,
+        pixels_vision_used: pixelsVisionUsed,
         vision_reason: visionReason,
+        vision_error: visionErrStr,
+        description_source: hasVisionDescription
+          ? (isDeepseekTextIntelligence ? 'screenshot_intelligence_text' : 'vision')
+          : 'text-fallback',
+        screenshot_intelligence_source: intelligenceObj
+          ? (isDeepseekTextIntelligence ? 'deepseek_text' : 'multimodal')
+          : undefined,
+        analyzer_meta_version: 2,
         ...(deepseek_usage ? { deepseek_usage } : {}),
+        ...(intelligenceObj ? { screenshot_intelligence: intelligenceObj } : {}),
       }
     };
+
+    if (imageDescription && !hasVisionDescription) {
+      updateData.vision_content = imageDescription;
+    }
 
     // Update vision-specific fields if vision was used
     if (visionResult?.success) {
@@ -502,8 +1217,10 @@ Deno.serve(async (req: Request) => {
     console.log('✅ Screenshot analysis completed', {
       category: analysis.category,
       aiEnhanced,
-      visionUsed: !!visionResult?.success,
+      visionUsed: pixelsVisionUsed,
+      screenshotIntelligenceText: isDeepseekTextIntelligence,
       visionReason: visionReason,
+      imageDescription,
       alertCreated: !!alertId,
       consecutiveDuplicates: consecutiveDuplicateCount,
       duplicateOverride: analysis.duplicate_override || false
@@ -516,11 +1233,22 @@ Deno.serve(async (req: Request) => {
         ai_enhanced: aiEnhanced,
         vision_result: visionResult,
         vision_reason: visionReason,
-        vision_used: !!visionResult?.success,
+        vision_used: pixelsVisionUsed,
+        pixels_vision_used: pixelsVisionUsed,
+        image_description: imageDescription,
+        description_source: hasVisionDescription
+          ? (isDeepseekTextIntelligence ? 'screenshot_intelligence_text' : 'vision')
+          : 'text-fallback',
+        screenshot_intelligence_source: intelligenceObj
+          ? (isDeepseekTextIntelligence ? 'deepseek_text' : 'multimodal')
+          : undefined,
+        vision_error: visionErrStr,
+        analyzer_runtime_version: ANALYZER_RUNTIME_VERSION,
         alert_id: alertId,
         consecutive_duplicate_count: consecutiveDuplicateCount,
         duplicate_override: analysis.duplicate_override || false,
         deepseek_usage,
+        screenshot_intelligence: intelligenceObj ?? undefined,
         message: 'Screenshot analysis completed successfully'
       }),
       {
@@ -937,41 +1665,107 @@ function buildDeepseekUsagePayload(
   vision: ReturnType<typeof extractOpenAiUsage>,
   textModel: string,
   visionModel: string,
+  intelligenceText?: ReturnType<typeof extractOpenAiUsage>,
 ): Record<string, unknown> | undefined {
   const textPart = text ? { ...text, model: textModel } : undefined;
   const visionPart = vision ? { ...vision, model: visionModel } : undefined;
-  const total_tokens = (text?.total_tokens ?? 0) + (vision?.total_tokens ?? 0);
-  if (!textPart && !visionPart) return undefined;
+  const intelPart = intelligenceText ? { ...intelligenceText, model: textModel } : undefined;
+  const total_tokens =
+    (text?.total_tokens ?? 0) + (vision?.total_tokens ?? 0) + (intelligenceText?.total_tokens ?? 0);
+  if (!textPart && !visionPart && !intelPart) return undefined;
   return {
     text: textPart,
     vision: visionPart,
+    screenshot_intelligence_text: intelPart,
     total_tokens,
   };
 }
 
-function parseVisionJsonPayload(text: string, model: string): any {
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return { success: false as const, error: 'unparseable' };
+/**
+ * DeepSeek VL: POST { image_url, prompt } — not OpenAI chat format.
+ * Response shape: { id?, model?, output: string | object }
+ */
+async function visionDeepSeekVlApi(
+  endpoint: string,
+  token: string,
+  imageUrl: string,
+  prompt: string,
+): Promise<any> {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      image_url: imageUrl,
+      prompt,
+      output_format: 'text',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { success: false, error: `${response.status}: ${errorText}` };
+  }
+
+  let result: Record<string, unknown>;
   try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validCategories = ['productive', 'social_media', 'entertainment', 'gaming', 'shopping', 'communication', 'other'];
-    const prod =
-      typeof parsed.productivity_score === 'number' ? clampScore(parsed.productivity_score) : undefined;
-    return {
-      success: true as const,
-      detected_content: parsed.detected_content || text.substring(0, 500),
-      category: validCategories.includes(parsed.category) ? parsed.category : undefined,
-      is_work_related: parsed.is_work_related,
-      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
-      privacy_concerns: parsed.privacy_concerns || [],
-      is_idle: parsed.is_idle || false,
-      productivity_score: prod,
-      distraction_score: typeof parsed.distraction_score === 'number' ? clampScore(parsed.distraction_score) : undefined,
-      model,
-    };
+    result = await response.json() as Record<string, unknown>;
+  } catch {
+    return { success: false, error: 'DeepSeek VL: invalid JSON response' };
+  }
+
+  const out = result.output;
+  const text = typeof out === 'string' ? out : (out != null ? JSON.stringify(out) : '');
+  const model = typeof result.model === 'string' ? result.model : 'deepseek-vl';
+  const parsed = parseVisionJsonPayload(text, model);
+  if (parsed.success) {
+    return { ...parsed, vision_route: 'deepseek-vl' as const };
+  }
+  return {
+    success: true,
+    detected_content: text.trim().substring(0, 500),
+    model,
+    vision_route: 'deepseek-vl' as const,
+  };
+}
+
+function parseLegacyVisionShape(parsed: Record<string, unknown>, model: string, fallbackText: string): any {
+  const validCategories = ['productive', 'social_media', 'entertainment', 'gaming', 'shopping', 'communication', 'other'];
+  const cat = typeof parsed.category === 'string' ? parsed.category : '';
+  const prod =
+    typeof parsed.productivity_score === 'number' ? clampScore(parsed.productivity_score) : undefined;
+  return {
+    success: true as const,
+    detected_content: String(parsed.detected_content || fallbackText).substring(0, 500),
+    category: validCategories.includes(cat) ? cat : undefined,
+    is_work_related: parsed.is_work_related,
+    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+    privacy_concerns: Array.isArray(parsed.privacy_concerns) ? parsed.privacy_concerns : [],
+    is_idle: parsed.is_idle || false,
+    productivity_score: prod,
+    distraction_score: typeof parsed.distraction_score === 'number' ? clampScore(parsed.distraction_score) : undefined,
+    model,
+  };
+}
+
+function parseVisionJsonPayload(text: string, model: string): any {
+  const slice = extractFirstJsonObject(text);
+  if (!slice) return { success: false as const, error: 'unparseable' };
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(slice);
   } catch {
     return { success: false as const, error: 'json_parse' };
   }
+  if (isScreenshotIntelligenceShape(parsed)) {
+    return normalizeIntelligenceVisionPayload(coerceScreenshotIntelligenceShape(parsed), model);
+  }
+  if (typeof parsed.detected_content === 'string' || typeof parsed.category === 'string') {
+    return parseLegacyVisionShape(parsed, model, text);
+  }
+  return { success: false as const, error: 'unparseable' };
 }
 
 async function visionOpenAiMultimodal(
@@ -994,12 +1788,12 @@ async function visionOpenAiMultimodal(
         {
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: imageUrl } },
             { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: imageUrl } },
           ],
         },
       ],
-      max_tokens: 400,
+      max_tokens: visionJsonMaxTokens(),
       temperature: 0.2,
       ...extra,
     }),
@@ -1007,6 +1801,19 @@ async function visionOpenAiMultimodal(
 
   if (!response.ok) {
     const errorText = await response.text();
+    // DeepSeek text-only models (eg v4 flash/pro on chat/completions) reject image blocks.
+    if (
+      response.status === 400 &&
+      /unknown variant [`'"]image_url[`'"]|expected [`'"]text[`'"]/i.test(errorText)
+    ) {
+      return {
+        success: false,
+        error:
+          `Model ${model} on ${apiUrl} rejected image input. ` +
+          `This endpoint/model appears text-only for chat/completions. ` +
+          `Use a vision-capable model/endpoint, or keep text fallback description.`,
+      };
+    }
     return { success: false, error: `${response.status}: ${errorText}` };
   }
 
@@ -1024,35 +1831,154 @@ async function visionOpenAiMultimodal(
   };
 }
 
-/**
- * Vision: DeepSeek multimodal (same API key; model id from request or env).
- */
-async function analyzeWithVision(imageUrl: string, visionModelId: string): Promise<any> {
-  try {
-    const prompt = `Analyze this screenshot and respond with ONLY valid JSON (no other text):
-{
-  "detected_content": "Brief description of what is visible (max 50 words)",
-  "category": "productive | social_media | entertainment | gaming | shopping | communication | other",
-  "is_work_related": true or false,
-  "distraction_score": 0-100,
-  "productivity_score": 0-100,
-  "confidence": 0.0 to 1.0,
-  "privacy_concerns": [],
-  "is_idle": false
+function pixelSourceFromVisionRoute(route: string | undefined): IntelligencePixelSource | null {
+  if (route === 'openai-compatible') return 'openai_compatible';
+  if (route === 'deepseek-vl') return 'deepseek_vl';
+  return null;
 }
 
-Use distraction_score for how distracting/non-work the screen is (higher = worse). productivity_score is the inverse notion on a 0-100 scale (higher = more focused/work-aligned).
+/** Set analysis_method_note for pixel-grounded multimodal results. */
+function finalizeVisionResultIntelligence(r: Record<string, unknown>): void {
+  if (!r?.success || !r.screenshot_intelligence || typeof r.screenshot_intelligence !== 'object') return;
+  const route = typeof r.vision_route === 'string' ? r.vision_route : undefined;
+  r.screenshot_intelligence = finalizeIntelligenceObject(r.screenshot_intelligence as Record<string, unknown>, {
+    pixelSource: pixelSourceFromVisionRoute(route),
+  });
+}
 
-Classification rules:
-- productive: IDEs, code editors, terminals, office apps, project management, design tools, file managers (File Explorer, Finder), system utilities, browsers showing work content, admin panels, dashboards
-- social_media: Facebook, Instagram, Twitter/X, TikTok, Snapchat, Reddit — personal social feeds
-- entertainment: Netflix, YouTube (non-tutorial), Hulu, Disney+, HBO, Twitch streams, Spotify, movies
-- gaming: Steam, Epic Games, actual video games, game interfaces
-- shopping: Amazon, eBay, personal online shopping on e-commerce sites
-- communication: Slack, Teams, Zoom, email clients
-- other: anything that doesn't clearly fit
+async function downloadScreenshotBytesForMeta(supabase: any, screenshot: { file_path?: string | null }): Promise<Uint8Array | null> {
+  const path = screenshot.file_path?.trim();
+  if (!path) return null;
+  const bucket = screenshotsBucket();
+  const { data: blob, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !blob) return null;
+  try {
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
 
-Important: File Explorer, Windows Explorer, Finder, and system utilities are ALWAYS productive. Only classify as non-productive if the content is clearly personal/leisure activity.`;
+/**
+ * DeepSeek chat/completions — text-only JSON intelligence (no image). Uses response_format json_object.
+ */
+async function analyzeScreenshotIntelligenceDeepSeekText(
+  token: string,
+  textModel: string,
+  transcript: string,
+  windowTitle: string,
+  appName: string,
+  activeUrl: string,
+  serverMetaHint: string,
+): Promise<any> {
+  const transcriptBlock = [
+    transcript.trim()
+      ? `Visual scene transcript (from agent, OCR, or user):\n${transcript.trim()}`
+      : 'Visual scene transcript: not provided.',
+    `Window title (metadata): ${windowTitle || '(unknown)'}`,
+    `Application name (metadata): ${appName || '(unknown)'}`,
+    `Active/focus URL if captured (metadata): ${activeUrl || '(unknown)'}`,
+  ].join('\n\n');
+
+  const prompt = buildScreenshotIntelligenceTextPrompt(transcriptBlock, serverMetaHint);
+
+  const response = await fetch(getDeepSeekChatUrl(), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: textModel,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You output only valid JSON for workforce screenshot analytics. Never use markdown code fences. Obey the user schema exactly.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: intelligenceTextMaxTokens(),
+      temperature: 0.2,
+      thinking: { type: 'disabled' },
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!response.ok) {
+    return { success: false, error: `${response.status}: ${await response.text()}` };
+  }
+
+  const result = await response.json();
+  const usage = extractOpenAiUsage(result as Record<string, unknown>);
+  const content = String((result as any).choices?.[0]?.message?.content || '');
+  const slice = extractFirstJsonObject(content);
+  if (!slice) return { success: false, error: 'intelligence_text_unparseable' };
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(slice);
+  } catch {
+    return { success: false, error: 'intelligence_text_json_parse' };
+  }
+  if (!isScreenshotIntelligenceShape(parsed)) {
+    return { success: false, error: 'intelligence_text_missing_schema_keys' };
+  }
+  const finalized = finalizeIntelligenceObject(coerceScreenshotIntelligenceShape(parsed), {
+    textOnly: true,
+    transcriptSupplied: transcript.trim().length > 0,
+  });
+  const norm = normalizeIntelligenceVisionPayload(finalized, textModel);
+  return { ...norm, usage, vision_route: 'deepseek-text-intelligence' as const };
+}
+
+/**
+ * Vision: try DeepSeek VL (/v1/vision) when a fetchable URL exists, then optional OpenAI-compatible API, then DeepSeek chat (often text-only).
+ */
+async function analyzeWithVision(
+  imageUrl: string,
+  visionModelId: string,
+  opts?: { remoteHttpsImageUrl?: string | null; serverSniffMeta?: ReturnType<typeof sniffImageMeta> | null },
+): Promise<any> {
+  try {
+    const sniff = opts?.serverSniffMeta;
+    const serverHint = sniff
+      ? `\nKnown from uploaded file bytes (use these exact values in meta for width, height, MIME, aspect_ratio; trust over guessing): image_pixel_width=${sniff.image_pixel_width}, image_pixel_height=${sniff.image_pixel_height}, image_file_format_mime=${sniff.image_file_format_mime}, aspect_ratio=${sniff.aspect_ratio}` +
+        (sniff.approx_file_type_note
+          ? `, approx_file_type_note=${JSON.stringify(sniff.approx_file_type_note)}`
+          : '')
+      : '';
+    const prompt = buildScreenshotIntelligencePrompt(serverHint);
+
+    const vlDisabled = Deno.env.get('DEEPSEEK_VL_DISABLED') === 'true';
+    const vlEndpoint = getDeepSeekVlVisionUrl();
+    const vlToken = getDeepSeekVlToken();
+    const remote = opts?.remoteHttpsImageUrl?.trim() || '';
+
+    if (!vlDisabled && vlToken && remote && vlEndpoint) {
+      const vl = await visionDeepSeekVlApi(vlEndpoint, vlToken, remote, prompt);
+      if (vl.success) {
+        finalizeVisionResultIntelligence(vl);
+        return vl;
+      }
+      console.warn('DeepSeek VL failed, trying fallbacks:', vl.error);
+    } else if (!remote && !vlDisabled) {
+      console.warn('Vision: no HTTPS image URL for DeepSeek VL (need file_path or public image_url); using fallbacks');
+    }
+
+    const compatUrl = visionOpenAiCompatibleUrl();
+    const compatTok = getOpenAiCompatibleVisionToken();
+    const compatModel = getOpenAiCompatibleVisionModel();
+    if (compatUrl && compatTok) {
+      const r2 = await visionOpenAiMultimodal(compatUrl, compatTok, compatModel, imageUrl, prompt, {
+        response_format: { type: 'json_object' },
+      });
+      if (r2.success) {
+        const out = { ...r2, vision_route: 'openai-compatible' as const };
+        finalizeVisionResultIntelligence(out);
+        return out;
+      }
+      console.warn('VISION_API multimodal failed:', r2.error);
+    }
 
     const dsToken = getDeepSeekToken();
     if (!dsToken || !visionModelId) {
@@ -1067,7 +1993,11 @@ Important: File Explorer, Windows Explorer, Finder, and system utilities are ALW
       prompt,
       { thinking: { type: 'disabled' }, response_format: { type: 'json_object' } },
     );
-    if (r.success) return r;
+    if (r.success) {
+      const out = { ...r, vision_route: 'deepseek-chat' as const };
+      finalizeVisionResultIntelligence(out);
+      return out;
+    }
     return { success: false, error: r.error || 'DeepSeek vision request failed' };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -1190,11 +2120,24 @@ function mergeAnalysis(patternAnalysis: any, aiResult: any): any {
 function mergeVisionAnalysis(analysis: any, visionResult: any): any {
   if (!visionResult.success) return analysis;
 
+  const intel = visionResult.screenshot_intelligence as Record<string, unknown> | undefined;
+  const cls0 = intel && Array.isArray(intel.classifications) && intel.classifications[0]
+    ? (intel.classifications[0] as Record<string, unknown>)
+    : null;
+  const visionReasonLine = cls0?.label
+    ? `Intelligence: ${cls0.label}`
+    : `Vision: ${visionResult.detected_content?.substring(0, 100) || 'Image analyzed'}`;
+
+  const textIntelOnly = visionResult.vision_route === 'deepseek-text-intelligence';
+  const nextMethod = textIntelOnly
+    ? (analysis.analysis_method === 'ai-enhanced' ? 'ai-text-intelligence-enhanced' : 'text-intelligence-enhanced')
+    : (analysis.analysis_method === 'ai-enhanced' ? 'ai-vision-enhanced' : 'vision-enhanced');
+
   const merged = {
     ...analysis,
     vision_content: visionResult.detected_content,
-    reasoning: [...analysis.reasoning, `Vision: ${visionResult.detected_content?.substring(0, 100) || 'Image analyzed'}`],
-    analysis_method: analysis.analysis_method === 'ai-enhanced' ? 'ai-vision-enhanced' : 'vision-enhanced',
+    reasoning: [...analysis.reasoning, visionReasonLine],
+    analysis_method: nextMethod,
   };
 
   if (typeof visionResult.distraction_score === 'number') {
