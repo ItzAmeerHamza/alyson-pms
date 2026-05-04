@@ -31,7 +31,14 @@ interface UseScreenshotsReturn {
   bulkDeleteScreenshots: (ids: string[]) => Promise<void>;
   estimateDeduction: (screenshotId: string) => Promise<number>;
   triggerAIAnalysis: (limit?: number) => Promise<void>;
-  reanalyzeScreenshot: (screenshotId: string) => Promise<void>;
+  reanalyzeScreenshot: (
+    screenshotId: string,
+    opts?: { deepseek_model?: string; silent?: boolean; skipFetch?: boolean },
+  ) => Promise<boolean>;
+  analyzeScreenshotsManual: (
+    screenshotIds: string[],
+    deepseek_model: string,
+  ) => Promise<{ ok: number; failed: number }>;
   fetchAIStatus: () => Promise<void>;
 }
 
@@ -585,10 +592,10 @@ export const useScreenshots = (
 
       setAiStatus({
         aiEnabled: true, // AI is always enabled via pg_cron
-        aiProvider: 'huggingface',
+        aiProvider: 'deepseek',
         models: {
-          text: 'Qwen3-32B',
-          vision: 'Qwen2.5-VL-7B'
+          text: 'deepseek-v4-flash / deepseek-v4-pro',
+          vision: 'same as selected model',
         },
         pendingCount: pendingCount || 0,
         analyzing: false,
@@ -642,12 +649,16 @@ export const useScreenshots = (
     }
   };
 
-  // Re-analyze a single screenshot
-  const reanalyzeScreenshot = async (screenshotId: string) => {
+  // Re-analyze a single screenshot (DeepSeek; model from UI)
+  const reanalyzeScreenshot = async (
+    screenshotId: string,
+    opts?: { deepseek_model?: string; silent?: boolean; skipFetch?: boolean },
+  ): Promise<boolean> => {
     try {
-      toast.info('🔄 Re-analyzing screenshot...');
+      if (!opts?.silent) {
+        toast.info('🔄 Running AI analysis…');
+      }
 
-      // First mark as pending (cast needed - column exists but types not regenerated)
       const { error: updateError } = await supabase
         .from('screenshots')
         .update({ ai_analysis_status: 'pending' } as any)
@@ -657,32 +668,71 @@ export const useScreenshots = (
         throw updateError;
       }
 
-      // Use ai-screenshot-analyzer for single screenshot analysis with vision
+      const body: Record<string, unknown> = {
+        screenshot_id: screenshotId,
+        use_vision: true,
+        generate_description: true,
+        force_vision: true,
+        force_ai: true,
+        organization_id: organizationId || null,
+      };
+      if (opts?.deepseek_model) {
+        body.deepseek_model = opts.deepseek_model;
+      }
+
       const { data, error } = await supabase.functions.invoke('ai-screenshot-analyzer', {
-        body: {
-          screenshot_id: screenshotId,
-          use_vision: true,
-          generate_description: true,
-          force_vision: true,
-          force_ai: true,
-          organization_id: organizationId || null
-        }
+        body,
       });
 
       if (error) {
         throw error;
       }
 
-      toast.success('✅ Screenshot re-analyzed successfully!');
-      
-      // Refresh data
-      await fetchData();
-
+      if (!opts?.silent) {
+        toast.success('✅ Analysis finished');
+      }
+      if (!opts?.skipFetch) {
+        await fetchData();
+      }
       console.log('🤖 Re-analysis result:', data);
+      return true;
     } catch (error: any) {
       console.error('Error re-analyzing screenshot:', error);
-      toast.error(`❌ Re-analysis failed: ${error.message}`);
+      if (!opts?.silent) {
+        toast.error(`❌ Analysis failed: ${error.message}`);
+      }
+      return false;
     }
+  };
+
+  /** Run manual DeepSeek analysis on many screenshots (sequential to avoid rate limits). */
+  const analyzeScreenshotsManual = async (
+    screenshotIds: string[],
+    deepseek_model: string,
+  ): Promise<{ ok: number; failed: number }> => {
+    let ok = 0;
+    let failed = 0;
+    const total = screenshotIds.length;
+    if (total === 0) return { ok: 0, failed: 0 };
+
+    toast.info(`Analyzing ${total} screenshot(s) with DeepSeek…`);
+    for (let i = 0; i < screenshotIds.length; i++) {
+      const id = screenshotIds[i];
+      const success = await reanalyzeScreenshot(id, {
+        deepseek_model,
+        silent: true,
+        skipFetch: true,
+      });
+      if (success) ok++;
+      else failed++;
+    }
+    await fetchData();
+    if (failed === 0) {
+      toast.success(`All ${ok} screenshot(s) analyzed`);
+    } else {
+      toast.warning(`Done: ${ok} succeeded, ${failed} failed`);
+    }
+    return { ok, failed };
   };
 
   // Filter screenshots based on current filters
@@ -827,6 +877,7 @@ export const useScreenshots = (
     estimateDeduction,
     triggerAIAnalysis,
     reanalyzeScreenshot,
+    analyzeScreenshotsManual,
     fetchAIStatus
   };
 }; 

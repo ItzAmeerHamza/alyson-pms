@@ -1,17 +1,16 @@
 /**
- * AI Screenshot Analyzer - Enhanced with GLM-4.7 + Vision + Alerts
- * 
- * Features:
- * - Pattern-based analysis (fast, always available)
- * - AI-powered text analysis using GLM-4.7 for context understanding
- * - Vision analysis for image content (optional)
- * - Automatic alert creation for non-work activities
- * - Privacy concern detection
- * - Consecutive duplicate tracking
- * 
- * Required secrets:
- * - GEMINI_API_KEY: Google Gemini API key (preferred)
- * - HF_API_TOKEN: Hugging Face API token (fallback)
+ * AI Screenshot Analyzer — pattern + DeepSeek (text + optional vision only)
+ *
+ * Runs on Supabase Edge (Deno). Configure via Edge Function secrets, e.g.:
+ *   supabase secrets set DEEPSEEK_API_KEY=sk-...
+ *
+ * Secrets:
+ * - DEEPSEEK_API_KEY — required for LLM text (window title / app). Optional vault: get_secret('DEEPSEEK_API_KEY')
+ * - DEEPSEEK_MODEL — optional; default deepseek-v4-flash
+ * - DEEPSEEK_API_BASE — optional; default https://api.deepseek.com
+ * - Request body (optional): deepseek_model, deepseek_vision_model — must be deepseek-v4-flash or deepseek-v4-pro
+ * - DEEPSEEK_VISION_MODEL — fallback vision model id when body omits deepseek_vision_model
+ * - SCREENSHOTS_STORAGE_BUCKET — optional; default screenshots (loads image bytes via service role + file_path)
  */
 
 /// <reference types="./types.d.ts" />
@@ -29,45 +28,105 @@ function getCorsHeaders(req: Request) {
   };
 }
 
-// Gemini API (OpenAI-compatible endpoint) — falls back to HF if GEMINI_API_KEY not set
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-const HF_ROUTER = 'https://router.huggingface.co/v1/chat/completions';
-const GEMINI_MODEL = 'gemini-2.5-flash-lite';
-const HF_TEXT_MODEL = 'THUDM/glm-4-9b-chat';
-// NOTE: HF Router support varies by enabled providers; allow override via secret/env.
-// `meta-llama/Llama-3.2-11B-Vision-Instruct` is broadly available via HF Inference Providers.
-const HF_VISION_MODEL_DEFAULT = 'meta-llama/Llama-3.2-11B-Vision-Instruct';
-const HF_BLIP_CAPTION_MODEL = 'Salesforce/blip-image-captioning-large';
+let _cachedDeepSeekKey: string | null = null;
 
-let _cachedGeminiKey: string | null = null;
-
-async function getGeminiKeyFromVault(supabase: any): Promise<string | null> {
-  if (_cachedGeminiKey) return _cachedGeminiKey;
+async function getDeepSeekKeyFromVault(supabase: any): Promise<string | null> {
+  if (_cachedDeepSeekKey) return _cachedDeepSeekKey;
   try {
-    const { data } = await supabase.rpc('get_secret', { secret_name: 'GEMINI_API_KEY' }).single();
+    const { data } = await supabase.rpc('get_secret', { secret_name: 'DEEPSEEK_API_KEY' }).single();
     if (data?.decrypted_secret) {
-      _cachedGeminiKey = data.decrypted_secret;
-      return _cachedGeminiKey;
+      _cachedDeepSeekKey = data.decrypted_secret;
+      return _cachedDeepSeekKey;
     }
   } catch (_e) { /* vault unavailable */ }
   return null;
 }
 
-function isUsingGemini(): boolean {
-  return !!(_cachedGeminiKey || Deno.env.get('GEMINI_API_KEY'));
+function getDeepSeekChatUrl(): string {
+  const base = (Deno.env.get('DEEPSEEK_API_BASE') || 'https://api.deepseek.com').replace(/\/$/, '');
+  return `${base}/chat/completions`;
 }
-function getApiUrl(): string {
-  return isUsingGemini() ? GEMINI_API_URL : HF_ROUTER;
+
+/** Only models we allow from request body (prevents arbitrary model injection). */
+const ALLOWED_DEEPSEEK_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro']);
+
+function pickDeepseekModel(preferred: unknown, fallback: string): string {
+  const p = typeof preferred === 'string' ? preferred.trim() : '';
+  if (ALLOWED_DEEPSEEK_MODELS.has(p)) return p;
+  const f = typeof fallback === 'string' ? fallback.trim() : '';
+  if (ALLOWED_DEEPSEEK_MODELS.has(f)) return f;
+  return 'deepseek-v4-flash';
 }
-function getTextModelName(): string {
-  return isUsingGemini() ? GEMINI_MODEL : HF_TEXT_MODEL;
+
+function envDefaultTextModel(): string {
+  return pickDeepseekModel(Deno.env.get('DEEPSEEK_MODEL'), 'deepseek-v4-flash');
 }
-function getVisionModelName(): string {
-  if (isUsingGemini()) return GEMINI_MODEL;
-  return Deno.env.get('HF_VISION_MODEL') || HF_VISION_MODEL_DEFAULT;
+
+/** Bearer token for DeepSeek API. */
+function getTextApiToken(): string {
+  return _cachedDeepSeekKey || Deno.env.get('DEEPSEEK_API_KEY') || '';
 }
-function getApiToken(): string {
-  return _cachedGeminiKey || Deno.env.get('GEMINI_API_KEY') || Deno.env.get('HF_API_TOKEN') || '';
+
+function getDeepSeekToken(): string {
+  return _cachedDeepSeekKey || Deno.env.get('DEEPSEEK_API_KEY') || '';
+}
+
+function hasDeepSeekText(): boolean {
+  return !!getTextApiToken();
+}
+
+function screenshotsBucket(): string {
+  return Deno.env.get('SCREENSHOTS_STORAGE_BUCKET') || 'screenshots';
+}
+
+/** Base64 for data URLs without blowing the stack on large buffers. */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Prefer downloading from Storage via service role (reliable in Edge). Public image_url often 404s
+ * if the bucket URL points at another project or the bucket was renamed.
+ */
+async function resolveVisionImageInput(
+  supabase: any,
+  screenshot: { image_url?: string | null; file_path?: string | null },
+): Promise<{ imageUrl: string; source: 'storage' | 'public_url' } | { error: string }> {
+  const path = screenshot.file_path?.trim();
+  if (path) {
+    const bucket = screenshotsBucket();
+    const { data: blob, error } = await supabase.storage.from(bucket).download(path);
+    if (!error && blob) {
+      try {
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        const ext = path.toLowerCase().split('.').pop() || 'jpg';
+        const mime =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const dataUrl = `data:${mime};base64,${uint8ArrayToBase64(buf)}`;
+        return { imageUrl: dataUrl, source: 'storage' };
+      } catch (e: any) {
+        console.warn('Vision: storage blob decode failed:', e?.message);
+      }
+    } else {
+      console.warn(`Vision: storage download failed (${bucket}/${path}):`, error?.message);
+    }
+  }
+
+  const publicUrl = screenshot.image_url?.trim();
+  if (publicUrl) {
+    return { imageUrl: publicUrl, source: 'public_url' };
+  }
+
+  return {
+    error: path
+      ? `Could not read screenshot file from storage and image_url is missing`
+      : 'No file_path or image_url for vision',
+  };
 }
 
 // Categories that trigger alerts
@@ -94,18 +153,30 @@ Deno.serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Ensure Gemini key is loaded from vault if not in env
-    if (!Deno.env.get('GEMINI_API_KEY') && !_cachedGeminiKey) {
-      await getGeminiKeyFromVault(supabase);
+    if (!Deno.env.get('DEEPSEEK_API_KEY') && !_cachedDeepSeekKey) {
+      await getDeepSeekKeyFromVault(supabase);
     }
 
+    const deepseekConfigured =
+      !!Deno.env.get('DEEPSEEK_API_KEY') || !!_cachedDeepSeekKey;
+
     const requestBody = await req.json();
+    const textModelForRequest = pickDeepseekModel(requestBody.deepseek_model, envDefaultTextModel());
+    const visionModelForRequest = pickDeepseekModel(
+      requestBody.deepseek_vision_model ?? requestBody.deepseek_model,
+      pickDeepseekModel(Deno.env.get('DEEPSEEK_VISION_MODEL'), textModelForRequest),
+    );
+
+    console.log(
+      `[ai-screenshot-analyzer] deepseek_configured=${deepseekConfigured} text_model=${textModelForRequest} vision_model=${visionModelForRequest}`,
+    );
+
     const { 
       screenshot_id, 
       user_id, 
       window_title, 
       app_name,
-      use_ai = true,        // Enable AI analysis (GLM-4.7)
+      use_ai = true,        // Enable DeepSeek text analysis
       use_vision,           // Enable vision analysis (auto-detected if not specified)
       create_alerts = true, // Enable alert creation
       force_vision = false, // Force vision analysis regardless of conditions
@@ -139,6 +210,9 @@ Deno.serve(async (req: Request) => {
     const titleToAnalyze = window_title || screenshot.window_title || '';
     const appToAnalyze = app_name || screenshot.app_name || '';
     const imageUrl = screenshot.image_url;
+    const hasScreenshotImage = !!(
+      String(screenshot.image_url || '').trim() || String(screenshot.file_path || '').trim()
+    );
 
     // Fetch user's organization_id for alert scoping
     let userOrgId: string | null = screenshot.organization_id || null;
@@ -156,7 +230,7 @@ Deno.serve(async (req: Request) => {
     let aiEnhanced = false;
     let visionResult = null;
 
-    const aiToken = getApiToken();
+    const textApiToken = getTextApiToken();
     const CONFIDENCE_THRESHOLD = 90;
     const patternConfident = analysis.confidence_score >= CONFIDENCE_THRESHOLD;
 
@@ -168,14 +242,13 @@ Deno.serve(async (req: Request) => {
       // Auto-detect when to use vision
       const activityPercent = screenshot.activity_percent || 0;
       const isUnvalidatedDuplicate = screenshot.is_duplicate && !screenshot.vision_validated_at;
-      const hasImageUrl = !!imageUrl;
       const alwaysVisionDescription = (Deno.env.get('ALWAYS_VISION_DESCRIPTION') || '').toLowerCase() === 'true';
       const wantsDescription = generate_description === true || alwaysVisionDescription;
       
       if (force_vision) {
         shouldUseVision = true;
         visionReason = 'forced';
-      } else if (wantsDescription && hasImageUrl) {
+      } else if (wantsDescription && hasScreenshotImage) {
         // Generate a description for the screenshot (vision) even if pattern is confident.
         // This is useful for UX, search, and auditability.
         shouldUseVision = true;
@@ -184,14 +257,14 @@ Deno.serve(async (req: Request) => {
         // Only run vision for flagged screenshots when pattern confidence is low
         shouldUseVision = true;
         visionReason = 'flagged_for_validation';
-      } else if (activityPercent < 10 && hasImageUrl && !patternConfident) {
+      } else if (activityPercent < 10 && hasScreenshotImage && !patternConfident) {
         // Low activity AND ambiguous app — might be idle or just reading
         shouldUseVision = true;
         visionReason = 'low_activity';
-      } else if (isUnvalidatedDuplicate && hasImageUrl && !patternConfident) {
+      } else if (isUnvalidatedDuplicate && hasScreenshotImage && !patternConfident) {
         shouldUseVision = true;
         visionReason = 'unvalidated_duplicate';
-      } else if (Math.random() < 0.03 && hasImageUrl) {
+      } else if (Math.random() < 0.03 && hasScreenshotImage) {
         // 3% random sampling for quality assurance
         shouldUseVision = true;
         visionReason = 'random_sample';
@@ -207,7 +280,7 @@ Deno.serve(async (req: Request) => {
 
     // Step 2: AI-enhanced analysis (normally only when pattern matching is NOT confident)
     // If force_ai is true, always call AI when a token exists.
-    if (use_ai && aiToken && (!patternConfident || force_ai)) {
+    if (use_ai && textApiToken && (!patternConfident || force_ai)) {
       // Check if same user+title was already AI-analyzed recently (dedup)
       let reusedClassification = false;
       if (titleToAnalyze) {
@@ -245,11 +318,11 @@ Deno.serve(async (req: Request) => {
 
       if (!reusedClassification) {
         try {
-          const aiResult = await analyzeWithAI(titleToAnalyze, appToAnalyze, aiToken);
+          const aiResult = await analyzeWithAI(titleToAnalyze, appToAnalyze, textApiToken, textModelForRequest);
           if (aiResult.success) {
             analysis = mergeAnalysis(analysis, aiResult);
             aiEnhanced = true;
-            console.log('✅ AI analysis enhanced with Gemini');
+            console.log('✅ AI analysis enhanced (deepseek)');
           }
         } catch (aiError: any) {
           console.warn('⚠️ AI analysis failed, using pattern-based only:', aiError.message);
@@ -269,10 +342,21 @@ Deno.serve(async (req: Request) => {
       'low_activity',
       'unvalidated_duplicate',
     ].includes(visionReason);
-    if (shouldUseVision && aiToken && imageUrl && (!patternConfident || visionForSpecialReason)) {
+    if (shouldUseVision && hasScreenshotImage && (!patternConfident || visionForSpecialReason)) {
       try {
-        visionResult = await analyzeWithVision(imageUrl, aiToken);
-        if (visionResult.success) {
+        if (!textApiToken) {
+          console.warn('⚠️ Vision was requested but DEEPSEEK_API_KEY is not configured');
+          visionResult = { success: false, error: 'DEEPSEEK_API_KEY not configured' };
+        } else {
+          const resolvedVision = await resolveVisionImageInput(supabase, screenshot);
+          if ('error' in resolvedVision) {
+            visionResult = { success: false, error: resolvedVision.error };
+          } else {
+            console.log(`Vision image loaded via ${resolvedVision.source}`);
+            visionResult = await analyzeWithVision(resolvedVision.imageUrl, visionModelForRequest);
+          }
+        }
+        if (visionResult?.success) {
           // App-name override protection: known dev tools cannot be reclassified by vision
           const isProtectedApp = OVERRIDE_PROTECTED_APPS.some(a => appToAnalyze.toLowerCase().includes(a));
           if (isProtectedApp && visionResult.category && visionResult.category !== 'productive' && visionResult.category !== 'communication') {
@@ -299,6 +383,8 @@ Deno.serve(async (req: Request) => {
       } catch (visionError: any) {
         console.warn('⚠️ Vision analysis failed:', visionError.message);
       }
+    } else if (shouldUseVision && !hasScreenshotImage) {
+      console.warn('⚠️ Vision skipped: no image_url or file_path on screenshot');
     } else if (shouldUseVision && patternConfident && !visionForSpecialReason) {
       console.log(`⏭️ Skipping vision: pattern confidence ${analysis.confidence_score}% >= ${CONFIDENCE_THRESHOLD}%`);
     }
@@ -348,14 +434,14 @@ Deno.serve(async (req: Request) => {
       confidence_score: analysis.confidence_score,
       activity_type: analysis.activity_type,
       ai_analyzed_at: new Date().toISOString(),
-      ai_model_used: aiEnhanced ? (analysis.ai_model || getTextModelName()) : 'pattern-based',
+      ai_model_used: aiEnhanced ? (analysis.ai_model || textModelForRequest) : 'pattern-based',
       is_work_related: !ALERT_CATEGORIES.includes(analysis.category),
       consecutive_duplicate_count: consecutiveDuplicateCount,
       ai_metadata: {
         ...analysis,
         image_description: imageDescription,
         analyzed_at: new Date().toISOString(),
-        analysis_version: '4.1.0',
+        analysis_version: '5.0.0-deepseek-only',
         source: 'ai-screenshot-analyzer',
         ai_enhanced: aiEnhanced,
         vision_used: !!visionResult?.success,
@@ -490,6 +576,7 @@ function analyzeScreenshotContent(windowTitle: string, appName: string): any {
       confidence_score: confidenceScore, reasoning, tags,
       privacy_risk_score: 0, privacy_concerns: [],
       meeting_detected: false, is_work_related: isWorkRelated,
+      productivity_score: 50,
       analysis_method: 'pattern-based',
       window_title_analyzed: windowTitle, app_name_analyzed: appName
     };
@@ -788,6 +875,8 @@ function analyzeScreenshotContent(windowTitle: string, appName: string): any {
                           title.includes('conference') || app.includes('zoom') || 
                           app.includes('meet') || app.includes('teams');
 
+  const productivityScore = Math.max(0, Math.min(100, 100 - distractionScore));
+
   return {
     category,
     activity_type: activityType,
@@ -799,100 +888,108 @@ function analyzeScreenshotContent(windowTitle: string, appName: string): any {
     privacy_concerns: privacyConcerns,
     meeting_detected: meetingDetected,
     is_work_related: isWorkRelated,
+    productivity_score: productivityScore,
     analysis_method: 'pattern-based',
     window_title_analyzed: windowTitle,
     app_name_analyzed: appName
   };
 }
 
-/**
- * AI-enhanced analysis using GLM-4.7
- */
-async function analyzeWithAI(windowTitle: string, appName: string, token: string): Promise<any> {
-  const systemPrompt = `You are an AI analyzing employee computer activity for a time tracking system.
-Analyze the screenshot metadata and respond with ONLY valid JSON:
-{
-  "category": "productive" | "social_media" | "entertainment" | "gaming" | "shopping" | "communication",
-  "activity_type": "string describing the activity",
-  "is_work_related": true | false,
-  "distraction_score": 0-100,
-  "confidence": 0.0-1.0,
-  "reasoning": "Brief explanation"
+function clampScore(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
-Consider context: YouTube tutorials are work-related, development forums are productive, etc.`;
 
-  const userMessage = `Window Title: ${windowTitle || 'Unknown'}
-Application: ${appName || 'Unknown'}
+function parseVisionJsonPayload(text: string, model: string): any {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { success: false as const, error: 'unparseable' };
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const validCategories = ['productive', 'social_media', 'entertainment', 'gaming', 'shopping', 'communication', 'other'];
+    const prod =
+      typeof parsed.productivity_score === 'number' ? clampScore(parsed.productivity_score) : undefined;
+    return {
+      success: true as const,
+      detected_content: parsed.detected_content || text.substring(0, 500),
+      category: validCategories.includes(parsed.category) ? parsed.category : undefined,
+      is_work_related: parsed.is_work_related,
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+      privacy_concerns: parsed.privacy_concerns || [],
+      is_idle: parsed.is_idle || false,
+      productivity_score: prod,
+      distraction_score: typeof parsed.distraction_score === 'number' ? clampScore(parsed.distraction_score) : undefined,
+      model,
+    };
+  } catch {
+    return { success: false as const, error: 'json_parse' };
+  }
+}
 
-Respond with ONLY valid JSON.`;
-
-  const textModel = getTextModelName();
-  
-  for (const model of [textModel]) {
-    try {
-      const response = await fetch(getApiUrl(), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
+async function visionOpenAiMultimodal(
+  apiUrl: string,
+  token: string,
+  model: string,
+  imageUrl: string,
+  prompt: string,
+  extra: Record<string, unknown> = {},
+): Promise<any> {
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageUrl } },
+            { type: 'text', text: prompt },
           ],
-          max_tokens: 300,
-          temperature: 0.3,
-        }),
-      });
+        },
+      ],
+      max_tokens: 400,
+      temperature: 0.2,
+      ...extra,
+    }),
+  });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`Model ${model} failed: ${response.status} - ${errorText}`);
-        continue; // Try next model
-      }
-
-      const result = await response.json();
-      let text = result.choices?.[0]?.message?.content || '';
-
-      // Parse JSON from response
-      const jsonMatch = text?.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        console.log(`AI analysis succeeded with model: ${model}`);
-        return {
-          success: true,
-          ...parsed,
-          ai_model: model
-        };
-      }
-      
-      console.warn(`Model ${model} returned unparseable response`);
-      continue;
-    } catch (error: any) {
-      console.warn(`Model ${model} error: ${error.message}`);
-      continue;
-    }
+  if (!response.ok) {
+    const errorText = await response.text();
+    return { success: false, error: `${response.status}: ${errorText}` };
   }
 
-  return { success: false, error: 'All AI models failed' };
+  const result = await response.json();
+  const text = result.choices?.[0]?.message?.content || '';
+  const parsed = parseVisionJsonPayload(text, model);
+  if (parsed.success) return parsed;
+
+  return {
+    success: true,
+    detected_content: text.substring(0, 500),
+    model,
+  };
 }
 
 /**
- * Vision analysis using Qwen2-VL
+ * Vision: DeepSeek multimodal (same API key; model id from request or env).
  */
-async function analyzeWithVision(imageUrl: string, token: string): Promise<any> {
+async function analyzeWithVision(imageUrl: string, visionModelId: string): Promise<any> {
   try {
     const prompt = `Analyze this screenshot and respond with ONLY valid JSON (no other text):
 {
   "detected_content": "Brief description of what is visible (max 50 words)",
   "category": "productive | social_media | entertainment | gaming | shopping | communication | other",
   "is_work_related": true or false,
+  "distraction_score": 0-100,
+  "productivity_score": 0-100,
   "confidence": 0.0 to 1.0,
   "privacy_concerns": [],
   "is_idle": false
 }
+
+Use distraction_score for how distracting/non-work the screen is (higher = worse). productivity_score is the inverse notion on a 0-100 scale (higher = more focused/work-aligned).
 
 Classification rules:
 - productive: IDEs, code editors, terminals, office apps, project management, design tools, file managers (File Explorer, Finder), system utilities, browsers showing work content, admin panels, dashboards
@@ -905,111 +1002,105 @@ Classification rules:
 
 Important: File Explorer, Windows Explorer, Finder, and system utilities are ALWAYS productive. Only classify as non-productive if the content is clearly personal/leisure activity.`;
 
-    const response = await fetch(getApiUrl(), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: getVisionModelName(),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: imageUrl } },
-              { type: 'text', text: prompt }
-            ]
-          }
-        ],
-        max_tokens: 300,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      // HF Router can fail if the requested model isn't available for enabled providers.
-      // In that case, fall back to classic HF Inference API for a simple caption so
-      // `generate_description` still works without provider configuration.
-      const isHfRouter = getApiUrl() === HF_ROUTER;
-      const looksLikeModelNotSupported =
-        response.status === 400 && /model_not_supported|not supported by any provider/i.test(errorText || '');
-      if (isHfRouter && looksLikeModelNotSupported) {
-        try {
-          const imageResp = await fetch(imageUrl);
-          if (!imageResp.ok) {
-            const imgErr = await imageResp.text();
-            throw new Error(`Failed to fetch image for caption: ${imageResp.status} - ${imgErr}`);
-          }
-          const imageBytes = new Uint8Array(await imageResp.arrayBuffer());
-          const captionResp = await fetch(`https://api-inference.huggingface.co/models/${HF_BLIP_CAPTION_MODEL}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              // Intentionally omit Content-Type; binary body is supported.
-            },
-            body: imageBytes,
-          });
-
-          if (!captionResp.ok) {
-            const captionErr = await captionResp.text();
-            throw new Error(`HF caption fallback error: ${captionResp.status} - ${captionErr}`);
-          }
-
-          const captionJson = await captionResp.json();
-          const caption =
-            (Array.isArray(captionJson) && captionJson[0]?.generated_text) ? String(captionJson[0].generated_text)
-            : (captionJson?.generated_text ? String(captionJson.generated_text) : '');
-
-          if (caption && caption.trim().length > 0) {
-            return {
-              success: true,
-              detected_content: caption.trim(),
-              confidence: 0.6,
-              model: HF_BLIP_CAPTION_MODEL,
-            };
-          }
-        } catch (fallbackError: any) {
-          // If fallback fails, surface both errors for easier debugging.
-          throw new Error(`Vision API error: ${response.status} - ${errorText}; fallback_failed: ${fallbackError?.message || String(fallbackError)}`);
-        }
-      }
-
-      throw new Error(`Vision API error: ${response.status} - ${errorText}`);
+    const dsToken = getDeepSeekToken();
+    if (!dsToken || !visionModelId) {
+      return { success: false, error: 'DeepSeek API key or vision model missing' };
     }
 
-    const result = await response.json();
-    let text = result.choices?.[0]?.message?.content || '';
-
-    // Try to parse structured JSON response
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const validCategories = ['productive', 'social_media', 'entertainment', 'gaming', 'shopping', 'communication', 'other'];
-        return {
-          success: true,
-          detected_content: parsed.detected_content || text.substring(0, 500),
-          category: validCategories.includes(parsed.category) ? parsed.category : undefined,
-          is_work_related: parsed.is_work_related,
-          confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
-          privacy_concerns: parsed.privacy_concerns || [],
-          is_idle: parsed.is_idle || false,
-          model: getVisionModelName()
-        };
-      }
-    } catch {
-      // JSON parsing failed, return raw text
-    }
-
-    return {
-      success: true,
-      detected_content: text.substring(0, 500),
-      model: getVisionModelName()
-    };
+    const r = await visionOpenAiMultimodal(
+      getDeepSeekChatUrl(),
+      dsToken,
+      visionModelId,
+      imageUrl,
+      prompt,
+      { thinking: { type: 'disabled' }, response_format: { type: 'json_object' } },
+    );
+    if (r.success) return r;
+    return { success: false, error: r.error || 'DeepSeek vision request failed' };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
+}
+
+/** Text LLM classification from window title + app name (DeepSeek only). */
+async function analyzeWithAI(
+  windowTitle: string,
+  appName: string,
+  token: string,
+  textModel: string,
+): Promise<any> {
+  const systemPrompt = `You are an AI analyzing employee computer activity for a time tracking system.
+Analyze the screenshot metadata and respond with ONLY valid JSON:
+{
+  "category": "productive" | "social_media" | "entertainment" | "gaming" | "shopping" | "communication",
+  "activity_type": "string describing the activity",
+  "is_work_related": true | false,
+  "distraction_score": 0-100,
+  "productivity_score": 0-100,
+  "confidence": 0.0-1.0,
+  "reasoning": "Brief explanation"
+}
+productivity_score should reflect focused work (higher is better). It should align inversely with distraction_score.
+
+Consider context: YouTube tutorials are work-related, development forums are productive, etc.`;
+
+  const userMessage = `Window Title: ${windowTitle || 'Unknown'}
+Application: ${appName || 'Unknown'}
+
+Respond with ONLY valid JSON.`;
+
+  for (const model of [textModel]) {
+    try {
+      const body: Record<string, unknown> = {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        max_tokens: 400,
+        temperature: 0.3,
+        thinking: { type: 'disabled' },
+        response_format: { type: 'json_object' },
+      };
+
+      const response = await fetch(getDeepSeekChatUrl(), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`Model ${model} failed: ${response.status} - ${errorText}`);
+        continue;
+      }
+
+      const result = await response.json();
+      let text = result.choices?.[0]?.message?.content || '';
+
+      const jsonMatch = text?.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log(`AI analysis succeeded with model: ${model}`);
+        return {
+          success: true,
+          ...parsed,
+          ai_model: model,
+        };
+      }
+
+      console.warn(`Model ${model} returned unparseable response`);
+      continue;
+    } catch (error: any) {
+      console.warn(`Model ${model} error: ${error.message}`);
+      continue;
+    }
+  }
+
+  return { success: false, error: 'DeepSeek text request failed or returned unparseable JSON' };
 }
 
 /**
@@ -1018,14 +1109,22 @@ Important: File Explorer, Windows Explorer, Finder, and system utilities are ALW
 function mergeAnalysis(patternAnalysis: any, aiResult: any): any {
   if (!aiResult.success) return patternAnalysis;
 
+  const distraction = aiResult.distraction_score ?? patternAnalysis.distraction_score;
+  let productivity =
+    typeof aiResult.productivity_score === 'number' ? clampScore(aiResult.productivity_score) : undefined;
+  if (productivity === undefined) {
+    productivity = clampScore(100 - distraction);
+  }
+
   return {
     ...patternAnalysis,
     category: aiResult.category || patternAnalysis.category,
     activity_type: aiResult.activity_type || patternAnalysis.activity_type,
-    distraction_score: aiResult.distraction_score ?? patternAnalysis.distraction_score,
+    distraction_score: distraction,
+    productivity_score: productivity,
     confidence_score: Math.round((aiResult.confidence || 0.7) * 100),
     is_work_related: aiResult.is_work_related ?? patternAnalysis.is_work_related,
-    reasoning: [...patternAnalysis.reasoning, `AI: ${aiResult.reasoning || 'Analysis enhanced with GLM-4.7'}`],
+    reasoning: [...patternAnalysis.reasoning, `AI: ${aiResult.reasoning || 'LLM classification'}`],
     analysis_method: 'ai-enhanced',
     ai_model: aiResult.ai_model,
   };
@@ -1043,6 +1142,15 @@ function mergeVisionAnalysis(analysis: any, visionResult: any): any {
     reasoning: [...analysis.reasoning, `Vision: ${visionResult.detected_content?.substring(0, 100) || 'Image analyzed'}`],
     analysis_method: analysis.analysis_method === 'ai-enhanced' ? 'ai-vision-enhanced' : 'vision-enhanced',
   };
+
+  if (typeof visionResult.distraction_score === 'number') {
+    merged.distraction_score = visionResult.distraction_score;
+  }
+  if (typeof visionResult.productivity_score === 'number') {
+    merged.productivity_score = visionResult.productivity_score;
+  } else if (typeof visionResult.distraction_score === 'number') {
+    merged.productivity_score = clampScore(100 - visionResult.distraction_score);
+  }
 
   // If vision returned a structured category, prefer it over pattern matching
   if (visionResult.category) {
@@ -1198,4 +1306,4 @@ async function createAlertsIfNeeded(
   }
 }
 
-console.log('🤖 AI Screenshot Analyzer v4.1 initialized with Smart Confidence Gating (vision + text) + Gemini');
+console.log('🤖 AI Screenshot Analyzer — DeepSeek-only (text + optional DEEPSEEK_VISION_MODEL)');

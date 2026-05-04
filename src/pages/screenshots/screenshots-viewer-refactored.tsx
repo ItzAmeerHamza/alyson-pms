@@ -12,12 +12,20 @@ import { useSearchParams } from 'react-router-dom';
 
 // Import our modular components
 import { Screenshot, FilterOptions } from './types';
-import { DEFAULT_FILTER_OPTIONS } from './constants';
+import {
+  DEFAULT_FILTER_OPTIONS,
+  DEEPSEEK_SCREENSHOT_MODEL_OPTIONS,
+  DEFAULT_DEEPSEEK_SCREENSHOT_MODEL,
+  STORAGE_KEY_MANUAL_DEEPSEEK_MODEL,
+  type DeepseekScreenshotModelId,
+} from './constants';
 import { useScreenshots } from './hooks/use-screenshots';
 import { ScreenshotFilters } from './components/screenshot-filters';
 import { ScreenshotStatsComponent } from './components/screenshot-stats';
 import { ScreenshotGrid } from './components/screenshot-grid';
 import { ScreenshotModal } from './components/screenshot-modal';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 // Time grouping interface
 interface TimeGroup {
@@ -66,6 +74,30 @@ export default function ScreenshotsViewer() {
   // Problem filter state
   const [problemFilter, setProblemFilter] = useState<'none' | 'idle' | 'low_activity' | 'all_problems'>('none');
 
+  const readStoredDeepseekModel = (): DeepseekScreenshotModelId => {
+    try {
+      const s = localStorage.getItem(STORAGE_KEY_MANUAL_DEEPSEEK_MODEL);
+      if (s === 'deepseek-v4-pro' || s === 'deepseek-v4-flash') return s;
+    } catch {
+      /* ignore */
+    }
+    return DEFAULT_DEEPSEEK_SCREENSHOT_MODEL;
+  };
+
+  const [manualDeepseekModel, setManualDeepseekModel] = useState<DeepseekScreenshotModelId>(() =>
+    typeof window !== 'undefined' ? readStoredDeepseekModel() : DEFAULT_DEEPSEEK_SCREENSHOT_MODEL,
+  );
+
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_MANUAL_DEEPSEEK_MODEL, manualDeepseekModel);
+    } catch {
+      /* ignore */
+    }
+  }, [manualDeepseekModel]);
+
   // Use our custom hook for data management
   const {
     screenshots,
@@ -81,6 +113,7 @@ export default function ScreenshotsViewer() {
     estimateDeduction,
     triggerAIAnalysis,
     reanalyzeScreenshot,
+    analyzeScreenshotsManual,
     fetchAIStatus
   } = useScreenshots(filters, isAdmin, userDetails?.id, organizationId, isSuperAdmin);
 
@@ -348,16 +381,19 @@ export default function ScreenshotsViewer() {
     }
   };
 
-  // Handle re-analyze with vision
+  /** Single-screenshot manual AI (uses DeepSeek model from toolbar dropdown). */
   const handleReanalyzeWithVision = async (id: string) => {
+    await reanalyzeScreenshot(id, { deepseek_model: manualDeepseekModel });
+  };
+
+  /** Bulk manual AI for checked screenshots in grid (admin only). */
+  const handleAnalyzeSelected = async () => {
+    if (selectedScreenshots.length === 0) return;
+    setBulkAnalyzing(true);
     try {
-      toast.loading('Re-analyzing with Vision AI...', { id: 'vision-reanalyze' });
-      await reanalyzeScreenshot(id);
-      toast.success('Vision analysis completed', { id: 'vision-reanalyze' });
-      // Refresh data after re-analysis
-      fetchData();
-    } catch (error) {
-      toast.error('Failed to re-analyze screenshot', { id: 'vision-reanalyze' });
+      await analyzeScreenshotsManual(selectedScreenshots, manualDeepseekModel);
+    } finally {
+      setBulkAnalyzing(false);
     }
   };
 
@@ -707,6 +743,52 @@ export default function ScreenshotsViewer() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4 mb-4 p-4 rounded-lg border bg-white/90 border-purple-100">
+            <div className="space-y-2 flex-1 min-w-0">
+              <Label htmlFor="manual-deepseek-model" className="text-sm font-medium">
+                Model for manual screenshot AI
+              </Label>
+              <Select
+                value={manualDeepseekModel}
+                onValueChange={(v) => setManualDeepseekModel(v as DeepseekScreenshotModelId)}
+              >
+                <SelectTrigger id="manual-deepseek-model" className="w-full max-w-md">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEEPSEEK_SCREENSHOT_MODEL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.label} ({opt.id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Applies to the grid action, enlarged view button, and analyzing selected screenshots. Choice is saved in this browser.
+              </p>
+            </div>
+            {isAdmin && selectedScreenshots.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="border-purple-200 shrink-0"
+                disabled={bulkAnalyzing || aiStatus.analyzing}
+                onClick={() => void handleAnalyzeSelected()}
+              >
+                {bulkAnalyzing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Analyzing…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Analyze selected ({selectedScreenshots.length})
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center p-3 bg-white rounded-lg border">
               <div className="text-2xl font-bold text-purple-600">{stats.aiPending || 0}</div>
@@ -1118,6 +1200,7 @@ export default function ScreenshotsViewer() {
         onDelete={handleSingleDelete}
         onEstimateDeduction={estimateDeduction}
         sessionInfo={sessionInfo}
+        onRunAiAnalysis={isAdmin ? handleReanalyzeWithVision : undefined}
       />
     </div>
   );

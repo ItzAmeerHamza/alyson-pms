@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
-import { X, ChevronLeft, ChevronRight, Trash2, Maximize2, Minimize2, Copy, ArrowLeftRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Trash2, Maximize2, Minimize2, Copy, ArrowLeftRight, Sparkles } from 'lucide-react';
 import { Screenshot, User } from '../types';
 
 interface SessionInfo {
@@ -27,6 +27,8 @@ interface ScreenshotModalProps {
   onDelete: (id: string) => void;
   onEstimateDeduction?: (id: string) => Promise<number>;
   sessionInfo?: SessionInfo;
+  /** Manual DeepSeek analysis for this screenshot (uses model chosen on Screenshots page). */
+  onRunAiAnalysis?: (id: string) => void | Promise<void>;
 }
 
 export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
@@ -39,7 +41,8 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
   onNavigate,
   onDelete,
   onEstimateDeduction,
-  sessionInfo
+  sessionInfo,
+  onRunAiAnalysis
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   const [showDuplicateComparison, setShowDuplicateComparison] = React.useState(false);
@@ -153,6 +156,20 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
             <DialogDescription>
               View and navigate through screenshot details. Use arrow keys or click to navigate between screenshots.
             </DialogDescription>
+            {isAdmin && onRunAiAnalysis && (
+              <div className="flex justify-end pt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="gap-2"
+                  onClick={() => void onRunAiAnalysis(screenshot.id)}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Run AI analysis
+                </Button>
+              </div>
+            )}
           </DialogHeader>
           
           <div className="space-y-4">

@@ -507,7 +507,7 @@ export const ScreenshotGrid: React.FC<ScreenshotGridProps> = ({
                 {isAdmin && (
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                     {/* Re-analyze with Vision Button */}
-                    {onReanalyzeScreenshot && !screenshot.vision_validated_at && (
+                    {onReanalyzeScreenshot && (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -524,7 +524,7 @@ export const ScreenshotGrid: React.FC<ScreenshotGridProps> = ({
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Re-analyze with Vision AI</p>
+                            <p>Run AI analysis (DeepSeek)</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

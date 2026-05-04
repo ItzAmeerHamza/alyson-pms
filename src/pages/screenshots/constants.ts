@@ -120,4 +120,16 @@ export const DEFAULT_FILTER_OPTIONS: Omit<import('./types').FilterOptions, 'sele
   distractionFilter: 'all',
   searchTerm: '',
   viewMode: 'time-grouped'
-}; 
+};
+
+/** Manual screenshot AI (Edge function `ai-screenshot-analyzer`) — DeepSeek only */
+export const DEEPSEEK_SCREENSHOT_MODEL_OPTIONS = [
+  { id: 'deepseek-v4-flash' as const, label: 'V4 Flash (fast)' },
+  { id: 'deepseek-v4-pro' as const, label: 'V4 Pro (quality)' },
+] as const;
+
+export type DeepseekScreenshotModelId = (typeof DEEPSEEK_SCREENSHOT_MODEL_OPTIONS)[number]['id'];
+
+export const DEFAULT_DEEPSEEK_SCREENSHOT_MODEL: DeepseekScreenshotModelId = 'deepseek-v4-flash';
+
+export const STORAGE_KEY_MANUAL_DEEPSEEK_MODEL = 'screenshots_manual_deepseek_model';

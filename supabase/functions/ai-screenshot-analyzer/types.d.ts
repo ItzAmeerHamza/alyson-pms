@@ -10,6 +10,13 @@ declare module 'https://deno.land/std@*/http/server.ts' {
   export function serve(handler: (request: Request) => Promise<Response> | Response): void;
 }
 
+// Deno / Supabase Edge — npm: and jsr: specifiers (resolved at runtime by Deno, not node_modules)
+declare module 'npm:@supabase/supabase-js@2' {
+  export function createClient(supabaseUrl: string, supabaseKey: string, options?: any): any;
+}
+
+declare module 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+
 // Supabase client modules
 declare module 'https://esm.sh/@supabase/supabase-js@2' {
   export function createClient(supabaseUrl: string, supabaseKey: string, options?: any): any;
@@ -19,12 +26,13 @@ declare module 'https://esm.sh/@supabase/supabase-js@*' {
   export function createClient(supabaseUrl: string, supabaseKey: string, options?: any): any;
 }
 
-// Deno globals
+// Deno globals (Edge Functions entry uses Deno.serve)
 declare namespace Deno {
   namespace env {
     function get(key: string): string | undefined;
     function toObject(): Record<string, string>;
   }
+  function serve(handler: (request: Request) => Response | Promise<Response>): void;
 }
 
 // Web APIs

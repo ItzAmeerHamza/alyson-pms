@@ -17,7 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
     BullModule.registerQueue(
       { name: 'activity-analyzer' },
-      { name: 'ai-screenshot-analyzer' },
+      { name: 'ai-analysis' },
       { name: 'unusual-detector' },
       { name: 'notification-pusher' },
       { name: 'suspicious-activity-detector' },

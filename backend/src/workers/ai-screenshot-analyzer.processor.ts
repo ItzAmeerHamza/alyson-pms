@@ -4,7 +4,7 @@ import { Job } from 'bull';
 import { SupabaseService } from '../common/supabase.service';
 
 @Injectable()
-@Processor('ai-screenshot-analyzer')
+@Processor('ai-analysis')
 export class AiScreenshotAnalyzerProcessor {
   private readonly logger = new Logger(AiScreenshotAnalyzerProcessor.name);
 
@@ -13,7 +13,11 @@ export class AiScreenshotAnalyzerProcessor {
   @Process('analyze-screenshot')
   async analyzeScreenshot(job: Job) {
     try {
-      const { screenshot_id } = job.data;
+      const screenshot_id = job.data?.screenshot_id ?? job.data?.screenshotId;
+      if (!screenshot_id) {
+        this.logger.error('Missing screenshot_id in job payload', job.data);
+        throw new Error('screenshot_id is required (use screenshot_id or screenshotId)');
+      }
       this.logger.log(`🤖 Starting AI analysis for screenshot: ${screenshot_id}`);
 
       const supabase = this.supabaseService.getClient();
@@ -70,7 +74,12 @@ export class AiScreenshotAnalyzerProcessor {
   @Process('reanalyze-screenshot')
   async reanalyzeScreenshot(job: Job) {
     try {
-      const { screenshot_id, reason } = job.data;
+      const screenshot_id = job.data?.screenshot_id ?? job.data?.screenshotId;
+      const { reason } = job.data;
+      if (!screenshot_id) {
+        this.logger.error('Missing screenshot_id in reanalyze job payload', job.data);
+        throw new Error('screenshot_id is required (use screenshot_id or screenshotId)');
+      }
       this.logger.log(`🔄 Re-analyzing screenshot ${screenshot_id}, reason: ${reason}`);
 
       const supabase = this.supabaseService.getClient();
