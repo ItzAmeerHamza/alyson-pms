@@ -105,6 +105,6 @@ print_info "  6. 📢 Announce release to users"
 
 # Get new version
 NEW_VERSION=$(node -p "require('./package.json').version")
-print_success "🔗 Release URL: https://github.com/mafatah/time-flow-admin/releases/tag/v${NEW_VERSION}"
+print_success "🔗 Release URL: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
 
 print_info "🎊 All done! TimeFlow v${NEW_VERSION} is ready!" 

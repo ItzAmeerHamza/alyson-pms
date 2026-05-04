@@ -57,7 +57,7 @@ ensure_debug_logs_dir() {
 
 start_fresh_session() {
   log_info "Restarting desktop agent for a fresh session..."
-  pkill -f "time-flow-admin/desktop-agent.*electron" 2>/dev/null || true
+  pkill -f "alyson-time-doctor/desktop-agent.*electron" 2>/dev/null || true
   pkill -f external_input_monitor_macos.py 2>/dev/null || true
   ensure_debug_logs_dir
   local ts

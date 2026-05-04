@@ -10,10 +10,18 @@
  *   scripts/deepseek-screenshot-intelligence-text.mjs
  */
 import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Canonical local clone (main): ~/Desktop/alyson-time-doctor */
+const projectRoot = path.join(os.homedir(), 'Desktop', 'alyson-time-doctor');
+const defaultFromDesktop = path.join(projectRoot, 'desktop-agent', 'assets', 'icon.png');
+const defaultFromRepo = path.join(__dirname, '..', 'desktop-agent', 'assets', 'icon.png');
 const imgPath =
   process.argv[2] ||
-  '/Users/revcloudmac/.cursor/projects/Users-revcloudmac-Desktop-alyson-time-doctor/assets/image-6a2d7349-49ef-4be4-b5d3-b9f563ea6526.png';
+  (fs.existsSync(defaultFromDesktop) ? defaultFromDesktop : defaultFromRepo);
 
 const key = process.env.DEEPSEEK_API_KEY;
 if (!key) {

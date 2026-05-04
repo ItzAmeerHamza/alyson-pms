@@ -12,7 +12,7 @@ ls -lh public/downloads/EbdaaWorkTime-*.dmg public/downloads/EbdaaWorkTime-*.exe
 echo ""
 
 echo "🔗 STEP 1: Go to GitHub Releases"
-echo "https://github.com/mafatah/time-flow-admin/releases"
+echo "https://github.com/ItzAmeerHamza/alyson-pms/releases"
 echo ""
 
 echo "🎯 STEP 2: Click 'Create a new release'"
@@ -73,7 +73,7 @@ Professional employee time tracking desktop applications with enterprise-grade f
 For technical support or installation issues, contact your system administrator.
 
 ---
-**Ebdaa Digital Technology © 2025**
+**RevCloud © 2025**
 EOF
 echo "----------------------------------------"
 echo ""
@@ -88,9 +88,9 @@ echo "✅ STEP 6: Publish the release"
 echo ""
 
 echo "🎯 After publishing, the download URLs will be:"
-echo "  • ARM DMG: https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg"
-echo "  • Intel DMG: https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg"
-echo "  • Windows EXE: https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe"
+echo "  • ARM DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg"
+echo "  • Intel DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg"
+echo "  • Windows EXE: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe"
 echo ""
 
 echo "🔧 The website is already configured to use these URLs!"

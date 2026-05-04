@@ -54,7 +54,7 @@ fi
 
 # Electron Builder Configuration
 export CSC_IDENTITY_AUTO_DISCOVERY=false
-export CSC_NAME="Developer ID Application: Ebdaa Digital Technology ($APPLE_TEAM_ID)"
+export CSC_NAME="Developer ID Application: RevCloud ($APPLE_TEAM_ID)"
 
 # Notarization Configuration
 export APPLEID="$APPLE_ID"

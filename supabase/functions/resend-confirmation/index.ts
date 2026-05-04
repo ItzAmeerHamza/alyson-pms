@@ -107,7 +107,7 @@ serve(async (req: Request): Promise<Response> => {
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${email}
     </div>
   </div>

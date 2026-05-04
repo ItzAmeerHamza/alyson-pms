@@ -10,25 +10,25 @@ The desktop application files are hosted on GitHub Releases for maximum accessib
 - **File**: `EbdaaWorkTime-Setup.exe`
 - **Size**: ~85MB
 - **Requirements**: Windows 10/11 (64-bit)
-- **Direct Link**: [Download for Windows](https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe)
+- **Direct Link**: [Download for Windows](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe)
 
 ### macOS (Intel)
 - **File**: `EbdaaWorkTime-Intel.dmg`
 - **Size**: ~118MB
 - **Requirements**: macOS 10.14+ (Intel processors)
-- **Direct Link**: [Download for macOS Intel](https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg)
+- **Direct Link**: [Download for macOS Intel](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg)
 
 ### macOS (Apple Silicon)
 - **File**: `EbdaaWorkTime-ARM.dmg`
 - **Size**: ~112MB
 - **Requirements**: macOS 11.0+ (Apple Silicon M1/M2/M3)
-- **Direct Link**: [Download for macOS Apple Silicon](https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg)
+- **Direct Link**: [Download for macOS Apple Silicon](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg)
 
 ### Linux
 - **File**: `EbdaaWorkTime.AppImage`
 - **Size**: ~120MB
 - **Requirements**: Ubuntu 18.04+ or equivalent
-- **Direct Link**: [Download for Linux](https://github.com/mafatah/time-flow-admin/releases/download/v1.0.0/EbdaaWorkTime.AppImage)
+- **Direct Link**: [Download for Linux](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime.AppImage)
 
 ## Public Access
 

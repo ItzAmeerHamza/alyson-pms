@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 VERSION="1.0.22"
-CERT_NAME="Developer ID Application: Ebdaa Digital Technology (6GW49LK9V9)"
+CERT_NAME="Developer ID Application: RevCloud (6GW49LK9V9)"
 TEAM_ID="6GW49LK9V9"
 KEYCHAIN_PROFILE="timeflow-notarization"
 APP_NAME="Ebdaa Work Time.app"

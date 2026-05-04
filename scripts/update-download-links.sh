@@ -11,8 +11,8 @@ echo "🔗 Updating download links for version $VERSION"
 echo "=============================================="
 
 # GitHub repository info
-REPO_OWNER="mafatah"
-REPO_NAME="time-flow-admin"
+REPO_OWNER="ItzAmeerHamza"
+REPO_NAME="alyson-pms"
 BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/v$VERSION"
 
 echo "📋 Base URL: $BASE_URL"
@@ -202,7 +202,7 @@ const DownloadPage = () => {
         <div className="text-center text-gray-600 space-y-4">
           <div className="flex justify-center gap-6 text-sm">
             <a 
-              href="https://github.com/mafatah/time-flow-admin/releases/tag/v$VERSION"
+              href="https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v$VERSION"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 hover:text-blue-600"
@@ -211,7 +211,7 @@ const DownloadPage = () => {
               View on GitHub
             </a>
             <a 
-              href="https://github.com/mafatah/time-flow-admin/releases"
+              href="https://github.com/ItzAmeerHamza/alyson-pms/releases"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 hover:text-blue-600"
@@ -223,7 +223,7 @@ const DownloadPage = () => {
             All downloads are code-signed and verified for security
           </p>
           <p className="text-xs text-gray-500">
-            © $(date +%Y) Ebdaa Digital Technology. All rights reserved.
+            © $(date +%Y) RevCloud. All rights reserved.
           </p>
         </div>
       </div>

@@ -3,10 +3,10 @@
   "version": "95.2.0",
   "description": "Work Time Agent - Employee time tracking and productivity monitoring",
   "main": "src/main.js",
-  "author": "Ebdaa Digital Technology",
+  "author": "RevCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mafatah/time-flow-admin.git"
+    "url": "https://github.com/ItzAmeerHamza/alyson-pms.git"
   },
   "scripts": {
     "start": "./node_modules/.bin/electron .",

@@ -11,7 +11,7 @@ APPLE_ID="${APPLE_ID}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID}"
 GITHUB_TOKEN="${GITHUB_TOKEN}"
-GITHUB_REPO="mafatah/time-flow-admin"
+GITHUB_REPO="ItzAmeerHamza/alyson-pms"
 
 # Get current version
 CURRENT_VERSION=$(node -p "require('./package.json').version")
@@ -28,7 +28,7 @@ export GITHUB_TOKEN="${GITHUB_TOKEN}"
 
 # Verify Apple Developer Certificate
 echo "🔍 Verifying Apple Developer Certificate..."
-if ! security find-identity -v -p codesigning | grep -q "Developer ID Application: Ebdaa Digital Technology (${APPLE_TEAM_ID})"; then
+if ! security find-identity -v -p codesigning | grep -q "Developer ID Application: RevCloud (${APPLE_TEAM_ID})"; then
     echo "❌ ERROR: Apple Developer Certificate not found!"
     echo "Please install the certificate from CertificateSigningRequest.certSigningRequest"
     exit 1

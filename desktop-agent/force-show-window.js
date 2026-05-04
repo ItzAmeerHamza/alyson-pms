@@ -43,7 +43,7 @@ function forceShowWindow() {
         console.log('✅ [FORCE-SHOW] App killed, restarting with forced window...');
         
         setTimeout(() => {
-          exec('cd /Users/mohammedabdulfattah/time-flow-admin/desktop-agent && FORCE_SHOW_WINDOW=true npm run start', (startError) => {
+          exec('cd "$HOME/Desktop/alyson-time-doctor/desktop-agent" && FORCE_SHOW_WINDOW=true npm run start', { shell: '/bin/bash' }, (startError) => {
             if (startError) {
               console.error('❌ [FORCE-SHOW] Failed to restart app:', startError.message);
             } else {

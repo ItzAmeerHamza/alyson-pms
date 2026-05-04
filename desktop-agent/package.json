@@ -3,10 +3,10 @@
   "version": "1.0.182",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
-  "author": "Ebdaa Digital Technology",
+  "author": "RevCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mafatah/time-flow-admin.git"
+    "url": "https://github.com/ItzAmeerHamza/alyson-pms.git"
   },
   "scripts": {
     "start": "electron .",
@@ -93,7 +93,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.png",
-      "identity": "Ebdaa Digital Technology (6GW49LK9V9)",
+      "identity": "RevCloud (6GW49LK9V9)",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",

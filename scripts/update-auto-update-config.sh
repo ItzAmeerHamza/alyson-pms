@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 VERSION="1.0.22"
-GITHUB_REPO="mafatah/time-flow-admin"
+GITHUB_REPO="ItzAmeerHamza/alyson-pms"
 BASE_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}"
 
 # Colors for output
@@ -165,10 +165,10 @@ create_app_update_config() {
     
     cat > "$config_file" << EOF
 provider: github
-owner: mafatah
-repo: time-flow-admin
+owner: ItzAmeerHamza
+repo: alyson-pms
 releaseType: release
-updaterCacheDirName: timeflow-updater
+updaterCacheDirName: alyson-updater
 EOF
     
     echo -e "${GREEN}✅ Created $config_file${NC}"

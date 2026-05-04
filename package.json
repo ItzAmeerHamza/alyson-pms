@@ -3,7 +3,11 @@
   "private": true,
   "version": "1.0.118",
   "type": "module",
-  "author": "Ebdaa Digital Technology",
+  "author": "RevCloud",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ItzAmeerHamza/alyson-pms.git"
+  },
   "description": "Alyson PM - Project management platform",
   "overrides": {
     "nan": "2.16.0"

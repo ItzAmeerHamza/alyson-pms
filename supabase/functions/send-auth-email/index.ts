@@ -77,7 +77,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't create an account, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -112,7 +112,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email - your password will remain unchanged.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -147,7 +147,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This invitation expires in 24 hours.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -176,7 +176,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -211,7 +211,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">If you didn't request this change, please contact support immediately.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -241,7 +241,7 @@ function generateEmailHTML(
       </p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by Ebdaa Digital Technology<br>
+      Ebdaa Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>

@@ -108,6 +108,40 @@ class ForceUpdater {
   }
 
   /**
+   * GitHub owner/repo for electron-updater, parsed from bundled package.json
+   * `repository` field. Falls back if missing so packaged builds never point at
+   * a stale hardcoded fork (which causes perpetual "update required" and broken installs).
+   */
+  getGithubReleaseTarget() {
+    const fallback = { owner: 'ItzAmeerHamza', repo: 'alyson-pms' };
+    try {
+      const pkgPath = path.join(__dirname, '../../../package.json');
+      if (!fs.existsSync(pkgPath)) {
+        console.warn('⚠️ [FORCE-UPDATER] package.json not found at', pkgPath, '- using fallback feed');
+        return fallback;
+      }
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      const raw =
+        pkg.repository &&
+        (typeof pkg.repository === 'string' ? pkg.repository : pkg.repository.url);
+      if (!raw || typeof raw !== 'string') {
+        console.warn('⚠️ [FORCE-UPDATER] No repository in package.json - using fallback feed');
+        return fallback;
+      }
+      const normalized = raw
+        .replace(/\.git$/i, '')
+        .replace(/^git@github\.com:/i, 'https://github.com/');
+      const m = normalized.match(/github\.com\/([^/]+)\/([^/]+)/i);
+      if (m) {
+        return { owner: m[1], repo: m[2] };
+      }
+    } catch (e) {
+      console.warn('⚠️ [FORCE-UPDATER] Could not read GitHub repo from package.json:', e.message);
+    }
+    return fallback;
+  }
+
+  /**
    * Ensure app data directory exists
    */
   ensureAppDataDir() {
@@ -258,16 +292,18 @@ class ForceUpdater {
       return;
     }
     
-    // Configure GitHub repository for auto-updater
-    console.log('🔧 [FORCE-UPDATER] Configuring GitHub repository...');
-    
+    // Configure GitHub repository for auto-updater (must match where you publish
+    // latest-mac.yml + ZIPs — driven by package.json repository, not a stale constant).
+    const gh = this.getGithubReleaseTarget();
+    console.log('🔧 [FORCE-UPDATER] Configuring GitHub repository:', gh);
+
     // Packaged builds only
     autoUpdater.forceDevUpdateConfig = false;
-    
+
     autoUpdater.setFeedURL({
       provider: 'github',
-      owner: 'ItzAmeerHamza',
-      repo: 'alyson-pms',
+      owner: gh.owner,
+      repo: gh.repo,
       releaseType: 'release'
     });
     

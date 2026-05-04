@@ -58,10 +58,10 @@ if ! security find-identity -v -p codesigning | grep -q "Developer ID Applicatio
 fi
 
 # Check for specific certificate
-if security find-identity -v -p codesigning | grep -q "Ebdaa Digital Technology (6GW49LK9V9)"; then
-    echo "✅ Found Ebdaa Digital Technology certificate"
+if security find-identity -v -p codesigning | grep -q "RevCloud (6GW49LK9V9)"; then
+    echo "✅ Found RevCloud certificate"
 else
-    echo "⚠️  Warning: Ebdaa Digital Technology certificate not found"
+    echo "⚠️  Warning: RevCloud certificate not found"
     echo "Available certificates:"
     security find-identity -v -p codesigning
 fi

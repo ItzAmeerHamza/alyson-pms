@@ -37,8 +37,8 @@ fi
 # Test 2: DMG Files Accessibility
 echo -e "${BLUE}📱 Test 2: Checking DMG file accessibility...${NC}"
 
-ARM64_URL="https://github.com/mafatah/time-flow-admin/releases/download/v$VERSION_TO_VERIFY/TimeFlow-v$VERSION_TO_VERIFY-ARM64.dmg"
-INTEL_URL="https://github.com/mafatah/time-flow-admin/releases/download/v$VERSION_TO_VERIFY/TimeFlow-v$VERSION_TO_VERIFY-Intel.dmg"
+ARM64_URL="https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v$VERSION_TO_VERIFY/TimeFlow-v$VERSION_TO_VERIFY-ARM64.dmg"
+INTEL_URL="https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v$VERSION_TO_VERIFY/TimeFlow-v$VERSION_TO_VERIFY-Intel.dmg"
 
 # Check ARM64 DMG
 if curl -L --head --fail "$ARM64_URL" &> /dev/null; then
@@ -59,7 +59,7 @@ fi
 # Test 3: Auto-Update Configuration
 echo -e "${BLUE}⚙️ Test 3: Checking auto-update configuration...${NC}"
 
-AUTO_UPDATE_URL="https://github.com/mafatah/time-flow-admin/releases/download/v$VERSION_TO_VERIFY/latest-mac.yml"
+AUTO_UPDATE_URL="https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v$VERSION_TO_VERIFY/latest-mac.yml"
 
 if curl -L --head --fail "$AUTO_UPDATE_URL" &> /dev/null; then
     echo -e "${GREEN}✅ Auto-update config accessible${NC}"
@@ -173,7 +173,7 @@ echo "  • Auto-update configuration"
 echo "  • Version consistency"
 echo ""
 echo -e "${BLUE}🔗 Important URLs:${NC}"
-echo "  📖 Release: https://github.com/mafatah/time-flow-admin/releases/tag/v$VERSION_TO_VERIFY"
+echo "  📖 Release: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v$VERSION_TO_VERIFY"
 echo "  📱 ARM64 DMG: $ARM64_URL"
 echo "  💻 Intel DMG: $INTEL_URL"
 echo "  ⚙️ Auto-Update: $AUTO_UPDATE_URL"

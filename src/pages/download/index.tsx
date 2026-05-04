@@ -234,7 +234,7 @@ const DownloadPage = () => {
             All downloads are code-signed and verified for security
           </p>
           <p className="text-xs text-gray-500">
-            &copy; {new Date().getFullYear()} Ebdaa Digital Technology. All rights reserved.
+            &copy; {new Date().getFullYear()} RevCloud. All rights reserved.
           </p>
         </div>
       </div>

@@ -206,7 +206,7 @@ For issues or questions, please create an issue in the GitHub repository.
 
 ---
 
-*Built with ❤️ by Ebdaa Digital Technology*
+*Built with ❤️ by RevCloud*
 # Cache bust for v1.0.62 deployment - Mon Jul 14 06:19:01 EEST 2025
 
 

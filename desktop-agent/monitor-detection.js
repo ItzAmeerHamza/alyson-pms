@@ -11,7 +11,7 @@ let lastApp = '';
 
 function checkDetection() {
   // Check the logs for recent app detection
-  exec('powershell "Get-Content C:\\Users\\mohammedabdulfattah\\Downloads\\EBdaaCode\\time-flow-admin\\desktop-agent\\*.log -Tail 50 | Select-String -Pattern \'Detected|detected|App Name|DWELL\' | Select-Object -Last 5"', 
+  exec('powershell -NoProfile -Command "Get-Content \\"$env:USERPROFILE\\Desktop\\alyson-time-doctor\\desktop-agent\\*.log\\" -Tail 50 -ErrorAction SilentlyContinue | Select-String -Pattern \'Detected|detected|App Name|DWELL\' | Select-Object -Last 5"', 
     (error, stdout, stderr) => {
       if (!error && stdout) {
         const output = stdout.trim();

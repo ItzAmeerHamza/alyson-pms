@@ -8,7 +8,7 @@ echo "Press Ctrl+C to stop monitoring"
 echo ""
 
 # Check if desktop agent is running
-if ! pgrep -f "electron.*time-flow-admin" > /dev/null; then
+if ! pgrep -f "electron.*alyson-time-doctor" > /dev/null; then
     echo "❌ Desktop agent is not running!"
     echo "💡 Start it with: npm run start"
     exit 1

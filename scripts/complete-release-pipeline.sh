@@ -19,7 +19,7 @@ export APPLE_ID="${APPLE_ID}"
 export APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD}"
 export APPLE_TEAM_ID="${APPLE_TEAM_ID}"
 export GITHUB_TOKEN="${GITHUB_TOKEN}"
-export CERT_NAME="Developer ID Application: Ebdaa Digital Technology (${APPLE_TEAM_ID})"
+export CERT_NAME="Developer ID Application: RevCloud (${APPLE_TEAM_ID})"
 
 # Verify prerequisites
 echo -e "${BLUE}🔍 Verifying prerequisites...${NC}"
@@ -39,11 +39,11 @@ fi
 
 # Check GitHub authentication
 echo -e "${BLUE}🔗 Checking GitHub authentication...${NC}"
-# Use existing authentication (mafatah account already logged in)
+# Use existing GitHub CLI authentication (logged-in account)
 echo -e "${GREEN}✅ Using existing GitHub authentication${NC}"
 
 # Check for signing certificate
-if ! security find-identity -v -p codesigning | grep -q "Ebdaa Digital Technology"; then
+if ! security find-identity -v -p codesigning | grep -q "RevCloud"; then
     echo -e "${RED}❌ Error: Signing certificate not found${NC}"
     echo "Please ensure your certificate is installed in Keychain Access"
     exit 1
@@ -254,7 +254,7 @@ This release includes auto-update functionality. Existing users will be notified
 - Code signed and notarized for macOS
 - Improved cross-platform compatibility
 
-**Full Changelog**: https://github.com/mafatah/time-flow-admin/compare/v${OLD_VERSION}...v${NEW_VERSION}"
+**Full Changelog**: https://github.com/ItzAmeerHamza/alyson-pms/compare/v${OLD_VERSION}...v${NEW_VERSION}"
 
 # Create the GitHub release
 gh release create "v${NEW_VERSION}" \
@@ -265,7 +265,7 @@ gh release create "v${NEW_VERSION}" \
   --notes "$RELEASE_NOTES" \
   --latest
 
-echo -e "${GREEN}✅ GitHub release created: https://github.com/mafatah/time-flow-admin/releases/tag/v${NEW_VERSION}${NC}"
+echo -e "${GREEN}✅ GitHub release created: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}${NC}"
 
 # Step 9: Commit and push changes
 echo -e "${BLUE}📝 Step 9: Committing and pushing changes...${NC}"
@@ -282,7 +282,7 @@ git commit -m "🚀 Release v${NEW_VERSION} - Enhanced Performance & Security
 - Updated auto-update configuration
 - Added signed and notarized DMG files
 
-Release URL: https://github.com/mafatah/time-flow-admin/releases/tag/v${NEW_VERSION}"
+Release URL: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
 
 # Push to main branch
 git push origin main
@@ -311,7 +311,7 @@ echo "  🔄 Auto-Update: Configured"
 echo "  🌐 Web: Deployed to Vercel"
 echo ""
 echo -e "${BLUE}🔗 Important Links:${NC}"
-echo "  📖 Release: https://github.com/mafatah/time-flow-admin/releases/tag/v${NEW_VERSION}"
+echo "  📖 Release: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
 echo "  🌐 Website: https://time-flow-admin.vercel.app"
 echo "  📥 Downloads: https://time-flow-admin.vercel.app/download"
 echo ""

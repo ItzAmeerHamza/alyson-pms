@@ -16,7 +16,7 @@ rm -f /tmp/timeflow-start.log 2>/dev/null || true
 
 # Start agent with debugging
 echo "🚀 Starting agent with URL fix..."
-cd /Users/mohammedabdulfattah/time-flow-admin/desktop-agent
+cd "$HOME/Desktop/alyson-time-doctor/desktop-agent"
 
 # Start the agent and log output
 npm start > /tmp/timeflow-start.log 2>&1 &

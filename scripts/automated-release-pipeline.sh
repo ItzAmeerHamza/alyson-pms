@@ -15,8 +15,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_OWNER="mafatah"
-GITHUB_REPO="time-flow-admin"
+GITHUB_OWNER="ItzAmeerHamza"
+GITHUB_REPO="alyson-pms"
 
 # Print colored output
 print_status() {
@@ -76,9 +76,9 @@ validate_prerequisites() {
     fi
     
     # Check signing identity
-    if ! security find-identity -v -p codesigning | grep -q "Developer ID Application: Ebdaa Digital Technology (6GW49LK9V9)"; then
+    if ! security find-identity -v -p codesigning | grep -q "Developer ID Application: RevCloud (6GW49LK9V9)"; then
         print_error "Code signing identity not found in keychain"
-        print_error "Please ensure 'Developer ID Application: Ebdaa Digital Technology (6GW49LK9V9)' is installed"
+        print_error "Please ensure 'Developer ID Application: RevCloud (6GW49LK9V9)' is installed"
         exit 1
     fi
     

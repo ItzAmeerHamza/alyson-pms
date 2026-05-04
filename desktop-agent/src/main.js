@@ -3949,7 +3949,7 @@ if (isElectronContext && ipcMain) {
         if (process.platform === 'win32') {
           const { exec } = require('child_process');
           // Remove any stale entries that might have been created with wrong app names
-          const staleKeys = ['vite_react_shadcn_ts', 'time-flow-admin', 'ebdaa-work-time-agent'];
+          const staleKeys = ['vite_react_shadcn_ts', 'time-flow-admin', 'alyson-pms', 'alyson-time-doctor', 'ebdaa-work-time-agent'];
           staleKeys.forEach(keyName => {
             exec(`reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${keyName}" /f`, (error) => {
               if (!error) {

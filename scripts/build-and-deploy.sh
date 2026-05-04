@@ -218,7 +218,7 @@ RELEASE_NOTES="## Ebdaa Work Time v$VERSION
 This release includes automatic update capabilities. Existing users will be notified of the update automatically.
 
 ---
-Built with ❤️ by Ebdaa Digital Technology"
+Built with ❤️ by RevCloud"
 
 echo "$RELEASE_NOTES" > "$RELEASES_DIR/release-notes.md"
 
