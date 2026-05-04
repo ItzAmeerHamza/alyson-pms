@@ -44,6 +44,7 @@ import {
   Copy,
   Building2,
   HeartPulse,
+  Wallet,
 } from "lucide-react";
 
 // Global flag to control debug logging (set to false for production)
@@ -58,6 +59,11 @@ const safeLog = (...args: any[]) => {
 const Sidebar = () => {
   const location = useLocation();
   const { userDetails, signOut, isSuperAdmin } = useAuth();
+
+  const canViewCostUsageNav =
+    isSuperAdmin ||
+    userDetails?.role === 'admin' ||
+    userDetails?.is_org_admin === true;
   const [duplicateCount, setDuplicateCount] = useState<number>(0);
 
   // Debug logging (controlled by flag)
@@ -370,8 +376,30 @@ const Sidebar = () => {
     }
   ] : [];
 
+  const costUsageNavSection = canViewCostUsageNav
+    ? [
+        {
+          title: 'COST & AI',
+          items: [
+            {
+              title: 'Cost & Usage',
+              href: '/cost-and-usage',
+              icon: Wallet,
+              description: 'Storage and DeepSeek usage',
+            },
+          ],
+        },
+      ]
+    : [];
+
   // Combine navigation items based on role
-  const allNavItems = [...employeeNavItems, ...teamLeaderNavItems, ...adminNavItems, ...superAdminNavItems];
+  const allNavItems = [
+    ...employeeNavItems,
+    ...teamLeaderNavItems,
+    ...adminNavItems,
+    ...costUsageNavSection,
+    ...superAdminNavItems,
+  ];
 
   return (
     <div className="w-72 bg-sidebar border-r border-sidebar-border h-screen overflow-y-auto fixed left-0 top-0 z-50">

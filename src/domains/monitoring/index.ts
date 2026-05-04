@@ -8,5 +8,16 @@ export { fetchIdleLogs, computeIdleStats } from './services/idle-logs.service';
 export type { IdleLogRow } from './services/idle-logs.service';
 export { fetchAiInsights, fetchLatestAiInsight, fetchOrganizations } from './services/ai-insights.service';
 export type { AiInsightRow } from './services/ai-insights.service';
+export {
+  fetchOrganizationCostInsights,
+  fetchDeepseekAccountInsights,
+} from './services/cost-insights.service';
+export type {
+  OrganizationCostInsights,
+  DeepseekAccountInsightsResponse,
+  StorageByUserRow,
+  LlmTotals,
+  LlmTokensByModelRow,
+} from './services/cost-insights.service';
 export { useAppUsageStats } from './hooks/use-app-logs';
 export { useUrlUsageStats } from './hooks/use-url-logs';

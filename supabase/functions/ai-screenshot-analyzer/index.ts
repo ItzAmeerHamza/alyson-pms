@@ -229,6 +229,8 @@ Deno.serve(async (req: Request) => {
     let analysis = analyzeScreenshotContent(titleToAnalyze, appToAnalyze);
     let aiEnhanced = false;
     let visionResult = null;
+    let textUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
+    let visionUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
 
     const textApiToken = getTextApiToken();
     const CONFIDENCE_THRESHOLD = 90;
@@ -322,6 +324,7 @@ Deno.serve(async (req: Request) => {
           if (aiResult.success) {
             analysis = mergeAnalysis(analysis, aiResult);
             aiEnhanced = true;
+            if (aiResult.usage) textUsage = aiResult.usage;
             console.log('✅ AI analysis enhanced (deepseek)');
           }
         } catch (aiError: any) {
@@ -355,6 +358,9 @@ Deno.serve(async (req: Request) => {
             console.log(`Vision image loaded via ${resolvedVision.source}`);
             visionResult = await analyzeWithVision(resolvedVision.imageUrl, visionModelForRequest);
           }
+        }
+        if (visionResult?.usage) {
+          visionUsage = visionResult.usage;
         }
         if (visionResult?.success) {
           // App-name override protection: known dev tools cannot be reclassified by vision
@@ -427,6 +433,13 @@ Deno.serve(async (req: Request) => {
         ? visionResult.detected_content.trim()
         : null;
 
+    const deepseek_usage = buildDeepseekUsagePayload(
+      textUsage,
+      visionUsage,
+      textModelForRequest,
+      visionModelForRequest,
+    );
+
     const updateData: any = {
       ai_analysis_status: 'completed',
       category: analysis.category,
@@ -446,6 +459,7 @@ Deno.serve(async (req: Request) => {
         ai_enhanced: aiEnhanced,
         vision_used: !!visionResult?.success,
         vision_reason: visionReason,
+        ...(deepseek_usage ? { deepseek_usage } : {}),
       }
     };
 
@@ -506,6 +520,7 @@ Deno.serve(async (req: Request) => {
         alert_id: alertId,
         consecutive_duplicate_count: consecutiveDuplicateCount,
         duplicate_override: analysis.duplicate_override || false,
+        deepseek_usage,
         message: 'Screenshot analysis completed successfully'
       }),
       {
@@ -899,6 +914,41 @@ function clampScore(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+/** OpenAI-compatible usage object from DeepSeek chat/completions response */
+function extractOpenAiUsage(result: Record<string, unknown> | null | undefined): {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} | undefined {
+  const u = result?.usage as Record<string, unknown> | undefined;
+  if (!u || typeof u !== 'object') return undefined;
+  const pt = Number(u.prompt_tokens);
+  const ct = Number(u.completion_tokens);
+  const tt = Number(u.total_tokens);
+  if (!Number.isFinite(tt) && !Number.isFinite(pt) && !Number.isFinite(ct)) return undefined;
+  const prompt_tokens = Number.isFinite(pt) ? pt : 0;
+  const completion_tokens = Number.isFinite(ct) ? ct : 0;
+  const total_tokens = Number.isFinite(tt) ? tt : prompt_tokens + completion_tokens;
+  return { prompt_tokens, completion_tokens, total_tokens };
+}
+
+function buildDeepseekUsagePayload(
+  text: ReturnType<typeof extractOpenAiUsage>,
+  vision: ReturnType<typeof extractOpenAiUsage>,
+  textModel: string,
+  visionModel: string,
+): Record<string, unknown> | undefined {
+  const textPart = text ? { ...text, model: textModel } : undefined;
+  const visionPart = vision ? { ...vision, model: visionModel } : undefined;
+  const total_tokens = (text?.total_tokens ?? 0) + (vision?.total_tokens ?? 0);
+  if (!textPart && !visionPart) return undefined;
+  return {
+    text: textPart,
+    vision: visionPart,
+    total_tokens,
+  };
+}
+
 function parseVisionJsonPayload(text: string, model: string): any {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return { success: false as const, error: 'unparseable' };
@@ -961,14 +1011,16 @@ async function visionOpenAiMultimodal(
   }
 
   const result = await response.json();
+  const usage = extractOpenAiUsage(result as Record<string, unknown>);
   const text = result.choices?.[0]?.message?.content || '';
   const parsed = parseVisionJsonPayload(text, model);
-  if (parsed.success) return parsed;
+  if (parsed.success) return { ...parsed, usage };
 
   return {
     success: true,
     detected_content: text.substring(0, 500),
     model,
+    usage,
   };
 }
 
@@ -1079,6 +1131,7 @@ Respond with ONLY valid JSON.`;
       }
 
       const result = await response.json();
+      const usage = extractOpenAiUsage(result as Record<string, unknown>);
       let text = result.choices?.[0]?.message?.content || '';
 
       const jsonMatch = text?.match(/\{[\s\S]*\}/);
@@ -1089,6 +1142,7 @@ Respond with ONLY valid JSON.`;
           success: true,
           ...parsed,
           ai_model: model,
+          usage,
         };
       }
 

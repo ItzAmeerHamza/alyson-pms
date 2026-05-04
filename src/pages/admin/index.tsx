@@ -1,14 +1,23 @@
-
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { useNavigate } from "react-router-dom";
-import { Camera, Clock, Users, Briefcase, Mail } from "lucide-react";
+import { Camera, Clock, Users, Briefcase, Mail, Wallet } from "lucide-react";
+import { CostManagementModal } from "@/components/admin/cost-management-modal";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const [costModalOpen, setCostModalOpen] = useState(false);
 
   const adminTools = [
+    {
+      title: "Cost & AI usage",
+      description: "Screenshot storage per person, DeepSeek balance, and LLM token totals",
+      icon: Wallet,
+      path: "__cost__",
+      color: "bg-teal-600"
+    },
     {
       title: "Email Reports",
       description: "Configure automated email reports and notifications",
@@ -70,17 +79,21 @@ export default function AdminDashboard() {
               <CardContent>
                 <p className="text-muted-foreground mb-4" data-testid={`${testId}-description`}>{tool.description}</p>
                 <Button 
-                  onClick={() => navigate(tool.path)}
+                  onClick={() => {
+                    if (tool.path === "__cost__") setCostModalOpen(true);
+                    else navigate(tool.path);
+                  }}
                   className="w-full"
                   data-testid={`${testId}-button`}
                 >
-                  Access {tool.title}
+                  {tool.path === "__cost__" ? "Open" : `Access ${tool.title}`}
                 </Button>
               </CardContent>
             </Card>
           );
         })}
       </div>
+      <CostManagementModal open={costModalOpen} onOpenChange={setCostModalOpen} />
     </div>
   );
 }

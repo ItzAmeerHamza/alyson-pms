@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Trash2, Timer, BarChart3, Activity, Pause, ChevronUp, ChevronDown, Copy, Loader2, Brain, Sparkles, Cpu, AlertTriangle, Eye, EyeOff, Moon } from 'lucide-react';
+import { RefreshCw, Trash2, Timer, BarChart3, Activity, Pause, ChevronUp, ChevronDown, Copy, Loader2, Brain, Sparkles, Cpu, AlertTriangle, Eye, EyeOff, Moon, Wallet } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/providers/auth-provider';
@@ -26,6 +26,7 @@ import { ScreenshotGrid } from './components/screenshot-grid';
 import { ScreenshotModal } from './components/screenshot-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { CostManagementModal } from '@/components/admin/cost-management-modal';
 
 // Time grouping interface
 interface TimeGroup {
@@ -42,6 +43,9 @@ export default function ScreenshotsViewer() {
   const { userDetails, isSuperAdmin } = useAuth();
   const isAdmin = userDetails?.role === 'admin';
   const organizationId = userDetails?.organization_id;
+  const canViewCosts =
+    isSuperAdmin || isAdmin || userDetails?.is_org_admin === true;
+  const [costModalOpen, setCostModalOpen] = useState(false);
   const [searchParams] = useSearchParams();
   
   // Filter state
@@ -722,6 +726,25 @@ export default function ScreenshotsViewer() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {canViewCosts && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCostModalOpen(true)}
+                        className="text-purple-600 border-purple-200 hover:bg-purple-50"
+                      >
+                        <Wallet className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Cost &amp; AI usage</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <Button
                 onClick={() => triggerAIAnalysis(50)}
                 disabled={aiStatus.analyzing || !aiStatus.aiEnabled}
@@ -1202,6 +1225,7 @@ export default function ScreenshotsViewer() {
         sessionInfo={sessionInfo}
         onRunAiAnalysis={isAdmin ? handleReanalyzeWithVision : undefined}
       />
+      <CostManagementModal open={costModalOpen} onOpenChange={setCostModalOpen} />
     </div>
   );
 } 

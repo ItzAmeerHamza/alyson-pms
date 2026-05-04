@@ -49,6 +49,7 @@ import EmailReportsPage from '@/pages/admin/email-reports';
 import AdminIdleLogsPage from '@/pages/admin/idle-logs';
 import VisionMonitoringPage from '@/pages/admin/vision-monitoring';
 import AIInsightsPage from '@/pages/ai-insights';
+import CostAndUsagePage from '@/pages/cost-and-usage';
 import ActivityIssuesPage from '@/pages/activity-issues';
 import LiveTrackingTodayPage from '@/pages/test/live-tracking';
 import SuperAdminDashboard from '@/pages/super-admin';
@@ -340,6 +341,45 @@ const TeamLeaderLayoutWrapper = React.memo(({ children, routeName }: { children:
   );
 });
 
+/** Super admin, organization admin (role admin), or explicit org admin flag */
+const CostAndUsageRoute = React.memo(({ children }: { children: React.ReactNode }) => {
+  const { userDetails, isSuperAdmin, loading } = useAuth();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+  if (!userDetails) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const allowed =
+    isSuperAdmin ||
+    userDetails.role === 'admin' ||
+    userDetails.is_org_admin === true;
+
+  if (!allowed) {
+    const fallback =
+      userDetails.role === 'admin' || userDetails.role === 'manager' ? '/dashboard' : '/employee';
+    return <Navigate to={fallback} replace />;
+  }
+
+  return <>{children}</>;
+});
+
+const CostAndUsageLayoutWrapper = React.memo(
+  ({ children, routeName }: { children: React.ReactNode; routeName: string }) => (
+    <ProtectedRoute>
+      <CostAndUsageRoute>
+        <AppLayout>
+          <AdminErrorBoundary pageName={routeName}>
+            <RouteWrapper routeName={routeName}>{children}</RouteWrapper>
+          </AdminErrorBoundary>
+        </AppLayout>
+      </CostAndUsageRoute>
+    </ProtectedRoute>
+  ),
+);
+
 // Combined Super Admin Layout wrapper
 const SuperAdminLayoutWrapper = React.memo(({ children, routeName }: { children: React.ReactNode; routeName: string }) => {
   return (
@@ -606,6 +646,12 @@ function AppRoutes() {
         <TeamLeaderLayoutWrapper routeName="ai-insights">
           <AIInsightsPage />
         </TeamLeaderLayoutWrapper>
+      } />
+
+      <Route path="/cost-and-usage" element={
+        <CostAndUsageLayoutWrapper routeName="cost-and-usage">
+          <CostAndUsagePage />
+        </CostAndUsageLayoutWrapper>
       } />
 
       {/* Activity Issues Route */}

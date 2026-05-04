@@ -7,6 +7,30 @@ import { format } from 'date-fns';
 import { X, ChevronLeft, ChevronRight, Trash2, Maximize2, Minimize2, Copy, ArrowLeftRight, Sparkles } from 'lucide-react';
 import { Screenshot, User } from '../types';
 
+/** Vision / DeepSeek multimodal text stored on the row or in metadata */
+function getScreenshotAiImageDescription(s: Screenshot): string | null {
+  const take = (v: unknown): string | null => {
+    if (typeof v !== 'string') return null;
+    const t = v.trim();
+    return t.length > 0 ? t : null;
+  };
+
+  const fromVisionAnalysis = (): string | null => {
+    const va = s.vision_analysis;
+    if (!va || typeof va !== 'object') return null;
+    const dc = (va as { detected_content?: unknown }).detected_content;
+    return take(dc);
+  };
+
+  return (
+    take(s.ai_description) ??
+    take(s.ai_metadata?.image_description) ??
+    take(s.vision_detected_content) ??
+    take(s.vision_content) ??
+    fromVisionAnalysis()
+  );
+}
+
 interface SessionInfo {
   timeSlot: string;
   employeeName: string;
@@ -125,6 +149,8 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
   }, [isOpen, isFullscreen, onNavigate, onClose]);
 
   if (!screenshot) return null;
+
+  const aiImageDescription = getScreenshotAiImageDescription(screenshot);
 
   return (
     <>
@@ -342,6 +368,29 @@ export const ScreenshotModal: React.FC<ScreenshotModalProps> = ({
                   {screenshot.ai_analysis_status}
                 </p>
               </div>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-violet-200/80 bg-violet-50/50 dark:bg-violet-950/25 dark:border-violet-800 p-4">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-violet-600 shrink-0" />
+              <span className="text-sm font-semibold text-foreground">AI image description</span>
+              {screenshot.ai_model_used && screenshot.ai_model_used !== 'pattern-based' ? (
+                <Badge variant="outline" className="text-[10px] font-mono">
+                  {screenshot.ai_model_used}
+                </Badge>
+              ) : null}
+            </div>
+            {aiImageDescription ? (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                {aiImageDescription}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic leading-relaxed">
+                {screenshot.ai_analysis_status === 'completed'
+                  ? 'No vision description is stored for this capture yet. It is added when the analyzer runs multimodal (vision) on the image—for example manual “Run AI analysis”, or when activity/duplicate rules trigger vision. Classifications that are pattern-only do not produce an image description.'
+                  : 'Description will appear here after AI analysis finishes.'}
+              </p>
             )}
           </div>
 
