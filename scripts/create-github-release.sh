@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# GitHub Release Creation Script for Ebdaa Work Time v1.0.0
+# GitHub Release Creation Script for Alyson Work Time v1.0.0
 
-echo "🚀 GitHub Release Creation Guide - Ebdaa Work Time v1.0.0"
+echo "🚀 GitHub Release Creation Guide - Alyson Work Time v1.0.0"
 echo "==========================================================="
 echo ""
 
 echo "📁 Files ready for upload:"
 echo "--------------------------"
-ls -lh public/downloads/EbdaaWorkTime-*.dmg public/downloads/EbdaaWorkTime-*.exe
+ls -lh public/downloads/AlysonWorkTime-*.dmg public/downloads/AlysonWorkTime-*.exe
 echo ""
 
 echo "🔗 STEP 1: Go to GitHub Releases"
@@ -20,14 +20,14 @@ echo ""
 
 echo "🏷️  STEP 3: Fill in release details:"
 echo "  • Tag version: v1.0.0"
-echo "  • Release title: Ebdaa Work Time v1.0.0 - Desktop Applications"
+echo "  • Release title: Alyson Work Time v1.0.0 - Desktop Applications"
 echo "  • Target: main branch"
 echo ""
 
 echo "📝 STEP 4: Release Description (copy this):"
 echo "----------------------------------------"
 cat << 'EOF'
-# Ebdaa Work Time v1.0.0 - Desktop Applications
+# Alyson Work Time v1.0.0 - Desktop Applications
 
 ## 🎉 First Official Release
 
@@ -35,9 +35,9 @@ Professional employee time tracking desktop applications with enterprise-grade f
 
 ### 📦 Downloads Available
 
-- **EbdaaWorkTime-ARM.dmg** (114MB) - macOS Apple Silicon (M1/M2/M3 Macs)
-- **EbdaaWorkTime-Intel.dmg** (119MB) - macOS Intel (x86_64 Macs)  
-- **EbdaaWorkTime-Setup.exe** (85MB) - Windows 10/11 (x64)
+- **AlysonWorkTime-ARM.dmg** (114MB) - macOS Apple Silicon (M1/M2/M3 Macs)
+- **AlysonWorkTime-Intel.dmg** (119MB) - macOS Intel (x86_64 Macs)  
+- **AlysonWorkTime-Setup.exe** (85MB) - Windows 10/11 (x64)
 
 ### ✨ Features
 
@@ -53,11 +53,11 @@ Professional employee time tracking desktop applications with enterprise-grade f
 #### macOS:
 1. Download the appropriate DMG file for your Mac
 2. Open the DMG file
-3. Drag "Ebdaa Work Time.app" to your Applications folder
+3. Drag "Alyson Work Time.app" to your Applications folder
 4. Launch from Applications (NOT from the DMG)
 
 #### Windows:
-1. Download EbdaaWorkTime-Setup.exe
+1. Download AlysonWorkTime-Setup.exe
 2. Right-click and "Run as administrator"
 3. Follow the installation wizard
 
@@ -79,18 +79,18 @@ echo "----------------------------------------"
 echo ""
 
 echo "📎 STEP 5: Upload these files to the release:"
-echo "  1. EbdaaWorkTime-ARM.dmg"
-echo "  2. EbdaaWorkTime-Intel.dmg"
-echo "  3. EbdaaWorkTime-Setup.exe"
+echo "  1. AlysonWorkTime-ARM.dmg"
+echo "  2. AlysonWorkTime-Intel.dmg"
+echo "  3. AlysonWorkTime-Setup.exe"
 echo ""
 
 echo "✅ STEP 6: Publish the release"
 echo ""
 
 echo "🎯 After publishing, the download URLs will be:"
-echo "  • ARM DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg"
-echo "  • Intel DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg"
-echo "  • Windows EXE: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe"
+echo "  • ARM DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-ARM.dmg"
+echo "  • Intel DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Intel.dmg"
+echo "  • Windows EXE: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Setup.exe"
 echo ""
 
 echo "🔧 The website is already configured to use these URLs!"

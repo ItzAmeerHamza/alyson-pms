@@ -51,12 +51,12 @@ echo   BUILD COMPLETE!
 echo ============================================
 echo.
 
-if exist "dist\ebdaa-work-time Setup 95.3.4.exe" (
+if exist "dist\alyson-work-time Setup 95.3.4.exe" (
     echo [OK] Installer created successfully
-    for %%F in ("dist\ebdaa-work-time Setup 95.3.4.exe") do (
+    for %%F in ("dist\alyson-work-time Setup 95.3.4.exe") do (
         set /a "size_mb=%%~zF / 1048576"
     )
-    echo   File: ebdaa-work-time Setup 95.3.4.exe
+    echo   File: alyson-work-time Setup 95.3.4.exe
     echo.
     
     echo Verifying native modules were unpacked...

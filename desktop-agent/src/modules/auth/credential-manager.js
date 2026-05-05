@@ -6,7 +6,7 @@
 class CredentialManager {
   constructor() {
     this.keytar = null;
-    this.serviceName = 'EbdaaWorkTime';
+    this.serviceName = 'AlysonWorkTime';
     // Cache credentials in memory to avoid repeated keychain prompts
     this._cachedCredentials = null;
     this._cacheTime = null;
@@ -52,9 +52,9 @@ class CredentialManager {
         if (success) {
           // Also save email preference in localStorage for easy access (if available)
           if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('ebdaa_remember_email', email);
-            localStorage.setItem('ebdaa_remember_me', 'true');
-            localStorage.setItem('ebdaa_credentials_stored', 'true');
+            localStorage.setItem('alyson_remember_email', email);
+            localStorage.setItem('alyson_remember_me', 'true');
+            localStorage.setItem('alyson_credentials_stored', 'true');
           }
           console.log('✅ Credentials saved securely via IPC');
           // Cache to avoid future keychain prompts
@@ -77,9 +77,9 @@ class CredentialManager {
         
         // Also save email preference in localStorage for easy access (if available)
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('ebdaa_remember_email', email);
-          localStorage.setItem('ebdaa_remember_me', 'true');
-          localStorage.setItem('ebdaa_credentials_stored', 'true');
+          localStorage.setItem('alyson_remember_email', email);
+          localStorage.setItem('alyson_remember_me', 'true');
+          localStorage.setItem('alyson_credentials_stored', 'true');
         }
         
         console.log('✅ Credentials saved securely');
@@ -121,7 +121,7 @@ class CredentialManager {
       try {
         // If no email provided, get from localStorage (if available)
         if (!email && typeof localStorage !== 'undefined') {
-          email = localStorage.getItem('ebdaa_remember_email');
+          email = localStorage.getItem('alyson_remember_email');
         }
 
         if (!email) {
@@ -150,7 +150,7 @@ class CredentialManager {
       try {
         // If no email provided, get from localStorage
         if (!email) {
-          email = localStorage.getItem('ebdaa_remember_email');
+          email = localStorage.getItem('alyson_remember_email');
         }
 
         if (!email) {
@@ -196,7 +196,7 @@ class CredentialManager {
       try {
         // If no email provided, get from localStorage
         if (!email) {
-          email = localStorage.getItem('ebdaa_remember_email');
+          email = localStorage.getItem('alyson_remember_email');
         }
 
         if (email) {
@@ -205,10 +205,10 @@ class CredentialManager {
         }
         
         // Clear localStorage as well
-        localStorage.removeItem('ebdaa_remember_email');
-        localStorage.removeItem('ebdaa_remember_me');
-        localStorage.removeItem('ebdaa_credentials_stored');
-        localStorage.removeItem('ebdaa_saved_password');
+        localStorage.removeItem('alyson_remember_email');
+        localStorage.removeItem('alyson_remember_me');
+        localStorage.removeItem('alyson_credentials_stored');
+        localStorage.removeItem('alyson_saved_password');
         
         console.log('✅ Credentials deleted successfully via IPC');
         return true;
@@ -221,7 +221,7 @@ class CredentialManager {
       try {
         // If no email provided, get from localStorage
         if (!email) {
-          email = localStorage.getItem('ebdaa_remember_email');
+          email = localStorage.getItem('alyson_remember_email');
         }
 
         if (email) {
@@ -230,10 +230,10 @@ class CredentialManager {
         }
         
         // Clear localStorage as well
-        localStorage.removeItem('ebdaa_remember_email');
-        localStorage.removeItem('ebdaa_remember_me');
-        localStorage.removeItem('ebdaa_credentials_stored');
-        localStorage.removeItem('ebdaa_saved_password');
+        localStorage.removeItem('alyson_remember_email');
+        localStorage.removeItem('alyson_remember_me');
+        localStorage.removeItem('alyson_credentials_stored');
+        localStorage.removeItem('alyson_saved_password');
         
         console.log('✅ Credentials deleted successfully');
         return true;
@@ -259,7 +259,7 @@ class CredentialManager {
 
     try {
       if (!email) {
-        email = localStorage.getItem('ebdaa_remember_email');
+        email = localStorage.getItem('alyson_remember_email');
       }
 
       if (!email) return false;
@@ -278,7 +278,7 @@ class CredentialManager {
    */
   async getStoredAccounts() {
     if (!this.keytar) {
-      const email = localStorage.getItem('ebdaa_remember_email');
+      const email = localStorage.getItem('alyson_remember_email');
       return email ? [email] : [];
     }
 
@@ -295,10 +295,10 @@ class CredentialManager {
   saveCredentialsLocalStorage(email, password) {
     try {
       console.warn('⚠️ Using localStorage for credential storage (INSECURE)');
-      localStorage.setItem('ebdaa_remember_email', email);
-      localStorage.setItem('ebdaa_remember_me', 'true');
-      localStorage.setItem('ebdaa_saved_password', btoa(password)); // Basic encoding (still insecure)
-      localStorage.setItem('ebdaa_credentials_stored', 'true');
+      localStorage.setItem('alyson_remember_email', email);
+      localStorage.setItem('alyson_remember_me', 'true');
+      localStorage.setItem('alyson_saved_password', btoa(password)); // Basic encoding (still insecure)
+      localStorage.setItem('alyson_credentials_stored', 'true');
       return true;
     } catch (error) {
       console.error('❌ Failed to save credentials to localStorage:', error);
@@ -308,8 +308,8 @@ class CredentialManager {
 
   getCredentialsLocalStorage() {
     try {
-      const email = localStorage.getItem('ebdaa_remember_email');
-      const encodedPassword = localStorage.getItem('ebdaa_saved_password');
+      const email = localStorage.getItem('alyson_remember_email');
+      const encodedPassword = localStorage.getItem('alyson_saved_password');
       
       if (email && encodedPassword) {
         const password = atob(encodedPassword);
@@ -325,10 +325,10 @@ class CredentialManager {
 
   deleteCredentialsLocalStorage() {
     try {
-      localStorage.removeItem('ebdaa_remember_email');
-      localStorage.removeItem('ebdaa_remember_me');
-      localStorage.removeItem('ebdaa_saved_password');
-      localStorage.removeItem('ebdaa_credentials_stored');
+      localStorage.removeItem('alyson_remember_email');
+      localStorage.removeItem('alyson_remember_me');
+      localStorage.removeItem('alyson_saved_password');
+      localStorage.removeItem('alyson_credentials_stored');
       return true;
     } catch (error) {
       console.error('❌ Failed to delete credentials from localStorage:', error);
@@ -337,8 +337,8 @@ class CredentialManager {
   }
 
   hasStoredCredentialsLocalStorage() {
-    const email = localStorage.getItem('ebdaa_remember_email');
-    const password = localStorage.getItem('ebdaa_saved_password');
+    const email = localStorage.getItem('alyson_remember_email');
+    const password = localStorage.getItem('alyson_saved_password');
     return !!(email && password);
   }
 }

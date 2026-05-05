@@ -319,16 +319,17 @@ class PermissionManagerFix {
   openPermissionSettings() {
     try {
       const { shell } = require('electron');
-      
-      if (process.platform === 'darwin') {
-        // Open to Screen Recording settings
-        shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-        this.console.log('🔧 Opened macOS permission settings');
+      const { openSystemPrivacySettings } = require('../utils/system-settings-opener');
+
+      if (['darwin', 'win32', 'linux'].includes(process.platform)) {
+        openSystemPrivacySettings(shell, { pane: 'screenRecording' }).catch((err) =>
+          this.console.error('❌ Failed to open permission settings:', err)
+        );
+        this.console.log(`🔧 Opened ${process.platform} privacy / capture settings`);
         return true;
-      } else {
-        this.console.log('ℹ️ Permission settings only available on macOS');
-        return false;
       }
+      this.console.log('ℹ️ Permission settings opener not configured for this platform');
+      return false;
     } catch (error) {
       this.console.error('❌ Failed to open permission settings:', error);
       return false;

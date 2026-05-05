@@ -52,7 +52,7 @@ const Index = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-muted/40 p-6">
         <div className="max-w-md text-center">
-          <h1 className="text-3xl font-bold text-primary mb-6">Ebdaa Time</h1>
+          <h1 className="text-3xl font-bold text-primary mb-6">Alyson Time</h1>
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <div className="flex items-center justify-center mb-4">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -72,7 +72,7 @@ const Index = () => {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-muted/40 p-6">
         <div className="max-w-md text-center">
-          <h1 className="text-3xl font-bold text-primary mb-6">Ebdaa Time</h1>
+          <h1 className="text-3xl font-bold text-primary mb-6">Alyson Time</h1>
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <h2 className="text-2xl font-semibold mb-4 text-red-600">Authentication Error</h2>
             <p className="mb-6 text-muted-foreground">{error}</p>
@@ -94,9 +94,9 @@ const Index = () => {
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-muted/40 p-6">
       <div className="max-w-md text-center">
-        <h1 className="text-3xl font-bold text-primary mb-6">Ebdaa Time</h1>
+        <h1 className="text-3xl font-bold text-primary mb-6">Alyson Time</h1>
         <div className="bg-white p-6 rounded-lg shadow-lg">
-          <h2 className="text-2xl font-semibold mb-4">Welcome to Ebdaa Time</h2>
+          <h2 className="text-2xl font-semibold mb-4">Welcome to Alyson Time</h2>
           <p className="mb-6">
             Employee time tracking and productivity monitoring platform.
           </p>

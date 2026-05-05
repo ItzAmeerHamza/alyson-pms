@@ -4,7 +4,7 @@ timeout /t 3 /nobreak >nul
 
 cd /d "%~dp0"
 
-taskkill /F /IM ebdaa-work-time.exe 2>nul
+taskkill /F /IM alyson-work-time.exe 2>nul
 timeout /t 2 /nobreak >nul
 
 echo Replacing app.asar...
@@ -14,7 +14,7 @@ move /Y "dist\win-unpacked\resources\app-new.asar" "dist\win-unpacked\resources\
 if exist "dist\win-unpacked\resources\app.asar" (
     echo SUCCESS: app.asar replaced!
     echo Starting application...
-    start "" "dist\win-unpacked\ebdaa-work-time.exe"
+    start "" "dist\win-unpacked\alyson-work-time.exe"
 ) else (
     echo ERROR: Failed to replace app.asar
     pause

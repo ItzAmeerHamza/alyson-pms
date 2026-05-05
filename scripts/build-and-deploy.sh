@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 🚀 Build, Sign, Notarize & Deploy Script for Ebdaa Work Time
+# 🚀 Build, Sign, Notarize & Deploy Script for Alyson Work Time
 # This script handles the complete deployment pipeline
 
 set -e
 
-echo "🚀 Ebdaa Work Time - Build & Deploy Pipeline"
+echo "🚀 Alyson Work Time - Build & Deploy Pipeline"
 echo "============================================"
 
 # Check if we're in the right directory
@@ -118,9 +118,9 @@ xcrun stapler staple "$INTEL_DMG"
 echo "✅ Notarization tickets stapled"
 
 # Copy files to releases directory with proper names
-ARM_RELEASE_NAME="Ebdaa-Work-Time-$VERSION-arm64.dmg"
-INTEL_RELEASE_NAME="Ebdaa-Work-Time-$VERSION.dmg"
-WIN_RELEASE_NAME="Ebdaa-Work-Time-Setup-$VERSION.exe"
+ARM_RELEASE_NAME="Alyson-Work-Time-$VERSION-arm64.dmg"
+INTEL_RELEASE_NAME="Alyson-Work-Time-$VERSION.dmg"
+WIN_RELEASE_NAME="Alyson-Work-Time-Setup-$VERSION.exe"
 
 cp "$ARM_DMG" "$RELEASES_DIR/$ARM_RELEASE_NAME"
 cp "$INTEL_DMG" "$RELEASES_DIR/$INTEL_RELEASE_NAME"
@@ -197,7 +197,7 @@ if ! gh auth status &> /dev/null; then
 fi
 
 # Create release notes
-RELEASE_NOTES="## Ebdaa Work Time v$VERSION
+RELEASE_NOTES="## Alyson Work Time v$VERSION
 
 ### 🚀 Features & Improvements
 - Enhanced URL tracking and monitoring
@@ -206,9 +206,9 @@ RELEASE_NOTES="## Ebdaa Work Time v$VERSION
 - Updated security and permissions handling
 
 ### 📦 Downloads
-- **macOS (Apple Silicon)**: Ebdaa-Work-Time-$VERSION-arm64.dmg
-- **macOS (Intel)**: Ebdaa-Work-Time-$VERSION.dmg  
-- **Windows**: Ebdaa-Work-Time-Setup-$VERSION.exe
+- **macOS (Apple Silicon)**: Alyson-Work-Time-$VERSION-arm64.dmg
+- **macOS (Intel)**: Alyson-Work-Time-$VERSION.dmg  
+- **Windows**: Alyson-Work-Time-Setup-$VERSION.exe
 
 ### 🔐 Security
 - All macOS builds are signed and notarized by Apple
@@ -225,7 +225,7 @@ echo "$RELEASE_NOTES" > "$RELEASES_DIR/release-notes.md"
 # Create GitHub release
 echo "📤 Creating GitHub release v$VERSION..."
 gh release create "v$VERSION" \
-    --title "Ebdaa Work Time v$VERSION" \
+    --title "Alyson Work Time v$VERSION" \
     --notes-file "$RELEASES_DIR/release-notes.md" \
     --draft
 

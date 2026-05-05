@@ -588,13 +588,13 @@ class IPCEventMap {
       return this._getUpdateStatus();
     });
 
-    this.registerHandler('open-system-preferences', async () => {
-      return await this._openSystemPreferences();
+    this.registerHandler('open-system-preferences', async (event, opts) => {
+      return await this._openSystemPreferences(event, opts);
     });
-    
+
     // Alias for UI compatibility
-    this.registerHandler('open-system-settings', async () => {
-      return await this._openSystemPreferences();
+    this.registerHandler('open-system-settings', async (event, opts) => {
+      return await this._openSystemPreferences(event, opts);
     });
 
     this.registerHandler('check-screen-permission', async () => {
@@ -975,29 +975,14 @@ class IPCEventMap {
     return { status: 'up-to-date' };
   }
 
-  async _openSystemPreferences() {
+  async _openSystemPreferences(event, options = {}) {
     try {
       const { shell } = require('electron');
-      const platform = process.platform;
-      
-      if (platform === 'darwin') {
-        // macOS: Open Privacy & Security settings using URL scheme
-        await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-        console.log('✅ [IPC] Opened macOS System Preferences > Privacy > Screen Recording');
-      } else if (platform === 'win32') {
-        // Windows: Open Privacy settings
-        await shell.openExternal('ms-settings:privacy');
-        console.log('✅ [IPC] Opened Windows Settings > Privacy');
-      } else if (platform === 'linux') {
-        // Linux: Try to open system settings
-        try {
-          await shell.openExternal('gnome-control-center privacy');
-        } catch (e) {
-          console.log('⚠️ [IPC] Could not open Linux settings:', e.message);
-        }
-      }
-      
-      return { success: true, message: 'System settings opened' };
+      const opts = options && typeof options === 'object' ? options : {};
+      const { openSystemPrivacySettings } = require('../utils/system-settings-opener');
+      const result = await openSystemPrivacySettings(shell, opts);
+      console.log('✅ [IPC] Opened system privacy UI:', result.pane, result.url || '');
+      return { success: true, message: 'System settings opened', ...result };
     } catch (error) {
       console.error('❌ [IPC] Failed to open system settings:', error);
       return { success: false, error: error.message };

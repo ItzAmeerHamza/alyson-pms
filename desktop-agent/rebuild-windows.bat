@@ -61,7 +61,7 @@ echo   Build Complete!
 echo ======================================
 echo.
 echo The Windows executable is located at:
-echo   release\win-unpacked\ebdaa-work-time-agent.exe
+echo   release\win-unpacked\alyson-work-time-agent.exe
 echo.
 echo To install:
 echo   1. Close the current running agent if open

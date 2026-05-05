@@ -1,12 +1,12 @@
 import React from 'react';
 
-interface EbdaaTimeLogoProps {
+interface AlysonTimeLogoProps {
   size?: number;
   className?: string;
   showText?: boolean;
 }
 
-const EbdaaTimeLogo: React.FC<EbdaaTimeLogoProps> = ({ 
+const AlysonTimeLogo: React.FC<AlysonTimeLogoProps> = ({ 
   size = 40, 
   className = '', 
   showText = false 
@@ -30,4 +30,4 @@ const EbdaaTimeLogo: React.FC<EbdaaTimeLogoProps> = ({
   );
 };
 
-export default EbdaaTimeLogo; 
+export default AlysonTimeLogo; 

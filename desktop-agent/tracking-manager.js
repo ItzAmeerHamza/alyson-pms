@@ -1136,7 +1136,7 @@ class TrackingManager extends EventEmitter {
       
       // Use same user data directory as saveOfflineQueue
       const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-      const appDataDir = path.join(userDataDir, 'Ebdaa Work Time');
+      const appDataDir = path.join(userDataDir, 'Alyson Work Time');
       const queuePath = path.join(appDataDir, 'offline-queue.json');
       
       if (fs.existsSync(queuePath)) {
@@ -1160,7 +1160,7 @@ class TrackingManager extends EventEmitter {
       
       // Use user data directory instead of app.asar path
       const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-      const appDataDir = path.join(userDataDir, 'Ebdaa Work Time');
+      const appDataDir = path.join(userDataDir, 'Alyson Work Time');
       
       // Ensure directory exists
       if (!fs.existsSync(appDataDir)) {

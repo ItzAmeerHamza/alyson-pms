@@ -17,7 +17,7 @@ function getIpcMain() {
 class MainCredentialHandler {
   constructor() {
     this.keytar = null;
-    this.serviceName = 'EbdaaWorkTime';
+    this.serviceName = 'AlysonWorkTime';
     this.handlersRegistered = false;
     this.init();
   }

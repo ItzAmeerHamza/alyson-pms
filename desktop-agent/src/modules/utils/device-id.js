@@ -24,7 +24,7 @@ function getAppDataDir() {
       || (process.platform === 'darwin'
         ? path.join(os.homedir(), 'Library', 'Application Support')
         : path.join(os.homedir(), '.config'));
-    return path.join(base, 'Ebdaa Work Time');
+    return path.join(base, 'Alyson Work Time');
   }
 }
 

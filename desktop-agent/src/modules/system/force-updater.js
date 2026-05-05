@@ -99,11 +99,11 @@ class ForceUpdater {
     const platform = process.platform;
     
     if (platform === 'darwin') {
-      return path.join(os.homedir(), 'Library', 'Application Support', 'ebdaa-work-time-agent');
+      return path.join(os.homedir(), 'Library', 'Application Support', 'alyson-work-time-agent');
     } else if (platform === 'win32') {
-      return path.join(process.env.APPDATA || os.homedir(), 'ebdaa-work-time-agent');
+      return path.join(process.env.APPDATA || os.homedir(), 'alyson-work-time-agent');
     } else {
-      return path.join(os.homedir(), '.config', 'ebdaa-work-time-agent');
+      return path.join(os.homedir(), '.config', 'alyson-work-time-agent');
     }
   }
 

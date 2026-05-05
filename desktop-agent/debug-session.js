@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const SESSION_PATH = path.join(os.homedir(), '.ebdaa_work_time_agent_session.json');
+const SESSION_PATH = path.join(os.homedir(), '.alyson_work_time_agent_session.json');
 
 async function checkSession() {
   console.log('🔍 Checking saved session at:', SESSION_PATH);

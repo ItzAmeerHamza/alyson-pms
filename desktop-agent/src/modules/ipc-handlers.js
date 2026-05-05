@@ -345,7 +345,7 @@ class IPCHandlers {
         const fs = require('fs');
         const os = require('os');
         const path = require('path');
-        const USER_SESSION_FALLBACK = path.join(os.homedir(), '.ebdaa_work_time_agent_session.json');
+        const USER_SESSION_FALLBACK = path.join(os.homedir(), '.alyson_work_time_agent_session.json');
         const raw = await fs.promises.readFile(USER_SESSION_FALLBACK, 'utf8');
         const session = JSON.parse(raw);
         return { success: true, session };

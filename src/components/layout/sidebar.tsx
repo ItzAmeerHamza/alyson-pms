@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import EbdaaTimeLogo from "@/components/ui/timeflow-logo";
+import AlysonTimeLogo from "@/components/ui/timeflow-logo";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { startOfDay, endOfDay } from "date-fns";
@@ -406,7 +406,7 @@ const Sidebar = () => {
       {/* Header */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center mb-3">
-          <EbdaaTimeLogo size={36} />
+          <AlysonTimeLogo size={36} />
           <div className="ml-3">
             <h1 className="text-xl font-bold text-sidebar-foreground">Alyson PM</h1>
             <p className="text-sm text-primary font-medium">

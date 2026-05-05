@@ -97,7 +97,7 @@ serve(async (req: Request): Promise<Response> => {
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>Click the button below to confirm your email and access your Ebdaa Work Time account.</p>
+      <p>Click the button below to confirm your email and access your Alyson Work Time account.</p>
       
       <p style="text-align: center;">
         <a href="${confirmationUrl}" class="button">Confirm Email Address</a>
@@ -107,7 +107,7 @@ serve(async (req: Request): Promise<Response> => {
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${email}
     </div>
   </div>
@@ -119,9 +119,9 @@ serve(async (req: Request): Promise<Response> => {
     const resend = new Resend(resendApiKey);
     
     const emailResponse = await resend.emails.send({
-      from: "Ebdaa Work Time <info@ebdaadt.com>",
+      from: "Alyson Work Time <info@ebdaadt.com>",
       to: [email],
-      subject: "Confirm Your Account - Ebdaa Work Time",
+      subject: "Confirm Your Account - Alyson Work Time",
       html: htmlContent,
     });
 

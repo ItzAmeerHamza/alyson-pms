@@ -15,7 +15,7 @@ set "timestamp=%timestamp: =0%"
 set "logfile=full-logs-%timestamp%.log"
 
 echo [1/4] Killing existing processes...
-taskkill /F /IM "ebdaa-work-time.exe" 2>nul
+taskkill /F /IM "alyson-work-time.exe" 2>nul
 timeout /t 2 /nobreak >nul
 echo       Done
 echo.

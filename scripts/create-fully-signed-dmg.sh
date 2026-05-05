@@ -10,7 +10,7 @@ VERSION="1.0.22"
 CERT_NAME="Developer ID Application: RevCloud (6GW49LK9V9)"
 TEAM_ID="6GW49LK9V9"
 KEYCHAIN_PROFILE="timeflow-notarization"
-APP_NAME="Ebdaa Work Time.app"
+APP_NAME="Alyson Work Time.app"
 
 # Colors
 RED='\033[0;31m'
@@ -122,7 +122,7 @@ find "$APP_PATH/Contents/Frameworks" -name "*.app" -exec codesign --force --opti
 echo -e "${YELLOW}🔏 Step 5: Signing main executable...${NC}"
 
 # Sign main executable
-codesign --force --options runtime --entitlements main-app.plist --sign "$CERT_NAME" --timestamp "$APP_PATH/Contents/MacOS/Ebdaa Work Time"
+codesign --force --options runtime --entitlements main-app.plist --sign "$CERT_NAME" --timestamp "$APP_PATH/Contents/MacOS/Alyson Work Time"
 
 echo -e "${YELLOW}🔏 Step 6: Signing main application...${NC}"
 
@@ -138,10 +138,10 @@ spctl -a -t exec -vv "$APP_PATH"
 echo -e "${YELLOW}📦 Step 8: Creating DMG...${NC}"
 
 # Create DMG
-DMG_NAME="Ebdaa Work Time-1.0.22-arm64-Signed.dmg"
+DMG_NAME="Alyson Work Time-1.0.22-arm64-Signed.dmg"
 rm -f "dist/${DMG_NAME}"
 
-npx create-dmg "$APP_PATH" dist/ --dmg-title="Install Ebdaa Work Time" --overwrite 2>/dev/null || {
+npx create-dmg "$APP_PATH" dist/ --dmg-title="Install Alyson Work Time" --overwrite 2>/dev/null || {
     echo "Using hdiutil to create DMG..."
     
     # Create temp directory for DMG contents
@@ -150,7 +150,7 @@ npx create-dmg "$APP_PATH" dist/ --dmg-title="Install Ebdaa Work Time" --overwri
     ln -sf /Applications "$DMG_DIR/Applications"
     
     # Create DMG
-    hdiutil create -volname "Install Ebdaa Work Time" -srcfolder "$DMG_DIR" -ov -format UDZO "dist/${DMG_NAME}"
+    hdiutil create -volname "Install Alyson Work Time" -srcfolder "$DMG_DIR" -ov -format UDZO "dist/${DMG_NAME}"
     rm -rf "$DMG_DIR"
 }
 

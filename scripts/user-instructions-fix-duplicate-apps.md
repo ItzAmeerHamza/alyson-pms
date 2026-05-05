@@ -11,7 +11,7 @@
 ### Step 1: Quit Current TimeFlow App
 ```bash
 # Force quit if needed
-killall "Ebdaa Work Time" 2>/dev/null || true
+killall "Alyson Work Time" 2>/dev/null || true
 ```
 
 ### Step 2: Install Latest Available Version

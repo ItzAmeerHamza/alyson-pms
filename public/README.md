@@ -7,28 +7,28 @@ This folder contains publicly accessible downloads for the TimeFlow Desktop Appl
 The desktop application files are hosted on GitHub Releases for maximum accessibility:
 
 ### Windows
-- **File**: `EbdaaWorkTime-Setup.exe`
+- **File**: `AlysonWorkTime-Setup.exe`
 - **Size**: ~85MB
 - **Requirements**: Windows 10/11 (64-bit)
-- **Direct Link**: [Download for Windows](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Setup.exe)
+- **Direct Link**: [Download for Windows](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Setup.exe)
 
 ### macOS (Intel)
-- **File**: `EbdaaWorkTime-Intel.dmg`
+- **File**: `AlysonWorkTime-Intel.dmg`
 - **Size**: ~118MB
 - **Requirements**: macOS 10.14+ (Intel processors)
-- **Direct Link**: [Download for macOS Intel](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-Intel.dmg)
+- **Direct Link**: [Download for macOS Intel](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Intel.dmg)
 
 ### macOS (Apple Silicon)
-- **File**: `EbdaaWorkTime-ARM.dmg`
+- **File**: `AlysonWorkTime-ARM.dmg`
 - **Size**: ~112MB
 - **Requirements**: macOS 11.0+ (Apple Silicon M1/M2/M3)
-- **Direct Link**: [Download for macOS Apple Silicon](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime-ARM.dmg)
+- **Direct Link**: [Download for macOS Apple Silicon](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-ARM.dmg)
 
 ### Linux
-- **File**: `EbdaaWorkTime.AppImage`
+- **File**: `AlysonWorkTime.AppImage`
 - **Size**: ~120MB
 - **Requirements**: Ubuntu 18.04+ or equivalent
-- **Direct Link**: [Download for Linux](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/EbdaaWorkTime.AppImage)
+- **Direct Link**: [Download for Linux](https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime.AppImage)
 
 ## Public Access
 
@@ -64,8 +64,8 @@ Users can access downloads through:
 
 ### Linux
 1. Download the `.AppImage` file
-2. Make it executable: `chmod +x EbdaaWorkTime.AppImage`
-3. Run: `./EbdaaWorkTime.AppImage`
+2. Make it executable: `chmod +x AlysonWorkTime.AppImage`
+3. Run: `./AlysonWorkTime.AppImage`
 
 ## Features
 

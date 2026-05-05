@@ -129,7 +129,7 @@ async function handleUploadScreenshot(
       activity_percent: metadata.activity_percent ?? 0,
       focus_percent: metadata.focus_percent ?? 0,
       captured_at: metadata.captured_at,
-      file_path: imageUrl,
+      file_path: fileName,
       classification: (metadata.activity_percent as number) > 50 ? 'productive' : 'idle',
       mouse_clicks: metadata.mouse_clicks ?? 0,
       keystrokes: metadata.keystrokes ?? 0,

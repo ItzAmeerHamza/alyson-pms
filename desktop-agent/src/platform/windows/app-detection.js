@@ -53,7 +53,7 @@ function getCachedResult() {
 
 // System processes that should NOT be saved as lastExternalApp
 const SYSTEM_PROCESS_EXCLUSIONS = [
-  'electron', 'ebdaa work time', 'timeflow',
+  'electron', 'alyson work time', 'timeflow',
   'applicationframehost', 'dwm', 'dwm.exe', 'desktop window manager',
   'shellexperiencehost', 'searchhost', 'searchapp', 'startmenuexperiencehost',
   'explorer', 'explorer.exe', 'taskhostw', 'sihost', 'ctfmon',
@@ -667,7 +667,7 @@ try {
 if (nativeApp && nativeApp.appName && nativeApp.appName !== 'Windows Desktop') {
       // BUG1 FIX: If we detected "Electron" (self), try to use last external app instead
       const appNameLower = (nativeApp.appName || '').toLowerCase();
-      const isSelfDetected = appNameLower.includes('electron') || appNameLower === 'ebdaa work time' || appNameLower === 'timeflow';
+      const isSelfDetected = appNameLower.includes('electron') || appNameLower === 'alyson work time' || appNameLower === 'timeflow';
       if (isSelfDetected) {
         const lastExternal = getLastExternalApp();
         if (lastExternal) {
@@ -708,7 +708,7 @@ try {
 if (simpleApp && simpleApp.appName && simpleApp.appName !== 'Unknown Application') {
       // BUG1 FIX: Skip self-detection in simple detection too
       const simpleAppLower = (simpleApp.appName || '').toLowerCase();
-      const isSelfSimple = simpleAppLower.includes('electron') || simpleAppLower === 'ebdaa work time' || simpleAppLower === 'timeflow';
+      const isSelfSimple = simpleAppLower.includes('electron') || simpleAppLower === 'alyson work time' || simpleAppLower === 'timeflow';
       if (!isSelfSimple) {
         if (DEBUG) console.log('[WINDOWS-APP] Simple detection succeeded:', simpleApp.appName);
         setCachedResult(simpleApp);
@@ -732,7 +732,7 @@ if (desktopWindow) {
         const friendly = normalizeAppName(desktopWindow.appName || desktopWindow.processName || '');
         // BUG1 FIX: Skip self-detection in desktop window detection too
         const desktopAppLower = friendly.toLowerCase();
-        const isSelfDesktop = desktopAppLower.includes('electron') || desktopAppLower === 'ebdaa work time' || desktopAppLower === 'timeflow';
+        const isSelfDesktop = desktopAppLower.includes('electron') || desktopAppLower === 'alyson work time' || desktopAppLower === 'timeflow';
         if (!isSelfDesktop) {
           const result = {
             appName: friendly,

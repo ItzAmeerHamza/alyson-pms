@@ -20,6 +20,9 @@
  * - Request body (optional): visual_scene_transcript — text description/OCR/transcript of the screen; used with DeepSeek chat (no pixels).
  * - Request body (optional): screenshot_intelligence_text_mode — overrides env for one request.
  * - SCREENSHOTS_STORAGE_BUCKET — optional; default screenshots (signed URL for VL when file_path is set)
+ * - SCREEN_ANALYSIS_DISABLED — if "true", skip canonical JSON (screenshots.screen_analysis).
+ * - SCREEN_ANALYSIS_MAX_TOKENS — optional cap for canonical JSON DeepSeek call (default 4096).
+ * - Request body (optional): canonical_screen_analysis_only — if true, only fills screen_analysis via DeepSeek (cheap queue mode).
  */
 
 /// <reference types="./types.d.ts" />
@@ -58,7 +61,33 @@ function getDeepSeekChatUrl(): string {
 
 /** Only models we allow from request body (prevents arbitrary model injection). */
 const ALLOWED_DEEPSEEK_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro']);
-const ANALYZER_RUNTIME_VERSION = '5.3.1-intelligence-metadata-flags';
+const ANALYZER_RUNTIME_VERSION = '5.4.0-canonical-screen-analysis';
+
+/** DeepSeek JSON schema stored in screenshots.screen_analysis */
+const CANONICAL_SCREEN_KEYS = [
+  'screenshot_id',
+  'timestamp',
+  'user_id',
+  'device',
+  'screen_category',
+  'application',
+  'screen_content',
+  'activity_status',
+  'task_alignment',
+  'video_audio',
+  'privacy_flags',
+  'distraction_risk',
+  'task_relevance',
+  'distraction_level',
+  'confidence_score',
+  'recommendation',
+  'metadata',
+] as const;
+
+function screenAnalysisMaxTokens(): number {
+  const n = Number(Deno.env.get('SCREEN_ANALYSIS_MAX_TOKENS') || '4096');
+  return Number.isFinite(n) && n >= 512 ? Math.min(8192, Math.floor(n)) : 4096;
+}
 
 function pickDeepseekModel(preferred: unknown, fallback: string): string {
   const p = typeof preferred === 'string' ? preferred.trim() : '';
@@ -703,6 +732,258 @@ const DUPLICATE_ALERT_THRESHOLDS = {
   CRITICAL: 30,
 };
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v != null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function isValidCanonicalScreenAnalysis(obj: unknown): boolean {
+  if (!isRecord(obj)) return false;
+  for (const k of CANONICAL_SCREEN_KEYS) {
+    if (!(k in obj)) return false;
+  }
+  return true;
+}
+
+function truncateForPrompt(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + '\n…(truncated)';
+}
+
+function applyCanonicalServerOverrides(
+  obj: Record<string, unknown>,
+  screenshot: Record<string, unknown>,
+  mergedAnalysis: Record<string, unknown>,
+): void {
+  obj.screenshot_id = String(screenshot.id);
+  obj.user_id = String(screenshot.user_id);
+  const cap = screenshot.captured_at;
+  obj.timestamp = typeof cap === 'string' ? cap : new Date().toISOString();
+
+  const ap = Number(screenshot.activity_percent);
+  const clicks = Number(screenshot.mouse_clicks ?? 0);
+  const keys = Number(screenshot.keystrokes ?? 0);
+  const moves = Number(screenshot.mouse_movements ?? 0);
+  let interaction: string = 'none';
+  if (keys > 0 && (clicks > 0 || moves > 0)) interaction = 'both';
+  else if (keys > 0) interaction = 'keyboard';
+  else if (clicks > 0 || moves > 0) interaction = 'mouse';
+
+  if (isRecord(obj.activity_status)) {
+    const a = obj.activity_status as Record<string, unknown>;
+    if (!Number.isFinite(Number(ap)) || ap >= 15) {
+      a.user_activity = a.user_activity || 'active';
+    } else {
+      a.user_activity = a.user_activity || 'idle';
+    }
+    a.interaction_type = interaction;
+  }
+
+  if (typeof obj.confidence_score !== 'number' || !Number.isFinite(obj.confidence_score)) {
+    const cs = Number(mergedAnalysis.confidence_score);
+    obj.confidence_score = Number.isFinite(cs) ? Math.max(0, Math.min(1, cs > 1 ? cs / 100 : cs)) : 0.5;
+  } else if (obj.confidence_score > 1) {
+    obj.confidence_score = Math.max(0, Math.min(1, (obj.confidence_score as number) / 100));
+  }
+}
+
+function buildCanonicalScreenAnalysisPrompt(contextBlock: string): string {
+  return `You classify a single employee desktop screenshot for workforce analytics.
+
+Return ONLY one JSON object (no markdown). Use response keys exactly as specified. Prefer enum values shown with | where given; if uncertain use "Other".
+
+Required top-level keys (all required):
+- screenshot_id: string (UUID echoed from input)
+- timestamp: string ISO 8601 (echo from input)
+- user_id: string (echo from input)
+- device: { type: "desktop" | "laptop" | "tablet" | "mobile" | "Other", os: "macOS" | "Windows" | "Linux" | "Android" | "iOS" | "Other", browser: "Chrome" | "Firefox" | "Safari" | "Edge" | "Other", resolution: string }
+- screen_category: "Work" | "Gaming" | "Browsing" | "Communication" | "Social Media" | "Entertainment" | "Other"
+- application: { name: string, category: "IDE" | "Gaming" | "Social Media" | "Entertainment" | "Communication" | "Browsing" | "Work" | "Other" }
+- screen_content: { title: string, url: string, keywords: string[], visible_elements: string[] }
+- activity_status: { user_activity: "active" | "idle", interaction_type: "keyboard" | "mouse" | "both" | "none", focus_level: "focused" | "distracted" | "idle" }
+- task_alignment: { relevant_to_work: "yes" | "no", alignment_score: number 0-1, evidence: string[] }
+- video_audio: { audio_playing: "yes" | "no", video_playing: "yes" | "no", video_type: "gaming" | "educational" | "leisure" | "meeting" | "tutorial" | "Other" }
+- privacy_flags: { sensitive_data: "none" | "partial" | "full", personal_info_exposed: "yes" | "no", activity_sensitivity: "low" | "medium" | "high" }
+- distraction_risk: { gaming: "yes" | "no", entertainment: "yes" | "no", social_media: "yes" | "no", news: "yes" | "no", shopping: "yes" | "no", other_distractions: string[] }
+- task_relevance: { coding_related: "yes" | "no", meeting_related: "yes" | "no", design_related: "yes" | "no", administrative: "yes" | "no", research_related: "yes" | "no", email_related: "yes" | "no", communication_related: "yes" | "no" }
+- distraction_level: { low: string, medium: string, high: string }  // For this screenshot: one sentence rationale on the matching tier; other two tiers use "-" or empty string.
+- confidence_score: number 0-1
+- recommendation: "Work mode" | "Possible distraction" | "Monitor" | "Idle time detected" | "Potential issue detected"
+- metadata: { image_quality: "high" | "medium" | "low", noise_level: "low" | "medium" | "high", image_resolution: "high" | "low" | "medium" }
+
+Context (metadata + prior signals — you may not see pixels):
+${contextBlock}`;
+}
+
+async function generateCanonicalScreenAnalysisDeepSeek(
+  token: string,
+  textModel: string,
+  ctx: {
+    screenshot: Record<string, unknown>;
+    mergedAnalysis: Record<string, unknown>;
+    screenshotIntelligence: unknown;
+    visualSceneTranscript: string;
+    imageDescription: string | null;
+    windowTitle: string;
+    appName: string;
+    url: string;
+  },
+): Promise<
+  | { success: true; obj: Record<string, unknown>; usage?: ReturnType<typeof extractOpenAiUsage> }
+  | { success: false; error: string; usage?: ReturnType<typeof extractOpenAiUsage> }
+> {
+  const intelStr = ctx.screenshotIntelligence != null
+    ? truncateForPrompt(JSON.stringify(ctx.screenshotIntelligence), 12000)
+    : '';
+  const contextBlock = [
+    `screenshot_id=${ctx.screenshot.id}`,
+    `user_id=${ctx.screenshot.user_id}`,
+    `captured_at=${ctx.screenshot.captured_at || ''}`,
+    `activity_percent=${ctx.screenshot.activity_percent ?? ''}`,
+    `focus_percent=${ctx.screenshot.focus_percent ?? ''}`,
+    `mouse_clicks=${ctx.screenshot.mouse_clicks ?? 0} keystrokes=${ctx.screenshot.keystrokes ?? 0} mouse_movements=${ctx.screenshot.mouse_movements ?? 0}`,
+    `window_title=${ctx.windowTitle || '(unknown)'}`,
+    `app_name=${ctx.appName || '(unknown)'}`,
+    `url=${ctx.url || '(unknown)'}`,
+    `merged_category=${ctx.mergedAnalysis.category ?? ''}`,
+    `merged_activity_type=${ctx.mergedAnalysis.activity_type ?? ''}`,
+    `merged_is_work_related=${ctx.mergedAnalysis.is_work_related ?? ''}`,
+    `merged_distraction_score=${ctx.mergedAnalysis.distraction_score ?? ''}`,
+    ctx.imageDescription ? `image_summary=${truncateForPrompt(ctx.imageDescription, 2000)}` : '',
+    ctx.visualSceneTranscript.trim()
+      ? `visual_scene_transcript=${truncateForPrompt(ctx.visualSceneTranscript.trim(), 8000)}`
+      : '',
+    intelStr ? `screenshot_intelligence_json=${intelStr}` : '',
+  ].filter(Boolean).join('\n');
+
+  const prompt = buildCanonicalScreenAnalysisPrompt(contextBlock);
+
+  try {
+    const response = await fetch(getDeepSeekChatUrl(), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: textModel,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You output only valid JSON for canonical screenshot workforce analytics. Never use markdown fences.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: screenAnalysisMaxTokens(),
+        temperature: 0.2,
+        thinking: { type: 'disabled' },
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      return { success: false as const, error: `${response.status}: ${await response.text()}` };
+    }
+
+    const result = await response.json() as Record<string, unknown>;
+    const usage = extractOpenAiUsage(result);
+    const content = String((result as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content || '');
+    const slice = extractFirstJsonObject(content);
+    if (!slice) return { success: false as const, error: 'canonical_unparseable', usage };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(slice);
+    } catch {
+      return { success: false as const, error: 'canonical_json_parse', usage };
+    }
+    if (!isValidCanonicalScreenAnalysis(parsed)) {
+      return { success: false as const, error: 'canonical_missing_keys', usage };
+    }
+    return { success: true as const, obj: parsed as Record<string, unknown>, usage };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false as const, error: msg };
+  }
+}
+
+async function executeCanonicalScreenAnalysisOnly(params: {
+  supabase: ReturnType<typeof createClient>;
+  corsHeaders: Record<string, string>;
+  screenshot: Record<string, unknown>;
+  textModelForRequest: string;
+  visualSceneTranscript: string;
+  requestBody: Record<string, unknown>;
+}): Promise<Response> {
+  const { supabase, corsHeaders, screenshot, textModelForRequest, visualSceneTranscript, requestBody } = params;
+  const token = getTextApiToken();
+  if (!token) {
+    return new Response(
+      JSON.stringify({ error: 'DEEPSEEK_API_KEY not configured' }),
+      { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+  if (Deno.env.get('SCREEN_ANALYSIS_DISABLED')?.toLowerCase() === 'true') {
+    return new Response(
+      JSON.stringify({ success: false, skipped: true, reason: 'SCREEN_ANALYSIS_DISABLED' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  const titleToAnalyze = pickBestWindowTitle(requestBody.window_title, screenshot);
+  const appToAnalyze = (requestBody.app_name as string) || String(screenshot.app_name || '');
+  const pattern = analyzeScreenshotContent(titleToAnalyze, appToAnalyze);
+  const aiMeta = screenshot.ai_metadata;
+  const intel = isRecord(aiMeta) ? aiMeta.screenshot_intelligence : undefined;
+
+  const gen = await generateCanonicalScreenAnalysisDeepSeek(token, textModelForRequest, {
+    screenshot,
+    mergedAnalysis: pattern,
+    screenshotIntelligence: intel,
+    visualSceneTranscript,
+    imageDescription: typeof screenshot.ai_metadata === 'object' && screenshot.ai_metadata != null
+      ? String((screenshot.ai_metadata as Record<string, unknown>).image_description || '').trim() || null
+      : null,
+    windowTitle: titleToAnalyze,
+    appName: appToAnalyze,
+    url: pickBestActiveUrl(screenshot),
+  });
+
+  if (gen.success === false) {
+    console.warn('canonical_screen_analysis_only failed:', gen.error);
+    return new Response(
+      JSON.stringify({ success: false, error: gen.error }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  applyCanonicalServerOverrides(gen.obj, screenshot, pattern);
+
+  const { error: upErr } = await supabase
+    .from('screenshots')
+    .update({ screen_analysis: gen.obj })
+    .eq('id', screenshot.id);
+
+  if (upErr) {
+    console.error('screen_analysis update failed:', upErr);
+    return new Response(
+      JSON.stringify({ success: false, error: upErr.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      screen_analysis: gen.obj,
+      analyzer_runtime_version: ANALYZER_RUNTIME_VERSION,
+      deepseek_usage: gen.usage
+        ? { screen_analysis: { ...gen.usage, model: textModelForRequest } }
+        : undefined,
+    }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+  );
+}
+
 Deno.serve(async (req: Request) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
@@ -763,8 +1044,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('🤖 Starting AI screenshot analysis for:', screenshot_id);
-
     // Get screenshot data
     const { data: screenshot, error: screenshotError } = await supabase
       .from('screenshots')
@@ -778,6 +1057,19 @@ Deno.serve(async (req: Request) => {
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    if (requestBody.canonical_screen_analysis_only === true) {
+      return await executeCanonicalScreenAnalysisOnly({
+        supabase,
+        corsHeaders,
+        screenshot,
+        textModelForRequest,
+        visualSceneTranscript,
+        requestBody,
+      });
+    }
+
+    console.log('🤖 Starting AI screenshot analysis for:', screenshot_id);
 
     const titleToAnalyze = pickBestWindowTitle(window_title, screenshot);
     const appToAnalyze = app_name || screenshot.app_name || '';
@@ -1104,12 +1396,35 @@ Deno.serve(async (req: Request) => {
         'AI summary: classification completed without a text summary (check app/window fields on the row).';
     }
 
+    let screenAnalysisUsage: ReturnType<typeof extractOpenAiUsage> = undefined;
+    let screenAnalysisObj: Record<string, unknown> | null = null;
+    if (textApiToken && Deno.env.get('SCREEN_ANALYSIS_DISABLED')?.toLowerCase() !== 'true') {
+      const canon = await generateCanonicalScreenAnalysisDeepSeek(textApiToken, textModelForRequest, {
+        screenshot,
+        mergedAnalysis: analysis,
+        screenshotIntelligence: intelligenceObj,
+        visualSceneTranscript,
+        imageDescription,
+        windowTitle: titleToAnalyze,
+        appName: appToAnalyze,
+        url: urlForIntelligence,
+      });
+      if (canon.success === false) {
+        console.warn('Canonical screen_analysis generation failed:', canon.error);
+      } else {
+        applyCanonicalServerOverrides(canon.obj, screenshot, analysis);
+        screenAnalysisObj = canon.obj;
+        screenAnalysisUsage = canon.usage;
+      }
+    }
+
     const deepseek_usage = buildDeepseekUsagePayload(
       textUsage,
       visionUsage,
       textModelForRequest,
       visionModelForRequest,
       intelligenceTextUsage,
+      screenAnalysisUsage,
     );
 
     const visionErrStr = visionResult?.success
@@ -1204,6 +1519,10 @@ Deno.serve(async (req: Request) => {
       updateData.alert_id = alertId;
     }
 
+    if (screenAnalysisObj) {
+      updateData.screen_analysis = screenAnalysisObj;
+    }
+
     const { error: updateError } = await supabase
       .from('screenshots')
       .update(updateData)
@@ -1223,7 +1542,8 @@ Deno.serve(async (req: Request) => {
       imageDescription,
       alertCreated: !!alertId,
       consecutiveDuplicates: consecutiveDuplicateCount,
-      duplicateOverride: analysis.duplicate_override || false
+      duplicateOverride: analysis.duplicate_override || false,
+      screen_analysis: !!screenAnalysisObj,
     });
 
     return new Response(
@@ -1249,6 +1569,7 @@ Deno.serve(async (req: Request) => {
         duplicate_override: analysis.duplicate_override || false,
         deepseek_usage,
         screenshot_intelligence: intelligenceObj ?? undefined,
+        screen_analysis: screenAnalysisObj ?? undefined,
         message: 'Screenshot analysis completed successfully'
       }),
       {
@@ -1666,17 +1987,23 @@ function buildDeepseekUsagePayload(
   textModel: string,
   visionModel: string,
   intelligenceText?: ReturnType<typeof extractOpenAiUsage>,
+  screenAnalysis?: ReturnType<typeof extractOpenAiUsage>,
 ): Record<string, unknown> | undefined {
   const textPart = text ? { ...text, model: textModel } : undefined;
   const visionPart = vision ? { ...vision, model: visionModel } : undefined;
   const intelPart = intelligenceText ? { ...intelligenceText, model: textModel } : undefined;
+  const screenPart = screenAnalysis ? { ...screenAnalysis, model: textModel } : undefined;
   const total_tokens =
-    (text?.total_tokens ?? 0) + (vision?.total_tokens ?? 0) + (intelligenceText?.total_tokens ?? 0);
-  if (!textPart && !visionPart && !intelPart) return undefined;
+    (text?.total_tokens ?? 0) +
+    (vision?.total_tokens ?? 0) +
+    (intelligenceText?.total_tokens ?? 0) +
+    (screenAnalysis?.total_tokens ?? 0);
+  if (!textPart && !visionPart && !intelPart && !screenPart) return undefined;
   return {
     text: textPart,
     vision: visionPart,
     screenshot_intelligence_text: intelPart,
+    screen_analysis: screenPart,
     total_tokens,
   };
 }

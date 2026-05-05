@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/components/ui/use-toast";
-import EbdaaTimeLogo from "@/components/ui/timeflow-logo";
+import AlysonTimeLogo from "@/components/ui/timeflow-logo";
 import DesktopDownload from "@/components/ui/desktop-download";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -112,7 +112,7 @@ export default function LoginPage() {
             <Card className="w-full max-w-md">
               <CardHeader className="space-y-1 text-center">
                 <div className="flex justify-center mb-4">
-                  <EbdaaTimeLogo size={60} showText={true} />
+                  <AlysonTimeLogo size={60} showText={true} />
                 </div>
                 <CardDescription>
                   Enter your credentials to access your account

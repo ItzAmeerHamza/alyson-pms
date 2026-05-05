@@ -24,7 +24,7 @@ function log(message) {
 async function killExistingProcesses() {
     try {
         log('🧹 Killing any existing Electron processes...');
-        execSync('pkill -f "electron.*time-flow\\|Ebdaa Work Time" || true');
+        execSync('pkill -f "electron.*time-flow\\|Alyson Work Time" || true');
         await sleep(2000);
     } catch (error) {
         log(`⚠️ Error killing processes: ${error.message}`);
@@ -158,7 +158,7 @@ function startDesktopAgent() {
             
             // Look for specific ready indicators
             if (!startupComplete && (
-                output.includes('✅ Ebdaa Work Time Agent ready and visible') ||
+                output.includes('✅ Alyson Work Time Agent ready and visible') ||
                 output.includes('✅ Desktop agent session loaded') ||
                 output.includes('✅ User session restored')
             )) {

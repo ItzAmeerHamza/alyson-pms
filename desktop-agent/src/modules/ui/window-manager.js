@@ -61,7 +61,7 @@ class WindowManager extends EventEmitter {
         contextIsolation: false,
         spellcheck: false
       },
-      icon: global.__ebdaaIconPath || path.join(__dirname, '../../../assets/icon.png'),
+      icon: global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png'),
       title: 'Alyson PM',
       resizable: true,
       show: true,
@@ -160,7 +160,7 @@ class WindowManager extends EventEmitter {
         contextIsolation: false,
         spellcheck: false
       },
-      icon: global.__ebdaaIconPath || path.join(__dirname, '../../../assets/icon.png'),
+      icon: global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png'),
       title: '🔬 Alyson PM Debug Console',
       resizable: true,
       show: false,

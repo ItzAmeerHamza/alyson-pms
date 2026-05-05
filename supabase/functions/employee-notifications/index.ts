@@ -90,7 +90,7 @@ const handler = async (req: Request): Promise<Response> => {
       
       console.log('📨 Sending status change notification email...');
       const emailResponse = await resend.emails.send({
-        from: "Ebdaa work time HR <info@ebdaadt.com>",
+        from: "Alyson work time HR <info@ebdaadt.com>",
         to: recipientEmails,
         subject: subject,
         html: htmlContent,
@@ -157,7 +157,7 @@ const handler = async (req: Request): Promise<Response> => {
       const recipientEmails = recipients.map(r => r.email);
       
       const emailResponse = await resend.emails.send({
-        from: "Ebdaa work time HR <info@ebdaadt.com>",
+        from: "Alyson work time HR <info@ebdaadt.com>",
         to: recipientEmails,
         subject: `🎉 New Employee Joined - ${employee_name}`,
         html: htmlContent,

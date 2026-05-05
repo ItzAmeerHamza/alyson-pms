@@ -13,7 +13,7 @@ class SessionManager {
     this.config = config;
     this.USER_SESSION_PATH = path.join(
       require('os').homedir(), 
-      '.ebdaa_work_time_agent_session.json'
+      '.alyson_work_time_agent_session.json'
     );
     
     // Session state

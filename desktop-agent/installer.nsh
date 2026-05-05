@@ -4,7 +4,7 @@
 !macro customInit
   ; Kill any running instances of the app before installation
   nsExec::ExecToLog 'taskkill /F /IM "Work Time.exe"'
-  nsExec::ExecToLog 'taskkill /F /IM "Ebdaa Work Time.exe"'
+  nsExec::ExecToLog 'taskkill /F /IM "Alyson Work Time.exe"'
   Sleep 2000
 
   ; Remove old per-machine installation if it exists (migration to per-user)
@@ -21,7 +21,7 @@
 !macro customUnInstall
   ; Kill any running instances before uninstallation
   nsExec::ExecToLog 'taskkill /F /IM "Work Time.exe"'
-  nsExec::ExecToLog 'taskkill /F /IM "Ebdaa Work Time.exe"'
+  nsExec::ExecToLog 'taskkill /F /IM "Alyson Work Time.exe"'
   Sleep 2000
 !macroend
 

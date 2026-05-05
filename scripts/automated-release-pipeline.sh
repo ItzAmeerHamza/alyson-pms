@@ -189,10 +189,10 @@ generate_file_info() {
     local version="$1"
     print_status "📊 Generating file information..." >&2
     
-    local intel_dmg="dist/Ebdaa Work Time-${version}.dmg"
-    local arm_dmg="dist/Ebdaa Work Time-${version}-arm64.dmg"
-    local win_exe="dist/Ebdaa Work Time Setup ${version}.exe"
-    local linux_appimage="dist/Ebdaa Work Time-${version}.AppImage"
+    local intel_dmg="dist/Alyson Work Time-${version}.dmg"
+    local arm_dmg="dist/Alyson Work Time-${version}-arm64.dmg"
+    local win_exe="dist/Alyson Work Time Setup ${version}.exe"
+    local linux_appimage="dist/Alyson Work Time-${version}.AppImage"
     
     # Check macOS files (required)
     if [[ ! -f "$intel_dmg" ]]; then
@@ -292,8 +292,8 @@ copy_to_downloads() {
     
     mkdir -p public/downloads
     
-    cp "dist/Ebdaa Work Time-${version}.dmg" "public/downloads/TimeFlow-v${version}-Intel.dmg"
-    cp "dist/Ebdaa Work Time-${version}-arm64.dmg" "public/downloads/TimeFlow-v${version}-ARM64.dmg"
+    cp "dist/Alyson Work Time-${version}.dmg" "public/downloads/TimeFlow-v${version}-Intel.dmg"
+    cp "dist/Alyson Work Time-${version}-arm64.dmg" "public/downloads/TimeFlow-v${version}-ARM64.dmg"
     
     print_success "Files copied to downloads directory"
 }
@@ -305,10 +305,10 @@ create_github_release() {
     local linux_available="$3"
     print_status "🐙 Creating GitHub release..."
     
-    local intel_dmg="dist/Ebdaa Work Time-${version}.dmg"
-    local arm_dmg="dist/Ebdaa Work Time-${version}-arm64.dmg"
-    local win_exe="dist/Ebdaa Work Time Setup ${version}.exe"
-    local linux_appimage="dist/Ebdaa Work Time-${version}.AppImage"
+    local intel_dmg="dist/Alyson Work Time-${version}.dmg"
+    local arm_dmg="dist/Alyson Work Time-${version}-arm64.dmg"
+    local win_exe="dist/Alyson Work Time Setup ${version}.exe"
+    local linux_appimage="dist/Alyson Work Time-${version}.AppImage"
     
     # Build download links based on available platforms
     local download_links="- **macOS (Apple Silicon)**: [TimeFlow-v${version}-ARM64.dmg](https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}/TimeFlow-v${version}-ARM64.dmg)

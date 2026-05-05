@@ -99,11 +99,11 @@ serve(async (req: Request): Promise<Response> => {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Welcome to Ebdaa Work Time!</h1>
+      <h1>Welcome to Alyson Work Time!</h1>
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>Thank you for signing up for Ebdaa Work Time! Please confirm your email address to get started.</p>
+      <p>Thank you for signing up for Alyson Work Time! Please confirm your email address to get started.</p>
       
       <div class="code-box">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your verification code:</p>
@@ -119,7 +119,7 @@ serve(async (req: Request): Promise<Response> => {
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't create an account, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${email}
     </div>
   </div>
@@ -131,9 +131,9 @@ serve(async (req: Request): Promise<Response> => {
     const resend = new Resend(resendApiKey);
     
     const emailResponse = await resend.emails.send({
-      from: "Ebdaa Work Time <info@ebdaadt.com>",
+      from: "Alyson Work Time <info@ebdaadt.com>",
       to: [email],
-      subject: "Confirm Your Email - Ebdaa Work Time",
+      subject: "Confirm Your Email - Alyson Work Time",
       html: htmlContent,
     });
 

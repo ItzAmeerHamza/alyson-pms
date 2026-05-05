@@ -2660,7 +2660,7 @@ class UIManager {
     
     try {
       // Get current user from localStorage
-      const savedUser = localStorage.getItem('ebdaa_user');
+      const savedUser = localStorage.getItem('alyson_user');
       if (!savedUser) {
         console.log('⚠️ [UI-MANAGER] No saved user found');
         return;

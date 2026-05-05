@@ -83,7 +83,7 @@ class DesktopAgentController {
     // First check if desktop agent is already running
     try {
       const { execSync } = require('child_process');
-      const existingProcesses = execSync('ps aux | grep -i -E "(electron.*main\\.js|electron.*ebdaa)" | grep -v grep', { encoding: 'utf8' });
+      const existingProcesses = execSync('ps aux | grep -i -E "(electron.*main\\.js|electron.*alyson)" | grep -v grep', { encoding: 'utf8' });
       
       if (existingProcesses.trim().length > 0) {
         console.log('✅ Desktop agent already running, using existing instance');
@@ -115,7 +115,7 @@ class DesktopAgentController {
         console.log('🔧', output.trim());
         
         // Look for startup completion signals
-        if (output.includes('✅ Ebdaa Work Time Agent ready') || 
+        if (output.includes('✅ Alyson Work Time Agent ready') || 
             output.includes('Desktop Agent initialized') ||
             output.includes('ready and visible')) {
           console.log('✅ Desktop agent started successfully');
@@ -547,7 +547,7 @@ class TestExecutor {
   async checkSession() {
     const sessionFile = path.join(
       require('os').homedir(),
-      '.ebdaa-work-time',
+      '.alyson-work-time',
       'user-session.json'
     );
     

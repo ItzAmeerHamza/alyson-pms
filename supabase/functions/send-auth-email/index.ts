@@ -9,12 +9,12 @@ const DEFAULT_WEB_APP_URL = "https://worktime.ebdaadt.com";
 
 // Email subjects for different auth actions
 const emailSubjects: Record<string, string> = {
-  signup: "Confirm Your Email - Ebdaa Work Time",
-  recovery: "Reset Your Password - Ebdaa Work Time",
-  invite: "You've Been Invited - Ebdaa Work Time",
-  magiclink: "Your Login Link - Ebdaa Work Time",
-  email_change: "Confirm Email Change - Ebdaa Work Time",
-  reauthentication: "Confirm Your Identity - Ebdaa Work Time",
+  signup: "Confirm Your Email - Alyson Work Time",
+  recovery: "Reset Your Password - Alyson Work Time",
+  invite: "You've Been Invited - Alyson Work Time",
+  magiclink: "Your Login Link - Alyson Work Time",
+  email_change: "Confirm Email Change - Alyson Work Time",
+  reauthentication: "Confirm Your Identity - Alyson Work Time",
 };
 
 // Generate email HTML based on action type
@@ -57,11 +57,11 @@ function generateEmailHTML(
 <body>
   <div class="container">
     <div class="header">
-      <h1>Welcome to Ebdaa Work Time!</h1>
+      <h1>Welcome to Alyson Work Time!</h1>
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>Thank you for signing up for Ebdaa Work Time! Please confirm your email address to get started.</p>
+      <p>Thank you for signing up for Alyson Work Time! Please confirm your email address to get started.</p>
       
       <div class="code-box">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your verification code:</p>
@@ -77,7 +77,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't create an account, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -96,7 +96,7 @@ function generateEmailHTML(
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>We received a request to reset your password for your Ebdaa Work Time account. Use the code below or click the button to set a new password.</p>
+      <p>We received a request to reset your password for your Alyson Work Time account. Use the code below or click the button to set a new password.</p>
       
       <div class="code-box" style="border-color: #f59e0b;">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your reset code:</p>
@@ -112,7 +112,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email - your password will remain unchanged.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -131,7 +131,7 @@ function generateEmailHTML(
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>You've been invited to join Ebdaa Work Time, a time tracking and productivity platform.</p>
+      <p>You've been invited to join Alyson Work Time, a time tracking and productivity platform.</p>
       
       <div class="code-box" style="border-color: #10b981;">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your invitation code:</p>
@@ -147,7 +147,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">This invitation expires in 24 hours.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -166,17 +166,17 @@ function generateEmailHTML(
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>Click the button below to sign in to your Ebdaa Work Time account. No password needed!</p>
+      <p>Click the button below to sign in to your Alyson Work Time account. No password needed!</p>
       
       <p style="text-align: center;">
-        <a href="${confirmationUrl}" class="button">Sign In to Ebdaa Work Time</a>
+        <a href="${confirmationUrl}" class="button">Sign In to Alyson Work Time</a>
       </p>
       
       <div class="divider"></div>
       <p style="font-size: 13px; color: #6b7280;">This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -195,7 +195,7 @@ function generateEmailHTML(
     </div>
     <div class="content">
       <p>Hi there,</p>
-      <p>You requested to change your email address for your Ebdaa Work Time account. Please confirm this change by entering the code below or clicking the button.</p>
+      <p>You requested to change your email address for your Alyson Work Time account. Please confirm this change by entering the code below or clicking the button.</p>
       
       <div class="code-box" style="border-color: #8b5cf6;">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your confirmation code:</p>
@@ -211,7 +211,7 @@ function generateEmailHTML(
       <p style="font-size: 13px; color: #6b7280;">If you didn't request this change, please contact support immediately.</p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -226,7 +226,7 @@ function generateEmailHTML(
 <body>
   <div class="container">
     <div class="header">
-      <h1>Ebdaa Work Time Notification</h1>
+      <h1>Alyson Work Time Notification</h1>
     </div>
     <div class="content">
       <p>Hi there,</p>
@@ -241,7 +241,7 @@ function generateEmailHTML(
       </p>
     </div>
     <div class="footer">
-      Ebdaa Work Time by RevCloud<br>
+      Alyson Work Time by RevCloud<br>
       Sent to ${userEmail}
     </div>
   </div>
@@ -332,7 +332,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     // Generate email content
-    const subject = emailSubjects[email_data.email_action_type] || "Ebdaa Work Time Notification";
+    const subject = emailSubjects[email_data.email_action_type] || "Alyson Work Time Notification";
     const htmlContent = generateEmailHTML(
       email_data.email_action_type,
       email_data.token || "",
@@ -346,7 +346,7 @@ serve(async (req: Request): Promise<Response> => {
     // Send email via Resend
     console.log("Sending email via Resend...");
     const emailResponse = await resend.emails.send({
-      from: "Ebdaa Work Time <info@ebdaadt.com>",
+      from: "Alyson Work Time <info@ebdaadt.com>",
       to: [user.email],
       subject: subject,
       html: htmlContent,

@@ -1109,10 +1109,11 @@ class IPCManager {
     }
   }
 
-  async openSystemPreferences() {
+  async openSystemPreferences(pane) {
     try {
-      await this.ipcRenderer.invoke('open-system-preferences');
-      console.log('⚙️ System preferences opened');
+      const payload = pane ? { pane } : {};
+      await this.ipcRenderer.invoke('open-system-preferences', payload);
+      console.log('⚙️ System preferences opened', pane || '(default)');
     } catch (error) {
       console.error('❌ Failed to open system preferences:', error);
     }
@@ -1643,7 +1644,64 @@ class IPCManager {
         return 'Time tracking paused';
     }
   }
-  
+
+  /** Labels for the three shortcut buttons (screen / accessibility / “related permissions”). */
+  _permissionPaneLabels() {
+    const p = typeof process !== 'undefined' ? process.platform : '';
+    if (p === 'win32') {
+      return {
+        screen: 'Graphics capture',
+        screenHint: 'Privacy → Graphics capture / screen recording',
+        access: 'Ease of Access',
+        accessHint: 'Accessibility-related Windows settings',
+        auto: 'Privacy',
+        autoHint: 'Privacy & security (app permissions)',
+      };
+    }
+    if (p === 'linux') {
+      return {
+        screen: 'Privacy & screen',
+        screenHint: 'Privacy and screen / sharing (GNOME Control Center)',
+        access: 'Accessibility',
+        accessHint: 'Universal access',
+        auto: 'Applications',
+        autoHint: 'Installed applications',
+      };
+    }
+    if (p === 'darwin') {
+      return {
+        screen: 'Screen Recording',
+        screenHint: 'Privacy → Screen Recording',
+        access: 'Accessibility',
+        accessHint: 'Privacy → Accessibility',
+        auto: 'Automation',
+        autoHint: 'Privacy → Automation (System Events)',
+      };
+    }
+    return null;
+  }
+
+  _escapeAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  _permissionSettingsButtonsHtml() {
+    const labels = this._permissionPaneLabels();
+    if (!labels) {
+      return `
+          <button type="button" class="permission-btn-settings" onclick="window.ipc.invoke('open-system-settings')">
+            Open System Settings
+          </button>`;
+    }
+    const { screen, screenHint, access, accessHint, auto, autoHint } = labels;
+    return `
+          <div class="permission-settings-pane-row">
+            <button type="button" class="permission-btn-settings" title="${this._escapeAttr(screenHint)}" onclick="window.ipc.invoke('open-system-settings', { pane: 'screenRecording' })">${screen}</button>
+            <button type="button" class="permission-btn-settings permission-btn-settings-secondary" title="${this._escapeAttr(accessHint)}" onclick="window.ipc.invoke('open-system-settings', { pane: 'accessibility' })">${access}</button>
+            <button type="button" class="permission-btn-settings permission-btn-settings-secondary" title="${this._escapeAttr(autoHint)}" onclick="window.ipc.invoke('open-system-settings', { pane: 'automation' })">${auto}</button>
+          </div>`;
+  }
+
   /**
    * Show permission required dialog when timer cannot start
    */
@@ -1666,7 +1724,7 @@ class IPCManager {
     const description = isInputDetectionFailure
       ? 'The timer cannot start because activity tracking is not working on this device. Without it, your activity will show as 0%.'
       : 'The timer cannot start because required permissions are missing:';
-    
+
     // Create or get existing modal
     let modal = document.getElementById('permissionRequiredModal');
     
@@ -1712,11 +1770,7 @@ class IPCManager {
           <button class="permission-btn-copy" id="modalCopyLogsBtn" style="background: #1e3a5f; border: 1px solid #2563eb; color: #93c5fd;">
             📋 Copy Logs
           </button>
-          ${!isInputDetectionFailure ? `
-          <button class="permission-btn-settings" onclick="window.ipc.invoke('open-system-settings')">
-            Open System Settings
-          </button>
-          ` : ''}
+          ${!isInputDetectionFailure ? this._permissionSettingsButtonsHtml() : ''}
           <button class="permission-btn-close" onclick="document.getElementById('permissionRequiredModal').style.display='none'">
             Close
           </button>
@@ -1935,7 +1989,9 @@ class IPCManager {
    */
   showPermissionsRevokedDialog(data) {
     console.log('🚨 [IPC] Showing permissions revoked dialog:', data);
-    
+
+    const settingsFooter = this._permissionSettingsButtonsHtml();
+
     // Create or get existing modal
     let modal = document.getElementById('permissionsRevokedModal');
     
@@ -1955,9 +2011,7 @@ class IPCManager {
             <div class="permission-details"></div>
           </div>
           <div class="permission-modal-footer">
-            <button class="permission-btn-settings" onclick="window.ipc.invoke('open-system-settings')">
-              Open System Settings
-            </button>
+            ${settingsFooter}
             <button class="permission-btn-close" onclick="document.getElementById('permissionsRevokedModal').style.display='none'">
               Close
             </button>
@@ -2012,7 +2066,7 @@ class IPCManager {
         background: #1e1e2e;
         border-radius: 12px;
         padding: 24px;
-        max-width: 450px;
+        max-width: 520px;
         width: 90%;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         border: 1px solid #333;
@@ -2070,8 +2124,18 @@ class IPCManager {
       
       .permission-modal-footer {
         display: flex;
+        flex-wrap: wrap;
         gap: 12px;
         margin-top: 20px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .permission-settings-pane-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
         justify-content: flex-end;
       }
       
@@ -2083,6 +2147,14 @@ class IPCManager {
         border-radius: 6px;
         cursor: pointer;
         font-weight: 500;
+      }
+
+      .permission-btn-settings-secondary {
+        background: #475569;
+      }
+
+      .permission-btn-settings-secondary:hover {
+        background: #64748b;
       }
       
       .permission-btn-settings:hover {

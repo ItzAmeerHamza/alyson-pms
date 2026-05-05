@@ -6,7 +6,7 @@ echo "🔧 Applying URL tracking fix..."
 
 # Kill existing agent processes
 echo "⏹️ Stopping existing agent..."
-pkill -f "Electron.*ebdaa-work-time-agent" 2>/dev/null || true
+pkill -f "Electron.*alyson-work-time-agent" 2>/dev/null || true
 pkill -f "node.*electron.*desktop-agent" 2>/dev/null || true
 sleep 2
 

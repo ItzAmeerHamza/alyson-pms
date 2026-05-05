@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo   Quick Build Script for ebdaa-work-time
+echo   Quick Build Script for alyson-work-time
 echo ============================================
 echo.
 
@@ -50,7 +50,7 @@ echo   Build Complete!
 echo ============================================
 echo.
 echo Next steps:
-echo   1. Uninstall old "Ebdaa Work Time" version
+echo   1. Uninstall old "Alyson Work Time" version
 echo   2. Install new version from dist folder
 echo.
 pause

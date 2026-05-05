@@ -49,8 +49,8 @@ class AuthManager {
         if (this.credentialManager) {
           await this.credentialManager.deleteCredentials();
         }
-        localStorage.removeItem('ebdaa_user');
-        localStorage.removeItem('ebdaa_session');
+        localStorage.removeItem('alyson_user');
+        localStorage.removeItem('alyson_session');
         localStorage.removeItem('auth_reset');
         console.log('✅ [AUTH-RESET] All credentials cleared');
         return; // Don't auto-fill anything
@@ -85,9 +85,9 @@ class AuthManager {
       }
       
       // Fallback to localStorage method
-      const rememberedEmail = localStorage.getItem('ebdaa_remember_email');
-      const rememberedCompany = localStorage.getItem('ebdaa_remember_company');
-      const rememberMeChecked = localStorage.getItem('ebdaa_remember_me') === 'true';
+      const rememberedEmail = localStorage.getItem('alyson_remember_email');
+      const rememberedCompany = localStorage.getItem('alyson_remember_company');
+      const rememberMeChecked = localStorage.getItem('alyson_remember_me') === 'true';
       
       const emailInput = document.getElementById('loginEmail');
       const companyInput = document.getElementById('loginCompany');
@@ -179,9 +179,9 @@ class AuthManager {
           console.log('📊 [AUTH] Set user ID result:', setResult);
           
           // Update localStorage for UI consistency
-          localStorage.setItem('ebdaa_user', JSON.stringify(this.currentUser));
-          localStorage.setItem('ebdaa_remember_email', this.currentUser.email);
-          localStorage.setItem('ebdaa_remember_me', 'true');
+          localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+          localStorage.setItem('alyson_remember_email', this.currentUser.email);
+          localStorage.setItem('alyson_remember_me', 'true');
           
           // CHECK FOR UPDATES before proceeding to main app
           console.log('🔄 [AUTH] Checking for updates after auto-login...');          try {
@@ -380,7 +380,7 @@ class AuthManager {
         console.log('📊 [AUTH] Set user ID result:', setResult);
 
         // Store in localStorage
-        localStorage.setItem('ebdaa_user', JSON.stringify(this.currentUser));
+        localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
 
         // Always save credentials securely (default behavior)
         if (this.credentialManager) {
@@ -389,18 +389,18 @@ class AuthManager {
             console.log('✅ Credentials saved securely');
           } else {
             console.warn('⚠️ Failed to save credentials securely, using localStorage fallback');
-            localStorage.setItem('ebdaa_remember_email', email);
-            localStorage.setItem('ebdaa_remember_me', 'true');
+            localStorage.setItem('alyson_remember_email', email);
+            localStorage.setItem('alyson_remember_me', 'true');
           }
         } else {
           // Fallback to localStorage
-          localStorage.setItem('ebdaa_remember_email', email);
-          localStorage.setItem('ebdaa_remember_me', 'true');
+          localStorage.setItem('alyson_remember_email', email);
+          localStorage.setItem('alyson_remember_me', 'true');
         }
         
         // Store company for next login
         if (company) {
-          localStorage.setItem('ebdaa_remember_company', company);
+          localStorage.setItem('alyson_remember_company', company);
         }
         
         // Save session for auto-login using IPC (remember_me enforced true)
@@ -473,11 +473,11 @@ class AuthManager {
         
         if (failureCount >= 2) {
           console.log('🔧 [AUTH] Multiple failures detected, clearing stored credentials');
-          localStorage.removeItem('ebdaa_remember_email');
-          localStorage.removeItem('ebdaa_remember_me');  
-          localStorage.removeItem('ebdaa_saved_password');
-          localStorage.removeItem('ebdaa_user');
-          localStorage.removeItem('ebdaa_session');
+          localStorage.removeItem('alyson_remember_email');
+          localStorage.removeItem('alyson_remember_me');  
+          localStorage.removeItem('alyson_saved_password');
+          localStorage.removeItem('alyson_user');
+          localStorage.removeItem('alyson_session');
           localStorage.removeItem('auth_failure_count');
           errorMessage += ' Stored credentials cleared - please enter fresh login details.';
           
@@ -532,7 +532,7 @@ class AuthManager {
       // Clear user data
       this.currentUser = null;
       this.isAuthenticated = false;
-      localStorage.removeItem('ebdaa_user');
+      localStorage.removeItem('alyson_user');
       
       // Notify main process
       await this.ipcRenderer.invoke('user-logged-out');
@@ -552,7 +552,7 @@ class AuthManager {
   async clearStoredCredentials() {
     try {
       if (this.credentialManager) {
-        const currentEmail = localStorage.getItem('ebdaa_remember_email') || 
+        const currentEmail = localStorage.getItem('alyson_remember_email') || 
                            (this.currentUser && this.currentUser.email);
         if (currentEmail) {
           await this.credentialManager.deleteCredentials(currentEmail);
@@ -560,10 +560,10 @@ class AuthManager {
         }
       }
       
-      localStorage.removeItem('ebdaa_remember_email');
-      localStorage.removeItem('ebdaa_remember_me');
-      localStorage.removeItem('ebdaa_saved_password');
-      localStorage.removeItem('ebdaa_credentials_stored');
+      localStorage.removeItem('alyson_remember_email');
+      localStorage.removeItem('alyson_remember_me');
+      localStorage.removeItem('alyson_saved_password');
+      localStorage.removeItem('alyson_credentials_stored');
       
       return true;
     } catch (error) {

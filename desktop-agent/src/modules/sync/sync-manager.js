@@ -24,7 +24,7 @@ class SyncManager {
           headers: {
             // CRITICAL FIX: Preserve Supabase headers first, then add custom ones
             ...options.headers,
-            'User-Agent': 'Ebdaa-Sync-Manager/1.0'
+            'User-Agent': 'Alyson-Sync-Manager/1.0'
           }
         };
           
@@ -58,7 +58,7 @@ class SyncManager {
     // Use user data directory instead of app.asar path
     const os = require('os');
     const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-    const appDataDir = path.join(userDataDir, 'Ebdaa Work Time');
+    const appDataDir = path.join(userDataDir, 'Alyson Work Time');
     
     // Ensure directory exists
     if (!fs.existsSync(appDataDir)) {

@@ -67,10 +67,10 @@ class PermissionUtilsManager {
       detail: 'To enable App and URL capture features:\n\n1. Open System Settings/Preferences\n2. Go to Privacy & Security → Screen Recording\n3. Click the "+" button\n4. Add "Electron" app\n5. Enable the checkbox\n6. Restart Alyson PM\n\nWould you like to open System Settings now?',
       buttons: ['Open System Settings', 'I\'ll Do It Later'],
       defaultId: 0
-    }).then(result => {
+    }).then(async (result) => {
       if (result.response === 0) {
-        // Open System Settings to Screen Recording section
-        shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+        const { openSystemPrivacySettings } = require('./system-settings-opener');
+        await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
       }
     });
   }
@@ -158,26 +158,26 @@ class PermissionUtilsManager {
   openSystemPreferences(permissionType = 'accessibility') {
     try {
       const { shell } = this.require('electron');
-      
-      if (process.platform === 'darwin') {
-        let url;
-        switch (permissionType) {
-          case 'accessibility':
-            url = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
-            break;
-          case 'screen':
-          case 'screenRecording':
-            url = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
-            break;
-          default:
-            url = 'x-apple.systempreferences:com.apple.preference.security';
-        }
-        
-        shell.openExternal(url);
-        this.console.log(`🔧 Opened system preferences for ${permissionType} permissions`);
-      } else {
-        this.console.log('⚠️ System preferences only available on macOS');
+      const { openSystemPrivacySettings, normalizePane } = require('./system-settings-opener');
+
+      if (!['darwin', 'win32', 'linux'].includes(process.platform)) {
+        this.console.log('⚠️ System privacy shortcuts not mapped for this platform');
+        return;
       }
+
+      const paneMap = {
+        accessibility: 'accessibility',
+        screen: 'screenRecording',
+        screenRecording: 'screenRecording',
+        automation: 'automation',
+        inputMonitoring: 'inputMonitoring',
+        privacy: 'privacy',
+      };
+      const pane = paneMap[permissionType] ?? normalizePane(permissionType);
+      openSystemPrivacySettings(shell, { pane }).catch((err) =>
+        this.console.error('❌ Error opening system preferences:', err)
+      );
+      this.console.log(`🔧 Opened system privacy UI for ${pane}`);
     } catch (error) {
       this.console.error('❌ Error opening system preferences:', error);
     }

@@ -1,6 +1,6 @@
 @echo off
 echo ============================================
-echo   Building ebdaa-work-time
+echo   Building alyson-work-time
 echo ============================================
 echo.
 

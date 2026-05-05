@@ -521,7 +521,7 @@ class WindowsUrlCaptureV2 {
       'Wikipedia': 'https://wikipedia.org',
       'Masrawy': 'https://www.masrawy.com',
       'Bitbucket': 'https://bitbucket.org',
-      'Ebdaa Work Time': 'https://worktime.ebdaadt.com',
+      'Alyson Work Time': 'https://worktime.ebdaadt.com',
       'Work Time': 'https://worktime.ebdaadt.com'
     };
 

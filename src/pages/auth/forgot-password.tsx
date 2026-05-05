@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import EbdaaTimeLogo from "@/components/ui/timeflow-logo";
+import AlysonTimeLogo from "@/components/ui/timeflow-logo";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Loader2, ArrowLeft, Mail, CheckCircle } from "lucide-react";
@@ -113,7 +113,7 @@ export default function ForgotPasswordPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <EbdaaTimeLogo size={60} showText={true} />
+            <AlysonTimeLogo size={60} showText={true} />
           </div>
           <CardTitle className="text-2xl">Forgot password?</CardTitle>
           <CardDescription>

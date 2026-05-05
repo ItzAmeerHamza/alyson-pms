@@ -67,8 +67,8 @@ npx electron-builder --mac --publish=never
 
 # Verify builds were created
 echo "🔍 Verifying build outputs..."
-DMG_INTEL="dist/Ebdaa Work Time-${CURRENT_VERSION}.dmg"
-DMG_ARM64="dist/Ebdaa Work Time-${CURRENT_VERSION}-arm64.dmg"
+DMG_INTEL="dist/Alyson Work Time-${CURRENT_VERSION}.dmg"
+DMG_ARM64="dist/Alyson Work Time-${CURRENT_VERSION}-arm64.dmg"
 
 if [[ ! -f "$DMG_INTEL" ]]; then
     echo "❌ ERROR: Intel DMG not found at: $DMG_INTEL"

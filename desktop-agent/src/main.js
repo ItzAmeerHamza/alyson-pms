@@ -380,14 +380,14 @@ const packageJson = require('../package.json');
 global.agentVersion = packageJson.version;
 console.log(`📦 [AGENT-VERSION] Desktop agent version: ${global.agentVersion}`);
 
-// ─── Cache Ebdaa icon path globally for BrowserWindow and Tray ─────────
-// The real Ebdaa icon lives at assets/icon.png (the compass logo).
+// ─── Cache Alyson icon path globally for BrowserWindow and Tray ─────────
+// The real Alyson icon lives at assets/icon.png (the compass logo).
 // We make it accessible globally so all windows and tray use it.
 (function cacheIconPath() {
   const path = require('path');
   const iconPath = path.join(__dirname, '../assets/icon.png');
-  global.__ebdaaIconPath = iconPath;
-  console.log('🎨 [ICON] Using Ebdaa release icon:', iconPath);
+  global.__alysonIconPath = iconPath;
+  console.log('🎨 [ICON] Using Alyson release icon:', iconPath);
 })();
 
 // CRITICAL FIX: Initialize tracking state to false on app startup
@@ -1121,7 +1121,7 @@ try {
             ...existingHeaders,
             // Only set apikey — do NOT override Authorization (the Supabase client sets it to the user's JWT)
             'apikey': existingHeaders['apikey'] || config.supabase_key,
-            'User-Agent': 'Ebdaa-Work-Time-Agent/1.0'
+            'User-Agent': 'Alyson-Work-Time-Agent/1.0'
           }
         };
 
@@ -1560,7 +1560,7 @@ function loadOfflineQueue() {
     const os = require('os');
     // Use user data directory instead of app.asar path
     const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-    const appDataDir = path.join(userDataDir, 'Ebdaa Work Time');
+    const appDataDir = path.join(userDataDir, 'Alyson Work Time');
     const queueFile = path.join(appDataDir, 'offline-queue.json');
 
     if (fs.existsSync(queueFile)) {
@@ -3916,12 +3916,12 @@ if (isElectronContext && ipcMain) {
   // === APP LIFECYCLE ===
   if (isElectronContext && app) {
     // === SINGLE INSTANCE LOCK - PREVENT DUPLICATE DESKTOP AGENTS ===
-    console.log('🔒 Checking for existing Ebdaa WorkTime Agent instance...');
+    console.log('🔒 Checking for existing Alyson WorkTime Agent instance...');
 
     const gotTheLock = app.requestSingleInstanceLock();
 
     if (!gotTheLock) {
-      console.log('❌ Another Ebdaa WorkTime Agent instance is already running - quitting immediately');
+      console.log('❌ Another Alyson WorkTime Agent instance is already running - quitting immediately');
       // CRITICAL FIX: Do NOT schedule any async work (setTimeout, input detection, etc.)
       // The second instance must exit immediately without creating any resources
       // The first instance already has everything initialized
@@ -3949,7 +3949,7 @@ if (isElectronContext && ipcMain) {
         if (process.platform === 'win32') {
           const { exec } = require('child_process');
           // Remove any stale entries that might have been created with wrong app names
-          const staleKeys = ['vite_react_shadcn_ts', 'time-flow-admin', 'alyson-pms', 'alyson-time-doctor', 'ebdaa-work-time-agent'];
+          const staleKeys = ['vite_react_shadcn_ts', 'time-flow-admin', 'alyson-pms', 'alyson-time-doctor', 'alyson-work-time-agent'];
           staleKeys.forEach(keyName => {
             exec(`reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${keyName}" /f`, (error) => {
               if (!error) {
@@ -6750,7 +6750,7 @@ if (isElectronContext && ipcMain) {
       // Use user data directory instead of app.asar path
       const os = require('os');
       const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-      const appDataDir = path.join(userDataDir, 'Ebdaa Work Time');
+      const appDataDir = path.join(userDataDir, 'Alyson Work Time');
 
       // Ensure directory exists
       if (!fs.existsSync(appDataDir)) {
@@ -6918,11 +6918,13 @@ if (isElectronContext && ipcMain) {
 
 
     // Add handler to open system preferences  
-    ipcMain.handle('open-system-preferences', async () => {
+    ipcMain.handle('open-system-preferences', async (event, opts) => {
       try {
         const { shell } = require('electron');
-        await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-        return { success: true };
+        const { openSystemPrivacySettings } = require('./modules/utils/system-settings-opener');
+        const options = opts && typeof opts === 'object' ? opts : {};
+        const result = await openSystemPrivacySettings(shell, options);
+        return { success: true, ...result };
       } catch (error) {
         console.error('❌ Failed to open System Preferences:', error);
         return { success: false, error: error.message };
@@ -7009,9 +7011,11 @@ if (isElectronContext && ipcMain) {
             permissionWindow.close();
 
             if (action === 'open-settings') {
-              // Open System Settings to Screen Recording
               const { shell } = require('electron');
-              shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+              const { openSystemPrivacySettings } = require('./modules/utils/system-settings-opener');
+              openSystemPrivacySettings(shell, { pane: 'screenRecording' }).catch((err) =>
+                console.warn('⚠️ Open Screen Recording settings failed:', err?.message || err)
+              );
               resolve({ success: true, needsRestart: true });
             } else {
               // Mark as skipped

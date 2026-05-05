@@ -107,13 +107,13 @@ class TrayManager {
     // Platform-specific tray icon:
     // macOS: MUST use the 22x22 Template.png file (auto dark/light mode support)
     //        Using icon.png (1024x1024 app icon) makes the tray invisible on macOS
-    // Windows/Linux: Use the Ebdaa release icon for a branded tray
+    // Windows/Linux: Use the Alyson release icon for a branded tray
     let trayIcon = null;
     if (!isMac) {
-      const ebdaaIconPath = global.__ebdaaIconPath || path.join(__dirname, '../../../assets/icon.png');
-      if (fs.existsSync(ebdaaIconPath)) {
-        console.log('🎨 [TRAY] Using Ebdaa release icon for tray (Windows/Linux)');
-        trayIcon = nativeImage.createFromPath(ebdaaIconPath);
+      const alysonIconPath = global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png');
+      if (fs.existsSync(alysonIconPath)) {
+        console.log('🎨 [TRAY] Using Alyson release icon for tray (Windows/Linux)');
+        trayIcon = nativeImage.createFromPath(alysonIconPath);
       }
     }
 
@@ -129,12 +129,12 @@ class TrayManager {
       }
     } catch (error) {
       console.error('❌ [TRAY] Error creating tray icon:', error?.message);
-      // Fallback: try the Ebdaa release icon directly
+      // Fallback: try the Alyson release icon directly
       try {
-        const ebdaaPath = path.join(__dirname, '../../../assets/icon.png');
-        this.tray = new this.Tray(ebdaaPath);
-        trayIcon = nativeImage.createFromPath(ebdaaPath);
-        console.log('⚠️ [TRAY] Using Ebdaa icon fallback');
+        const alysonPath = path.join(__dirname, '../../../assets/icon.png');
+        this.tray = new this.Tray(alysonPath);
+        trayIcon = nativeImage.createFromPath(alysonPath);
+        console.log('⚠️ [TRAY] Using Alyson icon fallback');
       } catch (fallbackError) {
         console.error('❌ [TRAY] Failed to create tray with fallback:', fallbackError?.message);
         throw fallbackError;

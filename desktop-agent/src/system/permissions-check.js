@@ -5,6 +5,7 @@
 
 const { dialog, app, systemPreferences, shell } = require('electron');
 const os = require('os');
+const { openSystemPrivacySettings } = require('../modules/utils/system-settings-opener');
 
 let getAuthStatus, askForScreenCaptureAccess, askForAccessibilityAccess;
 
@@ -163,6 +164,57 @@ async function showBlocker(opts) {
   return result.response;
 }
 
+/** Native dialog for macOS with separate shortcuts to common privacy panes */
+async function showMacScreenRecordingBlocker() {
+  const result = await dialog.showMessageBox(null, {
+    type: 'warning',
+    title: 'Enable Screen Recording',
+    message: 'This app needs Screen Recording to capture activity metrics.',
+    detail:
+      'Open the right pane below and enable Alyson PM (or Electron when developing), then tap Re-check.\n\n' +
+      'If macOS asked to control System Events, use Automation and allow Alyson PM.',
+    buttons: ['Screen Recording…', 'Accessibility…', 'Automation…', 'Re-check', 'Quit'],
+    defaultId: 0,
+    cancelId: 4,
+    noLink: true,
+  });
+  return result.response;
+}
+
+/** Windows — separate shortcuts aligned with system-settings-opener WIN_URLS */
+async function showWindowsPermissionBlocker() {
+  const result = await dialog.showMessageBox(null, {
+    type: 'warning',
+    title: 'Screen capture & privacy',
+    message: 'This app needs permission to capture the screen for screenshots and activity metrics.',
+    detail:
+      'Use the buttons to open the matching Windows Settings page, allow this app where applicable, then tap Re-check.\n\n' +
+      'Graphics capture corresponds to screen/window capture APIs. Privacy opens general app permissions.',
+    buttons: ['Graphics capture…', 'Ease of Access…', 'Privacy…', 'Re-check', 'Quit'],
+    defaultId: 0,
+    cancelId: 4,
+    noLink: true,
+  });
+  return result.response;
+}
+
+/** Linux — opens GNOME-style panels when available */
+async function showLinuxPermissionBlocker() {
+  const result = await dialog.showMessageBox(null, {
+    type: 'warning',
+    title: 'Display & privacy',
+    message: 'This app needs access to your session to capture the screen and activity metrics.',
+    detail:
+      'Use the buttons to open system settings (GNOME Control Center when installed). On Wayland you may need to grant portal permissions.\n\n' +
+      'Then tap Re-check.',
+    buttons: ['Privacy & screen…', 'Accessibility…', 'Applications…', 'Re-check', 'Quit'],
+    defaultId: 0,
+    cancelId: 4,
+    noLink: true,
+  });
+  return result.response;
+}
+
 /**
  * Handle screen recording permission check for macOS
  * @returns {Promise<boolean>} - true if permission granted
@@ -187,10 +239,8 @@ async function ensureMacOSScreenRecordingPermission() {
     }
   }
 
-  // Open system preferences using shell.openExternal with macOS URL scheme
   try {
-    const { shell } = require('electron');
-    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+    await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
     console.log('[perm] Opened Screen Recording settings');
   } catch (error) {
     console.warn('[perm] Could not open system preferences automatically:', error);
@@ -202,22 +252,30 @@ async function ensureMacOSScreenRecordingPermission() {
     loopCount++;
     console.log(`🔥 [EMERGENCY] Permission check loop iteration ${loopCount}, current status:`, getScreenStatus());
 
-    const choice = await showBlocker({
-      title: 'Enable Screen Recording',
-      message: 'This app needs Screen Recording to capture activity metrics.',
-      detail: 'System Settings → Privacy & Security → Screen Recording. Tick the checkbox next to this app. You may need to quit & reopen when prompted.'
-    });
+    const choice = await showMacScreenRecordingBlocker();
 
     if (choice === 0) {
-      // Open Settings again using shell.openExternal
       try {
-        const { shell } = require('electron');
-        shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+        await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
         console.log('[perm] Opened Screen Recording settings');
       } catch (error) {
         console.warn('[perm] Could not open system preferences:', error);
       }
     } else if (choice === 1) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'accessibility' });
+        console.log('[perm] Opened Accessibility settings');
+      } catch (error) {
+        console.warn('[perm] Could not open Accessibility settings:', error);
+      }
+    } else if (choice === 2) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'automation' });
+        console.log('[perm] Opened Automation settings');
+      } catch (error) {
+        console.warn('[perm] Could not open Automation settings:', error);
+      }
+    } else if (choice === 3) {
       // Re-check - add small delay to let TCC update
       console.log('🔥 [EMERGENCY] User clicked Re-check, waiting 2 seconds for TCC to update...');
       await new Promise(resolve => setTimeout(resolve, 2000)); // Increased delay
@@ -231,8 +289,7 @@ async function ensureMacOSScreenRecordingPermission() {
       } else {
         console.log('🔥 [EMERGENCY] Permission STILL not authorized after re-check!');
       }
-    } else {
-      // Quit
+    } else if (choice === 4) {
       console.log('[perm] User chose to quit - exiting app');
       app.quit();
       return false;
@@ -259,7 +316,6 @@ async function ensureMacOSScreenRecordingPermission() {
 async function ensureWindowsScreenRecordingPermission() {
   console.log('[perm] Checking Windows screen recording permission...');
 
-  // On Windows 10/11, check if the app can capture screen
   const status = getScreenStatus();
   console.log('[perm] Windows screen recording status:', status);
 
@@ -267,32 +323,54 @@ async function ensureWindowsScreenRecordingPermission() {
     return true;
   }
 
-  // Show informational dialog about Windows permissions
-  const choice = await showBlocker({
-    title: 'Enable Screen Recording',
-    message: 'This app needs screen recording permissions to capture activity metrics.',
-    detail: 'Windows Settings → Privacy & Security → Screen Recording → Allow apps to record your screen. Make sure this app is enabled.'
-  });
-
-  if (choice === 0) {
-    // Open Windows Settings
-    try {
-      await shell.openExternal('ms-settings:privacy-screencapture');
-    } catch (error) {
-      console.warn('[perm] Could not open Windows Settings automatically:', error);
-    }
-    // Show again after user hopefully enabled it
-    return ensureWindowsScreenRecordingPermission();
-  } else if (choice === 1) {
-    // Re-check
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return true; // Assume granted on Windows for now
-  } else {
-    // Quit
-    console.log('[perm] User chose to quit - exiting app');
-    app.quit();
-    return false;
+  try {
+    await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
+  } catch (error) {
+    console.warn('[perm] Could not open Windows Settings automatically:', error);
   }
+
+  let loopCount = 0;
+  while (getScreenStatus() !== 'authorized') {
+    loopCount++;
+    const choice = await showWindowsPermissionBlocker();
+
+    if (choice === 0) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
+      } catch (error) {
+        console.warn('[perm] Could not open Graphics capture settings:', error);
+      }
+    } else if (choice === 1) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'accessibility' });
+      } catch (error) {
+        console.warn('[perm] Could not open Ease of Access:', error);
+      }
+    } else if (choice === 2) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'automation' });
+      } catch (error) {
+        console.warn('[perm] Could not open Privacy settings:', error);
+      }
+    } else if (choice === 3) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (getScreenStatus() === 'authorized') {
+        console.log('[perm] ✅ Windows permission check: authorized');
+        return true;
+      }
+    } else if (choice === 4) {
+      console.log('[perm] User chose to quit - exiting app');
+      app.quit();
+      return false;
+    }
+
+    if (loopCount > 10) {
+      console.error('[perm] Windows permission dialog loop limit — continuing without confirmation');
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -309,34 +387,54 @@ async function ensureLinuxScreenRecordingPermission() {
     return true;
   }
 
-  // Show informational dialog about Linux permissions
-  const choice = await showBlocker({
-    title: 'Enable Screen Recording',
-    message: 'This app needs access to your display server to capture activity metrics.',
-    detail: 'Ensure your display server (X11/Wayland) is running and accessible. You may need to start the app from a terminal or grant permissions to access the display.'
-  });
-
-  if (choice === 0) {
-    // Open documentation or settings (Linux-specific)
-    try {
-      // Try to open system settings or provide help
-      await shell.openExternal('https://wiki.archlinux.org/title/Screen_capture');
-    } catch (error) {
-      console.warn('[perm] Could not open help documentation:', error);
-    }
-    // Show again after user hopefully fixed it
-    return ensureLinuxScreenRecordingPermission();
-  } else if (choice === 1) {
-    // Re-check
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const newStatus = getScreenStatus();
-    return newStatus === 'authorized';
-  } else {
-    // Quit
-    console.log('[perm] User chose to quit - exiting app');
-    app.quit();
-    return false;
+  try {
+    await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
+  } catch (error) {
+    console.warn('[perm] Could not open Linux settings automatically:', error);
   }
+
+  let loopCount = 0;
+  while (getScreenStatus() !== 'authorized') {
+    loopCount++;
+    const choice = await showLinuxPermissionBlocker();
+
+    if (choice === 0) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'screenRecording' });
+      } catch (error) {
+        console.warn('[perm] Could not open Privacy / screen settings:', error);
+      }
+    } else if (choice === 1) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'accessibility' });
+      } catch (error) {
+        console.warn('[perm] Could not open Accessibility settings:', error);
+      }
+    } else if (choice === 2) {
+      try {
+        await openSystemPrivacySettings(shell, { pane: 'automation' });
+      } catch (error) {
+        console.warn('[perm] Could not open Applications settings:', error);
+      }
+    } else if (choice === 3) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      if (getScreenStatus() === 'authorized') {
+        console.log('[perm] ✅ Linux display access OK');
+        return true;
+      }
+    } else if (choice === 4) {
+      console.log('[perm] User chose to quit - exiting app');
+      app.quit();
+      return false;
+    }
+
+    if (loopCount > 10) {
+      console.error('[perm] Linux permission dialog loop limit — exiting flow');
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**

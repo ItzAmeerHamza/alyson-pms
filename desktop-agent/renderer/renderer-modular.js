@@ -315,7 +315,7 @@ function setupModuleCommunication() {
     
     // Update auth manager with current user if needed
     if (data.isTracking && !authManager.getCurrentUser()) {
-      const savedUser = localStorage.getItem('ebdaa_user');
+      const savedUser = localStorage.getItem('alyson_user');
       if (savedUser) {
         authManager.setCurrentUser(JSON.parse(savedUser));
         authManager.updateUserInfo();
@@ -1298,6 +1298,39 @@ function setupLegacyEventListeners() {
       if (moduleInstances.ipcManager) {
         await moduleInstances.ipcManager.copyLogsToClipboard();
       }
+    });
+  }
+
+  const platformPrivacyShortcuts = document.getElementById('platformPrivacyShortcuts');
+  if (platformPrivacyShortcuts && ['darwin', 'win32', 'linux'].includes(process.platform)) {
+    const label = platformPrivacyShortcuts.querySelector('.platform-privacy-shortcuts-label');
+    if (label) {
+      if (process.platform === 'win32') label.textContent = 'Windows privacy';
+      else if (process.platform === 'linux') label.textContent = 'Linux settings';
+      else label.textContent = 'macOS permissions';
+    }
+    const btnLabels = {
+      darwin: { screen: 'Screen Recording', access: 'Accessibility', extra: 'Automation' },
+      win32: { screen: 'Graphics capture', access: 'Ease of Access', extra: 'Privacy' },
+      linux: { screen: 'Privacy & screen', access: 'Accessibility', extra: 'Applications' },
+    };
+    const bl = btnLabels[process.platform] || btnLabels.darwin;
+    platformPrivacyShortcuts.querySelectorAll('[data-role="screen"]').forEach((b) => {
+      b.textContent = bl.screen;
+    });
+    platformPrivacyShortcuts.querySelectorAll('[data-role="access"]').forEach((b) => {
+      b.textContent = bl.access;
+    });
+    platformPrivacyShortcuts.querySelectorAll('[data-role="extra"]').forEach((b) => {
+      b.textContent = bl.extra;
+    });
+
+    platformPrivacyShortcuts.removeAttribute('hidden');
+    platformPrivacyShortcuts.style.display = 'flex';
+    platformPrivacyShortcuts.querySelectorAll('[data-pane]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        ipcRenderer.invoke('open-system-settings', { pane: btn.dataset.pane });
+      });
     });
   }
 

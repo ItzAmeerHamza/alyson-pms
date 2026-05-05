@@ -14,10 +14,10 @@
     "generate:icons": "node scripts/generate-icons.mjs",
     "setup-python": "bash scripts/setup-python-deps.sh",
     "bundle-python": "bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1",
-    "bundle-python-windows": "powershell -ExecutionPolicy Bypass -File scripts/bundle-python-windows.ps1",
+    "bundle-python-windows": "node scripts/bundle-python-windows.js",
     "prebuild": "node scripts/setup-dist.js && node generate-env-config.js --build && (bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1)",
     "prebuild:mac": "node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/build-swift-helper.sh",
-    "prebuild:win": "node generate-env-config.js --build && powershell -ExecutionPolicy Bypass -File scripts/bundle-python-windows.ps1",
+    "prebuild:win": "node generate-env-config.js --build && node scripts/bundle-python-windows.js",
     "build": "npm run prebuild && electron-builder",
     "postbuild": "node ../scripts/cleanup-electron-build.cjs",
     "build:mac": "npm run prebuild:mac && electron-builder --mac --publish never",
@@ -47,7 +47,7 @@
     "sharp": "^0.34.5"
   },
   "build": {
-    "appId": "com.ebdaa.work-time-agent",
+    "appId": "com.alyson.work-time-agent",
     "productName": "Alyson PM",
     "directories": {
       "output": "dist"

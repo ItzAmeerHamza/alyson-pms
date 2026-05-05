@@ -41,8 +41,8 @@ const DownloadPage = () => {
       platform: "macOS (Apple Silicon)",
       icon: <Apple className="h-6 w-6" />,
       description: "For M1, M2, M3 Macs",
-      filename: "Ebdaa-Work-Time-\${version}-arm64.dmg",
-      url: "$BASE_URL/Ebdaa-Work-Time-$VERSION-arm64.dmg",
+      filename: "Alyson-Work-Time-\${version}-arm64.dmg",
+      url: "$BASE_URL/Alyson-Work-Time-$VERSION-arm64.dmg",
       size: "~112 MB",
       requirements: "macOS 11.0+",
       verified: true
@@ -51,8 +51,8 @@ const DownloadPage = () => {
       platform: "macOS (Intel)",
       icon: <Apple className="h-6 w-6" />,
       description: "For Intel-based Macs",
-      filename: "Ebdaa-Work-Time-\${version}.dmg",
-      url: "$BASE_URL/Ebdaa-Work-Time-$VERSION.dmg",
+      filename: "Alyson-Work-Time-\${version}.dmg",
+      url: "$BASE_URL/Alyson-Work-Time-$VERSION.dmg",
       size: "~118 MB",
       requirements: "macOS 10.14+",
       verified: true
@@ -61,8 +61,8 @@ const DownloadPage = () => {
       platform: "Windows",
       icon: <Monitor className="h-6 w-6" />,
       description: "For Windows 10/11",
-      filename: "Ebdaa-Work-Time-Setup-\${version}.exe",
-      url: "$BASE_URL/Ebdaa-Work-Time-Setup-$VERSION.exe",
+      filename: "Alyson-Work-Time-Setup-\${version}.exe",
+      url: "$BASE_URL/Alyson-Work-Time-Setup-$VERSION.exe",
       size: "~85 MB",
       requirements: "Windows 10/11 (64-bit)",
       verified: true
@@ -71,8 +71,8 @@ const DownloadPage = () => {
       platform: "Linux",
       icon: <Smartphone className="h-6 w-6" />,
       description: "AppImage for Linux",
-      filename: "Ebdaa-Work-Time-\${version}.AppImage",
-      url: "$BASE_URL/Ebdaa-Work-Time-$VERSION.AppImage",
+      filename: "Alyson-Work-Time-\${version}.AppImage",
+      url: "$BASE_URL/Alyson-Work-Time-$VERSION.AppImage",
       size: "~120 MB", 
       requirements: "Ubuntu 18.04+ or equivalent",
       verified: true
@@ -91,7 +91,7 @@ const DownloadPage = () => {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            📱 Download Ebdaa Work Time
+            📱 Download Alyson Work Time
           </h1>
           <p className="text-xl text-gray-600 mb-6">
             Professional employee time tracking desktop application
@@ -171,7 +171,7 @@ const DownloadPage = () => {
               <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
                 <li>Download the appropriate DMG file for your Mac</li>
                 <li>Open the downloaded DMG file</li>
-                <li>Drag "Ebdaa Work Time.app" to your Applications folder</li>
+                <li>Drag "Alyson Work Time.app" to your Applications folder</li>
                 <li>Eject the DMG and launch the app from Applications</li>
                 <li>If prompted about security, go to System Preferences → Security & Privacy → "Open Anyway"</li>
               </ol>
@@ -191,8 +191,8 @@ const DownloadPage = () => {
               <h3 className="font-semibold text-lg mb-2">🐧 Linux Installation</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600">
                 <li>Download the AppImage file</li>
-                <li>Make it executable: <code className="bg-gray-100 px-1 rounded">chmod +x Ebdaa-Work-Time-{version}.AppImage</code></li>
-                <li>Run: <code className="bg-gray-100 px-1 rounded">./Ebdaa-Work-Time-{version}.AppImage</code></li>
+                <li>Make it executable: <code className="bg-gray-100 px-1 rounded">chmod +x Alyson-Work-Time-{version}.AppImage</code></li>
+                <li>Run: <code className="bg-gray-100 px-1 rounded">./Alyson-Work-Time-{version}.AppImage</code></li>
               </ol>
             </div>
           </CardContent>
@@ -240,15 +240,15 @@ echo "✅ Updated download page component"
 cat > public/latest-mac.yml << EOF
 version: $VERSION
 files:
-  - url: Ebdaa-Work-Time-$VERSION-arm64.dmg
+  - url: Alyson-Work-Time-$VERSION-arm64.dmg
     sha512: placeholder_hash_will_be_updated_after_build
     size: 120000000
     blockMapSize: 150000
-  - url: Ebdaa-Work-Time-$VERSION.dmg  
+  - url: Alyson-Work-Time-$VERSION.dmg  
     sha512: placeholder_hash_will_be_updated_after_build
     size: 125000000
     blockMapSize: 155000
-path: Ebdaa-Work-Time-$VERSION-arm64.dmg
+path: Alyson-Work-Time-$VERSION-arm64.dmg
 sha512: placeholder_hash_will_be_updated_after_build
 releaseDate: '$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")'
 EOF
@@ -256,10 +256,10 @@ EOF
 cat > public/latest.yml << EOF
 version: $VERSION
 files:
-  - url: Ebdaa-Work-Time-Setup-$VERSION.exe
+  - url: Alyson-Work-Time-Setup-$VERSION.exe
     sha512: placeholder_hash_will_be_updated_after_build
     size: 90000000
-path: Ebdaa-Work-Time-Setup-$VERSION.exe
+path: Alyson-Work-Time-Setup-$VERSION.exe
 sha512: placeholder_hash_will_be_updated_after_build
 releaseDate: '$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")'
 EOF
@@ -286,7 +286,7 @@ echo "🔗 Download page: /download"
 echo "🌐 GitHub release: https://github.com/$REPO_OWNER/$REPO_NAME/releases/tag/v$VERSION"
 echo ""
 echo "📋 Direct download links:"
-echo "  🍎 macOS ARM64: $BASE_URL/Ebdaa-Work-Time-$VERSION-arm64.dmg"
-echo "  🍎 macOS Intel: $BASE_URL/Ebdaa-Work-Time-$VERSION.dmg"
-echo "  🪟 Windows: $BASE_URL/Ebdaa-Work-Time-Setup-$VERSION.exe"
-echo "  🐧 Linux: $BASE_URL/Ebdaa-Work-Time-$VERSION.AppImage" 
+echo "  🍎 macOS ARM64: $BASE_URL/Alyson-Work-Time-$VERSION-arm64.dmg"
+echo "  🍎 macOS Intel: $BASE_URL/Alyson-Work-Time-$VERSION.dmg"
+echo "  🪟 Windows: $BASE_URL/Alyson-Work-Time-Setup-$VERSION.exe"
+echo "  🐧 Linux: $BASE_URL/Alyson-Work-Time-$VERSION.AppImage" 

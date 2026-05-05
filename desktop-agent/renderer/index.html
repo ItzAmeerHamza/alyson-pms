@@ -1576,6 +1576,42 @@
             color: #86efac;
         }
 
+        .platform-privacy-shortcuts {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .platform-privacy-shortcuts-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .platform-privacy-shortcuts-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .platform-privacy-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .platform-privacy-btn:hover {
+            background: #475569;
+        }
+
         .logout-btn {
             width: 100%;
             padding: 10px 16px;
@@ -4335,6 +4371,14 @@
             </nav>
 
             <div class="sidebar-footer">
+                <div id="platformPrivacyShortcuts" class="platform-privacy-shortcuts" hidden>
+                    <div class="platform-privacy-shortcuts-label">Privacy shortcuts</div>
+                    <div class="platform-privacy-shortcuts-buttons">
+                        <button type="button" class="platform-privacy-btn" data-pane="screenRecording" data-role="screen">Screen Recording</button>
+                        <button type="button" class="platform-privacy-btn" data-pane="accessibility" data-role="access">Accessibility</button>
+                        <button type="button" class="platform-privacy-btn" data-pane="automation" data-role="extra">Automation</button>
+                    </div>
+                </div>
                 <button id="copyLogsBtn" class="copy-logs-btn" title="Copy diagnostic logs to clipboard for IT support">
                     <i data-lucide="clipboard-copy" class="nav-icon"></i>
                     <span>Copy Logs</span>
@@ -5513,7 +5557,7 @@
                         // Determine user id
                         let userId = null;
                         try {
-                            const stored = localStorage.getItem('ebdaa_user');
+                            const stored = localStorage.getItem('alyson_user');
                             if (stored) userId = JSON.parse(stored).id;
                         } catch(_) {}
                         if (!userId) {

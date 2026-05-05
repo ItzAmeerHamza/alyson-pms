@@ -5,7 +5,7 @@
 
 const { exec } = require('child_process');
 
-console.log('🔍 Checking App Detection in Running Ebdaa Work Time...\n');
+console.log('🔍 Checking App Detection in Running Alyson Work Time...\n');
 
 // Check if app is running
 exec('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV', (error, stdout, stderr) => {
@@ -20,7 +20,7 @@ exec('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV', (error, stdout, stderr)
     
     console.log('📝 Instructions to verify app detection:');
     console.log('==========================================');
-    console.log('1. Look at the running Ebdaa Work Time app window');
+    console.log('1. Look at the running Alyson Work Time app window');
     console.log('2. Check the "App Detection" page or dashboard');
     console.log('3. The app should show actual application names, not "Windows Desktop"');
     console.log('');

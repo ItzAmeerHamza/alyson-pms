@@ -35,21 +35,21 @@ const DownloadPage = () => {
     {
       platform: 'macOS (Apple Silicon)',
       icon: '🍎',
-      filename: \`Ebdaa-Work-Time-\${currentVersion}-arm64.dmg\`,
+      filename: \`Alyson-Work-Time-\${currentVersion}-arm64.dmg\`,
       description: 'For Mac computers with M1, M2, or M3 chips',
       primary: true
     },
     {
       platform: 'macOS (Intel)',
       icon: '🍎',
-      filename: \`Ebdaa-Work-Time-\${currentVersion}.dmg\`,
+      filename: \`Alyson-Work-Time-\${currentVersion}.dmg\`,
       description: 'For Mac computers with Intel processors',
       primary: false
     },
     {
       platform: 'Windows',
       icon: '🪟',
-      filename: \`Ebdaa-Work-Time-Setup-\${currentVersion}.exe\`,
+      filename: \`Alyson-Work-Time-Setup-\${currentVersion}.exe\`,
       description: 'For Windows 10 and Windows 11',
       primary: true
     }
@@ -78,7 +78,7 @@ const DownloadPage = () => {
             <Monitor className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Download Ebdaa Work Time
+            Download Alyson Work Time
           </h1>
           <p className="text-xl text-gray-600 mb-2">
             Professional time tracking and productivity monitoring
@@ -217,7 +217,7 @@ const DownloadPage = () => {
           </p>
           <div className="space-x-4">
             <a
-              href="mailto:support@ebdaadi.com"
+              href="mailto:support@alysondi.com"
               className="inline-flex items-center px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg font-medium transition-colors"
             >
               📧 Contact Support
@@ -264,9 +264,9 @@ if [ -f "public/version.json" ]; then
   "version": "$VERSION",
   "releaseDate": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)",
   "downloads": {
-    "macOS_arm64": "$RELEASE_URL/Ebdaa-Work-Time-$VERSION-arm64.dmg",
-    "macOS_intel": "$RELEASE_URL/Ebdaa-Work-Time-$VERSION.dmg",
-    "windows": "$RELEASE_URL/Ebdaa-Work-Time-Setup-$VERSION.exe"
+    "macOS_arm64": "$RELEASE_URL/Alyson-Work-Time-$VERSION-arm64.dmg",
+    "macOS_intel": "$RELEASE_URL/Alyson-Work-Time-$VERSION.dmg",
+    "windows": "$RELEASE_URL/Alyson-Work-Time-Setup-$VERSION.exe"
   }
 }
 EOF
@@ -281,6 +281,6 @@ echo "   - $DOWNLOAD_PAGE (download page component)"
 [ -f "public/version.json" ] && echo "   - public/version.json (version info)"
 echo ""
 echo "🔗 New download URLs:"
-echo "   - macOS ARM64: $RELEASE_URL/Ebdaa-Work-Time-$VERSION-arm64.dmg"
-echo "   - macOS Intel: $RELEASE_URL/Ebdaa-Work-Time-$VERSION.dmg"
-echo "   - Windows: $RELEASE_URL/Ebdaa-Work-Time-Setup-$VERSION.exe" 
+echo "   - macOS ARM64: $RELEASE_URL/Alyson-Work-Time-$VERSION-arm64.dmg"
+echo "   - macOS Intel: $RELEASE_URL/Alyson-Work-Time-$VERSION.dmg"
+echo "   - Windows: $RELEASE_URL/Alyson-Work-Time-Setup-$VERSION.exe" 

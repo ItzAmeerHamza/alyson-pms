@@ -76,7 +76,7 @@ class AppLifecycleManager {
       height: 800,
       minWidth: 800,
       minHeight: 600,
-      icon: global.__ebdaaIconPath || require('path').join(__dirname, '../../../assets/icon.png'),
+      icon: global.__alysonIconPath || require('path').join(__dirname, '../../../assets/icon.png'),
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,

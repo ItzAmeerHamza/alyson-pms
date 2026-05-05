@@ -156,7 +156,7 @@ class AppHistoryManager {
       let userId = null;
       let userRole = 'employee';
       try {
-        const stored = localStorage.getItem('ebdaa_user');
+        const stored = localStorage.getItem('alyson_user');
         if (stored) {
           const parsed = JSON.parse(stored);
           userId = parsed?.id || parsed?.user?.id || null;
