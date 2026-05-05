@@ -126,6 +126,7 @@ async function handleUploadScreenshot(
       project_id: metadata.project_id || null,
       time_log_id: metadata.time_log_id || null,
       image_url: imageUrl,
+      file_size: raw.length,
       activity_percent: metadata.activity_percent ?? 0,
       focus_percent: metadata.focus_percent ?? 0,
       captured_at: metadata.captured_at,

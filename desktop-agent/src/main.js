@@ -242,7 +242,7 @@ console.log('\n═════════════════════�
 
                 // Domain/host patterns - check within URL context
                 if (!isInternal) {
-                  const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'app.ebdaatech.com', 'ebdaatech.com'];
+                  const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'alyson-pms.vercel.app', 'alyson-pms'];
                   for (const pattern of hostPatterns) {
                     if (urlLower.includes('://' + pattern) || 
                         urlLower.includes('/' + pattern + '/') ||
@@ -1988,14 +1988,9 @@ async function initializeInputDetectionSystem() {
           return;
         }
 
-        // Call the global activity recording function
+        // Call the global activity recording function (single source of truth for counters + activity queue)
         if (typeof recordEnhancedActivity === 'function') {
           recordEnhancedActivity(type, method, details);
-        }
-
-        // Also call any global activity manager
-        if (global.activityManager && global.activityManager.recordActivity) {
-          global.activityManager.recordActivity(type, method, details);
         }
 
         // PERFORMANCE FIX: Drastically reduce logging to prevent slowdowns
@@ -2111,6 +2106,12 @@ async function initializeInputDetectionSystem() {
         global.betweenScreenshotsActivity.lastUpdate = now;
         if (global.enhancedActivityManager?.betweenScreenshotsActivity) global.enhancedActivityManager.betweenScreenshotsActivity.lastUpdate = now;
         global.displayActivityStats.lastUpdate = now;
+
+        try {
+          if (global.activityManager && typeof global.activityManager.enqueueActivityEvent === 'function') {
+            global.activityManager.enqueueActivityEvent(type, method, details);
+          }
+        } catch (_) {}
 
         // CRITICAL FIX: Forward activity to AntiCheatDetector for fraud detection
         try {
@@ -4738,7 +4739,7 @@ if (isElectronContext && ipcMain) {
 
                     // Domain/host patterns - check within URL context
                     if (!isInternal) {
-                      const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'app.ebdaatech.com', 'ebdaatech.com'];
+                      const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'alyson-pms.vercel.app', 'alyson-pms'];
                       for (const pattern of hostPatterns) {
                         if (urlLower.includes('://' + pattern) || 
                             urlLower.includes('/' + pattern + '/') ||
@@ -4970,7 +4971,7 @@ if (isElectronContext && ipcMain) {
 
                     // Domain/host patterns - check within URL context
                     if (!isInternal) {
-                      const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'app.ebdaatech.com', 'ebdaatech.com'];
+                      const hostPatterns = ['localhost', '127.0.0.1', '[::1]', 'alyson-pms.vercel.app', 'alyson-pms'];
                       for (const pattern of hostPatterns) {
                         if (urlLower.includes('://' + pattern) || 
                             urlLower.includes('/' + pattern + '/') ||

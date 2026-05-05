@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchPaginated } from '@/lib/supabase-utils';
 import { useAuth } from '@/providers/auth-provider';
-import { format, subDays, subMonths, startOfDay, endOfDay, startOfMonth, endOfMonth, differenceInSeconds } from 'date-fns';
+import { format, subDays, subMonths, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { fetchOrgUsers } from '@/domains/people';
+import { getLogDuration } from '@/lib/time-utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Monitor, Clock, TrendingUp, Activity, Filter, Brain, Sparkles, Info, AlertTriangle, Share2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -51,18 +52,6 @@ const isSocialMediaApp = (appName: string): boolean => {
   // REMOVED: Static matching causes false positives
   // AI Vision now analyzes actual content
   return false;
-};
-
-// Helper function to estimate duration
-const estimateDuration = (startedAt: string, endedAt: string | null): number => {
-  if (!startedAt) return 0;
-  
-  if (endedAt) {
-    return differenceInSeconds(new Date(endedAt), new Date(startedAt));
-  }
-  
-  // If no end time, estimate based on typical session length
-  return 180; // 3 minutes default for apps
 };
 
 // Helper function to categorize apps based on name
@@ -185,13 +174,30 @@ export default function AppActivityPage() {
         return;
       }
       
+      const { error: startedAtColumnError } = await supabase
+        .from('app_logs')
+        .select('started_at')
+        .limit(1);
+
+      const useLegacyTimestamp =
+        !!startedAtColumnError &&
+        `${startedAtColumnError.message || ''}`.toLowerCase().includes('started_at');
+
       let query = supabase
         .from('app_logs')
-        .select('app_name, timestamp, window_title, user_id, time_log_id')
+        .select('app_name, started_at, ended_at, duration_seconds, timestamp, window_title, user_id, time_log_id, category')
         .in('user_id', orgUserIds)
-        .gte('timestamp', start.toISOString())
-        .lte('timestamp', end.toISOString())
         .not('app_name', 'is', null);
+
+      if (useLegacyTimestamp) {
+        query = query
+          .gte('timestamp', start.toISOString())
+          .lte('timestamp', end.toISOString());
+      } else {
+        query = query
+          .gte('started_at', start.toISOString())
+          .lte('started_at', end.toISOString());
+      }
 
       if (selectedUser !== 'all') {
         query = query.eq('user_id', selectedUser);
@@ -204,7 +210,7 @@ export default function AppActivityPage() {
         console.log('📋 [APP-ACTIVITY] Sample app log:', data[0]);
       }
 
-      // Process app data - group by app_name and estimate usage
+      // Process app data - group by app_name using recorded duration fields
       const appStats = (data || []).reduce((acc: any, log: any) => {
         const appName = log.app_name || 'Unknown App';
         if (!acc[appName]) {
@@ -212,18 +218,23 @@ export default function AppActivityPage() {
             app_name: appName,
             total_duration: 0,
             total_sessions: 0,
-            category: getCategoryFromAppName(appName),
-            logs: []
+            category: log.category || getCategoryFromAppName(appName),
+            session_ids: new Set<string>()
           };
         }
-        
-        // Each app log entry represents some activity - estimate 60 seconds per entry
-        // This is a rough estimate since we don't have actual duration data
-        const estimatedDuration = 60; // 1 minute per app log entry
-        
-        acc[appName].total_duration += estimatedDuration;
-        acc[appName].total_sessions += 1;
-        acc[appName].logs.push(log);
+
+        let duration = getLogDuration(log);
+        if (duration <= 0 && log.timestamp) {
+          // Legacy app_logs rows with only timestamp still need visible (non-zero) usage.
+          duration = 30;
+        }
+        acc[appName].total_duration += duration;
+
+        const sessionKey =
+          log.time_log_id ||
+          `${log.user_id || 'unknown-user'}:${log.started_at || log.timestamp || 'unknown-start'}:${appName}`;
+        acc[appName].session_ids.add(sessionKey);
+        acc[appName].total_sessions = acc[appName].session_ids.size;
         return acc;
       }, {});
 
@@ -243,6 +254,7 @@ export default function AppActivityPage() {
       let processedApps: AppData[] = filteredAppStats
         .map((app: any) => ({
           ...app,
+          session_ids: undefined,
           avg_duration: app.total_sessions > 0 ? Math.round(app.total_duration / app.total_sessions) : 0,
           percentage: totalDuration > 0 ? Math.round((app.total_duration / totalDuration) * 100) : 0
         }))
@@ -425,11 +437,11 @@ export default function AppActivityPage() {
                   AI-Powered App Categorization
                   <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
                     <Sparkles className="h-3 w-3 mr-1" />
-                    Hugging Face
+                    DeepSeek
                   </Badge>
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  App categories are determined using Qwen3-32B analysis and pattern matching
+                  App categories are determined using DeepSeek analysis and pattern matching
                 </p>
               </div>
             </div>
@@ -442,7 +454,7 @@ export default function AppActivityPage() {
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   <p className="text-xs">
-                    Application categorization combines AI analysis (Qwen3-32B via Hugging Face) with pattern-based app name matching for accurate classification of Development, Communication, Design, Office, and other categories.
+                    Application categorization combines DeepSeek-driven AI enrichment with pattern-based app name matching for accurate classification of Development, Communication, Design, Office, and other categories.
                   </p>
                 </TooltipContent>
               </Tooltip>

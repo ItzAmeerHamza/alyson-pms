@@ -550,9 +550,9 @@ class WindowsUrlCaptureV2 {
   fixKnownUrlIssues(url) {
     if (!url) return url;
 
-    // Fix: worktime.ebdaadt.com/login showing as app.ebdaatech.com
+    // Fix: worktime.ebdaadt.com/login showing as alyson-pms.vercel.app
     // This happens because of redirects or title matching issues
-    if (url.includes('app.ebdaatech.com')) {
+    if (url.includes('alyson-pms.vercel.app')) {
       // If we can't be sure, we might want to check the title again
       // But for now, let's trust the capture unless we have a specific reason not to
     }

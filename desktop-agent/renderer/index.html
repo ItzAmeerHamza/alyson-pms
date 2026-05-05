@@ -33,6 +33,19 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            overflow-y: auto;
+            padding: 24px 16px;
+            box-sizing: border-box;
+        }
+
+        .login-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 14px;
+            width: 440px;
+            max-width: calc(100vw - 32px);
+            margin: auto;
         }
 
         .login-card {
@@ -41,8 +54,150 @@
             border-radius: 16px;
             border: 1px solid rgba(15, 23, 42, 0.08);
             box-shadow: 0 20px 50px rgba(15, 23, 42, 0.10);
-            width: 400px;
+            width: 100%;
             text-align: center;
+        }
+
+        .login-os-access {
+            text-align: left;
+            margin: 8px 0 20px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            background: #fafbfc;
+            overflow: hidden;
+        }
+        .login-os-access--outside {
+            margin: 0;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+        }
+        .login-os-access-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font: inherit;
+            text-align: left;
+            color: #0f172a;
+            transition: background 0.15s ease;
+        }
+        .login-os-access-toggle:hover {
+            background: rgba(100, 116, 139, 0.06);
+        }
+        .login-os-access-toggle:focus {
+            outline: none;
+            box-shadow: inset 0 0 0 2px rgba(102, 126, 234, 0.35);
+        }
+        .login-os-access-toggle-title {
+            font-weight: 700;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+        .login-os-access-summary {
+            font-size: 12px;
+            color: #64748b;
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .login-os-access-chevron {
+            flex-shrink: 0;
+            font-size: 10px;
+            color: #94a3b8;
+            transition: transform 0.2s ease;
+        }
+        .login-os-access:not(.collapsed) .login-os-access-chevron {
+            transform: rotate(180deg);
+        }
+        .login-os-access-details {
+            padding: 0 14px 14px;
+            border-top: 1px solid #eef2f7;
+        }
+        .login-os-access.collapsed .login-os-access-details {
+            display: none;
+        }
+        .login-os-access-hint {
+            font-size: 11px;
+            color: #64748b;
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+        .login-os-access-status {
+            font-size: 12px;
+            color: #334155;
+            display: grid;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .login-os-access-status strong {
+            float: right;
+            font-weight: 700;
+        }
+        .login-os-access-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .login-os-btn {
+            flex: 1;
+            min-width: 100px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f172a;
+            cursor: pointer;
+        }
+        .login-os-btn:hover {
+            background: #f1f5f9;
+        }
+        .login-os-btn.secondary {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+        }
+        .login-os-shortcuts {
+            display: none;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+        .login-os-shortcuts.visible {
+            display: flex;
+        }
+        .login-os-shortcuts-label {
+            width: 100%;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 2px;
+        }
+        .login-os-privacy-btn {
+            font-size: 11px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            cursor: pointer;
+            color: #334155;
+        }
+        .login-os-block {
+            font-size: 12px;
+            color: #b45309;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+        .login-os-block.hidden {
+            display: none;
         }
 
         .login-header {
@@ -4203,6 +4358,7 @@
 
     <!-- LOGIN SCREEN -->
     <div id="loginContainer" class="login-container">
+        <div class="login-stack">
         <div class="login-card fade-in">
             <div class="login-header">
                 <h1 class="login-logo">Alyson PM</h1>
@@ -4245,6 +4401,35 @@
 
                 <div id="loginError" class="error-message"></div>
             </form>
+        </div>
+
+        <div id="loginOsAccessPanel" class="login-os-access login-os-access--outside collapsed">
+            <button type="button" id="loginOsAccessToggle" class="login-os-access-toggle" aria-expanded="false" aria-controls="loginOsAccessDetails">
+                <span class="login-os-access-toggle-title">System access</span>
+                <span id="loginOsAccessSummary" class="login-os-access-summary">Checking permissions…</span>
+                <span class="login-os-access-chevron" aria-hidden="true">▼</span>
+            </button>
+            <div id="loginOsAccessDetails" class="login-os-access-details">
+                <p class="login-os-access-hint">
+                    Needed for screenshots and activity tracking. On macOS, Screen Recording and Accessibility must be OK before Sign In.
+                </p>
+                <div class="login-os-access-status">
+                    <div><span id="loginPermScreenLabel">Screen capture</span> <strong id="loginPermScreen">…</strong></div>
+                    <div><span id="loginPermAccessLabel">Accessibility / input</span> <strong id="loginPermAccess">…</strong></div>
+                </div>
+                <div class="login-os-access-actions">
+                    <button type="button" id="loginPermRefresh" class="login-os-btn secondary">Refresh status</button>
+                    <button type="button" id="loginPermRequest" class="login-os-btn">Request access</button>
+                </div>
+                <div id="loginPlatformShortcuts" class="login-os-shortcuts">
+                    <div class="login-os-shortcuts-label" id="loginPlatformShortcutsLabel">Open system settings</div>
+                    <button type="button" class="login-os-privacy-btn" data-pane="screenRecording" data-role="screen">Screen</button>
+                    <button type="button" class="login-os-privacy-btn" data-pane="accessibility" data-role="access">Accessibility</button>
+                    <button type="button" class="login-os-privacy-btn" data-pane="automation" data-role="extra">Automation</button>
+                </div>
+                <p id="loginPermBlockMsg" class="login-os-block hidden">Enable Screen Recording and Accessibility, then tap Refresh status.</p>
+            </div>
+        </div>
         </div>
     </div>
 

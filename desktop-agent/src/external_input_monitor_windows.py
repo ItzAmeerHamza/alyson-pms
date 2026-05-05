@@ -73,11 +73,15 @@ except ImportError as e:
     }), flush=True)
 
 class WindowsInputMonitor:
+    # Mouse hooks emit WM_MOUSEMOVE for every pointer tick — throttle so "move" counts reflect gestures, not pixels.
+    MOVE_EMIT_MIN_INTERVAL_MS = 100
+
     def __init__(self):
         self.running = False
         self.activity_map = set()
         self.keyboard_hook = None
         self.mouse_hook = None
+        self._last_move_emit_ms = 0
         
     def log_event(self, event_type, details=None):
         """Log an event to stdout as JSON"""
@@ -115,7 +119,10 @@ class WindowsInputMonitor:
                 
                 if wParam == WM_MOUSEMOVE:
                     self.activity_map.add(now)
-                    self.log_event("move")
+                    now_ms = int(time.time() * 1000)
+                    if now_ms - self._last_move_emit_ms >= self.MOVE_EMIT_MIN_INTERVAL_MS:
+                        self._last_move_emit_ms = now_ms
+                        self.log_event("move")
                 elif wParam == WM_LBUTTONDOWN or wParam == 0x0201:
                     self.activity_map.add(now)
                     self.log_event("click", {"button": "left", "wParam": wParam})

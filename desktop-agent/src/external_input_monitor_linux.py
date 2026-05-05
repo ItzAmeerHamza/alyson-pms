@@ -29,10 +29,13 @@ except ImportError as e:
     }), flush=True)
 
 class LinuxInputMonitor:
+    MOVE_EMIT_MIN_INTERVAL_MS = 100
+
     def __init__(self):
         self.running = False
         self.activity_map = set()
         self.devices = []
+        self._last_move_emit_ms = 0
         
     def log_event(self, event_type, details=None):
         """Log an event to stdout as JSON"""
@@ -144,11 +147,14 @@ class LinuxInputMonitor:
                     elif event.type == ecodes.EV_REL:
                         # Mouse movement event
                         if event.code == ecodes.REL_X or event.code == ecodes.REL_Y:
-                            self.log_event("move", {
-                                "device": device.name,
-                                "axis": "x" if event.code == ecodes.REL_X else "y",
-                                "value": event.value
-                            })
+                            now_ms = int(time.time() * 1000)
+                            if now_ms - self._last_move_emit_ms >= self.MOVE_EMIT_MIN_INTERVAL_MS:
+                                self._last_move_emit_ms = now_ms
+                                self.log_event("move", {
+                                    "device": device.name,
+                                    "axis": "x" if event.code == ecodes.REL_X else "y",
+                                    "value": event.value
+                                })
                     
                     elif event.type == ecodes.EV_KEY and event.code in [ecodes.BTN_LEFT, ecodes.BTN_RIGHT, ecodes.BTN_MIDDLE]:
                         # Mouse button event

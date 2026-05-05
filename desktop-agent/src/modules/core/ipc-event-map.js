@@ -189,12 +189,41 @@ class IPCEventMap {
     // Permission checks (guarded, centralized fallback to system-monitor/permissions-check)
     this.registerHandler('check-permissions', async (event) => {
       console.log('🔐 [IPC] Permission check requested');
+      const normalize = (raw) => {
+        if (!raw || typeof raw !== 'object') {
+          return { success: false, screen: false, accessibility: false, error: 'empty' };
+        }
+        // Legacy / SessionAuthManager shape: { screen: boolean, accessibility: boolean }
+        if (typeof raw.screen === 'boolean' && typeof raw.accessibility === 'boolean') {
+          return {
+            success: raw.success !== false,
+            screen: !!raw.screen,
+            accessibility: !!raw.accessibility,
+            details: raw.details || null,
+          };
+        }
+        const d = raw.details || {};
+        const screen = !!d.screenRecording;
+        const accessibility = !!d.accessibility;
+        return {
+          success: raw.success !== false,
+          screen,
+          accessibility,
+          allGranted: screen && accessibility,
+          status: raw.status,
+          details: raw.details,
+          message: raw.message,
+          requiresUserAction: raw.requiresUserAction,
+          fixAction: raw.fixAction,
+        };
+      };
+
       // Prefer centralized system monitor if available
       try {
         if (global.systemMonitor?.performComprehensiveHealthCheck) {
           const health = await global.systemMonitor.performComprehensiveHealthCheck();
           const permissions = health.checks?.permissions || { status: 'unknown' };
-          return { success: true, ...permissions };
+          return normalize({ success: true, ...permissions });
         }
       } catch (e) {
         console.warn('⚠️ [IPC] System monitor permission check failed:', e.message);
@@ -206,7 +235,7 @@ class IPCEventMap {
         const accessibility = getAccessibilityAuthorized();
         // Input Monitoring no longer required — Accessibility covers input detection
         const allGranted = (screenStatus === 'authorized') && !!accessibility;
-        return {
+        return normalize({
           success: true,
           status: allGranted ? 'pass' : 'fail',
           details: {
@@ -214,9 +243,9 @@ class IPCEventMap {
             accessibility,
             inputMonitoring: accessibility // backward compat: report same as accessibility
           }
-        };
+        });
       } catch (e) {
-        return { success: false, error: e.message };
+        return { success: false, screen: false, accessibility: false, error: e.message };
       }
     });
 

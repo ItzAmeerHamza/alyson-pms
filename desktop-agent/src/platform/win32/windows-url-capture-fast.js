@@ -787,7 +787,7 @@ if (titleParts.length > 0) {
         'amazon': 'https://amazon.com',
         'netflix': 'https://netflix.com',
         'masrawy': 'https://www.masrawy.com',
-        'alyson': 'https://app.ebdaatech.com',
+        'alyson': 'https://alyson-pms.vercel.app',
         'gmail': 'https://mail.google.com',
         'outlook': 'https://outlook.office.com',
         'teams': 'https://teams.microsoft.com',
@@ -873,7 +873,7 @@ continue; // Skip generic words
       'linkedin': 'https://linkedin.com',
       'reddit': 'https://reddit.com',
       'wikipedia': 'https://wikipedia.org',
-      'alyson': 'https://app.ebdaatech.com',
+      'alyson': 'https://alyson-pms.vercel.app',
       // Arabic sites (using Arabic keywords)
       'مصراو': 'https://www.masrawy.com',  // مصراوى
       'اليوم السابع': 'https://www.youm7.com',

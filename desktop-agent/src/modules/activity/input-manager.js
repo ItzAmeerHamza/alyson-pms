@@ -333,22 +333,8 @@ class UnifiedInputManager extends EventEmitter {
     // Update lastActivity now that we've passed the gate
     this.stats.lastActivity = now;
 
-    // CRITICAL: Update UI counters via global if available without spamming logs
-    try {
-      // Try to access the global function directly first
-      if (typeof global !== 'undefined' && global.recordEnhancedActivity) {
-        global.recordEnhancedActivity(type, method);
-      } else if (typeof global !== 'undefined' && global.recordActivityForDisplay) {
-        global.recordActivityForDisplay(type, method);
-      } else {
-        // ALWAYS emit event that main process can listen to (most reliable)
-        process.emit('real-input-detected', { type, method, timestamp: now });
-      }
-    } catch (error) {
-      logger.warn({ category: 'INPUT', step: 'UPDATE WARN', message: 'Error updating activity', ctx: { error: error.message } });
-      // Always fall back to event emission
-      process.emit('real-input-detected', { type, method, timestamp: now });
-    }
+    // Do NOT call global.recordEnhancedActivity here: main.js already listens for mouseClick/keyPress/mouseMovement
+    // and runs recordEnhancedActivity — calling it from both places doubled clicks/keys/moves in DB + screenshots.
 
     switch (type) {
       case 'click':

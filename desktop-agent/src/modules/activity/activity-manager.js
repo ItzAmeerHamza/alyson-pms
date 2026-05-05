@@ -128,6 +128,27 @@ class ActivityManager {
   }
 
   /**
+   * Queue a raw input event without incrementing counters (counters are owned by recordEnhancedActivity in main).
+   */
+  enqueueActivityEvent(type, method, details = {}) {
+    const timestamp = Date.now();
+    this.displayActivityStats.lastActivity = timestamp;
+    this.displayActivityStats.lastUpdate = timestamp;
+    this.displayActivityStats.idleSeconds = 0;
+
+    this.activityQueue.push({
+      type,
+      method,
+      details,
+      timestamp
+    });
+
+    if (this.activityQueue.length > 1000) {
+      this.activityQueue.splice(0, 500);
+    }
+  }
+
+  /**
    * Record activity
    */
   recordActivity(type, method, details = {}) {
@@ -237,9 +258,10 @@ class ActivityManager {
       clicks: realtimeActivity.clicks || this.displayActivityStats.totalClicks,
       keystrokes: realtimeActivity.keys || this.displayActivityStats.totalKeys,
       mouseMovements: realtimeActivity.moves || this.displayActivityStats.totalMoves,
-      sessionClicks: this.displayActivityStats.sessionClicks + (realtimeActivity.clicks || 0),
-      sessionKeys: this.displayActivityStats.sessionKeys + (realtimeActivity.keys || 0),
-      sessionMoves: this.displayActivityStats.sessionMoves + (realtimeActivity.moves || 0),
+      // session* already includes all counted input; do not add realtimeActivity again (was double-counting in UI)
+      sessionClicks: this.displayActivityStats.sessionClicks,
+      sessionKeys: this.displayActivityStats.sessionKeys,
+      sessionMoves: this.displayActivityStats.sessionMoves,
       lastActivity: realtimeActivity.lastUpdate || this.displayActivityStats.lastActivity,
       sessionDuration: sessionDuration,
       isActive: (now - (realtimeActivity.lastUpdate || this.displayActivityStats.lastActivity)) < 30000, // Active if activity within 30 seconds

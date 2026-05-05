@@ -100,6 +100,7 @@ async function uploadScreenshotBuffer({
       time_log_id: timeLogId,
       image_url: publicUrl,
       file_path: fileName,
+      file_size: uploadBuffer.length,
       captured_at: capturedAt || new Date().toISOString(),
       activity_percent: activityPercent || 0,
       focus_percent: focusPercent || 0,

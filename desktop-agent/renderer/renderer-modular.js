@@ -1277,6 +1277,181 @@ if (!window.__rendererInitAttached) {
   console.warn('[BOOT] DOMContentLoaded init listener already attached — skipping');
 }
 
+/** Poll + UI for OS permissions on the login screen (macOS gates sign-in until OK). */
+let loginPermPollInterval = null;
+
+function setupLoginOsAccessPanel() {
+  const panel = document.getElementById('loginOsAccessPanel');
+  if (!panel) return;
+
+  const toggle = document.getElementById('loginOsAccessToggle');
+  const summaryEl = document.getElementById('loginOsAccessSummary');
+  const screenEl = document.getElementById('loginPermScreen');
+  const accessEl = document.getElementById('loginPermAccess');
+  const screenLabel = document.getElementById('loginPermScreenLabel');
+  const accessLabel = document.getElementById('loginPermAccessLabel');
+  const refreshBtn = document.getElementById('loginPermRefresh');
+  const requestBtn = document.getElementById('loginPermRequest');
+  const shortcuts = document.getElementById('loginPlatformShortcuts');
+  const shortcutsLabel = document.getElementById('loginPlatformShortcutsLabel');
+  const blockMsg = document.getElementById('loginPermBlockMsg');
+  const loginBtn = document.getElementById('loginBtn');
+
+  /** darwin only: last known “both permissions OK” — used to collapse once when user fixes access */
+  let lastDarwinPermOk = null;
+
+  toggle?.addEventListener('click', () => {
+    panel.classList.toggle('collapsed');
+    const collapsed = panel.classList.contains('collapsed');
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+
+  if (screenLabel && accessLabel) {
+    if (process.platform === 'darwin') {
+      screenLabel.textContent = 'Screen Recording';
+      accessLabel.textContent = 'Accessibility';
+    } else if (process.platform === 'win32') {
+      screenLabel.textContent = 'Screen / window capture';
+      accessLabel.textContent = 'Privacy & input';
+    } else {
+      screenLabel.textContent = 'Display session';
+      accessLabel.textContent = 'Accessibility (AT-SPI)';
+    }
+  }
+
+  const setRow = (el, ok) => {
+    if (!el) return;
+    el.textContent = ok ? 'OK' : 'Missing';
+    el.style.color = ok ? '#15803d' : '#b45309';
+  };
+
+  const applyMacGate = (perm) => {
+    if (process.platform !== 'darwin') {
+      if (blockMsg) blockMsg.classList.add('hidden');
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.removeAttribute('title');
+      }
+      return;
+    }
+    const ok = !!(perm && perm.screen && perm.accessibility);
+    if (blockMsg) blockMsg.classList.toggle('hidden', ok);
+    if (loginBtn) {
+      loginBtn.disabled = !ok;
+      loginBtn.title = ok ? '' : 'Grant Screen Recording and Accessibility, then tap Refresh status.';
+    }
+  };
+
+  const syncLoginOsAccessChrome = (perm, permError) => {
+    if (summaryEl) {
+      if (permError) {
+        summaryEl.textContent =
+          process.platform === 'darwin'
+            ? 'Could not verify permissions · tap to retry'
+            : 'Could not verify · tap to expand';
+      } else if (process.platform === 'darwin') {
+        const ok = !!(perm && perm.screen && perm.accessibility);
+        summaryEl.textContent = ok
+          ? 'Screen & Accessibility OK'
+          : 'Action needed — expand to grant access';
+      } else {
+        const s = perm?.screen;
+        const a = perm?.accessibility;
+        if (s && a) summaryEl.textContent = 'Permissions look fine · tap for shortcuts';
+        else if (s || a) summaryEl.textContent = 'One item may need attention · tap to review';
+        else summaryEl.textContent = 'Optional checks · tap for system settings';
+      }
+    }
+    if (process.platform === 'darwin' && toggle && !permError && perm) {
+      const ok = !!(perm.screen && perm.accessibility);
+      if (!ok) {
+        panel.classList.remove('collapsed');
+        toggle.setAttribute('aria-expanded', 'true');
+      } else if (lastDarwinPermOk === false) {
+        panel.classList.add('collapsed');
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+      lastDarwinPermOk = ok;
+    }
+  };
+
+  const updateLoginPermUI = async () => {
+    try {
+      const perm = await ipcRenderer.invoke('check-permissions');
+      setRow(screenEl, !!perm.screen);
+      setRow(accessEl, !!perm.accessibility);
+      applyMacGate(perm);
+      syncLoginOsAccessChrome(perm, null);
+    } catch (e) {
+      console.warn('[LOGIN-PERM] check-permissions failed:', e?.message || e);
+      if (screenEl) {
+        screenEl.textContent = '?';
+        screenEl.style.color = '#64748b';
+      }
+      if (accessEl) {
+        accessEl.textContent = '?';
+        accessEl.style.color = '#64748b';
+      }
+      if (process.platform === 'darwin' && loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.title = 'Could not verify permissions. Tap Refresh status.';
+      }
+      syncLoginOsAccessChrome(null, e);
+      if (process.platform === 'darwin' && toggle) {
+        panel.classList.remove('collapsed');
+        toggle.setAttribute('aria-expanded', 'true');
+        lastDarwinPermOk = null;
+      }
+    }
+  };
+
+  refreshBtn?.addEventListener('click', () => {
+    void updateLoginPermUI();
+  });
+
+  requestBtn?.addEventListener('click', async () => {
+    try {
+      await ipcRenderer.invoke('request-permissions');
+    } catch (e) {
+      console.warn('[LOGIN-PERM] request-permissions failed:', e?.message || e);
+    }
+    setTimeout(() => void updateLoginPermUI(), 600);
+    setTimeout(() => void updateLoginPermUI(), 2000);
+  });
+
+  if (shortcuts && ['darwin', 'win32', 'linux'].includes(process.platform)) {
+    shortcuts.classList.add('visible');
+    if (shortcutsLabel) {
+      if (process.platform === 'win32') shortcutsLabel.textContent = 'Open Windows settings';
+      else if (process.platform === 'linux') shortcutsLabel.textContent = 'Open Linux settings';
+      else shortcutsLabel.textContent = 'Open macOS privacy panes';
+    }
+    const btnLabels = {
+      darwin: { screen: 'Screen Recording', access: 'Accessibility', extra: 'Automation' },
+      win32: { screen: 'Graphics capture', access: 'Ease of Access', extra: 'Privacy' },
+      linux: { screen: 'Privacy & screen', access: 'Accessibility', extra: 'Applications' },
+    };
+    const bl = btnLabels[process.platform] || btnLabels.darwin;
+    shortcuts.querySelectorAll('[data-role="screen"]').forEach((b) => { b.textContent = bl.screen; });
+    shortcuts.querySelectorAll('[data-role="access"]').forEach((b) => { b.textContent = bl.access; });
+    shortcuts.querySelectorAll('[data-role="extra"]').forEach((b) => { b.textContent = bl.extra; });
+    shortcuts.querySelectorAll('[data-pane]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        ipcRenderer.invoke('open-system-settings', { pane: btn.dataset.pane }).catch(() => {});
+      });
+    });
+  }
+
+  void updateLoginPermUI();
+
+  if (loginPermPollInterval) clearInterval(loginPermPollInterval);
+  loginPermPollInterval = setInterval(() => {
+    const loginContainer = document.getElementById('loginContainer');
+    if (!loginContainer || loginContainer.style.display === 'none') return;
+    void updateLoginPermUI();
+  }, 4000);
+}
+
 // === LEGACY EVENT LISTENERS ===
 function setupLegacyEventListeners() {
   if (window.__legacyListenersSetup) {
@@ -1300,6 +1475,8 @@ function setupLegacyEventListeners() {
       }
     });
   }
+
+  setupLoginOsAccessPanel();
 
   const platformPrivacyShortcuts = document.getElementById('platformPrivacyShortcuts');
   if (platformPrivacyShortcuts && ['darwin', 'win32', 'linux'].includes(process.platform)) {
