@@ -6,6 +6,7 @@
 const { EventEmitter } = require('events');
 const debugLogger = require('../utils/debug-logger');
 const { getDeviceId } = require('../utils/device-id');
+const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
 
 class TrackingManager extends EventEmitter {
   constructor(config, dependencies = {}) {
@@ -477,10 +478,21 @@ try {
       // for subsystem init (screenshot, input, app detection can take 10+ seconds)
       if (global.trayManager) {
         const projectName = this.currentSession?.projectName || null;
+        let completedTodayBeforeSessionSeconds = 0;
+        try {
+          const supabase = global.supabaseClient || this.supabaseService || global.supabaseService || global.supabase;
+          if (supabase && effectiveUserId && timeLog?.id) {
+            const agg = await computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id);
+            completedTodayBeforeSessionSeconds = agg.completedClosedSeconds;
+          }
+        } catch (aggErr) {
+          console.warn('⚠️ [TRACKING-MANAGER] Could not load today cumulative base:', aggErr?.message || aggErr);
+        }
         global.trayManager.updateState(true, false, {
           projectName,
           projectId: this.currentProjectId,
-          startTime: this.sessionStartTime
+          startTime: this.sessionStartTime,
+          completedTodayBeforeSessionSeconds
         });
         console.log('✅ [TRAY] Icon updated immediately after state set');
       }

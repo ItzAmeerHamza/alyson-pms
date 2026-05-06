@@ -4411,7 +4411,7 @@
             </button>
             <div id="loginOsAccessDetails" class="login-os-access-details">
                 <p class="login-os-access-hint">
-                    Needed for screenshots and activity tracking. On macOS, Screen Recording and Accessibility must be OK before Sign In.
+                    Needed for screenshots and activity tracking. You can sign in first, then grant access here.
                 </p>
                 <div class="login-os-access-status">
                     <div><span id="loginPermScreenLabel">Screen capture</span> <strong id="loginPermScreen">…</strong></div>
@@ -4427,7 +4427,7 @@
                     <button type="button" class="login-os-privacy-btn" data-pane="accessibility" data-role="access">Accessibility</button>
                     <button type="button" class="login-os-privacy-btn" data-pane="automation" data-role="extra">Automation</button>
                 </div>
-                <p id="loginPermBlockMsg" class="login-os-block hidden">Enable Screen Recording and Accessibility, then tap Refresh status.</p>
+                <p id="loginPermBlockMsg" class="login-os-block hidden">For full tracking features, enable Screen Recording and Accessibility, then tap Refresh status.</p>
             </div>
         </div>
         </div>
@@ -4802,6 +4802,7 @@
                     <div style="text-align: center; margin-bottom: 32px;">
                         <div class="metric-value" id="trackerTime">00:00:00</div>
                         <div class="metric-label" id="trackerStatus">Select a project to start tracking</div>
+                        <div id="trackerTodayHint" style="font-size: 12px; color: #64748b; margin-top: 8px; max-width: 420px; margin-left: auto; margin-right: auto; line-height: 1.4;"></div>
                     </div>
                     
                     <div class="button-group">

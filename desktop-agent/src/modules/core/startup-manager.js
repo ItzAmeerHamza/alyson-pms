@@ -677,18 +677,16 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
         console.log('⚠️ [STARTUP-MANAGER] System monitor not available, skipping permission check');
       }
       
-      // Prompt for Accessibility permission early on macOS so it's ready when user starts tracking
+      // Do not auto-prompt Accessibility on startup.
+      // Auto-prompts can loop on macOS when permission APIs are stale.
+      // User can grant access from the explicit "System access" panel.
       if (process.platform === 'darwin') {
         try {
           const { systemPreferences } = require('electron');
           if (systemPreferences && typeof systemPreferences.isTrustedAccessibilityClient === 'function') {
-            // Pass false first to just check without prompting
             const accessibilityGranted = systemPreferences.isTrustedAccessibilityClient(false);
             if (!accessibilityGranted) {
-              console.log('🔐 [STARTUP-MANAGER] Accessibility permission not yet granted — prompting...');
-              // Pass true to trigger the native macOS Accessibility permission prompt
-              systemPreferences.isTrustedAccessibilityClient(true);
-              console.log('🔐 [STARTUP-MANAGER] Accessibility permission prompt triggered');
+              console.log('🔐 [STARTUP-MANAGER] Accessibility permission not yet detected (no auto-prompt)');
             } else {
               console.log('✅ [STARTUP-MANAGER] Accessibility permission already granted');
             }

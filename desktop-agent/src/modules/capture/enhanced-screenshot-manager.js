@@ -62,12 +62,45 @@ class EnhancedScreenshotManager {
     });
   }
 
+  getConfiguredScreenshotIntervalMs() {
+    const raw =
+      this.config?.screenshot_interval_seconds ??
+      this.config?.appSettings?.screenshot_interval_seconds ??
+      this.config?.appSettings?.screenshot_interval;
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return 60 * 1000;
+    // `screenshot_interval` may be persisted in milliseconds in some paths.
+    const seconds = num >= 1000 ? Math.round(num / 1000) : num;
+    return Math.max(10, seconds) * 1000;
+  }
+
+  resolveActiveUserId() {
+    return (
+      global.currentUserId ||
+      this.currentSession?.user_id ||
+      this.currentSession?.userId ||
+      global.config?.user_id ||
+      global.config?.USER_ID ||
+      global.configManager?.config?.user_id ||
+      global.configManager?.config?.USER_ID ||
+      null
+    );
+  }
+
   /**
    * Unified public API for both manual and scheduled captures
    */
   async requestScreenshot(source = 'scheduled') {
     try {
+      const requestId = `ss-req-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       log.info({ step: 'REQUEST START', ctx: { source } });
+      console.log(`[SCREENSHOT-REQUEST][${requestId}] Request start`, {
+        source,
+        isTracking: this.isTracking,
+        hasSession: !!this.currentSession,
+        paused: this.screenshotsPaused,
+        shuttingDown: this._shuttingDown
+      });
       try { global.currentCaptureSource = source; } catch { }
       log.debug({
         step: 'REQUEST STATE CHECK', ctx: {
@@ -99,7 +132,8 @@ class EnhancedScreenshotManager {
       
       // CRITICAL FIX v1.0.132: Hard minimum gap check BEFORE rate limiter
       // This prevents duplicate screenshots even if rate limiter was reset on restart
-      const MIN_GAP_MS = 3 * 60 * 1000; // 3 minutes
+      const configuredIntervalMs = this.getConfiguredScreenshotIntervalMs();
+      const MIN_GAP_MS = Math.max(30 * 1000, configuredIntervalMs - 5 * 1000);
       const lastScreenshotTime = global.lastScreenshotTime || 0;
       const timeSinceLastScreenshot = nowMs - lastScreenshotTime;
       
@@ -114,7 +148,8 @@ class EnhancedScreenshotManager {
         return { ok: false, skipped: true, reason: 'hard-min-gap', nextAllowedInMs: waitTime };
       }
       
-      if (this._rateLimiter) {
+      // For short fixed intervals (e.g. every 60s), don't apply the legacy 3/10m limiter.
+      if (this._rateLimiter && configuredIntervalMs >= 3 * 60 * 1000) {
         const check = this._rateLimiter.canTake(nowMs);
         log.debug({ step: 'RATE LIMITER CHECK', ctx: check });
         if (!check.allowed) {
@@ -130,6 +165,7 @@ class EnhancedScreenshotManager {
 
       log.info({ step: 'CALLING CAPTURE SCREENSHOT' });
       const ok = await this.captureScreenshot(false);
+      console.log(`[SCREENSHOT-REQUEST][${requestId}] Request result`, { ok });
       log.debug({ step: 'CAPTURE SCREENSHOT RESULT', ctx: ok });
 
       if (ok) {
@@ -163,14 +199,19 @@ class EnhancedScreenshotManager {
     // Start lightweight diagnostics heartbeat for visibility and self-heal
     this.startDiagnosticsHeartbeat();
 
-    // Initialize limiter with policy: 3 per 10 minutes, min 180s gap
+    // Initialize limiter with policy: 3 per 10 minutes, min 180s gap.
+    // Skip limiter for short fixed intervals to honor user screenshot settings.
     try {
-      const ScreenshotRateLimiter = require('../utils/screenshot-rate-limiter');
-      this._rateLimiter = new ScreenshotRateLimiter({
-        maxInWindow: 3,
-        windowMs: 10 * 60 * 1000,
-        minGapMs: 3 * 60 * 1000
-      });
+      if (this.getConfiguredScreenshotIntervalMs() >= 3 * 60 * 1000) {
+        const ScreenshotRateLimiter = require('../utils/screenshot-rate-limiter');
+        this._rateLimiter = new ScreenshotRateLimiter({
+          maxInWindow: 3,
+          windowMs: 10 * 60 * 1000,
+          minGapMs: 3 * 60 * 1000
+        });
+      } else {
+        this._rateLimiter = null;
+      }
     } catch (e) {
       log.warn({ step: 'RATE LIMITER INIT FAILED', message: e.message });
     }
@@ -241,16 +282,23 @@ class EnhancedScreenshotManager {
         console.log('🔧 [MACOS-SCREENSHOT] Permission check result:', hasPerm);
         log.debug({ step: 'MACOS SCREEN RECORDING PERMISSION', ctx: { hasPerm } });
         if (!hasPerm) {
-          console.log('❌ [MACOS-SCREENSHOT] Permission denied! Screenshot timer will NOT start!');
-          log.warn({ step: 'SCREEN RECORDING PERMISSION MISSING', message: 'Screen Recording permission missing — not starting scheduler. Enable Electron in System Settings → Privacy & Security → Screen Recording.' });
+          console.log('⚠️ [MACOS-SCREENSHOT] Permission check returned denied, but continuing scheduler start (runtime capture will verify).');
+          log.warn({ step: 'SCREEN RECORDING PERMISSION CHECK UNRELIABLE', message: 'Screen permission probe returned denied; continuing scheduler and validating at capture time.' });
           try { this.mainWindow?.webContents.send('permissions-updated', { granted: false, type: 'screen' }); } catch { }
-          return;
         }
         console.log('✅ [MACOS-SCREENSHOT] Permission granted! Screenshot timer will start...');
       }
     } catch (e) {
       console.log('⚠️ [MACOS-SCREENSHOT] Error during permission check:', e.message);
       log.warn({ step: 'PERMISSION CHECK FAILED', message: e.message });
+    }
+
+    const configuredIntervalMs = this.getConfiguredScreenshotIntervalMs();
+    if (configuredIntervalMs <= 2 * 60 * 1000) {
+      console.log(`🚀 [SCREENSHOT] Starting fixed-interval mode (${Math.round(configuredIntervalMs / 1000)}s)...`);
+      // Use direct scheduler for short intervals (e.g. 60s) to honor settings.
+      this.scheduleDirectScreenshot();
+      return;
     }
 
     console.log('🚀 [SCREENSHOT] Starting setInterval backbone (10-min windows)...');
@@ -537,10 +585,20 @@ class EnhancedScreenshotManager {
       console.log('🔍 [MACOS-PERMISSION] systemPreferences available:', !!this.systemPreferences);
       console.log('🔍 [MACOS-PERMISSION] getMediaAccessStatus available:', typeof this.systemPreferences?.getMediaAccessStatus);
 
+      // Use centralized permission status first (includes robust mapping/fallbacks).
+      try {
+        const { getScreenStatus } = require('../../system/permissions-check');
+        const status = getScreenStatus();
+        if (status === 'authorized') {
+          console.log('🔍 [MACOS-PERMISSION] Centralized status: authorized');
+          return true;
+        }
+      } catch (_) {}
+
       if (this.systemPreferences && typeof this.systemPreferences.getMediaAccessStatus === 'function') {
         const status = this.systemPreferences.getMediaAccessStatus('screen');
         console.log('🔍 [MACOS-PERMISSION] Permission status:', status);
-        const granted = status === 'granted';
+        const granted = status === 'granted' || status === 'authorized' || status === 'limited';
         console.log('🔍 [MACOS-PERMISSION] Permission granted?', granted);
         return granted;
       }
@@ -610,17 +668,13 @@ class EnhancedScreenshotManager {
       return;
     }
     
-    // Always use window-based backbone scheduling; redirect if not active yet
+    // If backbone scheduling is active, don't duplicate local timers.
     if (this._windowInterval) {
       log.warn({ step: 'BACKBONE ACTIVE', message: 'Skipping direct scheduling to prevent duplicates' });
       if (!this.screenshotTimerInterval) {
         this.startScreenshotTimerUpdates();
         this.sendNextScreenshotUpdate();
       }
-      return;
-    } else {
-      log.info({ step: 'REDIRECTING TO BACKBONE SCHEDULING' });
-      this.startScreenshotCapture();
       return;
     }
     
@@ -642,11 +696,8 @@ class EnhancedScreenshotManager {
       this.screenshotInterval = null;
     }
 
-    // Test mode: capture every 2 minutes (fixed)
-    // NOTE: This is intentionally short to validate end-to-end uploads.
-    const minInterval = 120000; // 2 minutes
-    const maxInterval = 120000; // 2 minutes
-    const interval = Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
+    // Fixed schedule based on configured screenshot interval.
+    const interval = this.getConfiguredScreenshotIntervalMs();
 
     // Set next screenshot time
     this.nextScreenshotTime = new Date(Date.now() + interval);
@@ -787,7 +838,7 @@ class EnhancedScreenshotManager {
           if (!saved) {
             try {
               const supabase = resolveSupabaseClient();
-              const userId = global.currentUserId || global.config?.user_id || global.configManager?.config?.user_id;
+              const userId = this.resolveActiveUserId();
 
               // ENHANCED LOGGING: Log upload attempt details
               log.info({
@@ -1051,7 +1102,7 @@ if (uploadResult?.id) {
           if (!saved) {
             try {
               const supabase = resolveSupabaseClient();
-              const userId = global.currentUserId || global.config?.user_id || global.configManager?.config?.user_id;
+              const userId = this.resolveActiveUserId();
 
               // ENHANCED LOGGING: Log upload attempt details
               log.info({

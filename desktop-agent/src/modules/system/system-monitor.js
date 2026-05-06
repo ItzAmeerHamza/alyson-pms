@@ -51,6 +51,11 @@ class SystemMonitor {
     // Debug log buffer for console
     this.debugLogs = [];
     this.MAX_DEBUG_LOGS = 1000;
+
+    // Permission prompt guardrails (avoid repeated alert loops)
+    this.permissionPromptInProgress = false;
+    this.lastPermissionPromptAt = 0;
+    this.permissionPromptCooldownMs = 10 * 60 * 1000; // 10 minutes
     
     console.log('🔬 [SYSTEM-MONITOR] Centralized System Monitor initialized');
   }
@@ -243,52 +248,61 @@ class SystemMonitor {
       const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
       
       let screenStatus = getScreenStatus();
+      let screenRecordingGranted = screenStatus === 'authorized';
       const accessibilityStatus = getAccessibilityAuthorized();
       // Input Monitoring no longer required — Accessibility covers input detection
       const inputMonitoringStatus = accessibilityStatus;
       const platform = process.platform;
       
-      // REAL SCREENSHOT TEST: Use screenshot-desktop which correctly detects macOS permission status
-      // The Electron desktopCapturer API caches permission status and doesn't reflect real-time changes
-      if (platform === 'darwin' && screenStatus === 'authorized') {
+      // Fallback probe for macOS false negatives:
+      // If API says denied but an actual screenshot succeeds, treat Screen Recording as granted.
+      let screenProbeSucceeded = false;
+      if (platform === 'darwin' && !screenRecordingGranted) {
         try {
           const screenshot = require('screenshot-desktop');
-          // Attempt an actual screenshot capture - this will fail if permission is revoked
-          const buffer = await screenshot({ format: 'png' });
-          
-          if (!buffer || buffer.length === 0) {
-            console.log('🚫 [HEALTH-CHECK] Real screenshot test FAILED - empty buffer (permission revoked)');
-            screenStatus = 'denied';
-          } else {
-            console.log(`✅ [HEALTH-CHECK] Real screenshot test PASSED (buffer size: ${buffer.length})`);
+          const probe = await Promise.race([
+            screenshot({ format: 'png' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('probe-timeout')), 3000))
+          ]);
+          if (probe && probe.length > 0) {
+            screenProbeSucceeded = true;
+            screenRecordingGranted = true;
+            screenStatus = 'authorized';
           }
-        } catch (screenshotError) {
-          console.log('🚫 [HEALTH-CHECK] Real screenshot test FAILED:', screenshotError.message);
-          screenStatus = 'denied';
+        } catch (_) {
+          // Keep original status when probe fails
         }
       }
       
-      const allGranted = screenStatus === 'authorized' && accessibilityStatus && inputMonitoringStatus;
+      const allGranted = screenRecordingGranted && accessibilityStatus && inputMonitoringStatus;
+      // On macOS, allow tracking with warning if screen recording works but accessibility is not yet detected.
+      const allowWithWarning = platform === 'darwin' && screenRecordingGranted && !accessibilityStatus;
+      const status = allGranted ? 'pass' : (allowWithWarning ? 'warn' : 'fail');
       
       // Update internal state
-      this.systemState.features.permissions.screenRecording = screenStatus === 'authorized';
+      this.systemState.features.permissions.screenRecording = screenRecordingGranted;
       this.systemState.features.permissions.accessibility = accessibilityStatus;
       this.systemState.features.permissions.inputMonitoring = inputMonitoringStatus;
-      this.systemState.features.permissions.status = allGranted ? 'active' : 'inactive';
+      this.systemState.features.permissions.status = (allGranted || allowWithWarning) ? 'active' : 'inactive';
       this.systemState.features.permissions.lastUpdate = Date.now();
       
       console.log(`[HEALTH-CHECK] ${platform.toUpperCase()} Permissions: Screen=${screenStatus}, Accessibility=${accessibilityStatus}, InputMonitoring=${inputMonitoringStatus}`);
       
       return {
-        status: allGranted ? 'pass' : 'fail',
+        status,
         details: {
-          screenRecording: screenStatus === 'authorized',
+          screenRecording: screenRecordingGranted,
           accessibility: accessibilityStatus,
           inputMonitoring: inputMonitoringStatus,
           platform: platform,
-          screenStatus: screenStatus
+          screenStatus: screenStatus,
+          screenProbeSucceeded
         },
-        message: allGranted ? `All ${platform} permissions granted` : `${platform} system permissions required`,
+        message: allGranted
+          ? `All ${platform} permissions granted`
+          : allowWithWarning
+            ? `${platform} screen recording verified; accessibility still needed for full activity tracking`
+            : `${platform} system permissions required`,
         requiresUserAction: !allGranted,
         fixAction: allGranted ? null : 'Open system settings to grant permissions'
       };
@@ -651,8 +665,9 @@ class SystemMonitor {
       
       console.log(`[HEALTH-CHECK] Input detection: ${inputWorking ? '✅ PASS' : '❌ FAIL'} - ${message}`);
       
+      const status = (platform === 'darwin' && !inputWorking) ? 'warn' : (inputWorking ? 'pass' : 'fail');
       return {
-        status: inputWorking ? 'pass' : 'fail',
+        status,
         details: {
           platform,
           pythonAvailable,
@@ -741,11 +756,6 @@ class SystemMonitor {
         // Critical failures that prevent timer start
         if (['permissions', 'database', 'screenshot', 'inputDetection'].includes(checkName)) {
           canStartTimer = false;
-          
-          // Trigger permission popup only for actual permission issues
-          if (checkName === 'permissions' && result.requiresUserAction) {
-            this.triggerPermissionPopup(result);
-          }
         }
       } else if (result.status === 'warn') {
         warnings.push(`${checkName}: ${result.message}`);
@@ -768,6 +778,34 @@ class SystemMonitor {
   // === PERMISSION POPUP TRIGGER ===
   async triggerPermissionPopup(permissionResult) {
     try {
+      // macOS-only permission popup flow
+      if (process.platform !== 'darwin') {
+        return;
+      }
+
+      // Don't open duplicate dialogs
+      if (this.permissionPromptInProgress) {
+        process.stderr.write('[PERMISSION-GATE] Popup already in progress, skipping\n');
+        return;
+      }
+
+      // Cooldown to avoid repetitive alerts
+      const now = Date.now();
+      if (now - this.lastPermissionPromptAt < this.permissionPromptCooldownMs) {
+        process.stderr.write('[PERMISSION-GATE] Popup in cooldown window, skipping\n');
+        return;
+      }
+
+      // Re-check before showing popup; skip if already granted
+      const latest = await this.checkPermissions();
+      if (latest?.status === 'pass') {
+        process.stderr.write('[PERMISSION-GATE] Permissions already granted, no popup needed\n');
+        return;
+      }
+
+      this.permissionPromptInProgress = true;
+      this.lastPermissionPromptAt = now;
+
       // Log silently to avoid EPIPE errors
       process.stderr.write('[PERMISSION-GATE] Triggering permission popup\n');
       
@@ -780,6 +818,8 @@ class SystemMonitor {
       process.stderr.write('[PERMISSION-GATE] Permission popup completed\n');
     } catch (error) {
       process.stderr.write(`[PERMISSION-GATE] Permission popup failed: ${error.message}\n`);
+    } finally {
+      this.permissionPromptInProgress = false;
     }
   }
   

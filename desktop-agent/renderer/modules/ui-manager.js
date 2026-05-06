@@ -199,6 +199,9 @@ class UIManager {
         } else {
           console.error('❌ [UI-MANAGER] loadTimeTrackerContent method not found!');
         }
+        if (typeof window.updateTrackerDailyRefreshHint === 'function') {
+          window.updateTrackerDailyRefreshHint();
+        }
         // Load monthly work report (uses its own cache)
         this.loadMonthlyReport();
         // Load recent screenshots on the time tracker page
@@ -1332,7 +1335,7 @@ class UIManager {
         if (trackingState && trackingState.isTracking) {
           this.setTrackingStatus('active');
           
-          // Update the timer display
+          // Update the timer display (tracker = today's cumulative; uses closed logs + this session)
           const timerElement = document.getElementById('trackerTime');
           if (timerElement && trackingState.sessionStartTime) {
             const startTime = new Date(trackingState.sessionStartTime);
@@ -1340,11 +1343,33 @@ class UIManager {
             const hours = Math.floor(elapsed / 3600);
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;
-            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            timerElement.textContent = timeString;
+            const sessionStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            try {
+              this._todayStatsCacheTime = 0;
+              const today = await this._getCachedTodayTimeStats();
+              const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
+              const totalSec = base + elapsed;
+              const th = Math.floor(totalSec / 3600);
+              const tm = Math.floor((totalSec % 3600) / 60);
+              const ts = totalSec % 60;
+              timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+            } catch {
+              timerElement.textContent = sessionStr;
+            }
           }
         } else {
           this.setTrackingStatus('stopped');
+          try {
+            const today = await this.ipcRenderer.invoke('get-today-time-stats');
+            const te = document.getElementById('trackerTime');
+            if (te && today && typeof today.totalTime === 'number') {
+              const t = Math.max(0, Math.floor(today.totalTime));
+              const th = Math.floor(t / 3600);
+              const tm = Math.floor((t % 3600) / 60);
+              const ts = t % 60;
+              te.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+            }
+          } catch { /* keep default */ }
         }
         
         // Load projects for the dropdowns if not already populated
@@ -3270,9 +3295,20 @@ class UIManager {
             const hours = Math.floor(elapsed / 3600);
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;
-            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            timerElement.textContent = timeString;
-            console.log('✅ [TIMER-REFRESH] Timer updated:', timeString);
+            const sessionStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            try {
+              this._todayStatsCacheTime = 0;
+              const today = await this._getCachedTodayTimeStats();
+              const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
+              const totalSec = base + elapsed;
+              const th = Math.floor(totalSec / 3600);
+              const tm = Math.floor((totalSec % 3600) / 60);
+              const ts = totalSec % 60;
+              timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+            } catch {
+              timerElement.textContent = sessionStr;
+            }
+            console.log('✅ [TIMER-REFRESH] Tracker timer updated (cumulative today)');
           }
           
           // Also update dashboard timer if available
@@ -3296,10 +3332,22 @@ class UIManager {
           } else {
             this.setTrackingStatus('stopped');
             
-            // Reset timer displays
             const timerElement = document.getElementById('trackerTime');
             if (timerElement) {
-              timerElement.textContent = '00:00:00';
+              try {
+                const today = await this.ipcRenderer.invoke('get-today-time-stats');
+                if (today && typeof today.totalTime === 'number') {
+                  const t = Math.max(0, Math.floor(today.totalTime));
+                  const th = Math.floor(t / 3600);
+                  const tm = Math.floor((t % 3600) / 60);
+                  const ts = t % 60;
+                  timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+                } else {
+                  timerElement.textContent = '00:00:00';
+                }
+              } catch {
+                timerElement.textContent = '00:00:00';
+              }
             }
             
             const dashboardTimer = document.getElementById('sessionTime');

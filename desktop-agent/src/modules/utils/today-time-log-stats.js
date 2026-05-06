@@ -16,11 +16,11 @@ function endOfLocalDayExclusive(d = new Date()) {
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
  * @param {string} userId
  * @param {string|null} currentTimeLogId - open row to count as "live" in totalTime only
- * @returns {Promise<{ completedClosedSeconds: number, ongoingCurrentSessionSeconds: number, totalTime: number }>}
+ * @returns {Promise<{ completedClosedSeconds: number, ongoingCurrentSessionSeconds: number, totalTime: number, timeLogsCount: number }>}
  */
 async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
   if (!supabase || !userId) {
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0 };
+    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
   }
 
   const startOfDay = startOfLocalDay();
@@ -36,7 +36,7 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
 
   if (error) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Query failed:', error.message);
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0 };
+    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
   }
 
   let completedClosedSeconds = 0;
@@ -57,7 +57,8 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
   }
 
   const totalTime = completedClosedSeconds + ongoingCurrentSessionSeconds;
-  return { completedClosedSeconds, ongoingCurrentSessionSeconds, totalTime };
+  const timeLogsCount = (timeLogs || []).length;
+  return { completedClosedSeconds, ongoingCurrentSessionSeconds, totalTime, timeLogsCount };
 }
 
 module.exports = {

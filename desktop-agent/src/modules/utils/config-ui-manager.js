@@ -243,32 +243,34 @@ class ConfigUIManager {
     try {
       this.global.trayManager.create();
       console.log('✅ [CONFIG-UI] System tray created successfully');
-      
-      // RACE FIX: The TrayManager was just recreated, so its isTracking is false.
-      // If tracking started before tray creation, updateState() will see
-      // wasTracking=false and correctly trigger startTrayTimer() + notification.
-      this.global.trayManager.updateState(
-        this.global.isTracking,
-        this.global.isPaused,
-        {
-          projectName: this.global.currentSession?.projectName || null,
-          projectId: this.global.currentProjectId || null,
-          startTime: this.global.sessionStartTime || null
+
+      void (async () => {
+        try {
+          if (this.global.isTracking && typeof this.global.trayManager.ensureCumulativeBaseFromDb === 'function') {
+            await this.global.trayManager.ensureCumulativeBaseFromDb();
+          }
+        } catch (e) {
+          console.warn('⚠️ [CONFIG-UI] ensureCumulativeBaseFromDb:', e?.message || e);
         }
-      );
-      this.global.trayManager.currentSession = this.global.currentSession;
-      
-      // Store reference for other functions
-      this.global.tray = this.global.trayManager.tray;
-      
-      // Pre-fetch and cache the project list on the tray
-      this._fetchProjectListForTray();
-      
-      if (!this.global.tray) {
-        console.error('❌ [CONFIG-UI] Tray object is null after creation!');
-      } else {
-        console.log('✅ [CONFIG-UI] Tray reference stored:', !!this.global.tray);
-      }
+        // RACE FIX: TrayManager was recreated; if tracking already started, sync state after DB base load.
+        this.global.trayManager.updateState(
+          this.global.isTracking,
+          this.global.isPaused,
+          {
+            projectName: this.global.currentSession?.projectName || null,
+            projectId: this.global.currentProjectId || null,
+            startTime: this.global.sessionStartTime || null
+          }
+        );
+        this.global.trayManager.currentSession = this.global.currentSession;
+        this.global.tray = this.global.trayManager.tray;
+        this._fetchProjectListForTray();
+        if (!this.global.tray) {
+          console.error('❌ [CONFIG-UI] Tray object is null after creation!');
+        } else {
+          console.log('✅ [CONFIG-UI] Tray reference stored:', !!this.global.tray);
+        }
+      })();
     } catch (error) {
       console.error('❌ [CONFIG-UI] Failed to create tray:', error);
       console.error('❌ [CONFIG-UI] Error stack:', error.stack);

@@ -16,6 +16,38 @@ window.electronAPI = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version')
 };
 
+/** HH:MM:SS from total seconds (for tracker / tray). */
+function formatSecondsAsHMS(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+/** Closed time_logs today (local day), excluding the current open session — for cumulative "worked today" UI. */
+async function refreshTodayCompletedBaseSeconds() {
+  try {
+    const s = await ipcRenderer.invoke('get-today-time-stats');
+    window.__completedTodayBaseSeconds = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
+  } catch {
+    window.__completedTodayBaseSeconds = 0;
+  }
+}
+
+/** Next calendar-day boundary (local) — shown under the Time Tracker clock */
+function updateTrackerDailyRefreshHint() {
+  const el = document.getElementById('trackerTodayHint');
+  if (!el) return;
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  const datePart = next.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const timePart = next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  el.textContent = `Daily total refreshes on ${datePart} at ${timePart} (your local time).`;
+}
+
+window.updateTrackerDailyRefreshHint = updateTrackerDailyRefreshHint;
+
 // Import our focused modules
 let AuthManager, UIManager, NotificationManager, IPCManager, AppHistoryManager, ActivityMonitor;
 
@@ -420,12 +452,11 @@ function setupModuleCommunication() {
     window.__trayTimerActive = true;
     const trackerTimer = document.getElementById('trackerTime');
     const dashboardTimer = document.getElementById('sessionTime');
-    if (data && data.display) {
-      // Tray timer is the authoritative source — always accept its value.
-      // Both tray and renderer now share the same session start time,
-      // so backward jumps should not occur.
-      if (trackerTimer) trackerTimer.textContent = data.display;
-      if (dashboardTimer) dashboardTimer.textContent = data.display;
+    if (data && (data.display || data.cumulativeDisplay)) {
+      const sessionStr = data.display || formatSecondsAsHMS(data.sessionElapsedSeconds ?? 0);
+      const cumulativeStr = data.cumulativeDisplay || sessionStr;
+      if (trackerTimer) trackerTimer.textContent = cumulativeStr;
+      if (dashboardTimer) dashboardTimer.textContent = sessionStr;
     }
   });
 
@@ -443,12 +474,14 @@ function setupModuleCommunication() {
       const minutes = Math.floor((elapsed % 3600) / 60);
       const seconds = elapsed % 60;
       const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      
+      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+      const cumulativeStr = formatSecondsAsHMS(base + elapsed);
+
       if (dashboardTimer) {
         dashboardTimer.textContent = timeString;
       }
       if (trackerTimer) {
-        trackerTimer.textContent = timeString;
+        trackerTimer.textContent = cumulativeStr;
       }
     }
   });
@@ -488,20 +521,23 @@ function setupModuleCommunication() {
       window.__lastTrackingStartTime = startTime;
       if (timerUpdateInterval) clearInterval(timerUpdateInterval);
       if (window.timerUpdateInterval) clearInterval(window.timerUpdateInterval);
+      await refreshTodayCompletedBaseSeconds();
       const st = new Date(startTime);
       const elapsed = Math.max(0, Math.floor((Date.now() - st.getTime()) / 1000));
       const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60), s = elapsed % 60;
       const ts = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
       if (dashboardTimer) dashboardTimer.textContent = ts;
-      if (trackerTimer) trackerTimer.textContent = ts;
+      if (trackerTimer) trackerTimer.textContent = formatSecondsAsHMS(base + elapsed);
       timerUpdateInterval = setInterval(() => {
         if (window.__trayTimerActive) return;
         const st2 = new Date(window.__lastTrackingStartTime);
         const el = Math.max(0, Math.floor((Date.now() - st2.getTime()) / 1000));
         const hh = Math.floor(el / 3600), mm = Math.floor((el % 3600) / 60), ss = el % 60;
         const t = `${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}:${ss.toString().padStart(2,'0')}`;
+        const b = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
         if (dashboardTimer) dashboardTimer.textContent = t;
-        if (trackerTimer) trackerTimer.textContent = t;
+        if (trackerTimer) trackerTimer.textContent = formatSecondsAsHMS(b + el);
       }, 1000);
       window.timerUpdateInterval = timerUpdateInterval;
       return;
@@ -513,6 +549,7 @@ function setupModuleCommunication() {
     if (state.synced && state.isTracking && state.startTime) {
       console.log('🔄 [TIMER] Synced event — updating start time without re-verification');
       window.__lastTrackingStartTime = state.startTime;
+      void refreshTodayCompletedBaseSeconds();
       return;
     }
     
@@ -551,6 +588,8 @@ function setupModuleCommunication() {
           // Clear any existing interval
           if (timerUpdateInterval) clearInterval(timerUpdateInterval);
           if (window.timerUpdateInterval) clearInterval(window.timerUpdateInterval);
+
+          await refreshTodayCompletedBaseSeconds();
           
           // Immediate update to avoid 1s delay
           const startTime = new Date(window.__lastTrackingStartTime);
@@ -559,12 +598,13 @@ function setupModuleCommunication() {
           const minutes = Math.floor((elapsed % 3600) / 60);
           const seconds = elapsed % 60;
           const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+          const base0 = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
           
           if (dashboardTimer) {
             dashboardTimer.textContent = timeString;
           }
           if (trackerTimer) {
-            trackerTimer.textContent = timeString;
+            trackerTimer.textContent = formatSecondsAsHMS(base0 + elapsed);
           }
           
           // Update both timers every second (fallback — skipped when tray timer is active)
@@ -572,18 +612,19 @@ function setupModuleCommunication() {
             // Main-process tray timer is the authoritative source; skip local calc
             if (window.__trayTimerActive) return;
 
-            const startTime = new Date(window.__lastTrackingStartTime);
-            const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
-            const hours = Math.floor(elapsed / 3600);
-            const minutes = Math.floor((elapsed % 3600) / 60);
-            const seconds = elapsed % 60;
-            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const startTime2 = new Date(window.__lastTrackingStartTime);
+            const elapsed2 = Math.floor((Date.now() - startTime2.getTime()) / 1000);
+            const hours2 = Math.floor(elapsed2 / 3600);
+            const minutes2 = Math.floor((elapsed2 % 3600) / 60);
+            const seconds2 = elapsed2 % 60;
+            const timeString2 = `${hours2.toString().padStart(2, '0')}:${minutes2.toString().padStart(2, '0')}:${seconds2.toString().padStart(2, '0')}`;
+            const b2 = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
             
             if (dashboardTimer) {
-              dashboardTimer.textContent = timeString;
+              dashboardTimer.textContent = timeString2;
             }
             if (trackerTimer) {
-              trackerTimer.textContent = timeString;
+              trackerTimer.textContent = formatSecondsAsHMS(b2 + elapsed2);
             }
           }, 1000);
           // Store globally so IPC manager can clear it
@@ -607,12 +648,18 @@ function setupModuleCommunication() {
             clearInterval(window.timerUpdateInterval);
             window.timerUpdateInterval = null;
           }
-          // Reset both displays to the same value
+          // Session clock stops; tracker shows today's completed total (no live session)
           if (dashboardTimer) {
             dashboardTimer.textContent = '00:00:00';
           }
           if (trackerTimer) {
-            trackerTimer.textContent = '00:00:00';
+            ipcRenderer.invoke('get-today-time-stats').then((s) => {
+              if (trackerTimer && s && typeof s.totalTime === 'number') {
+                trackerTimer.textContent = formatSecondsAsHMS(s.totalTime);
+              }
+            }).catch(() => {
+              if (trackerTimer) trackerTimer.textContent = '00:00:00';
+            });
           }
           window.__lastTrackingStartTime = null;
           // Reset tray timer flag so fallback timers can run on next start
@@ -640,7 +687,13 @@ function setupModuleCommunication() {
           dashboardTimer.textContent = '00:00:00';
         }
         if (trackerTimer) {
-          trackerTimer.textContent = '00:00:00';
+          ipcRenderer.invoke('get-today-time-stats').then((s) => {
+            if (trackerTimer && s && typeof s.totalTime === 'number') {
+              trackerTimer.textContent = formatSecondsAsHMS(s.totalTime);
+            }
+          }).catch(() => {
+            if (trackerTimer) trackerTimer.textContent = '00:00:00';
+          });
         }
         window.__lastTrackingStartTime = null;
       }
@@ -698,11 +751,8 @@ function setupModuleCommunication() {
         // Only update if we have valid elapsed time to avoid overwriting
         if (timerDisplay && data.timer.elapsed !== undefined && data.timer.elapsed !== null) {
           const elapsed = Math.floor(data.timer.elapsed / 1000);
-          const hours = Math.floor(elapsed / 3600);
-          const minutes = Math.floor((elapsed % 3600) / 60);
-          const seconds = elapsed % 60;
-          const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          timerDisplay.textContent = timeString;
+          const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+          timerDisplay.textContent = formatSecondsAsHMS(base + elapsed);
         }
       }
       
@@ -1057,6 +1107,7 @@ if (!window.__rendererInitAttached) {
     
     // Setup communication between modules
     setupModuleCommunication();
+    updateTrackerDailyRefreshHint();
     
     // Initialize dashboard displays
     initializeDashboard();
@@ -1321,7 +1372,7 @@ function setupLoginOsAccessPanel() {
 
   const setRow = (el, ok) => {
     if (!el) return;
-    el.textContent = ok ? 'OK' : 'Missing';
+    el.textContent = ok ? 'OK' : 'Not detected';
     el.style.color = ok ? '#15803d' : '#b45309';
   };
 
@@ -1337,8 +1388,10 @@ function setupLoginOsAccessPanel() {
     const ok = !!(perm && perm.screen && perm.accessibility);
     if (blockMsg) blockMsg.classList.toggle('hidden', ok);
     if (loginBtn) {
-      loginBtn.disabled = !ok;
-      loginBtn.title = ok ? '' : 'Grant Screen Recording and Accessibility, then tap Refresh status.';
+      // Never hard-block login on permission probe mismatch.
+      // Permission enforcement happens at tracking start and via explicit permission requests.
+      loginBtn.disabled = false;
+      loginBtn.title = ok ? '' : 'Permissions may be missing. You can still log in, then grant access from the app.';
     }
   };
 
@@ -1353,7 +1406,7 @@ function setupLoginOsAccessPanel() {
         const ok = !!(perm && perm.screen && perm.accessibility);
         summaryEl.textContent = ok
           ? 'Screen & Accessibility OK'
-          : 'Action needed — expand to grant access';
+          : 'Optional setup — expand to grant access';
       } else {
         const s = perm?.screen;
         const a = perm?.accessibility;
@@ -1364,10 +1417,7 @@ function setupLoginOsAccessPanel() {
     }
     if (process.platform === 'darwin' && toggle && !permError && perm) {
       const ok = !!(perm.screen && perm.accessibility);
-      if (!ok) {
-        panel.classList.remove('collapsed');
-        toggle.setAttribute('aria-expanded', 'true');
-      } else if (lastDarwinPermOk === false) {
+      if (ok && lastDarwinPermOk === false) {
         panel.classList.add('collapsed');
         toggle.setAttribute('aria-expanded', 'false');
       }
@@ -1393,8 +1443,8 @@ function setupLoginOsAccessPanel() {
         accessEl.style.color = '#64748b';
       }
       if (process.platform === 'darwin' && loginBtn) {
-        loginBtn.disabled = true;
-        loginBtn.title = 'Could not verify permissions. Tap Refresh status.';
+        loginBtn.disabled = false;
+        loginBtn.title = 'Could not verify permissions right now. You can still log in and retry access checks.';
       }
       syncLoginOsAccessChrome(null, e);
       if (process.platform === 'darwin' && toggle) {
@@ -1417,6 +1467,7 @@ function setupLoginOsAccessPanel() {
     }
     setTimeout(() => void updateLoginPermUI(), 600);
     setTimeout(() => void updateLoginPermUI(), 2000);
+    setTimeout(() => void updateLoginPermUI(), 5000);
   });
 
   if (shortcuts && ['darwin', 'win32', 'linux'].includes(process.platform)) {

@@ -248,17 +248,16 @@ class AuthManager {
     const loginLoader = document.getElementById('loginLoader');
     const errorDiv = document.getElementById('loginError');
 
-    // macOS: require Screen Recording + Accessibility before hitting Supabase (matches login OS panel gate)
+    // macOS: check permissions and guide user, but never block sign-in.
     if (typeof process !== 'undefined' && process.platform === 'darwin') {
       try {
         const perm = await this.ipcRenderer.invoke('check-permissions');
         if (!perm?.screen || !perm?.accessibility) {
           if (errorDiv) {
             errorDiv.textContent =
-              'Enable Screen Recording and Accessibility first (see System access under the sign-in box), then tap Refresh status.';
+              'Sign-in is allowed. For screenshots and activity tracking, grant Screen Recording and Accessibility from System access below.';
             errorDiv.style.display = 'block';
           }
-          return;
         }
       } catch (gateErr) {
         console.warn('[AUTH] macOS permission pre-check failed:', gateErr?.message || gateErr);

@@ -133,81 +133,72 @@ class SessionAuthManager {
     // Handle permission checking for onboarding guide
     this.ipcMain.handle('check-permissions', async (event) => {
       console.log('🚨 [PERMISSION-CHECK] Checking current permission status...');
-      
-      let screenPermission = 'granted';
-      let accessibilityPermission = true;
-      
-      if (process.platform === 'darwin') {
-        // Check if systemPreferences is available and has the methods
-        if (this.systemPreferences && typeof this.systemPreferences.getMediaAccessStatus === 'function') {
-          screenPermission = this.systemPreferences.getMediaAccessStatus('screen');
+
+      try {
+        const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
+        let screenStatus = getScreenStatus();
+        const accessibility = getAccessibilityAuthorized();
+
+        // Fallback probe for stale macOS status APIs.
+        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
+          try {
+            const screenshot = require('screenshot-desktop');
+            const probe = await screenshot({ format: 'png' });
+            if (probe && probe.length > 0) {
+              screenStatus = 'authorized';
+            }
+          } catch (_) {
+            // keep original status
+          }
         }
-        if (this.systemPreferences && typeof this.systemPreferences.isTrustedAccessibilityClient === 'function') {
-          accessibilityPermission = this.systemPreferences.isTrustedAccessibilityClient(false);
-        }
+
+        console.log('🚨 [PERMISSION-CHECK] Screen Recording:', screenStatus);
+        console.log('🚨 [PERMISSION-CHECK] Accessibility:', accessibility);
+
+        return {
+          screen: screenStatus === 'authorized',
+          accessibility: !!accessibility
+        };
+      } catch (error) {
+        console.error('❌ [PERMISSION-CHECK] Robust check failed:', error);
+        return { screen: false, accessibility: false };
       }
-      
-      console.log('🚨 [PERMISSION-CHECK] Screen Recording:', screenPermission);
-      console.log('🚨 [PERMISSION-CHECK] Accessibility:', accessibilityPermission);
-      
-      return {
-        screen: screenPermission === 'granted',
-        accessibility: accessibilityPermission
-      };
     });
 
     // Handle permission requests
     this.ipcMain.handle('request-permissions', async (event) => {
       console.log('🚨 [PERMISSION-REQUEST] Requesting permissions...');
-      
-      let screenPermission = 'granted';
-      let accessibilityPermission = true;
-      let finalScreenPermission = 'granted';
-      let finalAccessibilityPermission = true;
-      
-      if (process.platform === 'darwin') {
-        // Check if systemPreferences is available and has the methods
-        if (this.systemPreferences && typeof this.systemPreferences.getMediaAccessStatus === 'function') {
-          screenPermission = this.systemPreferences.getMediaAccessStatus('screen');
-          console.log('🚨 [PERMISSION-REQUEST] Current screen permission:', screenPermission);
-          
-          if (screenPermission !== 'granted') {
-            console.log('🚨 [PERMISSION-REQUEST] Requesting screen recording permission...');
-            if (typeof this.systemPreferences.askForMediaAccess === 'function') {
-              await this.systemPreferences.askForMediaAccess('screen');
-            }
-          }
-        }
-        
-        if (this.systemPreferences && typeof this.systemPreferences.isTrustedAccessibilityClient === 'function') {
-          accessibilityPermission = this.systemPreferences.isTrustedAccessibilityClient(false);
-          console.log('🚨 [PERMISSION-REQUEST] Current accessibility permission:', accessibilityPermission);
-          
-          if (!accessibilityPermission) {
-            console.log('🚨 [PERMISSION-REQUEST] Opening accessibility preferences...');
-            if (this.shell && typeof this.shell.openExternal === 'function') {
-              this.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
-            }
-          }
-        }
-        
-        // Check final status
-        if (this.systemPreferences && typeof this.systemPreferences.getMediaAccessStatus === 'function') {
-          finalScreenPermission = this.systemPreferences.getMediaAccessStatus('screen');
-        }
-        if (this.systemPreferences && typeof this.systemPreferences.isTrustedAccessibilityClient === 'function') {
-          finalAccessibilityPermission = this.systemPreferences.isTrustedAccessibilityClient(false);
-        }
+
+      try {
+        const { ensureMacPermissions } = require('../../system/permissions-check');
+        await ensureMacPermissions();
+      } catch (error) {
+        console.warn('⚠️ [PERMISSION-REQUEST] ensureMacPermissions failed:', error?.message || error);
       }
-      
-      console.log('🚨 [PERMISSION-REQUEST] Final screen permission:', finalScreenPermission);
-      console.log('🚨 [PERMISSION-REQUEST] Final accessibility permission:', finalAccessibilityPermission);
-      
-      return {
-        screen: finalScreenPermission === 'granted',
-        accessibility: finalAccessibilityPermission,
-        message: 'Permission request completed'
-      };
+
+      // Return fresh status after request flow.
+      try {
+        const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
+        let screenStatus = getScreenStatus();
+        const accessibility = getAccessibilityAuthorized();
+
+        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
+          try {
+            const screenshot = require('screenshot-desktop');
+            const probe = await screenshot({ format: 'png' });
+            if (probe && probe.length > 0) screenStatus = 'authorized';
+          } catch (_) {}
+        }
+
+        return {
+          screen: screenStatus === 'authorized',
+          accessibility: !!accessibility,
+          message: 'Permission request completed'
+        };
+      } catch (error) {
+        console.error('❌ [PERMISSION-REQUEST] Final status check failed:', error);
+        return { screen: false, accessibility: false, message: 'Permission request completed' };
+      }
     });
 
     // macOS permission checking

@@ -129,4 +129,4 @@ export class AiScreenshotAnalyzerProcessor {
       throw error;
     }
   }
-} 
+}

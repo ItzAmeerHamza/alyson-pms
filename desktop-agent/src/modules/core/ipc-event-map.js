@@ -218,21 +218,26 @@ class IPCEventMap {
         };
       };
 
-      // Prefer centralized system monitor if available
-      try {
-        if (global.systemMonitor?.performComprehensiveHealthCheck) {
-          const health = await global.systemMonitor.performComprehensiveHealthCheck();
-          const permissions = health.checks?.permissions || { status: 'unknown' };
-          return normalize({ success: true, ...permissions });
-        }
-      } catch (e) {
-        console.warn('⚠️ [IPC] System monitor permission check failed:', e.message);
-      }
-      // Fallback to cross-platform permissions module
+      // Use a lightweight direct check here.
+      // Avoid running comprehensive health checks from login/onboarding polling,
+      // which can trigger heavyweight screenshot tests and stale false negatives.
       try {
         const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
-        const screenStatus = getScreenStatus();
+        let screenStatus = getScreenStatus();
         const accessibility = getAccessibilityAuthorized();
+        // Extra fallback for macOS false negatives:
+        // if status API is stale but real capture works, treat screen permission as granted.
+        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
+          try {
+            const screenshot = require('screenshot-desktop');
+            const probe = await screenshot({ format: 'png' });
+            if (probe && probe.length > 0) {
+              screenStatus = 'authorized';
+            }
+          } catch (_) {
+            // Keep original status if probe fails
+          }
+        }
         // Input Monitoring no longer required — Accessibility covers input detection
         const allGranted = (screenStatus === 'authorized') && !!accessibility;
         return normalize({

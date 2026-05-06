@@ -25,6 +25,8 @@ class TrayManager {
     // Timer state
     this._timerInterval = null;
     this._trackingStartTime = null;  // Date object for when current session started
+    /** Seconds from closed time_logs today before the current open session (for "total worked today" display). */
+    this._cumulativeBaseSeconds = 0;
     this._currentProjectName = null;
     this._projectList = [];          // Cached project list [{project_id, name}]
     this._selectedProjectId = null;
@@ -317,13 +319,16 @@ class TrayManager {
 
     // Set initial display based on actual elapsed time (not always 00:00:00)
     const initialElapsed = Math.max(0, Math.floor((Date.now() - this._trackingStartTime.getTime()) / 1000));
+    const base = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+    const initialCumulative = base + initialElapsed;
     const initialDisplay = this._formatElapsed(initialElapsed);
+    const initialCumulativeDisplay = this._formatElapsed(initialCumulative);
 
     if (process.platform === 'darwin' && this.tray && !this.tray.isDestroyed()) {
       const hasSetTitle = typeof this.tray.setTitle === 'function';
       if (hasSetTitle) {
         try {
-          this.tray.setTitle(initialDisplay, { fontType: 'monospacedDigit' });
+          this.tray.setTitle(initialCumulativeDisplay, { fontType: 'monospacedDigit' });
         } catch (e) {
           console.error('❌ [TRAY] setTitle failed:', e?.message);
         }
@@ -337,22 +342,31 @@ class TrayManager {
 
         const elapsed = Math.floor((Date.now() - this._trackingStartTime.getTime()) / 1000);
         const display = this._formatElapsed(elapsed);
+        const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+        const cumulativeSeconds = Math.max(0, baseSec + elapsed);
+        const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
 
         if (process.platform === 'darwin') {
           // macOS: show timer text next to tray icon in the menu bar
           // Use monospacedDigit font for consistent width and better macOS compatibility
-          this.tray.setTitle(display, { fontType: 'monospacedDigit' });
+          this.tray.setTitle(cumulativeDisplay, { fontType: 'monospacedDigit' });
         }
         // All platforms: update tooltip with clear tracking indicator
         const projectLabel = this._currentProjectName || 'No Project';
-        this.tray.setToolTip(`▶ TRACKING: ${display} — ${projectLabel}`);
+        this.tray.setToolTip(`▶ Today: ${cumulativeDisplay} (session ${display}) — ${projectLabel}`);
 
         // Push elapsed time to renderer so the in-app timer stays in sync
         try {
           const { BrowserWindow } = require('electron');
           const windows = BrowserWindow.getAllWindows();
           if (windows.length > 0 && !windows[0].isDestroyed()) {
-            windows[0].webContents.send('tray-timer-tick', { display, elapsed });
+            windows[0].webContents.send('tray-timer-tick', {
+              display,
+              cumulativeDisplay,
+              elapsed,
+              cumulativeSeconds,
+              sessionElapsedSeconds: elapsed
+            });
           }
         } catch (_) { /* ignore send failures */ }
 
@@ -499,6 +513,7 @@ class TrayManager {
    * @param {string} [extra.projectId] - Current project ID
    * @param {Date|string} [extra.startTime] - Session start time
    * @param {Array} [extra.projectList] - Array of {project_id, name}
+   * @param {number} [extra.completedTodayBeforeSessionSeconds] - Closed sessions today (local day) before current run
    */
   updateState(isTracking, isPaused, extra = {}) {
     const wasTracking = this.isTracking;
@@ -509,6 +524,10 @@ class TrayManager {
     if (extra.projectId !== undefined) this._selectedProjectId = extra.projectId;
     if (extra.startTime !== undefined) {
       this._trackingStartTime = extra.startTime ? new Date(extra.startTime) : null;
+    }
+    if (extra.completedTodayBeforeSessionSeconds !== undefined) {
+      const n = Number(extra.completedTodayBeforeSessionSeconds);
+      this._cumulativeBaseSeconds = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
     }
     if (extra.projectList !== undefined) this._projectList = extra.projectList;
 
@@ -526,9 +545,28 @@ class TrayManager {
     } else if (!isTracking && wasTracking) {
       this.stopTrayTimer();
       this._trackingStartTime = null;
+      this._cumulativeBaseSeconds = 0;
     }
 
     this.updateMenu();
+  }
+
+  /**
+   * Load closed time_logs total for today (excludes open row) — used when tray is created after tracking already started.
+   */
+  async ensureCumulativeBaseFromDb() {
+    try {
+      const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
+      const supabase = global.supabaseClient || global.supabaseService || global.supabase;
+      const userId = global.currentUserId || global.trackingManager?.currentSession?.user_id;
+      const currentTimeLogId = global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null;
+      if (!supabase || !userId) return;
+      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId);
+      this._cumulativeBaseSeconds = agg.completedClosedSeconds;
+      console.log('⏱️ [TRAY] Cumulative base synced from DB:', this._cumulativeBaseSeconds, 's');
+    } catch (e) {
+      console.warn('⚠️ [TRAY] ensureCumulativeBaseFromDb failed:', e?.message || e);
+    }
   }
 
   /**

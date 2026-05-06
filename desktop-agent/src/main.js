@@ -4436,16 +4436,7 @@ if (isElectronContext && ipcMain) {
           : true;
 
         if (!hasAccessibility) {
-          console.log('🔐 [USER-ONBOARDING] Accessibility permission missing, prompting user...');
-          // Trigger native macOS Accessibility permission dialog
-          // Pass true to isTrustedAccessibilityClient to show the system prompt
-          // This is needed for keyboard/mouse activity detection (replaces old Input Monitoring)
-          try {
-            systemPreferences.isTrustedAccessibilityClient(true);
-            console.log('🔐 [USER-ONBOARDING] Accessibility permission prompt shown');
-          } catch (permErr) {
-            console.warn('⚠️ [USER-ONBOARDING] Could not prompt for Accessibility:', permErr.message);
-          }
+          console.log('🔐 [USER-ONBOARDING] Accessibility permission not yet detected (no auto-prompt)');
         } else {
           console.log('✅ [USER-ONBOARDING] Accessibility permission already granted');
         }
@@ -6049,86 +6040,43 @@ if (isElectronContext && ipcMain) {
     return state;
   });
 
-  // Get today's time statistics for dashboard (fallback if DataStatsManager not available)
-  if (!global.dataStatsManager) {
-    ipcMain.handle('get-today-time-stats', async () => {
-      try {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
+  // Today's time_logs aggregate (always register — DataStatsManager does not own this channel)
+  try { ipcMain.removeHandler('get-today-time-stats'); } catch {}
+  ipcMain.handle('get-today-time-stats', async () => {
+    try {
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
-        if (!global.supabaseService && !global.supabase) {
-          console.log('⚠️ [TODAY-TIME-STATS] No Supabase service available');
-          return { totalTime: 0, error: 'No database connection' };
-        }
-
-        const supabase = global.supabaseService || global.supabase;
-        const userId = global.currentUserId || config.user_id || '0c3d3092-913e-436f-a352-3378e558c34f';
-
-        // Get today's date range
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT time_logs', ctx: { userId, startOfDay: startOfDay.toISOString(), endOfDay: endOfDay.toISOString() } }); } catch { }
-
-        // Query time logs for today (include id for stale session filtering)
-        const { data: timeLogs, error } = await supabase
-          .from('time_logs')
-          .select('id, start_time, end_time')
-          .eq('user_id', userId)
-          .gte('start_time', startOfDay.toISOString())
-          .lt('start_time', endOfDay.toISOString())
-          .order('start_time', { ascending: false });
-
-        if (error) {
-          console.error('❌ [TODAY-TIME-STATS] Database error:', error);
-          return { totalTime: 0, error: error.message };
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT RESULT', ctx: { rows: timeLogs?.length || 0 } }); } catch { }
-
-        let totalSeconds = 0;
-
-        // FIX-7: Only treat the CURRENT active session as ongoing.
-        // Stale unclosed sessions (from crashes, etc.) should be skipped,
-        // matching the DataStatsManager pattern.
-        const currentTimeLogId = global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null;
-
-        if (timeLogs && timeLogs.length > 0) {
-          timeLogs.forEach(log => {
-            if (log.start_time && log.end_time) {
-              const start = new Date(log.start_time);
-              const end = new Date(log.end_time);
-              const duration = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
-              totalSeconds += duration;
-            } else if (log.start_time && !log.end_time) {
-              // FIX-7: Only count the current active session as ongoing.
-              // Skip stale unclosed sessions to prevent inflated totals.
-              if (currentTimeLogId && log.id === currentTimeLogId) {
-                const start = new Date(log.start_time);
-                const now = new Date();
-                const duration = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
-                totalSeconds += duration;
-              }
-              // else: stale unclosed session — skip
-            }
-          });
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: totalSeconds, rows: timeLogs?.length || 0 } }); } catch { }
-
-        return {
-          totalTime: totalSeconds,
-          timeLogsCount: timeLogs?.length || 0,
-          userId: userId,
-          date: today.toISOString().split('T')[0]
-        };
-
-      } catch (error) {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
-        return { totalTime: 0, error: error.message };
+      if (!global.supabaseService && !global.supabase) {
+        console.log('⚠️ [TODAY-TIME-STATS] No Supabase service available');
+        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
       }
-    });
-  }
+
+      const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
+      const supabase = global.supabaseService || global.supabase;
+      const userId = global.currentUserId || config.user_id || config.userId;
+      if (!userId) {
+        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'User not authenticated' };
+      }
+
+      const currentTimeLogId = global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null;
+      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId);
+
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: agg.totalTime, completed_closed: agg.completedClosedSeconds } }); } catch { }
+
+      const today = new Date();
+      return {
+        totalTime: agg.totalTime,
+        completedTodayBeforeCurrentSessionSeconds: agg.completedClosedSeconds,
+        ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
+        timeLogsCount: agg.timeLogsCount,
+        userId,
+        date: today.toISOString().split('T')[0]
+      };
+    } catch (error) {
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
+      return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: error.message };
+    }
+  });
 
   // Get weekly time statistics for dashboard
   // DataStatsManager handles weekly stats - fallback removed
