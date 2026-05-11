@@ -1,0 +1,17 @@
+{
+  "name": "screenshots-s3-migrate",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "One-off migration: Supabase screenshots → S3 with AVIF/WebP compression",
+  "scripts": {
+    "migrate": "node migrate.mjs",
+    "migrate:dry": "node migrate.mjs --dry-run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@supabase/supabase-js": "^2.49.8",
+    "dotenv": "^16.4.7",
+    "sharp": "^0.33.5"
+  }
+}
