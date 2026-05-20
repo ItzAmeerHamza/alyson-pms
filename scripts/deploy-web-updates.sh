@@ -9,12 +9,12 @@ echo "🌐 Deploying Web App Updates to Vercel..."
 echo "========================================"
 
 # Get current version
-CURRENT_VERSION=$(node -p "require('./package.json').version")
+CURRENT_VERSION=$(node -p "require('./web/package.json').version")
 echo "📦 Current version: $CURRENT_VERSION"
 
 # Build the web application
 echo "🔨 Building web application..."
-npm run build
+npm run build -w web
 
 # Deploy to Vercel
 echo "🚀 Deploying to Vercel..."

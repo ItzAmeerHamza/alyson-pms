@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION=${1:-$(node -p "require('./package.json').version")}
+VERSION=${1:-$(node -p "require('./web/package.json').version")}
 
 echo "🔗 Updating download links for version $VERSION"
 echo "=============================================="
@@ -18,7 +18,7 @@ BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/v$VERSION"
 echo "📋 Base URL: $BASE_URL"
 
 # Update download page component
-cat > src/pages/download/index.tsx << EOF
+cat > web/src/pages/download/index.tsx << EOF
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

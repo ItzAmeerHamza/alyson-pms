@@ -1,6 +1,7 @@
 {
-  "buildCommand": "npm run build:dev",
-  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build:dev -w web",
+  "outputDirectory": "web/dist",
   "framework": "vite",
   "rewrites": [
     {
@@ -64,7 +65,7 @@
       "source": "/(.*\\.js)",
       "headers": [
         {
-          "key": "Content-Type", 
+          "key": "Content-Type",
           "value": "application/javascript"
         }
       ]

@@ -55,7 +55,9 @@ function deletePattern(pattern) {
   try {
     // Use glob to find matching files
     const { execSync } = require('child_process');
-    const files = execSync(`find . -path "${pattern}" -type f 2>/dev/null || true`, {
+    const files = execSync(
+      `find . -path "./node_modules" -prune -o -path "${pattern}" -type f -print 2>/dev/null || true`,
+      {
       cwd: PROJECT_ROOT,
       encoding: 'utf8',
     })

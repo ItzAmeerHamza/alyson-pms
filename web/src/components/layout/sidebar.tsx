@@ -45,6 +45,7 @@ import {
   Building2,
   HeartPulse,
   Wallet,
+  CircleHelp,
 } from "lucide-react";
 
 // Global flag to control debug logging (set to false for production)
@@ -149,6 +150,12 @@ const Sidebar = () => {
           href: "/employee/time-tracker",
           icon: Timer,
           description: "Track your work time"
+        },
+        {
+          title: "FAQ",
+          href: "/faq",
+          icon: CircleHelp,
+          description: "Tracking, screenshots, permissions, and Mac install help"
         }
       ]
     },
@@ -182,6 +189,12 @@ const Sidebar = () => {
           href: "/team-leader",
           icon: Users,
           description: "View your team"
+        },
+        {
+          title: "FAQ",
+          href: "/faq",
+          icon: CircleHelp,
+          description: "Tracking, screenshots, permissions, and Mac install help"
         }
       ]
     }
@@ -314,6 +327,12 @@ const Sidebar = () => {
       title: "ADMINISTRATION",
       items: [
         {
+          title: "FAQ",
+          href: "/faq",
+          icon: CircleHelp,
+          description: "Tracking, screenshots, and permissions"
+        },
+        {
           title: "System Health",
           href: "/admin/system-health",
           icon: HeartPulse,
@@ -360,6 +379,12 @@ const Sidebar = () => {
     {
       title: "SUPER ADMIN",
       items: [
+        {
+          title: "FAQ",
+          href: "/faq",
+          icon: CircleHelp,
+          description: "Tracking, screenshots, and permissions"
+        },
         {
           title: "Super Admin Dashboard",
           href: "/super-admin",

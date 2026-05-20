@@ -77,17 +77,17 @@ echo -e "${GREEN}✅ Version updated to $NEW_VERSION${NC}"
 # Step 2: Update download URLs
 echo -e "${BLUE}🔗 Step 2: Updating download URLs...${NC}"
 
-# Update src/pages/download/index.tsx
-sed -i '' "s/const version = \"v[0-9.]*\"/const version = \"v$NEW_VERSION\"/" src/pages/download/index.tsx
+# Update web/src/pages/download/index.tsx
+sed -i '' "s/const version = \"v[0-9.]*\"/const version = \"v$NEW_VERSION\"/" web/src/pages/download/index.tsx
 
-# Update src/components/ui/desktop-download.tsx
-sed -i '' "s/const currentVersion = \"[0-9.]*\"/const currentVersion = \"$NEW_VERSION\"/" src/components/ui/desktop-download.tsx
+# Update web/src/components/ui/desktop-download.tsx
+sed -i '' "s/const currentVersion = \"[0-9.]*\"/const currentVersion = \"$NEW_VERSION\"/" web/src/components/ui/desktop-download.tsx
 
 echo -e "${GREEN}✅ Download URLs updated${NC}"
 
 # Step 3: Build web application
 echo -e "${BLUE}🏗️ Step 3: Building web application...${NC}"
-npm run build
+npm run build -w web
 echo -e "${GREEN}✅ Web application built${NC}"
 
 # Step 4: Build desktop application with signing

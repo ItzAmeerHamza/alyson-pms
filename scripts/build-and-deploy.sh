@@ -15,7 +15,7 @@ if [ ! -f "package.json" ]; then
 fi
 
 # Get version from package.json
-VERSION=$(node -p "require('./package.json').version")
+VERSION=$(node -p "require('./web/package.json').version")
 echo "📦 Building version: $VERSION"
 
 # Check if certificates are installed

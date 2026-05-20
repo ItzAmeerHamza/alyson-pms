@@ -57,6 +57,7 @@ import OrganizationsPage from '@/pages/super-admin/organizations';
 import OrganizationDetailPage from '@/pages/super-admin/organizations/[id]';
 import TeamLeaderDashboard from '@/pages/team-leader/dashboard';
 import TeamLeaderEmployeeDetail from '@/pages/team-leader/employee-detail';
+import FaqPage from '@/pages/faq';
 
 // import DebugUrlTracking from '@/components/debug/debug-url-tracking';
 
@@ -313,6 +314,30 @@ const EmployeeLayoutWrapper = React.memo(({ children, routeName }: { children: R
   );
 });
 
+const AuthenticatedUserRoute = React.memo(({ children }: { children: React.ReactNode }) => {
+  const { userDetails, loading } = useAuth();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
+  if (!userDetails) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+});
+
+const FaqLayoutWrapper = React.memo(({ children, routeName }: { children: React.ReactNode; routeName: string }) => (
+  <ProtectedRoute>
+    <AuthenticatedUserRoute>
+      <AppLayout>
+        <RouteWrapper routeName={routeName}>{children}</RouteWrapper>
+      </AppLayout>
+    </AuthenticatedUserRoute>
+  </ProtectedRoute>
+));
+
 // Admin or Team Leader route guard (view access for shared pages)
 const AdminOrTeamLeaderRoute = React.memo(({ children }: { children: React.ReactNode }) => {
   const { userDetails, loading } = useAuth();
@@ -466,6 +491,15 @@ function AppRoutes() {
           <RouteWrapper routeName="confirm">
             <ConfirmPage />
           </RouteWrapper>
+        }
+      />
+
+      <Route
+        path="/faq"
+        element={
+          <FaqLayoutWrapper routeName="faq">
+            <FaqPage />
+          </FaqLayoutWrapper>
         }
       />
 

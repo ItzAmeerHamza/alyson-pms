@@ -1,0 +1,94 @@
+[build]
+  command = "npm run build:dev"
+  publish = "dist"
+
+# Environment variables should be set in Netlify dashboard, not here
+# [build.environment]
+#   VITE_SUPABASE_URL = "Set in Netlify Environment Variables"
+#   VITE_SUPABASE_ANON_KEY = "Set in Netlify Environment Variables"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Content-Type = "text/css"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Content-Type = "text/html"
+
+# Binary file headers for downloads
+[[headers]]
+  for = "/*.dmg"
+  [headers.values]
+    Content-Type = "application/x-apple-diskimage"
+    Content-Disposition = "attachment"
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "/*.exe"
+  [headers.values]
+    Content-Type = "application/x-msdownload"
+    Content-Disposition = "attachment"
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "/*.AppImage"
+  [headers.values]
+    Content-Type = "application/x-executable"
+    Content-Disposition = "attachment"
+    Cache-Control = "public, max-age=31536000"
+
+# Serve static assets first - these should not redirect
+[[redirects]]
+  from = "/assets/*"
+  to = "/assets/:splat"
+  status = 200
+
+# Serve debug tool directly
+[[redirects]]
+  from = "/debug-production-tokens.html"
+  to = "/debug-production-tokens.html"
+  status = 200
+
+# API endpoints should not redirect (if any)
+[[redirects]]
+  from = "/api/*"
+  to = "/api/:splat"
+  status = 200
+
+# Serve common static files directly
+[[redirects]]
+  from = "/*.js"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*.css"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*.ico"
+  to = "/:splat"
+  status = 200
+
+# SPA fallback for client-side routing - MUST BE LAST
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

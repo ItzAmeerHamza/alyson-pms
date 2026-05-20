@@ -1,11 +1,9 @@
 [build]
+  base = "web"
   command = "npm run build:dev"
   publish = "dist"
 
 # Environment variables should be set in Netlify dashboard, not here
-# [build.environment]
-#   VITE_SUPABASE_URL = "Set in Netlify Environment Variables"
-#   VITE_SUPABASE_ANON_KEY = "Set in Netlify Environment Variables"
 
 [[headers]]
   for = "/*"
@@ -31,7 +29,6 @@
   [headers.values]
     Content-Type = "text/html"
 
-# Binary file headers for downloads
 [[headers]]
   for = "/*.dmg"
   [headers.values]
@@ -53,25 +50,21 @@
     Content-Disposition = "attachment"
     Cache-Control = "public, max-age=31536000"
 
-# Serve static assets first - these should not redirect
 [[redirects]]
   from = "/assets/*"
   to = "/assets/:splat"
   status = 200
 
-# Serve debug tool directly
 [[redirects]]
   from = "/debug-production-tokens.html"
   to = "/debug-production-tokens.html"
   status = 200
 
-# API endpoints should not redirect (if any)
 [[redirects]]
   from = "/api/*"
   to = "/api/:splat"
   status = 200
 
-# Serve common static files directly
 [[redirects]]
   from = "/*.js"
   to = "/:splat"
@@ -87,7 +80,6 @@
   to = "/:splat"
   status = 200
 
-# SPA fallback for client-side routing - MUST BE LAST
 [[redirects]]
   from = "/*"
   to = "/index.html"

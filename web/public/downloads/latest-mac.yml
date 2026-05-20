@@ -1,0 +1,11 @@
+version: 1.0.52
+files:
+  - url: TimeFlow-v1.0.52-Intel.dmg
+    sha512: aeff5ab938f977bb81fc755d680d30605dc68e6c0c99117d134e4cd898da87276d5adccb6d09ad0b07feb4eba3f7daccf65a5932c69ada24be342babeab93008
+    size: 106165033
+  - url: TimeFlow-v1.0.52-ARM64.dmg
+    sha512: f05da8713ae354ba4dd76129a295b8d52c47f71da29dd8eb4564815a244ad079b2d96352053cca212dd2e1ba8faa142ca8139578ede1a4ed591430f6be0a04b9
+    size: 98671418
+path: TimeFlow-v1.0.52-Intel.dmg
+sha512: aeff5ab938f977bb81fc755d680d30605dc68e6c0c99117d134e4cd898da87276d5adccb6d09ad0b07feb4eba3f7daccf65a5932c69ada24be342babeab93008
+releaseDate: '2025-07-06T05:59:00.000Z'

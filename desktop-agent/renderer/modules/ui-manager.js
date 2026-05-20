@@ -73,7 +73,7 @@ class UIManager {
     };
     
     // Cache all page sections
-    const pageIds = ['dashboard', 'timetracker', 'screenshots', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
+    const pageIds = ['dashboard', 'timetracker', 'screenshots', 'faq', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
     pageIds.forEach(pageId => {
       const pageElement = document.getElementById(pageId + 'Page');
       if (pageElement) {
@@ -306,7 +306,8 @@ class UIManager {
       'url-activity': 'URL History',
       'app-activity': 'App Detection',
       'activity-between-screenshots': 'Activity Monitor',
-      'today-history': "Today's History"
+      'today-history': "Today's History",
+      'faq': 'FAQ'
     };
     
     pageTitle.textContent = pageTitles[pageId] || 'Dashboard';

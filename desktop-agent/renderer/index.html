@@ -4514,6 +4514,11 @@
                         <i data-lucide="camera" class="nav-icon"></i>
                         <span>Screenshots</span>
                     </div>
+                    
+                    <div class="nav-item" data-page="faq">
+                        <i data-lucide="circle-help" class="nav-icon"></i>
+                        <span>FAQ</span>
+                    </div>
                 </div>
                 
                 <div class="nav-section" id="monitoringSection" style="display: none;">
@@ -4966,6 +4971,72 @@
                     <!-- Screenshots Grid -->
                     <div id="trackerScreenshotsGrid" class="tracker-screenshots-grid" style="display: none;">
                         <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQ PAGE -->
+            <div id="faqPage" class="page-section">
+                <div class="control-section">
+                    <div class="control-header">
+                        <div class="control-title">Frequently asked questions</div>
+                        <div class="control-subtitle">How Alyson PM tracks time, uses screenshots, and which permissions it needs</div>
+                    </div>
+                    <div class="faq-list" style="max-width: 720px;">
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How does the app track my time?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">When you start the timer, the agent records your active work session. Time is counted while tracking is on, along with optional signals your organization enables (idle detection, focused app, and URLs where supported). Stop the timer or log out to end the session.</p>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How do screenshots work?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">If enabled by your organization, the desktop agent captures still images of your displays on a schedule while you are clocked in. They are still images—not continuous screen recording unless your company uses a separate product or policy that says otherwise.</p>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How often are screenshots taken?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">The interval is set by your administrator in the web portal (often about one to several minutes). The agent follows that schedule while tracking is active. Your org may also enforce a maximum gap without a successful capture—ask IT if tracking stops unexpectedly.</p>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">Does the app record audio or the microphone?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">No. The agent does not record microphone input or system audio for time tracking or screenshots.</p>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">What permissions does the app need?</summary>
+                            <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
+                                <p style="margin: 0 0 8px;">Typical prompts include:</p>
+                                <ul style="margin: 0; padding-left: 1.25rem;">
+                                    <li><strong style="color: #0f172a;">Screen recording / capture</strong> — for screenshots when enabled.</li>
+                                    <li><strong style="color: #0f172a;">Accessibility</strong> (macOS) — for focused window and related activity features.</li>
+                                    <li><strong style="color: #0f172a;">Optional browser helpers</strong> — only if your org enables precise URL capture.</li>
+                                </ul>
+                            </div>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How do I grant permissions?</summary>
+                            <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
+                                <p style="margin: 0 0 8px;"><strong style="color: #0f172a;">macOS:</strong> System Settings → Privacy &amp; Security → Screen Recording and Accessibility. Enable this app, then quit and reopen if prompted.</p>
+                                <p style="margin: 0;"><strong style="color: #0f172a;">Windows:</strong> Follow the installer or IT guide under Settings → Privacy for screen capture if asked.</p>
+                                <p style="margin: 8px 0 0;">You can also use the Privacy shortcuts in the sidebar footer when shown.</p>
+                            </div>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">What is AI analysis?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">In the web portal, administrators may run AI-assisted reporting (for example AI Insights) on data that was already collected—such as summarizing patterns from screenshots and activity. It analyzes existing records; it is not a separate hidden recorder. Ask your admin for the official policy that applies to your organization.</p>
+                        </details>
+                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">macOS blocked Alyson PM (not from an identified developer)</summary>
+                            <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
+                                <p style="margin: 0 0 10px;">The app may not be notarized yet. You can allow it manually.</p>
+                                <p style="margin: 0 0 8px; font-weight: 600; color: #0f172a;">Option 1: Allow the app manually in System Preferences</p>
+                                <p style="margin: 0 0 6px;">On macOS Ventura or later, use <strong style="color: #0f172a;">System Settings</strong> → <strong style="color: #0f172a;">Privacy &amp; Security</strong> and look for <strong style="color: #0f172a;">Open Anyway</strong> after you try to open the app once.</p>
+                                <ol style="margin: 10px 0 0; padding-left: 1.25rem;">
+                                    <li style="margin-bottom: 6px;">Click Done on the warning message.</li>
+                                    <li style="margin-bottom: 6px;">Open System Preferences.</li>
+                                    <li style="margin-bottom: 6px;">Go to Security &amp; Privacy.</li>
+                                    <li style="margin-bottom: 6px;">In the General tab, you should see a message saying &quot;Alyson PM was blocked from use because it is not from an identified developer&quot; with an option to Open Anyway.</li>
+                                    <li>Click Open Anyway, then enter your password if prompted.</li>
+                                </ol>
+                            </div>
+                        </details>
                     </div>
                 </div>
             </div>

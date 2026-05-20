@@ -34,7 +34,7 @@ cd ..
 
 # Step 1: Build web app
 echo -e "${BLUE}🌐 Building web application...${NC}"
-npm run build:dev
+npm run build:dev -w web
 
 # Step 2: Build electron components  
 echo -e "${BLUE}⚡ Building electron components...${NC}"

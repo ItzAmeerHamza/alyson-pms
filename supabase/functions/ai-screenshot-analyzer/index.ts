@@ -61,7 +61,7 @@ function getDeepSeekChatUrl(): string {
 
 /** Only models we allow from request body (prevents arbitrary model injection). */
 const ALLOWED_DEEPSEEK_MODELS = new Set(['deepseek-v4-flash', 'deepseek-v4-pro']);
-const ANALYZER_RUNTIME_VERSION = '5.4.0-canonical-screen-analysis';
+const ANALYZER_RUNTIME_VERSION = '5.4.5-screen-analysis-extended-schema';
 
 /** DeepSeek JSON schema stored in screenshots.screen_analysis */
 const CANONICAL_SCREEN_KEYS = [
@@ -82,6 +82,9 @@ const CANONICAL_SCREEN_KEYS = [
   'confidence_score',
   'recommendation',
   'metadata',
+  'gaming_detection',
+  'coding_detection',
+  'additional_signals',
 ] as const;
 
 function screenAnalysisMaxTokens(): number {
@@ -583,9 +586,180 @@ ${intelligenceSchemaJsonBlock()}
 
 Set analysis_method_note explicitly: state that this run used DeepSeek chat completions with text-only input (no pixels), and summarize what inputs you received (transcript yes/no, metadata fields used).
 
+If the server meta block below includes image_pixel_width and image_pixel_height, a real screenshot was captured (pixels exist in storage). You MUST NOT claim there is "no visual data" or "only metadata" in the sense of no image — you only lack the bitmap in this API call. Infer plausible on-screen categories (e.g. browser games, PWAs, media) from app name, window title, URL, and dimensions; use unknown labels only when truly ambiguous.
+
 Textual inputs for this request:
 ${transcriptBlock}
 ${serverMetaHint}`;
+}
+
+function isBrowserLikeApp(app: string): boolean {
+  const a = app.toLowerCase();
+  return (
+    a.includes('chrome') ||
+    a.includes('chromium') ||
+    a.includes('edge') ||
+    a.includes('brave') ||
+    a.includes('firefox') ||
+    a.includes('safari') ||
+    a.includes('opera') ||
+    a.includes('vivaldi') ||
+    a.includes('arc') ||
+    a.includes('browser')
+  );
+}
+
+function isWeakWindowTitle(title: string): boolean {
+  const t = title.trim();
+  if (!t) return true;
+  const low = t.toLowerCase();
+  if (WINDOW_TITLE_SENTINELS.has(low)) return true;
+  if (low === 'no window' || /^no window\b/i.test(t)) return true;
+  if (t.length < 2) return true;
+  return false;
+}
+
+/**
+ * When text-only intelligence runs but we sniffed real image bytes, steer the LLM away from
+ * "no visual data" hallucinations (common with Chrome + blank/PWA window titles during web games).
+ */
+function buildHeuristicTranscriptForTextOnly(
+  sniff: NonNullable<ReturnType<typeof sniffImageMeta>>,
+  app: string,
+  windowTitle: string,
+  activeUrl: string,
+): string {
+  const parts: string[] = [
+    'Heuristic agent note (not OCR; use with metadata):',
+    `Server verified a full raster screenshot exists (${sniff.image_pixel_width}x${sniff.image_pixel_height}px, ${sniff.image_file_format_mime}).`,
+    `Foreground app/process (metadata): ${app || '(unknown)'}.`,
+    `OS window title (metadata, may be empty for PWAs / borderless web / in-tab games): ${windowTitle || '(empty or unknown)'}.`,
+    `Active URL if captured: ${activeUrl || '(unknown)'}.`,
+  ];
+  if (isBrowserLikeApp(app) && isWeakWindowTitle(windowTitle)) {
+    parts.push(
+      'Interpretation hint: Browser with missing/generic window title + verified bitmap often means in-browser casual game, embedded game portal, streaming/video tab, or fullscreen web app — set primary_activity_hypothesis and active_surface to reflect recreational web / possible gaming (not literal "unknown" for both coarse and fine unless you also have contradictory evidence).',
+    );
+    parts.push(
+      'Do NOT write that there is "no visual data" or "only metadata" — pixels were captured; this API call simply does not attach the bitmap.',
+    );
+  } else if (isWeakWindowTitle(windowTitle)) {
+    parts.push(
+      'Interpretation hint: Non-browser foreground with empty/generic window title (e.g. "No Window") is common for fullscreen games, game launchers, emulators, or borderless windows — do not infer "desktop idle" or unknown-unknown from title alone when a full-size bitmap exists.',
+    );
+    parts.push(
+      'Do NOT write that there is "no visual data" or "only metadata" — pixels were captured; this API call simply does not attach the bitmap.',
+    );
+  }
+  return parts.join(' ');
+}
+
+const BAD_TEXT_ONLY_RATIONALE = /no visual or URL data|only metadata indicates|no window is active|lack(?:s)? the bitmap.*no pixels|transient state|viewing the desktop/i;
+
+/**
+ * If the text model still contradicts pixel proof, fix labels/rationale so UX and reporting are not nonsense.
+ */
+function repairTextOnlyIntelligenceIfPixelProof(
+  intel: Record<string, unknown> | null | undefined,
+  sniff: NonNullable<ReturnType<typeof sniffImageMeta>> | null,
+  ctx: { app: string; windowTitle: string; activeUrl: string },
+): Record<string, unknown> | null {
+  if (!intel || typeof intel !== 'object' || !sniff) return intel;
+  const primary = intel.primary_activity_hypothesis;
+  if (!primary || typeof primary !== 'object') return intel;
+  const p = primary as Record<string, unknown>;
+  const rationale = String(p.rationale || '');
+  const fine = String(p.fine_label || '').toLowerCase();
+  const coarse = String(p.coarse_label || '').toLowerCase();
+  const weakTitle = isWeakWindowTitle(ctx.windowTitle);
+  const browserWeak = isBrowserLikeApp(ctx.app) && weakTitle;
+
+  const idleMislabel =
+    weakTitle &&
+    (fine.includes('idle') ||
+      coarse === 'idle' ||
+      /^idle$/i.test(fine.trim()) ||
+      /^idle$/i.test(coarse.trim()) ||
+      /desktop\s*idle/i.test(fine) ||
+      /desktop\s*idle/i.test(coarse));
+
+  const insufficientEv = weakTitle && /insufficient evidence/i.test(rationale);
+
+  const unknownPair = fine === 'unknown' && coarse === 'unknown';
+
+  const looksBad =
+    BAD_TEXT_ONLY_RATIONALE.test(rationale) ||
+    insufficientEv ||
+    idleMislabel ||
+    (unknownPair && weakTitle);
+
+  if (!looksBad) return intel;
+
+  const w = sniff.image_pixel_width;
+  const h = sniff.image_pixel_height;
+  const app = ctx.app || '(unknown)';
+  const wt = ctx.windowTitle || '(empty or generic e.g. No Window)';
+  const url = ctx.activeUrl || '(none)';
+
+  const relabelGameLike =
+    browserWeak ||
+    (weakTitle && !isBrowserLikeApp(ctx.app) && (idleMislabel || insufficientEv || unknownPair));
+
+  if (browserWeak) {
+    p.rationale =
+      `Screenshot bitmap verified server-side (${w}x${h}px). Foreground app "${app}" with weak/generic window title ("${wt}") and URL "${url}". ` +
+      `Fullscreen web games, PWAs, and borderless Chrome often report "No Window" or blank titles — this is not desktop idle. ` +
+      `Classify as recreational web / likely in-browser game or media unless you have strong contradictory metadata.`;
+
+    p.coarse_label = 'recreational_web_or_fullscreen_app';
+    p.fine_label = 'likely_in_browser_game_or_media';
+    const c0 = Number(p.confidence_0_1);
+    p.confidence_0_1 = Number.isFinite(c0) && c0 <= 0.55 ? c0 : 0.48;
+  } else if (weakTitle && (idleMislabel || insufficientEv || unknownPair)) {
+    p.rationale =
+      `Screenshot bitmap verified server-side (${w}x${h}px). Foreground app "${app}" with weak/generic window title ("${wt}") and URL "${url}". ` +
+      `Fullscreen games, launchers, and borderless windows often report "No Window" or empty titles — that is not evidence of desktop idle. ` +
+      `Classify as recreational fullscreen app / possible game or media unless metadata clearly contradicts.`;
+
+    p.coarse_label = 'recreational_fullscreen_app';
+    p.fine_label = 'possible_game_or_media_fullscreen';
+    const c0 = Number(p.confidence_0_1);
+    p.confidence_0_1 = Number.isFinite(c0) && c0 <= 0.55 ? c0 : 0.48;
+  } else if (BAD_TEXT_ONLY_RATIONALE.test(rationale)) {
+    p.rationale =
+      `Screenshot bitmap verified server-side (${w}x${h}px). App "${app}", window "${wt}", URL "${url}". ` +
+      `Pixels exist in storage; do not claim there is no visual data — this analysis path did not include the image bitmap.`;
+  }
+
+  if (relabelGameLike) {
+    const surf = intel.active_surface;
+    if (surf && typeof surf === 'object') {
+      const s = surf as Record<string, unknown>;
+      const st = String(s.surface_type || '').toLowerCase();
+      const pf = String(s.page_family || '').toLowerCase();
+      if (browserWeak) {
+        if (!st || st === 'unknown') s.surface_type = 'browser_fullscreen_or_borderless_web';
+        if (!pf || pf === 'unknown') s.page_family = 'web_game_or_embedded_media_probable';
+      } else {
+        if (!st || st === 'unknown') s.surface_type = 'fullscreen_opaque_or_unknown_wm_title';
+        if (!pf || pf === 'unknown') s.page_family = 'game_or_media_fullscreen_probable';
+      }
+    }
+
+    const attrs = intel.attributes_flat;
+    if (attrs && typeof attrs === 'object') {
+      const a = attrs as Record<string, unknown>;
+      const fg = String(a.foreground_domain_category || '').toLowerCase();
+      if (!fg || fg === 'unknown' || fg.includes('idle')) {
+        a.foreground_domain_category = browserWeak ? 'gaming_or_media_web' : 'gaming_or_media_app';
+      }
+      const d = Number(a.distraction_risk_score_suggested_0_1);
+      if (!Number.isFinite(d) || d < 0.35) a.distraction_risk_score_suggested_0_1 = 0.55;
+      a.focus_on_work_surface = false;
+    }
+  }
+
+  return intel;
 }
 
 /** Base64 for data URLs without blowing the stack on large buffers. */
@@ -688,11 +862,23 @@ function getOpenAiCompatibleVisionModel(): string {
 const WINDOW_TITLE_SENTINELS = new Set([
   '',
   'no window',
+  'no active window',
+  '(no window)',
   'unknown',
   'untitled',
   '(unknown)',
   'n/a',
 ]);
+
+function isUselessWindowTitle(t: string): boolean {
+  const s = t.trim();
+  if (!s) return true;
+  const low = s.toLowerCase();
+  if (WINDOW_TITLE_SENTINELS.has(low)) return true;
+  // macOS / agents sometimes report title-cased "No Window"
+  if (low === 'no window' || /^no window\b/i.test(s)) return true;
+  return false;
+}
 
 function pickBestWindowTitle(bodyWindowTitle: unknown, screenshot: Record<string, unknown>): string {
   const candidates = [
@@ -703,10 +889,11 @@ function pickBestWindowTitle(bodyWindowTitle: unknown, screenshot: Record<string
   for (const c of candidates) {
     const t = c.trim();
     if (!t) continue;
-    if (WINDOW_TITLE_SENTINELS.has(t.toLowerCase())) continue;
+    if (isUselessWindowTitle(t)) continue;
     return t;
   }
-  return candidates.map((c) => c.trim()).find(Boolean) || '';
+  // Never fall back to a sentinel title (e.g. "No Window") — treat as unknown for LLM prompts.
+  return '';
 }
 
 function pickBestActiveUrl(screenshot: Record<string, unknown>): string {
@@ -809,6 +996,9 @@ Required top-level keys (all required):
 - confidence_score: number 0-1
 - recommendation: "Work mode" | "Possible distraction" | "Monitor" | "Idle time detected" | "Potential issue detected"
 - metadata: { image_quality: "high" | "medium" | "low", noise_level: "low" | "medium" | "high", image_resolution: "high" | "low" | "medium" }
+- gaming_detection: { game_name: string, game_activity: "active" | "idle" | "Other", game_type: "arcade" | "strategy" | "simulation" | "Other", distraction_risk_score: number 0-1 }  // If not gaming, use game_name "N/A" or "Other", game_activity "idle", distraction_risk_score near 0.
+- coding_detection: { file_name: string, file_extension: string, editor: string, coding_activity_level: "high" | "medium" | "low" | "none" }  // If not coding, use file_name "N/A", coding_activity_level "none".
+- additional_signals: { browser_tabs_open: string, application_type: "IDE" | "Browser" | "Game" | "Social Media" | "Other", multi_tasking_detected: "yes" | "no" }  // browser_tabs_open: estimate as string (e.g. "3" or "unknown").
 
 Context (metadata + prior signals — you may not see pixels):
 ${contextBlock}`;
@@ -1301,10 +1491,20 @@ Deno.serve(async (req: Request) => {
               : '')
           : '\nNo local image dimensions/MIME available; set meta fields cautiously or use null where allowed.';
 
+        const heuristicTranscript = serverSniffMeta
+          ? buildHeuristicTranscriptForTextOnly(
+            serverSniffMeta,
+            appToAnalyze,
+            titleToAnalyze,
+            urlForIntelligence,
+          )
+          : '';
+        const combinedTranscript = [visualSceneTranscript.trim(), heuristicTranscript.trim()].filter(Boolean).join('\n\n');
+
         const tr = await analyzeScreenshotIntelligenceDeepSeekText(
           textApiToken,
           textModelForRequest,
-          visualSceneTranscript,
+          combinedTranscript,
           titleToAnalyze,
           appToAnalyze,
           urlForIntelligence,
@@ -1316,6 +1516,11 @@ Deno.serve(async (req: Request) => {
               tr.screenshot_intelligence as Record<string, unknown>,
               serverSniffMeta,
             );
+            tr.screenshot_intelligence = repairTextOnlyIntelligenceIfPixelProof(
+              tr.screenshot_intelligence as Record<string, unknown>,
+              serverSniffMeta,
+              { app: appToAnalyze, windowTitle: titleToAnalyze, activeUrl: urlForIntelligence },
+            ) as Record<string, unknown>;
           }
           visionResult = tr;
           if (tr.usage) intelligenceTextUsage = tr.usage;
@@ -1455,6 +1660,9 @@ Deno.serve(async (req: Request) => {
     const analysisForMeta = Object.fromEntries(
       Object.entries(analysis as Record<string, unknown>).filter(([k]) => !META_OUR_KEYS.has(k)),
     );
+
+    analysis.distraction_score = normalizeDbDistractionInt(analysis.distraction_score, 0);
+    analysis.confidence_score = normalizeDbConfidenceInt(analysis.confidence_score, 50);
 
     const updateData: any = {
       ai_analysis_status: 'completed',
@@ -1963,6 +2171,27 @@ function clampScore(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+/** Models may return confidence as 0–1 or 1–100; screenshots.confidence_score is 0–100 integer. */
+function toDbConfidenceInt(n: unknown, fallbackFrac = 0.85): number {
+  const frac = clampConfidence01(n) ?? fallbackFrac;
+  return clampScore(Math.round(frac * 100));
+}
+
+/** Repair double-scaled scores (e.g. 9200 from 92×100) before Postgres CHECK constraints. */
+function normalizeDbConfidenceInt(n: unknown, fallback = 50): number {
+  let x = Number(n);
+  if (!Number.isFinite(x)) return clampScore(fallback);
+  if (x >= 0 && x <= 100) return clampScore(x);
+  if (x > 100 && x <= 10000) return clampScore(Math.round(x / 100));
+  return clampScore(x);
+}
+
+function normalizeDbDistractionInt(n: unknown, fallback = 0): number {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return clampScore(fallback);
+  return clampScore(x);
+}
+
 /** OpenAI-compatible usage object from DeepSeek chat/completions response */
 function extractOpenAiUsage(result: Record<string, unknown> | null | undefined): {
   prompt_tokens: number;
@@ -2068,7 +2297,7 @@ function parseLegacyVisionShape(parsed: Record<string, unknown>, model: string, 
     detected_content: String(parsed.detected_content || fallbackText).substring(0, 500),
     category: validCategories.includes(cat) ? cat : undefined,
     is_work_related: parsed.is_work_related,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.85,
+    confidence: clampConfidence01(parsed.confidence) ?? 0.85,
     privacy_concerns: Array.isArray(parsed.privacy_concerns) ? parsed.privacy_concerns : [],
     is_idle: parsed.is_idle || false,
     productivity_score: prod,
@@ -2261,6 +2490,21 @@ async function analyzeScreenshotIntelligenceDeepSeekText(
 /**
  * Vision: try DeepSeek VL (/v1/vision) when a fetchable URL exists, then optional OpenAI-compatible API, then DeepSeek chat (often text-only).
  */
+/**
+ * Vendor multimodal APIs fetch the image server-side. Prefer HTTPS (signed/public)
+ * over data: URLs — DeepSeek chat and many hosts reject or ignore huge data URLs.
+ */
+function pickMultimodalImageUrlForChat(
+  storageDataUrlOrPublic: string,
+  signedOrHttpsFallback: string,
+): string {
+  const signed = signedOrHttpsFallback?.trim() || '';
+  if (signed && /^https:\/\//i.test(signed)) return signed;
+  const primary = storageDataUrlOrPublic?.trim() || '';
+  if (primary && /^https:\/\//i.test(primary)) return primary;
+  return primary;
+}
+
 async function analyzeWithVision(
   imageUrl: string,
   visionModelId: string,
@@ -2268,6 +2512,10 @@ async function analyzeWithVision(
 ): Promise<any> {
   try {
     const sniff = opts?.serverSniffMeta;
+    const chatImageUrl = pickMultimodalImageUrlForChat(imageUrl, opts?.remoteHttpsImageUrl || '');
+    if (chatImageUrl !== imageUrl && /^https:\/\//i.test(chatImageUrl)) {
+      console.log('Vision: using HTTPS image URL for chat multimodal (not data URL)');
+    }
     const serverHint = sniff
       ? `\nKnown from uploaded file bytes (use these exact values in meta for width, height, MIME, aspect_ratio; trust over guessing): image_pixel_width=${sniff.image_pixel_width}, image_pixel_height=${sniff.image_pixel_height}, image_file_format_mime=${sniff.image_file_format_mime}, aspect_ratio=${sniff.aspect_ratio}` +
         (sniff.approx_file_type_note
@@ -2296,7 +2544,7 @@ async function analyzeWithVision(
     const compatTok = getOpenAiCompatibleVisionToken();
     const compatModel = getOpenAiCompatibleVisionModel();
     if (compatUrl && compatTok) {
-      const r2 = await visionOpenAiMultimodal(compatUrl, compatTok, compatModel, imageUrl, prompt, {
+      const r2 = await visionOpenAiMultimodal(compatUrl, compatTok, compatModel, chatImageUrl, prompt, {
         response_format: { type: 'json_object' },
       });
       if (r2.success) {
@@ -2316,7 +2564,7 @@ async function analyzeWithVision(
       getDeepSeekChatUrl(),
       dsToken,
       visionModelId,
-      imageUrl,
+      chatImageUrl,
       prompt,
       { thinking: { type: 'disabled' }, response_format: { type: 'json_object' } },
     );
@@ -2420,7 +2668,10 @@ Respond with ONLY valid JSON.`;
 function mergeAnalysis(patternAnalysis: any, aiResult: any): any {
   if (!aiResult.success) return patternAnalysis;
 
-  const distraction = aiResult.distraction_score ?? patternAnalysis.distraction_score;
+  const distraction = normalizeDbDistractionInt(
+    aiResult.distraction_score ?? patternAnalysis.distraction_score,
+    patternAnalysis.distraction_score ?? 0,
+  );
   let productivity =
     typeof aiResult.productivity_score === 'number' ? clampScore(aiResult.productivity_score) : undefined;
   if (productivity === undefined) {
@@ -2433,7 +2684,7 @@ function mergeAnalysis(patternAnalysis: any, aiResult: any): any {
     activity_type: aiResult.activity_type || patternAnalysis.activity_type,
     distraction_score: distraction,
     productivity_score: productivity,
-    confidence_score: Math.round((aiResult.confidence || 0.7) * 100),
+    confidence_score: toDbConfidenceInt(aiResult.confidence, 0.7),
     is_work_related: aiResult.is_work_related ?? patternAnalysis.is_work_related,
     reasoning: [...patternAnalysis.reasoning, `AI: ${aiResult.reasoning || 'LLM classification'}`],
     analysis_method: 'ai-enhanced',
@@ -2468,19 +2719,19 @@ function mergeVisionAnalysis(analysis: any, visionResult: any): any {
   };
 
   if (typeof visionResult.distraction_score === 'number') {
-    merged.distraction_score = visionResult.distraction_score;
+    merged.distraction_score = normalizeDbDistractionInt(visionResult.distraction_score, merged.distraction_score ?? 0);
   }
   if (typeof visionResult.productivity_score === 'number') {
-    merged.productivity_score = visionResult.productivity_score;
-  } else if (typeof visionResult.distraction_score === 'number') {
-    merged.productivity_score = clampScore(100 - visionResult.distraction_score);
+    merged.productivity_score = clampScore(visionResult.productivity_score);
+  } else if (typeof merged.distraction_score === 'number') {
+    merged.productivity_score = clampScore(100 - merged.distraction_score);
   }
 
   // If vision returned a structured category, prefer it over pattern matching
   if (visionResult.category) {
     merged.category = visionResult.category;
     merged.is_work_related = visionResult.is_work_related ?? (visionResult.category === 'productive' || visionResult.category === 'communication');
-    merged.confidence_score = Math.round((visionResult.confidence || 0.85) * 100);
+    merged.confidence_score = toDbConfidenceInt(visionResult.confidence, 0.85);
   }
 
   return merged;

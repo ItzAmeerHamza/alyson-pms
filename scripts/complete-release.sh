@@ -14,7 +14,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN}"
 GITHUB_REPO="ItzAmeerHamza/alyson-pms"
 
 # Get current version
-CURRENT_VERSION=$(node -p "require('./package.json').version")
+CURRENT_VERSION=$(node -p "require('./web/package.json').version")
 RELEASE_TAG="v${CURRENT_VERSION}"
 
 echo "📦 Current version: ${CURRENT_VERSION}"
@@ -53,7 +53,7 @@ npm ci
 
 # Build web application
 echo "🌐 Building web application..."
-npm run build
+npm run build -w web
 
 # Copy entitlements file to build directory
 echo "📋 Preparing entitlements..."

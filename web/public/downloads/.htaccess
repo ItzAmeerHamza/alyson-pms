@@ -1,0 +1,25 @@
+# Simple, compatible DMG handling
+AddType application/octet-stream .dmg
+AddType application/octet-stream .exe
+AddType application/octet-stream .AppImage
+
+# Force download
+<Files "*.dmg">
+    Header set Content-Disposition "attachment"
+    Header set Content-Type "application/octet-stream"
+</Files>
+
+<Files "*.exe">
+    Header set Content-Disposition "attachment"
+    Header set Content-Type "application/octet-stream"
+</Files>
+
+<Files "*.AppImage">
+    Header set Content-Disposition "attachment"
+    Header set Content-Type "application/octet-stream"
+</Files>
+
+# Disable compression for binary files
+<FilesMatch "\.(dmg|exe|AppImage)$">
+    SetEnv no-gzip 1
+</FilesMatch> 

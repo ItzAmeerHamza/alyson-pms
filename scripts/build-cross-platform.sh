@@ -7,7 +7,7 @@ set -e
 echo "🚀 Starting Cross-Platform Build (Windows + Linux)..."
 
 # Get current version
-CURRENT_VERSION=$(node -p "require('./package.json').version")
+CURRENT_VERSION=$(node -p "require('./web/package.json').version")
 
 echo "📦 Current version: ${CURRENT_VERSION}"
 
@@ -21,7 +21,7 @@ npm ci
 
 # Build web application
 echo "🌐 Building web application..."
-npm run build
+npm run build -w web
 
 # Build desktop applications for Windows and Linux
 echo "🖥️ Building cross-platform desktop applications..."

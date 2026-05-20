@@ -39,27 +39,53 @@ npm start
 - Connects directly to Supabase database
 - Minimal UI for employee login/settings
 
-### 🌐 Web Admin (`/src/`)
+### 🌐 Web Portal (`/web/`)
 **Purpose**: Administrator dashboard (web interface)
 - Full-featured admin interface accessible via web browser
 - Manages employees, projects, reports, and analytics
 - Views all data collected by desktop agents
 - Real-time monitoring and reporting
 
+### ⚙️ Backend (`/backend/`)
+**Purpose**: NestJS API for queues, AI analysis, and notifications
+- Complements Supabase for async and privileged workflows
+
+### 🗄️ Shared (`/supabase/`)
+Database migrations, Edge Functions, and Supabase config used by all apps.
+
+## Repository layout
+
+| Folder | App |
+|--------|-----|
+| `web/` | React + Vite web portal |
+| `desktop-agent/` | Electron desktop agent |
+| `backend/` | NestJS backend service |
+| `supabase/` | Database & edge functions (shared) |
+
+Install once from the repo root (npm workspaces):
+
+```bash
+npm install
+```
+
 ## Quick Start
 
 ### For Employees (Desktop Agent)
 ```bash
-cd desktop-agent
-npm install
-npm start
+npm run dev:desktop
+# or: cd desktop-agent && npm start
 ```
 
-### For Administrators (Web Interface)
+### For Administrators (Web Portal)
 ```bash
-npm install
-npm run dev  # Development mode
-npm run build  # Production build
+npm run dev          # http://localhost:8080
+npm run build        # production build → web/dist
+```
+
+### For Backend Development
+```bash
+npm run dev:backend
+# or: cd backend && npm run start:dev
 ```
 
 ## Key Features

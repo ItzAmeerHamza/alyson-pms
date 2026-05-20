@@ -19,6 +19,8 @@ import { format, startOfDay, endOfDay, startOfWeek, endOfWeek } from 'date-fns';
 import { calculateSessionHours, mergeTimeIntervals, getSmartEndMs, type TimeInterval } from '@/lib/time-utils';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import DesktopDownload from '@/components/ui/desktop-download';
+import { Link } from 'react-router-dom';
+import { CircleHelp } from 'lucide-react';
 
 interface EmployeeStats {
   todayHours: number;
@@ -436,6 +438,24 @@ const EmployeeDashboard = () => {
           )}
         </div>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-4">
+          <div className="flex items-start gap-3">
+            <CircleHelp className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-foreground">Help &amp; FAQ</p>
+              <p className="text-sm text-muted-foreground">
+                How time tracking and screenshots work, permissions, AI analysis, and opening the Mac app if Gatekeeper
+                blocks it.
+              </p>
+            </div>
+          </div>
+          <Button variant="secondary" asChild className="shrink-0">
+            <Link to="/faq">Open FAQ</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

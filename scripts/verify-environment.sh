@@ -100,8 +100,8 @@ echo "📁 Project Files:"
 
 REQUIRED_FILES=(
     "package.json"
-    "src/pages/download/index.tsx"
-    "src/components/ui/desktop-download.tsx"
+    "web/src/pages/download/index.tsx"
+    "web/src/components/ui/desktop-download.tsx"
     "build/entitlements.mac.plist"
 )
 

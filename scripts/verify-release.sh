@@ -108,7 +108,7 @@ else
 fi
 
 # Check download page version
-DOWNLOAD_VERSION=$(grep 'const version = "v' src/pages/download/index.tsx | cut -d'"' -f2 | sed 's/v//')
+DOWNLOAD_VERSION=$(grep 'const version = "v' web/src/pages/download/index.tsx | cut -d'"' -f2 | sed 's/v//')
 if [ "$DOWNLOAD_VERSION" = "$VERSION_TO_VERIFY" ]; then
     echo -e "${GREEN}✅ Download page version matches${NC}"
 else
@@ -116,7 +116,7 @@ else
 fi
 
 # Check desktop download component version
-COMPONENT_VERSION=$(grep 'const currentVersion = "' src/components/ui/desktop-download.tsx | cut -d'"' -f2)
+COMPONENT_VERSION=$(grep 'const currentVersion = "' web/src/components/ui/desktop-download.tsx | cut -d'"' -f2)
 if [ "$COMPONENT_VERSION" = "$VERSION_TO_VERIFY" ]; then
     echo -e "${GREEN}✅ Desktop download component version matches${NC}"
 else

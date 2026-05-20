@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Common Development Commands
 
-### Web Admin Development
+### Web Portal Development (`web/`)
 ```bash
-npm run dev              # Start development server (port 8080)
-npm run build            # Production build
+npm run dev              # From repo root — starts web on port 8080
+npm run build            # Production build → web/dist
 npm run build:dev        # Development build
 npm run lint             # Run ESLint
 npm run preview          # Preview production build
+# Or from web/: cd web && npm run dev
 ```
 
 ### Desktop Agent Development
@@ -80,8 +81,9 @@ Desktop Agents → Supabase Database ← Web Admin
 ```
 
 ### Key Directories
-- `/src/pages/` - Web admin page components
-- `/src/components/ui/` - shadcn/ui components
+- `/web/` - Web portal (React + Vite)
+- `/web/src/pages/` - Web portal page components
+- `/web/src/components/ui/` - shadcn/ui components
 - `/desktop-agent/src/modules/` - Modular desktop agent functionality
 - `/desktop-agent/src/platform/` - Platform-specific implementations
 - `/backend/src/` - NestJS backend modules
@@ -174,7 +176,8 @@ The backend includes comprehensive AI analysis capabilities:
 5. **Integration Testing**: Ensure desktop agent ↔ web admin data sync works correctly
 
 ## Important Files
-- `package.json` (root) - Web admin dependencies and scripts
+- `package.json` (root) - Monorepo workspace orchestration
+- `web/package.json` - Web portal dependencies and scripts
 - `desktop-agent/package.json` - Desktop agent dependencies and Electron Builder config  
 - `backend/package.json` - Backend service dependencies
 - `supabase/config.toml` - Supabase project configuration

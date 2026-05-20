@@ -14,6 +14,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const BUILD_DIRS = [
   'dist',
+  'web/dist',
   'build',
   'desktop-agent/dist',
   'backend/dist',

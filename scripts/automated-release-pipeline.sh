@@ -128,14 +128,14 @@ update_download_urls() {
     local version="$1"
     print_status "🔗 Updating download URLs to version $version..."
     
-    # Update src/pages/download/index.tsx
-    sed -i.bak "s/const version = \"v[0-9]\+\.[0-9]\+\.[0-9]\+\"/const version = \"v$version\"/" src/pages/download/index.tsx
+    # Update web/src/pages/download/index.tsx
+    sed -i.bak "s/const version = \"v[0-9]\+\.[0-9]\+\.[0-9]\+\"/const version = \"v$version\"/" web/src/pages/download/index.tsx
     
-    # Update src/components/ui/desktop-download.tsx
-    sed -i.bak "s/const currentVersion = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/const currentVersion = \"$version\"/" src/components/ui/desktop-download.tsx
+    # Update web/src/components/ui/desktop-download.tsx
+    sed -i.bak "s/const currentVersion = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/const currentVersion = \"$version\"/" web/src/components/ui/desktop-download.tsx
     
     # Remove backup files
-    rm -f src/pages/download/index.tsx.bak src/components/ui/desktop-download.tsx.bak
+    rm -f web/src/pages/download/index.tsx.bak web/src/components/ui/desktop-download.tsx.bak
     
     print_success "Download URLs updated"
 }
@@ -144,7 +144,7 @@ update_download_urls() {
 build_web() {
     print_status "🌐 Building web application..."
     
-    npm run build
+    npm run build -w web
     
     print_success "Web application built"
 }

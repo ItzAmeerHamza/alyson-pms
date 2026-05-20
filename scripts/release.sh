@@ -36,7 +36,7 @@ command_exists() {
 
 # Function to get current version
 get_current_version() {
-    node -p "require('./package.json').version"
+    node -p "require('./web/package.json').version"
 }
 
 # Function to update version in all relevant files
@@ -63,7 +63,7 @@ build_app() {
     rm -rf dist build
     
     # Build web app
-    npm run build:dev
+    npm run build:dev -w web
     
     # Build electron
     npm run build:electron

@@ -6,6 +6,10 @@ else
   npm install
 fi
 
+if [ -d web ] && [ -f web/package-lock.json ]; then
+  (cd web && npm ci) 2>/dev/null || true
+fi
+
 if [ -d desktop-agent ]; then
   if [ -f desktop-agent/package-lock.json ]; then
     (cd desktop-agent && npm ci)

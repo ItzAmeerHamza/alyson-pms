@@ -59,7 +59,7 @@ else
 fi
 
 # Get current version
-CURRENT_VERSION=$(node -p "require('./package.json').version")
+CURRENT_VERSION=$(node -p "require('./web/package.json').version")
 print_info "📋 Current version: $CURRENT_VERSION"
 
 # Confirm release
@@ -104,7 +104,7 @@ print_info "  5. 🔍 Test auto-updater functionality"
 print_info "  6. 📢 Announce release to users"
 
 # Get new version
-NEW_VERSION=$(node -p "require('./package.json').version")
+NEW_VERSION=$(node -p "require('./web/package.json').version")
 print_success "🔗 Release URL: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
 
 print_info "🎊 All done! TimeFlow v${NEW_VERSION} is ready!" 

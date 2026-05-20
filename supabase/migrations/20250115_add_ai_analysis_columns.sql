@@ -140,4 +140,4 @@ VALUES (
     ),
     'completed',
     NOW()
-) ON CONFLICT DO NOTHING; 
+) ON CONFLICT DO NOTHING;

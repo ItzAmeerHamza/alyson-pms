@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION=${1:-$(node -p "require('./package.json').version")}
+VERSION=${1:-$(node -p "require('./web/package.json').version")}
 
 echo "🌐 Updating Web Download Links for v$VERSION"
 echo "============================================="
@@ -17,7 +17,7 @@ RELEASE_URL="$REPO_URL/releases/download/v$VERSION"
 echo "📦 Release URL: $RELEASE_URL"
 
 # Update download page component
-DOWNLOAD_PAGE="src/pages/download/index.tsx"
+DOWNLOAD_PAGE="web/src/pages/download/index.tsx"
 
 if [ -f "$DOWNLOAD_PAGE" ]; then
     echo "📝 Updating download page: $DOWNLOAD_PAGE"
