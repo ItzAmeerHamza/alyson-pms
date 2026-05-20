@@ -508,22 +508,7 @@ class WindowsUrlCaptureV2 {
       return urlMatch[1];
     }
 
-    // Pattern matching for known sites
-    const patterns = {
-      'Google': 'https://www.google.com',
-      'YouTube': 'https://www.youtube.com',
-      'GitHub': 'https://github.com',
-      'Stack Overflow': 'https://stackoverflow.com',
-      'Twitter': 'https://twitter.com',
-      'Facebook': 'https://facebook.com',
-      'LinkedIn': 'https://linkedin.com',
-      'Reddit': 'https://reddit.com',
-      'Wikipedia': 'https://wikipedia.org',
-      'Masrawy': 'https://www.masrawy.com',
-      'Bitbucket': 'https://bitbucket.org',
-      'Alyson Work Time': 'https://worktime.ebdaadt.com',
-      'Work Time': 'https://worktime.ebdaadt.com'
-    };
+    const { SITE_TITLE_PATTERNS: patterns } = require('../../lib/known-work-sites');
 
     // Check for exact matches
     for (const [keyword, url] of Object.entries(patterns)) {

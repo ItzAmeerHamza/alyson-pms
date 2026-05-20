@@ -769,7 +769,6 @@ if (result) {
 if (titleParts.length > 0) {
       const firstPart = titleParts[0].trim().toLowerCase();
       
-      // Check for known site names that we can convert to URLs
       const knownSites = {
         'google': 'https://www.google.com',
         'youtube': 'https://www.youtube.com',
@@ -786,7 +785,6 @@ if (titleParts.length > 0) {
         'wikipedia': 'https://wikipedia.org',
         'amazon': 'https://amazon.com',
         'netflix': 'https://netflix.com',
-        'masrawy': 'https://www.masrawy.com',
         'alyson': 'https://alyson-pms.vercel.app',
         'gmail': 'https://mail.google.com',
         'outlook': 'https://outlook.office.com',
@@ -796,7 +794,7 @@ if (titleParts.length > 0) {
         'figma': 'https://figma.com',
         'canva': 'https://canva.com'
       };
-      
+
       // Try exact match first
       if (knownSites[firstPart]) {
         if (this.debug) console.log('[URL-EXTRACT] Known site:', firstPart);
@@ -858,7 +856,6 @@ continue; // Skip generic words
       }
     }
     
-    // Pattern 4: Look for keywords in full title (English and transliterated Arabic)
     const lowerTitle = cleanTitle.toLowerCase();
     const lowerOriginal = originalTitle.toLowerCase();
     const sitePatterns = {
@@ -874,13 +871,8 @@ continue; // Skip generic words
       'reddit': 'https://reddit.com',
       'wikipedia': 'https://wikipedia.org',
       'alyson': 'https://alyson-pms.vercel.app',
-      // Arabic sites (using Arabic keywords)
-      'مصراو': 'https://www.masrawy.com',  // مصراوى
-      'اليوم السابع': 'https://www.youm7.com',
-      'الأهرام': 'https://www.ahram.org.eg',
-      'البوابة': 'https://www.albawaba.com'
     };
-    
+
     // Check both cleaned and original title
     for (const [keyword, url] of Object.entries(sitePatterns)) {
       if (lowerTitle.includes(keyword) || lowerOriginal.includes(keyword)) {

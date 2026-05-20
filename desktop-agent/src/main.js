@@ -1064,8 +1064,11 @@ try {
   global.supabaseDirectUrl = config.supabase_url;
   Object.defineProperty(global, 'useSupabaseProxy', { get: () => useProxy });
 
+  const { getSupabaseRealtimeOptions } = require('./lib/supabase-realtime-transport');
+
   // Initialize Supabase client with extended timeout settings for better connectivity
   const supabaseOptions = {
+    ...getSupabaseRealtimeOptions(),
     auth: {
       autoRefreshToken: true,
       persistSession: true,
@@ -1178,6 +1181,7 @@ try {
   // Create service client for admin operations if service key is available
   supabaseService = config.supabase_service_key ?
     createClient(config.supabase_url, config.supabase_service_key, {
+      ...getSupabaseRealtimeOptions(),
       auth: {
         autoRefreshToken: false, // Service role doesn't need token refresh
         persistSession: false,  // Service role doesn't need session persistence

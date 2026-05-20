@@ -36,7 +36,8 @@
     "electron-updater": "^6.6.2",
     "keytar": "^7.9.0",
     "node-cron": "^4.2.1",
-    "screenshot-desktop": "^1.14.0"
+    "screenshot-desktop": "^1.14.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@mapbox/node-pre-gyp": "^2.0.0",

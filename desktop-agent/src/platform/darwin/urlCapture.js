@@ -1054,21 +1054,8 @@ class DarwinUrlCapture {
       return null;
     }
     
-    const knownPageTitles = {
-      'google': 'https://www.google.com',
-      'new tab': null,  // Generic, can't infer
-      'chatgpt': 'https://chatgpt.com',
-      'github': 'https://github.com',
-      'youtube': 'https://www.youtube.com',
-      'gmail': 'https://mail.google.com',
-      'twitter': 'https://twitter.com',
-      'x': 'https://x.com',
-      'facebook': 'https://www.facebook.com',
-      'linkedin': 'https://www.linkedin.com',
-      'reddit': 'https://www.reddit.com',
-      'stack overflow': 'https://stackoverflow.com',
-      'wikipedia': 'https://www.wikipedia.org'
-    };
+    const { KNOWN_SITES_LOWER } = require('../../lib/known-work-sites');
+    const knownPageTitles = { ...KNOWN_SITES_LOWER, 'new tab': null };
 
     // Check for exact matches or title STARTS WITH keyword (not just includes)
     // This prevents matching "Google" when it's just part of the site name

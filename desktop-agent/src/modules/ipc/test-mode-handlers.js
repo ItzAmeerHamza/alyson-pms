@@ -429,19 +429,36 @@ class TestModeHandlers {
     const productiveDomains = [
       'stackoverflow.com',
       'github.com',
+      'gitlab.com',
+      'bitbucket.org',
       'docs.microsoft.com',
       'developer.mozilla.org',
       'aws.amazon.com',
+      'portal.azure.com',
+      'console.cloud.google.com',
+      'notion.so',
+      'asana.com',
+      'atlassian.com',
+      'linear.app',
+      'slack.com',
+      'teams.microsoft.com',
+      'zoom.us',
+      'figma.com',
+      'salesforce.com',
+      'hubspot.com',
+      'chatgpt.com',
+      'claude.ai',
       'ebdaadt.com',
+      'alyson-pms.vercel.app',
+      'worktime.ebdaadt.com',
     ];
-    
+
     const unproductiveDomains = [
-      'youtube.com',
       'facebook.com',
-      'twitter.com',
       'instagram.com',
       'tiktok.com',
       'netflix.com',
+      'reddit.com',
     ];
     
     if (productiveDomains.some(d => domain.includes(d))) {

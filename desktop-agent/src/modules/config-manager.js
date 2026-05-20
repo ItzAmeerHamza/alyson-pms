@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseRealtimeOptions } = require('../lib/supabase-realtime-transport');
 
 class ConfigManager {
   constructor() {
@@ -58,12 +59,14 @@ class ConfigManager {
       throw new Error(`Invalid Supabase URL format: ${this.config.supabase_url}`);
     }
 
+    const realtimeOpts = getSupabaseRealtimeOptions();
+
     // Initialize Supabase client - use anonymous key for user operations
-    this.supabase = createClient(this.config.supabase_url, this.config.supabase_key);
+    this.supabase = createClient(this.config.supabase_url, this.config.supabase_key, realtimeOpts);
 
     // Create service client for admin operations if service key is available
     this.supabaseService = this.config.supabase_service_key ? 
-      createClient(this.config.supabase_url, this.config.supabase_service_key) :
+      createClient(this.config.supabase_url, this.config.supabase_service_key, realtimeOpts) :
       this.supabase;
 
     console.log('✅ Supabase clients initialized successfully');

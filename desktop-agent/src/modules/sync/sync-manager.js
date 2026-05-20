@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseRealtimeOptions } = require('../../lib/supabase-realtime-transport');
 const { db, logger } = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -10,6 +11,7 @@ class SyncManager {
     
     // Configure Supabase with extended timeouts for sync operations
     const syncOptions = {
+      ...getSupabaseRealtimeOptions(),
       auth: {
         autoRefreshToken: true,
         persistSession: true,

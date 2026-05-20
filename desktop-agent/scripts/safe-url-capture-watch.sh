@@ -122,7 +122,7 @@ main() {
 
   if [[ $OPEN_URLS -eq 1 ]]; then
     log_info "Opening Safari to Masrawy..."
-    open -a Safari 'https://www.masrawy.com/' || true
+    open -a Safari 'https://github.com/' || true
     sleep 10
     log_info "Opening Safari to Google test..."
     open -a Safari 'https://www.google.com/?ai-test=3' || true
