@@ -1,10 +1,68 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Screenshot, User, Project, FilterOptions, ScreenshotStats } from '../types';
-import { analyzeScreenshotContent, mapDbCategoryToDisplayCategory } from '../services/ai-analysis.service';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { mapDbCategoryToDisplayCategory } from '../services/ai-analysis.service';
+import { dayBoundsFromDateString, isCapturedOnLocalDate } from '@/lib/date-bounds';
 import { toast } from 'sonner';
 import { mergeTimeIntervals, getSmartEndMs, type TimeInterval } from '@/lib/time-utils';
+import { fetchOrgUsers, fetchProjects as fetchProjectsApi } from '@/domains/people';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { resolveScreenshotImageUrl } from '@/lib/screenshot-image-url';
+
+function mapDbScreenshotToScreenshot(dbScreenshot: Record<string, unknown>): Screenshot {
+  return {
+    id: dbScreenshot.id as string,
+    user_id: (dbScreenshot.user_id as string) || '',
+    project_id: (dbScreenshot.project_id as string | null) ?? null,
+    captured_at: dbScreenshot.captured_at as string,
+    image_url: resolveScreenshotImageUrl({
+      image_url: dbScreenshot.image_url as string | null,
+      file_path: dbScreenshot.file_path as string | null,
+    }),
+    activity_percent: (dbScreenshot.activity_percent as number) || 0,
+    focus_percent: (dbScreenshot.focus_percent as number) || 0,
+    mouse_clicks: dbScreenshot.mouse_clicks as number | undefined,
+    keystrokes: dbScreenshot.keystrokes as number | undefined,
+    mouse_movements: dbScreenshot.mouse_movements as number | undefined,
+    is_blurred: dbScreenshot.is_blurred as boolean | undefined,
+    active_window_title: dbScreenshot.active_window_title as string | undefined,
+    url: dbScreenshot.url as string | undefined,
+    window_title: dbScreenshot.window_title as string | undefined,
+    app_name: dbScreenshot.app_name as string | undefined,
+    ai_tags:
+      (dbScreenshot.ai_tags as string[]) ||
+      ((dbScreenshot.ai_metadata as { tags?: string[] })?.tags) ||
+      (dbScreenshot.tags as string[]) ||
+      undefined,
+    ai_description:
+      (dbScreenshot.ai_metadata as { image_description?: string })?.image_description ??
+      (dbScreenshot.vision_detected_content as string) ??
+      (dbScreenshot.vision_content as string) ??
+      null,
+    content_category: dbScreenshot.content_category
+      ? mapDbCategoryToDisplayCategory(dbScreenshot.content_category as string)
+      : dbScreenshot.category
+        ? mapDbCategoryToDisplayCategory(dbScreenshot.category as string)
+        : undefined,
+    distraction_score: dbScreenshot.distraction_score as number | undefined,
+    ai_confidence:
+      (dbScreenshot.ai_confidence as number) ?? (dbScreenshot.confidence_score as number),
+    ai_analyzed_at: dbScreenshot.ai_analyzed_at as string | null,
+    ai_analysis_status: dbScreenshot.ai_analysis_status as Screenshot['ai_analysis_status'],
+    ai_model_used: dbScreenshot.ai_model_used as string | undefined,
+    ai_metadata: (dbScreenshot.ai_metadata as Screenshot['ai_metadata']) ?? undefined,
+    vision_content: dbScreenshot.vision_content as string | undefined,
+    vision_detected_content: dbScreenshot.vision_detected_content as string | undefined,
+    vision_analysis: dbScreenshot.vision_analysis,
+    is_duplicate: dbScreenshot.is_duplicate as boolean | undefined,
+    duplicate_reason: dbScreenshot.duplicate_reason as string | undefined,
+    duplicate_hash: dbScreenshot.duplicate_hash as string | undefined,
+    duplicate_group_hash: dbScreenshot.duplicate_group_hash as string | undefined,
+    duplicate_matched_id: dbScreenshot.duplicate_matched_id as string | undefined,
+    consecutive_duplicate_count: dbScreenshot.consecutive_duplicate_count as number | undefined,
+    idle_inferred: dbScreenshot.idle_inferred as boolean | undefined,
+  };
+}
 
 interface AIStatus {
   aiEnabled: boolean;
@@ -55,6 +113,7 @@ export const useScreenshots = (
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeLogsMinutes, setTimeLogsMinutes] = useState<number>(0);
+  const fetchRequestIdRef = useRef(0);
   const [aiStatus, setAiStatus] = useState<AIStatus>({
     aiEnabled: false,
     aiProvider: 'huggingface',
@@ -66,31 +125,51 @@ export const useScreenshots = (
 
   // Fetch all data
   const fetchData = useCallback(async () => {
+    const requestId = ++fetchRequestIdRef.current;
+    const isStale = () => requestId !== fetchRequestIdRef.current;
+
     try {
       setLoading(true);
-      
-      // First fetch users to know which user_ids belong to this organization
+
       const usersResult = await fetchUsers();
+      if (isStale()) return;
       if (usersResult) setUsers(usersResult);
-      
-      // Get org user IDs so we can push the filter into the DB query
-      const orgUserIds = (usersResult || []).map(u => u.id);
-      
-      // Then fetch screenshots, projects, and time logs in parallel
+
+      const orgUserIds = (usersResult || []).map((u) => u.id);
+
+      const hasDate = Boolean(filters.selectedDate);
+      const needsEmployee = !hasDate && (!filters.userFilter || filters.userFilter === 'all');
+
       const [screenshotsResult, projectsResult] = await Promise.all([
-        fetchScreenshots(orgUserIds),
+        needsEmployee ? Promise.resolve([] as Screenshot[]) : fetchScreenshots(orgUserIds),
         fetchProjects(),
-        fetchTimeLogsForDay(orgUserIds)
       ]);
 
-      if (screenshotsResult) setScreenshots(screenshotsResult);
-      if (projectsResult) setProjects(projectsResult);
+      if (isStale()) return;
 
+      if (hasDate) {
+        await fetchTimeLogsForDay(orgUserIds);
+      } else {
+        setTimeLogsMinutes(0);
+      }
+
+      if (isStale()) return;
+
+      if (needsEmployee) {
+        setScreenshots([]);
+      } else if (screenshotsResult) {
+        setScreenshots(screenshotsResult);
+      }
+      if (projectsResult) setProjects(projectsResult);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      toast.error('Failed to load screenshots');
+      if (!isStale()) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load screenshots');
+      }
     } finally {
-      setLoading(false);
+      if (!isStale()) {
+        setLoading(false);
+      }
     }
   }, [filters.selectedDate, filters.userFilter, isAdmin, userId, organizationId, isSuperAdmin]);
 
@@ -98,9 +177,11 @@ export const useScreenshots = (
   // Cross-references with screenshots to cap sessions where the last screenshot is far before end_time
   const fetchTimeLogsForDay = async (orgUserIds: string[] = []): Promise<void> => {
     try {
-      const selectedDate = new Date(filters.selectedDate);
-      const start = startOfDay(selectedDate);
-      const end = endOfDay(selectedDate);
+      if (!filters.selectedDate) {
+        setTimeLogsMinutes(0);
+        return;
+      }
+      const { start, end } = dayBoundsFromDateString(filters.selectedDate);
 
       let query = supabase
         .from('time_logs')
@@ -190,165 +271,75 @@ export const useScreenshots = (
     }
   };
 
-  // Fetch screenshots with filters -- orgUserIds pushed into DB query to avoid truncation
+  // Fetch screenshots via backend API (RDS)
   const fetchScreenshots = async (orgUserIds: string[] = []): Promise<Screenshot[] | null> => {
     try {
-      const selectedDate = new Date(filters.selectedDate);
-      const start = startOfDay(selectedDate);
-      const end = endOfDay(selectedDate);
+      const hasDate = Boolean(filters.selectedDate);
+      let start: Date | undefined;
+      let end: Date | undefined;
+      if (hasDate && filters.selectedDate) {
+        ({ start, end } = dayBoundsFromDateString(filters.selectedDate));
+      }
 
-      console.log(`[SCREENSHOT-QUERY] date=${filters.selectedDate} range=${start.toISOString()}..${end.toISOString()} user=${filters.userFilter}`);
+      const ctx = { organizationId, isSuperAdmin, orgUserIds };
+      let userIdFilter: string | undefined;
+      let userIdsFilter: string[] | undefined;
 
-      let query = supabase
-        .from('screenshots')
-        .select('*')
-        .gte('captured_at', start.toISOString())
-        .lte('captured_at', end.toISOString())
-        .order('captured_at', { ascending: false });
-
-      // Push employee filter into the DB query to avoid hitting the default 1000-row limit
       if (filters.userFilter && filters.userFilter !== 'all') {
-        query = query.eq('user_id', filters.userFilter);
+        userIdFilter = filters.userFilter;
       } else if (!isAdmin && userId) {
-        query = query.eq('user_id', userId);
-      } else if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        query = query.in('user_id', orgUserIds);
+        userIdFilter = userId;
+      } else if (hasDate && organizationId && !isSuperAdmin && orgUserIds.length > 0) {
+        userIdsFilter = orgUserIds;
       }
 
-      // Raise the row cap for org-wide queries (Supabase default is 1000)
-      if (!filters.userFilter || filters.userFilter === 'all') {
-        query = query.limit(10000);
+      if (!hasDate && !userIdFilter) {
+        return [];
       }
 
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching screenshots:', error);
-        toast.error('Failed to load screenshots');
-        return null;
-      }
-
-      // Storage bucket is private in production; use signed URLs to render images.
-      const signedUrlByFilePath = new Map<string, string>();
-      const rows = (data || []) as any[];
-      const filePaths = rows
-        .map((r) => r.file_path as string | null | undefined)
-        .filter((p): p is string => typeof p === 'string' && p.length > 0);
-
-      await Promise.all(
-        filePaths.map(async (filePath) => {
-          if (signedUrlByFilePath.has(filePath)) return;
-          const { data } = await supabase.storage.from('screenshots').createSignedUrl(filePath, 60 * 60);
-          if (data?.signedUrl) signedUrlByFilePath.set(filePath, data.signedUrl);
-        })
-      );
-
-      // Process screenshots with AI analysis and transform to our interface
-      const processedScreenshots: Screenshot[] = (data || []).map((dbScreenshot: any) => {
-        const signed = dbScreenshot.file_path ? signedUrlByFilePath.get(dbScreenshot.file_path) : undefined;
-        // Transform database fields to our interface
-        const screenshot: Screenshot = {
-          id: dbScreenshot.id,
-          user_id: dbScreenshot.user_id || '',
-          project_id: dbScreenshot.project_id,
-          captured_at: dbScreenshot.captured_at,
-          image_url: signed || dbScreenshot.image_url || dbScreenshot.file_path || '',
-          activity_percent: dbScreenshot.activity_percent || 0,
-          focus_percent: dbScreenshot.focus_percent || 0,
-          mouse_clicks: dbScreenshot.mouse_clicks,
-          keystrokes: dbScreenshot.keystrokes,
-          mouse_movements: dbScreenshot.mouse_movements,
-          is_blurred: dbScreenshot.is_blurred,
-          active_window_title: dbScreenshot.active_window_title,
-          url: dbScreenshot.url,
-          window_title: dbScreenshot.window_title,
-          app_name: dbScreenshot.app_name,
-          ai_tags: dbScreenshot.ai_tags || (dbScreenshot.ai_metadata && dbScreenshot.ai_metadata.tags) || dbScreenshot.tags || undefined,
-          ai_description:
-            dbScreenshot.ai_metadata?.image_description ??
-            dbScreenshot.vision_detected_content ??
-            dbScreenshot.vision_content ??
-            null,
-          content_category: dbScreenshot.content_category
-            ? mapDbCategoryToDisplayCategory(dbScreenshot.content_category)
-            : (dbScreenshot.category ? mapDbCategoryToDisplayCategory(dbScreenshot.category) : undefined),
-          distraction_score: dbScreenshot.distraction_score,
-          ai_confidence: dbScreenshot.ai_confidence ?? dbScreenshot.confidence_score,
-          ai_analyzed_at: dbScreenshot.ai_analyzed_at,
-          ai_analysis_status: dbScreenshot.ai_analysis_status,
-          ai_model_used: dbScreenshot.ai_model_used,
-          ai_metadata: dbScreenshot.ai_metadata ?? undefined,
-          vision_content: dbScreenshot.vision_content,
-          vision_detected_content: dbScreenshot.vision_detected_content,
-          vision_analysis: dbScreenshot.vision_analysis,
-          is_duplicate: dbScreenshot.is_duplicate,
-                      duplicate_reason: dbScreenshot.duplicate_reason,
-                      duplicate_hash: dbScreenshot.duplicate_hash,
-                      duplicate_group_hash: dbScreenshot.duplicate_group_hash,
-                      duplicate_matched_id: dbScreenshot.duplicate_matched_id,
-                      consecutive_duplicate_count: dbScreenshot.consecutive_duplicate_count,
-          idle_inferred: dbScreenshot.idle_inferred
-        };
-
-        // Keep server-side analysis status - workers will handle analysis, not page load
-        // Remove client-side AI analysis - workers handle all AI processing
-
-        return screenshot;
+      const rows = await fetchScreenshotsApi(ctx, {
+        start,
+        end,
+        userId: userIdFilter,
+        userIds: userIdsFilter,
+        limit: 10000,
       });
 
-      return processedScreenshots;
+      return rows.map((row) =>
+        mapDbScreenshotToScreenshot(row as unknown as Record<string, unknown>),
+      );
     } catch (error) {
       console.error('Error in fetchScreenshots:', error);
+      toast.error('Failed to load screenshots');
       return null;
     }
   };
 
-  // Fetch users - filtered by organization for non-super admins
   const fetchUsers = async (): Promise<User[] | null> => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, email, full_name, role, organization_id');
-      
-      // Filter by organization if user is not a super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('full_name');
-
-      if (error) {
-        console.error('Error fetching users:', error);
-        return null;
-      }
-
-      return data || [];
+      const data = await fetchOrgUsers({
+        organizationId: organizationId ?? null,
+        isSuperAdmin,
+      });
+      return data.map((u) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name ?? undefined,
+        role: u.role ?? 'employee',
+      }));
     } catch (error) {
       console.error('Error in fetchUsers:', error);
       return null;
     }
   };
 
-  // Fetch projects - filtered by organization for non-super admins
   const fetchProjects = async (): Promise<Project[] | null> => {
     try {
-      let query = supabase
-        .from('projects')
-        .select('id, name, organization_id');
-      
-      // Filter by organization if user is not a super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('name');
-
-      if (error) {
-        console.error('Error fetching projects:', error);
-        return null;
-      }
-
-      return data || [];
+      const data = await fetchProjectsApi({
+        organizationId: organizationId ?? null,
+        isSuperAdmin,
+      });
+      return data.map((p) => ({ id: p.id, name: p.name }));
     } catch (error) {
       console.error('Error in fetchProjects:', error);
       return null;
@@ -742,6 +733,10 @@ export const useScreenshots = (
 
   // Filter screenshots based on current filters
   const filteredScreenshots = screenshots.filter(screenshot => {
+    if (filters.selectedDate && !isCapturedOnLocalDate(screenshot.captured_at, filters.selectedDate)) {
+      return false;
+    }
+
     // User filter
     if (filters.userFilter !== 'all' && screenshot.user_id !== filters.userFilter) {
       return false;

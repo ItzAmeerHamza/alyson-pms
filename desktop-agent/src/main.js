@@ -1043,6 +1043,7 @@ let supabaseService;
 let configDataManager;
 try {
   config = loadConfig();
+  global.config = config;
 
   // Initialize Supabase client with proper error handling
   if (!config.supabase_url || !config.supabase_key) {
@@ -3573,17 +3574,23 @@ if (isElectronContext && ipcMain) {
 
     try {
       // Try to use loaded config first
-      if (config && config.supabase_url && config.supabase_key) {
+      if (config && (config.auth_provider === 'cognito' || (config.supabase_url && config.supabase_key))) {
         console.log('✅ [EARLY-IPC] Using loaded config');
         return {
           supabase_url: config.supabase_url,
           supabase_key: config.supabase_key,
-          // Never expose service role key to renderer
+          auth_provider: config.auth_provider || 'supabase',
+          cognito_region: config.cognito_region || '',
+          cognito_user_pool_id: config.cognito_user_pool_id || '',
+          cognito_client_id: config.cognito_client_id || '',
+          api_base_url: config.api_base_url || 'http://localhost:3000',
+          backend_api_url: config.backend_api_url || process.env.BACKEND_API_URL || '',
+          backend_api_key: config.backend_api_key || process.env.INTERNAL_API_KEY || '',
           user_id: config.user_id || null,
           project_id: config.project_id || null,
           isTracking: global.isTracking || false,
           currentTimeLogId: global.currentTimeLogId || null,
-          NODE_ENV: config.NODE_ENV || process.env.NODE_ENV || 'production'
+          NODE_ENV: config.NODE_ENV || process.env.NODE_ENV || 'production',
         };
       }
 

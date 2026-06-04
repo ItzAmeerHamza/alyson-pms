@@ -45,26 +45,43 @@ function startSessionHealthCheck() {
         log.info({ step: 'HEALTH_CHECK_SYNC', message: 'Checking database for active sessions on this device' });
 
         const supabase = resolveSupabaseClient();
-        if (!supabase) {
+        const backendTimeLogs = require('./backend-time-logs');
+        const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
+        if (!supabase && !useBackend) {
           log.warn({ step: 'HEALTH_CHECK_NO_CLIENT' });
           return;
         }
 
         const deviceId = getDeviceId();
-        let query = supabase
-          .from('time_logs')
-          .select('*')
-          .eq('user_id', global.currentUserId)
-          .is('end_time', null)
-          .eq('status', 'active')
-          .limit(1);
-        if (deviceId) {
-          query = query.eq('device_id', deviceId);
-        }
-        const { data: activeLogs } = await query;
+        let activeLog = null;
 
-        if (activeLogs && activeLogs.length > 0) {
-          const activeLog = activeLogs[0];
+        try {
+          if (useBackend) {
+            activeLog = await backendTimeLogs.getActiveTimeLog(
+              global.currentUserId,
+              deviceId,
+            );
+          }
+        } catch (backendErr) {
+          log.warn({ step: 'HEALTH_CHECK_BACKEND', message: backendErr.message });
+        }
+
+        if (!activeLog && supabase) {
+          let query = supabase
+            .from('time_logs')
+            .select('*')
+            .eq('user_id', global.currentUserId)
+            .is('end_time', null)
+            .eq('status', 'active')
+            .limit(1);
+          if (deviceId) {
+            query = query.eq('device_id', deviceId);
+          }
+          const { data: activeLogs } = await query;
+          activeLog = activeLogs?.[0] ?? null;
+        }
+
+        if (activeLog) {
           
           // CRITICAL FIX: Don't restore tracking if we're in the middle of stopping
           if (global.isStopping) {
@@ -76,16 +93,23 @@ function startSessionHealthCheck() {
           // This prevents the health check from restarting screenshots after manual stop
           if (global.userExplicitlyStopped) {
             log.info({ step: 'SYNC_SKIP_USER_STOPPED', message: 'Skipping session recovery - user explicitly stopped tracking', ctx: { timeLogId: activeLog.id } });
-            // Close the stale session in DB instead of recovering it
             try {
-              const supabaseClose = resolveSupabaseClient();
-              if (supabaseClose) {
-                await supabaseClose
-                  .from('time_logs')
-                  .update({ end_time: new Date().toISOString(), status: 'completed' })
-                  .eq('id', activeLog.id);
-                log.info({ step: 'SYNC_CLOSED_STALE', message: 'Closed stale session in database', ctx: { timeLogId: activeLog.id } });
+              const backendTimeLogs = require('./backend-time-logs');
+              if (backendTimeLogs.isBackendTimeLogsEnabled()) {
+                await backendTimeLogs.closeActiveSessions(
+                  global.currentUserId,
+                  getDeviceId(),
+                );
+              } else {
+                const supabaseClose = resolveSupabaseClient();
+                if (supabaseClose) {
+                  await supabaseClose
+                    .from('time_logs')
+                    .update({ end_time: new Date().toISOString(), status: 'completed' })
+                    .eq('id', activeLog.id);
+                }
               }
+              log.info({ step: 'SYNC_CLOSED_STALE', message: 'Closed stale session in database', ctx: { timeLogId: activeLog.id } });
             } catch (closeErr) {
               log.warn({ step: 'SYNC_CLOSE_ERROR', message: 'Failed to close stale session: ' + closeErr.message });
             }

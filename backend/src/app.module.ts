@@ -20,6 +20,10 @@ import { CronModule } from './cron/cron.module';
 import { ForceSyncController } from './sync/force-sync.controller';
 import { HealthController } from './health/health.controller';
 
+/** Lambda / serverless: no Redis, GraphQL, or in-process cron. */
+const serverlessMode =
+  process.env.SERVERLESS_MODE === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 @Module({
   imports: [
     // Configuration
@@ -28,12 +32,15 @@ import { HealthController } from './health/health.controller';
       envFilePath: '.env',
     }),
 
-    // Scheduler - kept for module compatibility, but cron decorators are disabled
-    // Scheduled tasks are now handled by Supabase pg_cron instead
-    ScheduleModule.forRoot(),
+    ...(serverlessMode
+      ? []
+      : [
+          // Scheduled tasks: use EventBridge → Lambda in serverless (not in-process)
+          ScheduleModule.forRoot(),
+        ]),
 
-    // GraphQL (disabled during tests via DISABLE_GRAPHQL=1)
-    ...(process.env.DISABLE_GRAPHQL === '1'
+    // GraphQL (disabled during tests or serverless)
+    ...(serverlessMode || process.env.DISABLE_GRAPHQL === '1'
       ? []
       : [
           GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -49,17 +56,20 @@ import { HealthController } from './health/health.controller';
           }),
         ]),
 
-    // BullMQ for background jobs
-    BullModule.forRootAsync({
-      useFactory: () => ({
-        redis: {
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT) || 6379,
-          password: process.env.REDIS_PASSWORD,
-          db: parseInt(process.env.REDIS_DB) || 0,
-        },
-      }),
-    }),
+    ...(serverlessMode
+      ? []
+      : [
+          BullModule.forRootAsync({
+            useFactory: () => ({
+              redis: {
+                host: process.env.REDIS_HOST || 'localhost',
+                port: parseInt(process.env.REDIS_PORT) || 6379,
+                password: process.env.REDIS_PASSWORD,
+                db: parseInt(process.env.REDIS_DB) || 0,
+              },
+            }),
+          }),
+        ]),
 
     // Rate limiting: default 60 req/min, named 'strict' for sensitive endpoints
     ThrottlerModule.forRoot([
@@ -73,10 +83,8 @@ import { HealthController } from './health/health.controller';
     ScreenshotsModule,
     InsightsModule,
     NotificationsModule,
-    WorkersModule,
     ReportsModule,
-    AIAnalysisModule,
-    CronModule,
+    ...(serverlessMode ? [] : [WorkersModule, AIAnalysisModule, CronModule]),
   ],
   controllers: [ForceSyncController, HealthController],
   providers: [

@@ -3,10 +3,12 @@
  * Extracted from main.js to improve modularity and maintainability
  */
 
+const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const debugLogger = require('../utils/debug-logger');
 const { getDeviceId } = require('../utils/device-id');
 const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
+const backendTimeLogs = require('../utils/backend-time-logs');
 
 class TrackingManager extends EventEmitter {
   constructor(config, dependencies = {}) {
@@ -203,7 +205,8 @@ try {
           foundFallback: !!this.supabaseService
         });
       }
-      if (!this.supabaseService) {
+      const useBackendTimeLogs = backendTimeLogs.isBackendTimeLogsEnabled(this.config);
+      if (!useBackendTimeLogs && !this.supabaseService) {
         debugLogger.guard('tracking', 'Supabase service not available - cannot start tracking', {
           supabaseService: !!this.supabaseService,
           globalSupabaseService: !!global.supabaseService,
@@ -243,27 +246,50 @@ try {
         device_id: deviceId
       };
 
-      // T4: Before Supabase insert
-      console.log('💾 [TRACKING-MANAGER] T4: Before Supabase insert:', new Date().toISOString());
-      console.time('T4-T5: Supabase insert time');
+      console.log('💾 [TRACKING-MANAGER] T4: Before time_logs insert:', new Date().toISOString());
+      console.time('T4-T5: time_logs insert');
 
       let timeLog, error;
-      try {
-        const resp = await this.supabaseService
-          .from('time_logs')
-          .insert([timeLogData])
-          .select()
-          .single();
-        timeLog = resp.data;
-        error = resp.error;
-      } catch (e) {
-        // Normalize thrown fetch/network exceptions to reuse offline fallback path
-        error = e;
+
+      if (useBackendTimeLogs) {
+        try {
+          const orgId =
+            global.currentOrganizationId ||
+            this.config.organization_id ||
+            null;
+          await backendTimeLogs.closeActiveSessions(effectiveUserId, deviceId, this.config);
+          const newId = crypto.randomUUID();
+          timeLog = await backendTimeLogs.createTimeLog(
+            {
+              id: newId,
+              ...timeLogData,
+              organization_id: orgId,
+            },
+            this.config,
+          );
+          error = null;
+          console.log('✅ [TRACKING-MANAGER] RDS time log created:', timeLog.id);
+        } catch (e) {
+          error = e;
+          timeLog = null;
+          console.error('❌ [TRACKING-MANAGER] RDS create_time_log failed:', e.message || e);
+        }
+      } else {
+        try {
+          const resp = await this.supabaseService
+            .from('time_logs')
+            .insert([timeLogData])
+            .select()
+            .single();
+          timeLog = resp.data;
+          error = resp.error;
+        } catch (e) {
+          error = e;
+        }
       }
 
-      // T5: After Supabase insert returns
-      console.timeEnd('T4-T5: Supabase insert time');
-      console.log('💾 [TRACKING-MANAGER] T5: After Supabase insert:', new Date().toISOString());
+      console.timeEnd('T4-T5: time_logs insert');
+      console.log('💾 [TRACKING-MANAGER] T5: After time_logs insert:', new Date().toISOString());
 
       if (error) {
         // Special fallback: Some packaged builds see "Content-Type not acceptable: text/plain" from postgrest-js
@@ -1476,20 +1502,19 @@ try {
     // Store pending session close for fallback (in case of failure)
     this._storePendingSessionClose(timeLogId, endTime, userId);
 
-    // Get the authenticated Supabase client (already initialized and working)
     const supabase = this.supabaseService || global.supabaseService || global.supabaseClient;
-    
-    if (!supabase) {
-      console.error('❌ [TRACKING-MANAGER] No Supabase client available for database update');
-      return { success: false, reason: 'no_supabase_client' };
+    const useBackendTimeLogs = backendTimeLogs.isBackendTimeLogsEnabled(this.config);
+
+    if (!useBackendTimeLogs && !supabase) {
+      console.error('❌ [TRACKING-MANAGER] No database client available for database update');
+      return { success: false, reason: 'no_db_client' };
     }
 
     try {
-      // Compute idle_seconds from overlapping idle_logs for this session
       let idleSeconds = 0;
       try {
         const sessionStart = this.sessionStartTime || this.currentSession?.start_time;
-        if (sessionStart) {
+        if (sessionStart && supabase) {
           const { data: idleLogs } = await supabase
             .from('idle_logs')
             .select('idle_start, idle_end, duration_seconds')
@@ -1518,17 +1543,21 @@ try {
       const updatePayload = {
         end_time: endTime,
         status: 'completed',
-        idle_seconds: idleSeconds || 0
+        idle_seconds: idleSeconds || 0,
       };
 
-      const { error } = await supabase
-        .from('time_logs')
-        .update(updatePayload)
-        .eq('id', timeLogId);
-      
-      if (error) {
-        console.error('❌ [TRACKING-MANAGER] Database update failed:', error.message);
-        return { success: false, reason: 'db_error', error: error.message };
+      if (useBackendTimeLogs) {
+        await backendTimeLogs.updateTimeLog(timeLogId, updatePayload, this.config);
+      } else {
+        const { error } = await supabase
+          .from('time_logs')
+          .update(updatePayload)
+          .eq('id', timeLogId);
+
+        if (error) {
+          console.error('❌ [TRACKING-MANAGER] Database update failed:', error.message);
+          return { success: false, reason: 'db_error', error: error.message };
+        }
       }
       
       console.log(`✅ [TRACKING-MANAGER] Time log ended successfully (idle: ${idleSeconds}s)`);
@@ -1824,7 +1853,18 @@ try {
    */
   async _forceCloseActiveSessions(userId, deviceId = null) {
     try {
-      if (!userId || !this.supabaseService) return;
+      if (!userId) return;
+
+      if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+        const result = await backendTimeLogs.closeActiveSessions(userId, deviceId, this.config);
+        const closed = result?.closed ?? 0;
+        console.log(
+          `🔒 [TRACKING-MANAGER] RDS close_active_sessions: closed ${closed} session(s) for ${userId} device=${deviceId || 'all'}`,
+        );
+        return;
+      }
+
+      if (!this.supabaseService) return;
 
       // Strategy 1: Use SECURITY DEFINER RPC (bypasses RLS reliably)
       // Pass p_device_id to close only this device's sessions (multi-device safe)

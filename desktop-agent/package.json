@@ -31,6 +31,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.89.0",
     "active-win": "^8.2.1",
+    "amazon-cognito-identity-js": "^6.3.16",
     "axios": "^1.13.2",
     "dotenv": "^16.6.1",
     "electron-updater": "^6.6.2",

@@ -106,6 +106,10 @@ class ActivityMonitor {
           }
         };
 
+        this._ipcHandlers['screenshot-saved'] = () => {
+          this.loadRecentScreenshots().catch(() => {});
+        };
+
         this._ipcHandlers['timer-update'] = (_e, data) => {
           this.logIpcEvent('timer-update', data);
           console.log('📡 [ActivityMonitor] timer-update', data);

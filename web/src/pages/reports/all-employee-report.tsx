@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchIdleLogs } from '@/domains/monitoring/services/idle-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { useAuth } from "@/providers/auth-provider";
 import { 
   Download, 
@@ -135,23 +137,10 @@ export default function AllEmployeeReport() {
       const labels = days.map(day => format(day, 'EEE\nM/d'));
       setDateLabels(labels);
 
-      // First get all users (employees, admins, managers) with better error handling
-      let usersQuery = supabase
-        .from('users')
-        .select('id, full_name, email, role')
-        .in('role', ['employee', 'admin', 'manager']);
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        usersQuery = usersQuery.eq('organization_id', organizationId);
-      }
-      
-      const { data: usersData, error: usersError } = await usersQuery.order('full_name');
-
-      if (usersError) {
-        console.error('Error fetching users:', usersError);
-        throw new Error(`Failed to fetch users: ${usersError.message}`);
-      }
+      const usersData = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
 
       if (!usersData || usersData.length === 0) {
         setEmployees([]);
@@ -162,50 +151,23 @@ export default function AllEmployeeReport() {
       // Pre-compute org user IDs so we can scope all high-volume queries to this org
       const orgUserIds = usersData.map(u => u.id);
 
-      // Fetch time logs with pagination to bypass PostgREST row cap
-      const timeLogsData = await fetchPaginated<any>(
-        supabase
-          .from('time_logs')
-          .select(`
-            id,
-            user_id,
-            start_time,
-            end_time,
-            is_idle,
-            idle_seconds,
-            status
-          `)
-          .gte('start_time', start.toISOString())
-          .lte('start_time', end.toISOString())
-          .in('user_id', orgUserIds)
-          .order('start_time')
-      );
+      const [timeLogsData, screenshotsData, idleLogsData] = await Promise.all([
+        fetchDetailedTimeLogs(start, end, { organizationId, isSuperAdmin }, { limit: 10000 }),
+        fetchScreenshotsApi(
+          { organizationId, isSuperAdmin, orgUserIds },
+          { start, end, limit: 10000 },
+        ),
+        fetchIdleLogs(start, end, { organizationId, isSuperAdmin }),
+      ]);
 
-      // Also get screenshots for the date range to include users with screenshots but no time logs
-      const screenshotsData = await fetchPaginated<any>(
-        supabase
-          .from('screenshots')
-          .select('user_id, captured_at, activity_percent')
-          .gte('captured_at', start.toISOString())
-          .lte('captured_at', end.toISOString())
-          .in('user_id', orgUserIds)
-          .order('captured_at')
-      );
-
-      // CRITICAL: Get idle_logs to calculate actual idle time (not just is_idle flag)
-      const idleLogsData = await fetchPaginated<any>(
-        supabase
-          .from('idle_logs')
-          .select('user_id, duration_seconds, idle_start, idle_end')
-          .lte('idle_start', end.toISOString())
-          .or(`idle_end.gte.${start.toISOString()},idle_end.is.null`)
-          .in('user_id', orgUserIds)
-      );
+      const scopedTimeLogs = timeLogsData.filter((log) => orgUserIds.includes(log.user_id));
+      const scopedScreenshots = screenshotsData.filter((s) => orgUserIds.includes(s.user_id));
+      const scopedIdleLogs = idleLogsData.filter((log) => orgUserIds.includes(log.user_id));
 
       // Build a map of total idle hours per user from idle_logs
       // Step 1: Group idle periods by user and clamp to reporting range
       const userIdlePeriods: { [userId: string]: Array<{ start: Date; end: Date }> } = {};
-      (idleLogsData || []).forEach(idleLog => {
+      scopedIdleLogs.forEach(idleLog => {
         if (!idleLog.user_id || !idleLog.idle_start) return;
         
         // Calculate the actual overlap between idle period and reporting range
@@ -282,7 +244,7 @@ export default function AllEmployeeReport() {
       });
 
       // Process time logs with merged intervals per user per day (multi-device safe)
-      const sortedLogs = [...(timeLogsData || [])].sort((a, b) => {
+      const sortedLogs = [...scopedTimeLogs].sort((a, b) => {
         const aStart = new Date(a.start_time).getTime();
         const bStart = new Date(b.start_time).getTime();
         return bStart - aStart;
@@ -299,7 +261,7 @@ export default function AllEmployeeReport() {
 
       // Build per-user sorted screenshot timestamps for smart session capping
       const userScreenshotTimes: { [userId: string]: number[] } = {};
-      (screenshotsData || []).forEach((ss: any) => {
+      scopedScreenshots.forEach((ss: any) => {
         if (!ss.user_id) return;
         if (!userScreenshotTimes[ss.user_id]) userScreenshotTimes[ss.user_id] = [];
         userScreenshotTimes[ss.user_id].push(new Date(ss.captured_at).getTime());
@@ -312,7 +274,7 @@ export default function AllEmployeeReport() {
       const userDayIntervals: { [key: string]: TimeInterval[] } = {};
       const userOngoing: { [userId: string]: boolean } = {};
 
-      (timeLogsData || []).forEach(log => {
+      scopedTimeLogs.forEach(log => {
         if (!log.user_id || !employeeMap[log.user_id]) return;
 
         const logDate = format(new Date(log.start_time), 'yyyy-MM-dd');
@@ -374,7 +336,7 @@ export default function AllEmployeeReport() {
       // Process screenshots to mark users who have activity even without time logs
       // Note: This must run BEFORE applying idle logs so that users with estimated hours
       // from screenshots also have their idle time properly applied
-      (screenshotsData || []).forEach(screenshot => {
+      scopedScreenshots.forEach(screenshot => {
         if (!screenshot.user_id || !employeeMap[screenshot.user_id]) return;
 
         employeeMap[screenshot.user_id].hasScreenshots = true;
@@ -396,7 +358,7 @@ export default function AllEmployeeReport() {
       // Build a map of total idle_seconds per user from time_logs (fallback when idle_logs missing)
       const userIdleSecondsMap: { [userId: string]: number } = {};
       const userDeductedSecondsMap: { [userId: string]: number } = {};
-      (timeLogsData || []).forEach(log => {
+      scopedTimeLogs.forEach(log => {
         if (!log.user_id) return;
         if ((log as any).idle_seconds) {
           userIdleSecondsMap[log.user_id] = (userIdleSecondsMap[log.user_id] || 0) + ((log as any).idle_seconds || 0);

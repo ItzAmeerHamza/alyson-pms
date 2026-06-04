@@ -1,6 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { backendGet } from '@/lib/backend-api';
 import { getLogDuration } from '@/lib/time-utils';
-import { fetchPaginated } from '@/lib/supabase-utils';
 
 export interface AppLogRow {
   id?: string;
@@ -12,6 +11,7 @@ export interface AppLogRow {
   category: string | null;
   user_id?: string;
   organization_id?: string | null;
+  timestamp?: string | null;
 }
 
 export interface AppUsageStat {
@@ -33,24 +33,24 @@ export async function fetchAppLogs(
   start: Date,
   end: Date,
   ctx: OrgContext,
-  selectedUser?: string
+  selectedUser?: string,
 ): Promise<AppLogRow[]> {
-  let query = supabase
-    .from('app_logs')
-    .select('app_name, started_at, ended_at, duration_seconds, window_title, category, user_id')
-    .gte('started_at', start.toISOString())
-    .lte('started_at', end.toISOString())
-    .not('app_name', 'is', null);
-
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+    limit: '10000',
+  });
   if (selectedUser && selectedUser !== 'all') {
-    query = query.eq('user_id', selectedUser);
+    params.set('userId', selectedUser);
   }
+
+  const rows = await backendGet<AppLogRow[]>(`/data/app-logs?${params.toString()}`);
 
   if (ctx.organizationId && !ctx.isSuperAdmin && ctx.orgUserIds?.length) {
-    query = query.in('user_id', ctx.orgUserIds);
+    const ids = new Set(ctx.orgUserIds);
+    return rows.filter((r) => r.user_id && ids.has(r.user_id));
   }
-
-  return await fetchPaginated<AppLogRow>(query);
+  return rows;
 }
 
 export function aggregateAppUsage(logs: AppLogRow[]): AppUsageStat[] {

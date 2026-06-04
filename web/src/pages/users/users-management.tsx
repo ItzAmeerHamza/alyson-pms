@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,8 @@ import {
   EyeOff
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
+import { backendGet } from "@/lib/backend-api";
+import { useOrgUsers } from "@/domains/people/hooks/use-org-users";
 import { AssignProjectsDialog } from "./components/assign-projects-dialog";
 import { ManageTeamDialog } from "./components/manage-team-dialog";
 import { ManualHoursModal } from "@/components/ManualHoursModal";
@@ -79,6 +81,24 @@ function getEmployeeId(uuid: string): string {
   return "EMP-" + uuid.substring(0, 8).toUpperCase();
 }
 
+function mapUsersFromApi(usersData: Array<Record<string, unknown>>): User[] {
+  return (usersData || []).map((user) => ({
+    id: user.id as string,
+    email: user.email as string,
+    full_name: user.full_name as string,
+    role: user.role as string,
+    avatar_url: (user.avatar_url as string | null) ?? null,
+    is_active: (user.is_active as boolean | undefined) ?? true,
+    paused_at: (user.paused_at as string | null) ?? null,
+    paused_by: (user.paused_by as string | null) ?? null,
+    pause_reason: (user.pause_reason as string | null) ?? null,
+    last_activity: (user.last_activity as string) || new Date().toISOString(),
+    auth_status: 'confirmed' as const,
+    email_confirmed_at: new Date().toISOString(),
+    agent_version: (user.agent_version as string | null) ?? null,
+  }));
+}
+
 export default function UsersManagement() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -113,6 +133,18 @@ export default function UsersManagement() {
   const { toast } = useToast();
   const { userDetails, isSuperAdmin } = useAuth();
   const organizationId = userDetails?.organization_id;
+  const usersErrorToastShown = useRef(false);
+  const {
+    data: orgUsers,
+    isLoading: usersQueryLoading,
+    isError: usersQueryError,
+    error: usersQueryErrorDetail,
+    refetch: refetchOrgUsers,
+  } = useOrgUsers(!!userDetails?.id);
+
+  const refreshUsers = useCallback(() => {
+    void refetchOrgUsers();
+  }, [refetchOrgUsers]);
 
   const form = useForm<UserRoleFormValues>({
     resolver: zodResolver(userRoleFormSchema),
@@ -150,13 +182,36 @@ export default function UsersManagement() {
     },
   });
 
-  // Fetch users when userDetails is available
+  // Sync React Query org-users into local state (no [users] dep — avoids fetch loops)
   useEffect(() => {
-    if (userDetails) {
-      fetchUsers();
+    if (orgUsers) {
+      setUsers(mapUsersFromApi(orgUsers as unknown as Array<Record<string, unknown>>));
+    }
+  }, [orgUsers]);
+
+  useEffect(() => {
+    setLoading(usersQueryLoading);
+  }, [usersQueryLoading]);
+
+  useEffect(() => {
+    if (usersQueryError && usersQueryErrorDetail && !usersErrorToastShown.current) {
+      usersErrorToastShown.current = true;
+      toast({
+        title: "Error fetching users",
+        description: (usersQueryErrorDetail as Error).message,
+        variant: "destructive",
+      });
+    }
+    if (!usersQueryError) {
+      usersErrorToastShown.current = false;
+    }
+  }, [usersQueryError, usersQueryErrorDetail, toast]);
+
+  useEffect(() => {
+    if (userDetails?.id) {
       fetchUserProjectCounts();
     }
-  }, [userDetails, toast]);
+  }, [userDetails?.id]);
 
   // Fetch projects when create dialog opens
   useEffect(() => {
@@ -169,18 +224,7 @@ export default function UsersManagement() {
   const fetchProjects = async () => {
     setLoadingProjects(true);
     try {
-      let query = supabase
-        .from('projects')
-        .select('id, name, organization_id');
-      
-      // Filter by organization if user is not a super admin
-      if (userDetails?.organization_id && !userDetails?.is_super_admin) {
-        query = query.eq('organization_id', userDetails.organization_id);
-      }
-      
-      const { data, error } = await query.order('name');
-
-      if (error) throw error;
+      const data = await backendGet<Array<{ id: string; name: string; organization_id?: string }>>('/data/projects');
       setProjects(data || []);
     } catch (error: any) {
       console.error('Error fetching projects:', error);
@@ -197,10 +241,8 @@ export default function UsersManagement() {
   // Fetch project counts for each user
   const fetchUserProjectCounts = async () => {
     try {
-      const { data, error } = await supabase
-        .from('employee_project_assignments')
-        .select('user_id');
-
+      // TODO: replace with backend endpoint once assignments API is migrated.
+      const { data, error } = await supabase.from('employee_project_assignments').select('user_id');
       if (error) throw error;
 
       const counts: Record<string, number> = {};
@@ -415,7 +457,7 @@ export default function UsersManagement() {
 
       // Refresh users list (with small delay to ensure DB is updated)
       await new Promise(resolve => setTimeout(resolve, 300));
-      fetchUsers();
+      refreshUsers();
       
       // Close dialog and reset form
       setIsCreateDialogOpen(false);
@@ -431,109 +473,6 @@ export default function UsersManagement() {
       });
     }
   }
-
-  // Fetch users function (extracted from useEffect) - filters by organization
-  const fetchUsers = async () => {
-    try {
-      console.log('Fetching users...');
-      
-      // Build query with organization filter for non-super admins
-      let query = supabase
-        .from("users")
-        .select(`
-          id,
-          email,
-          full_name,
-          role,
-          avatar_url,
-          is_active,
-          paused_at,
-          paused_by,
-          pause_reason,
-          last_activity,
-          organization_id
-        `)
-        .not('email', 'ilike', '%@example.com%');
-      
-      // Filter by organization if user is not a super admin
-      if (userDetails?.organization_id && !userDetails?.is_super_admin) {
-        query = query.eq('organization_id', userDetails.organization_id);
-      }
-      
-      const { data: usersData, error: usersError } = await query.order("full_name");
-
-      if (usersError) {
-        console.error('Error fetching users:', usersError);
-        throw usersError;
-      }
-
-      // Fetch latest agent versions from screenshots (most reliable source)
-      const userIds = (usersData || []).map(u => u.id);
-      const agentVersions: Record<string, string | null> = {};
-      
-      if (userIds.length > 0) {
-        const { data: versionData } = await supabase
-          .from("screenshots")
-          .select("user_id, agent_version, captured_at")
-          .in("user_id", userIds)
-          .not("agent_version", "is", null)
-          .order("captured_at", { ascending: false })
-          .limit(200);
-        
-        (versionData || []).forEach(row => {
-          if (row.user_id && row.agent_version && !agentVersions[row.user_id]) {
-            agentVersions[row.user_id] = row.agent_version;
-          }
-        });
-
-        // Fallback: fetch version individually for offline users missed by the limit(200) batch
-        const missingVersionIds = userIds.filter(id => !agentVersions[id]);
-        if (missingVersionIds.length > 0) {
-          const fallbackResults = await Promise.all(
-            missingVersionIds.map(uid =>
-              supabase
-                .from("screenshots")
-                .select("user_id, agent_version")
-                .eq("user_id", uid)
-                .not("agent_version", "is", null)
-                .order("captured_at", { ascending: false })
-                .limit(1)
-            )
-          );
-          fallbackResults.forEach(({ data }) => {
-            if (data?.[0]?.user_id && data[0].agent_version) {
-              agentVersions[data[0].user_id] = data[0].agent_version;
-            }
-          });
-        }
-      }
-
-      // Use actual database values, with fallbacks only for missing auth status
-      const usersWithStatus = (usersData || []).map(user => ({
-        ...user,
-        auth_status: 'confirmed' as const, // Still defaulting this until proper auth status is implemented
-        email_confirmed_at: new Date().toISOString(),
-        is_active: user.is_active ?? true, // Use database value or default to true if null
-        paused_at: user.paused_at,
-        paused_by: user.paused_by,
-        pause_reason: user.pause_reason,
-        last_activity: user.last_activity || new Date().toISOString(),
-        agent_version: agentVersions[user.id] || null
-      }));
-      
-      console.log('Users fetched:', usersWithStatus);
-      setUsers(usersWithStatus);
-    } catch (error: any) {
-      console.error('Error fetching users:', error);
-      toast({
-        title: "Error fetching users",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Open dialog for editing role
   function handleEditRole(user: User) {
@@ -679,7 +618,7 @@ export default function UsersManagement() {
       });
 
       // Refresh users list
-      fetchUsers();
+      refreshUsers();
       setIsPauseDialogOpen(false);
     } catch (error: any) {
       toast({
@@ -716,7 +655,7 @@ export default function UsersManagement() {
       });
 
       // Refresh users list
-      fetchUsers();
+      refreshUsers();
     } catch (error: any) {
       toast({
         title: "Error unpausing user",
@@ -743,7 +682,7 @@ export default function UsersManagement() {
       });
       
       // Refresh users list to update status
-      fetchUsers();
+      refreshUsers();
     } catch (error: any) {
       console.error('Error sending confirmation:', error);
       toast({
@@ -1419,7 +1358,7 @@ export default function UsersManagement() {
           isSuperAdmin={isSuperAdmin}
           onAssignmentChange={() => {
             fetchUserProjectCounts();
-            fetchUsers();
+            refreshUsers();
           }}
         />
       )}
@@ -1468,14 +1407,14 @@ export default function UsersManagement() {
         onOpenChange={setIsManageTeamOpen}
         teamLeaderId={manageTeamUserId}
         teamLeaderName={manageTeamUserName}
-        onTeamChange={() => fetchUsers()}
+        onTeamChange={() => refreshUsers()}
       />
 
       {/* Manual Hours Modal */}
       <ManualHoursModal
         isOpen={isManualHoursOpen}
         onClose={() => setIsManualHoursOpen(false)}
-        onSaved={() => fetchUsers()}
+        onSaved={() => refreshUsers()}
         preSelectedEmployeeId={manualHoursUserId}
         preSelectedEmployeeName={manualHoursUserName}
       />

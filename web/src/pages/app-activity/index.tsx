@@ -6,8 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EmployeeFilterCombobox } from '@/components/shared/employee-filter-combobox';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchAppLogs, aggregateAppUsage } from '@/domains/monitoring/services/app-logs.service';
 import { useAuth } from '@/providers/auth-provider';
 import { format, subDays, subMonths, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -163,105 +162,42 @@ export default function AppActivityPage() {
 
   const fetchAppData = async (start: Date, end: Date) => {
     try {
-      console.log(`🔍 [APP-ACTIVITY] Fetching app data for range: ${start.toISOString()} to ${end.toISOString()}`);
-      
-      // Get organization user IDs for filtering
-      const orgUserIds = users.map(u => u.id);
-      
-      // If no users in org, return empty
+      const orgUserIds = users.map((u) => u.id);
       if (orgUserIds.length === 0) {
         setAppData([]);
         return;
       }
-      
-      const { error: startedAtColumnError } = await supabase
-        .from('app_logs')
-        .select('started_at')
-        .limit(1);
 
-      const useLegacyTimestamp =
-        !!startedAtColumnError &&
-        `${startedAtColumnError.message || ''}`.toLowerCase().includes('started_at');
+      const logs = await fetchAppLogs(
+        start,
+        end,
+        { organizationId, isSuperAdmin, orgUserIds },
+        selectedUser,
+      );
 
-      let query = supabase
-        .from('app_logs')
-        .select('app_name, started_at, ended_at, duration_seconds, timestamp, window_title, user_id, time_log_id, category')
-        .in('user_id', orgUserIds)
-        .not('app_name', 'is', null);
+      const enriched = logs.map((log) => ({
+        ...log,
+        category: log.category || getCategoryFromAppName(log.app_name),
+      }));
 
-      if (useLegacyTimestamp) {
-        query = query
-          .gte('timestamp', start.toISOString())
-          .lte('timestamp', end.toISOString());
-      } else {
-        query = query
-          .gte('started_at', start.toISOString())
-          .lte('started_at', end.toISOString());
-      }
+      let processedApps = aggregateAppUsage(enriched).map((app) => ({
+        ...app,
+        category: app.category || getCategoryFromAppName(app.app_name),
+      }));
 
-      if (selectedUser !== 'all') {
-        query = query.eq('user_id', selectedUser);
-      }
-
-      const data = await fetchPaginated(query);
-
-      console.log(`📊 [APP-ACTIVITY] Found ${data?.length || 0} app log entries`);
-      if (data && data.length > 0) {
-        console.log('📋 [APP-ACTIVITY] Sample app log:', data[0]);
-      }
-
-      // Process app data - group by app_name using recorded duration fields
-      const appStats = (data || []).reduce((acc: any, log: any) => {
-        const appName = log.app_name || 'Unknown App';
-        if (!acc[appName]) {
-          acc[appName] = {
-            app_name: appName,
-            total_duration: 0,
-            total_sessions: 0,
-            category: log.category || getCategoryFromAppName(appName),
-            session_ids: new Set<string>()
-          };
-        }
-
-        let duration = getLogDuration(log);
-        if (duration <= 0 && log.timestamp) {
-          // Legacy app_logs rows with only timestamp still need visible (non-zero) usage.
-          duration = 30;
-        }
-        acc[appName].total_duration += duration;
-
-        const sessionKey =
-          log.time_log_id ||
-          `${log.user_id || 'unknown-user'}:${log.started_at || log.timestamp || 'unknown-start'}:${appName}`;
-        acc[appName].session_ids.add(sessionKey);
-        acc[appName].total_sessions = acc[appName].session_ids.size;
-        return acc;
-      }, {});
-
-      // BUG FIX: Filter Unknown apps BEFORE calculating percentages so they sum to 100%
       const unknownAppNames = ['Unknown', 'Unknown App', 'Unknown Application', 'Desktop Activity'];
-      
-      let filteredAppStats = Object.values(appStats);
       if (!showUnknown) {
-        filteredAppStats = filteredAppStats.filter((app: any) => 
-          !unknownAppNames.includes(app.app_name)
-        );
+        processedApps = processedApps.filter((app) => !unknownAppNames.includes(app.app_name));
       }
 
-      // Calculate totalDuration AFTER filtering so percentages sum to 100%
-      const totalDuration = filteredAppStats.reduce((sum: number, app: any) => sum + app.total_duration, 0);
-
-      let processedApps: AppData[] = filteredAppStats
-        .map((app: any) => ({
+      const totalDuration = processedApps.reduce((sum, app) => sum + app.total_duration, 0);
+      processedApps = processedApps
+        .map((app) => ({
           ...app,
-          session_ids: undefined,
-          avg_duration: app.total_sessions > 0 ? Math.round(app.total_duration / app.total_sessions) : 0,
-          percentage: totalDuration > 0 ? Math.round((app.total_duration / totalDuration) * 100) : 0
+          percentage: totalDuration > 0 ? Math.round((app.total_duration / totalDuration) * 100) : 0,
         }))
-        .sort((a: any, b: any) => b.total_duration - a.total_duration)
-        .slice(0, 20); // Take top 20
+        .slice(0, 20);
 
-      // Processed app data logging disabled for performance
       setAppData(processedApps);
     } catch (error) {
       console.error('Error fetching app data:', error);

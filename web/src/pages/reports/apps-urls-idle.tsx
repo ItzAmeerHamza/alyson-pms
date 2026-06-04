@@ -6,8 +6,9 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EmployeeFilterCombobox } from '@/components/shared/employee-filter-combobox';
 import { Input } from '@/components/ui/input';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchAppLogs, aggregateAppUsage } from '@/domains/monitoring/services/app-logs.service';
+import { fetchUrlLogs, aggregateUrlUsage } from '@/domains/monitoring/services/url-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { useAuth } from '@/providers/auth-provider';
 import { format, subDays, subMonths, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -96,22 +97,18 @@ export default function AppsUrlsPage() {
 
   const fetchUsers = async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, full_name, email')
-        .in('role', ['employee', 'admin', 'manager']);
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('full_name');
-
-      if (error) throw error;
-      const resolvedUsers = data || [];
-      setUsers(resolvedUsers);
-      setOrgUserIds(resolvedUsers.map(user => user.id));
+      const resolvedUsers = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
+      setUsers(
+        resolvedUsers.map((u) => ({
+          id: u.id,
+          full_name: u.full_name || u.email,
+          email: u.email,
+        })),
+      );
+      setOrgUserIds(resolvedUsers.map((user) => user.id));
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -137,55 +134,12 @@ export default function AppsUrlsPage() {
 
   const fetchAppData = async (start: Date, end: Date) => {
     try {
-      const baseQuery = supabase
-        .from('app_logs')
-        .select('app_name, started_at, ended_at, duration_seconds, window_title, category')
-        .gte('started_at', start.toISOString())
-        .lte('started_at', end.toISOString())
-        .not('app_name', 'is', null);
-
-      let query = baseQuery;
-      if (selectedUser !== 'all') {
-        query = query.eq('user_id', selectedUser);
-      }
-
-      // Filter by organization users unless super admin
-      if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        query = query.in('user_id', orgUserIds);
-      }
-
-      const data = await fetchPaginated<any>(query);
-
-      const appStats = data.reduce((acc: any, log: any) => {
-        const appName = log.app_name || 'Unknown App';
-        if (!acc[appName]) {
-          acc[appName] = {
-            app_name: appName,
-            total_duration: 0,
-            total_sessions: 0,
-            category: log.category || 'Other'
-          };
-        }
-        
-        const duration = getLogDuration(log);
-        
-        acc[appName].total_duration += duration;
-        acc[appName].total_sessions += 1;
-        return acc;
-      }, {});
-
-      const totalDuration = Object.values(appStats).reduce((sum: number, app: any) => sum + app.total_duration, 0);
-
-      const processedApps: AppData[] = Object.values(appStats)
-        .map((app: any) => ({
-          ...app,
-          avg_duration: app.total_sessions > 0 ? Math.round(app.total_duration / app.total_sessions) : 0,
-          percentage: totalDuration > 0 ? Math.round((app.total_duration / totalDuration) * 100) : 0
-        }))
-        .sort((a: any, b: any) => b.total_duration - a.total_duration)
-        .slice(0, 20); // Top 20 apps
-
-      // Processed app data logging disabled for performance
+      const logs = await fetchAppLogs(start, end, {
+        organizationId,
+        isSuperAdmin,
+        orgUserIds,
+      }, selectedUser !== 'all' ? selectedUser : undefined);
+      const processedApps = aggregateAppUsage(logs).slice(0, 20) as AppData[];
       setAppData(processedApps);
     } catch (error) {
       console.error('Error fetching app data:', error);
@@ -199,58 +153,12 @@ export default function AppsUrlsPage() {
         setUrlData([]);
         return;
       }
-      const baseQuery = supabase
-        .from('url_logs_compat')
-        .select('site_url, domain, started_at, ended_at, duration_seconds, title, browser')
-        .gte('started_at', start.toISOString())
-        .lte('started_at', end.toISOString())
-        .not('site_url', 'is', null)
-        .not('site_url', 'ilike', '%browser-activity-detected.local%');
-
-      let query = baseQuery;
-      if (selectedUser !== 'all') {
-        query = query.eq('user_id', selectedUser);
-      }
-
-      // Filter by organization users unless super admin
-      if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        query = query.in('user_id', orgUserIds);
-      }
-
-      const data = await fetchPaginated<any>(query);
-
-      const urlStats = data.reduce((acc: any, log: any) => {
-        const domain = log.domain || extractDomain(log.site_url);
-        
-        if (!acc[domain]) {
-          acc[domain] = {
-            domain: domain,
-            site_url: log.site_url || '',
-            total_duration: 0,
-            total_visits: 0,
-            category: log.category || 'Other'
-          };
-        }
-        
-        const duration = getLogDuration(log);
-        
-        acc[domain].total_duration += duration;
-        acc[domain].total_visits += 1;
-        return acc;
-      }, {});
-
-      const totalDuration = Object.values(urlStats).reduce((sum: number, url: any) => sum + url.total_duration, 0);
-
-      const processedUrls: UrlData[] = Object.values(urlStats)
-        .map((url: any) => ({
-          ...url,
-          avg_duration: url.total_visits > 0 ? Math.round(url.total_duration / url.total_visits) : 0,
-          percentage: totalDuration > 0 ? Math.round((url.total_duration / totalDuration) * 100) : 0
-        }))
-        .sort((a: any, b: any) => b.total_duration - a.total_duration)
-        .slice(0, 20); // Top 20 domains
-
-      // Processed URL data logging disabled for performance
+      const logs = await fetchUrlLogs(start, end, {
+        organizationId,
+        isSuperAdmin,
+        orgUserIds,
+      }, selectedUser !== 'all' ? selectedUser : undefined);
+      const processedUrls = aggregateUrlUsage(logs).slice(0, 20) as UrlData[];
       setUrlData(processedUrls);
     } catch (error) {
       console.error('Error fetching URL data:', error);

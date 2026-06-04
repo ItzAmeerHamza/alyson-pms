@@ -3,15 +3,39 @@
  * See README.md for env vars and usage.
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { readFileSync, existsSync } from 'node:fs';
+import pg from 'pg';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Load .env from this folder, scripts/.env, backend/.env, or repo root. */
+function loadDotEnvFiles() {
+  const candidates = [
+    resolve(__dirname, '.env'),
+    resolve(__dirname, '../.env'),
+    resolve(__dirname, '../../backend/.env'),
+    resolve(__dirname, '../../.env'),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      dotenv.config({ path });
+    }
+  }
+  if (!process.env.SUPABASE_URL && process.env.VITE_SUPABASE_URL) {
+    process.env.SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_KEY) {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_KEY;
+  }
+}
+
+loadDotEnvFiles();
 
 function parseArgs(argv) {
   const out = {
@@ -20,11 +44,17 @@ function parseArgs(argv) {
     batchSize: 150,
     skipExisting: false,
     startOffset: 0,
+    preservePath: false,
+    noTranscode: false,
+    updateRds: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') out.dryRun = true;
     else if (a === '--skip-existing') out.skipExisting = true;
+    else if (a === '--preserve-path') out.preservePath = true;
+    else if (a === '--no-transcode') out.noTranscode = true;
+    else if (a === '--update-rds') out.updateRds = true;
     else if (a === '--limit') out.limit = Number(argv[++i] || 0) || null;
     else if (a === '--batch-size') out.batchSize = Math.max(1, Number(argv[++i] || 150));
     else if (a === '--start-offset') out.startOffset = Math.max(0, Number(argv[++i] || 0));
@@ -47,7 +77,10 @@ function loadEnv() {
   const distractionMin = Number(process.env.AUDIT_DISTRACTION_MIN || 75);
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error(
+      'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. ' +
+        'Create scripts/screenshots-s3-migrate/.env or scripts/.env (see .env.example).',
+    );
   }
   if (!accessKeyId || !secretAccessKey) {
     throw new Error('Missing AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY');
@@ -103,13 +136,38 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-function buildS3Key({ prefix, capturedAt, organizationId, userId, screenshotId, ext }) {
+function buildS3Key({ prefix, capturedAt, organizationId, userId, screenshotId, ext, filePath, preservePath }) {
+  if (preservePath && filePath) {
+    const normalized = String(filePath).replace(/^\/+/, '');
+    return prefix ? `${prefix}/${normalized}` : normalized;
+  }
   const d = new Date(capturedAt);
   const y = d.getUTCFullYear();
   const m = pad2(d.getUTCMonth() + 1);
   const day = pad2(d.getUTCDate());
   const orgSeg = organizationId ? String(organizationId) : 'none';
   return `${prefix}/${y}/${m}/${day}/organization_${orgSeg}/user_${userId}/${screenshotId}.${ext}`;
+}
+
+function contentTypeFromPath(path) {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.avif')) return 'image/avif';
+  return 'application/octet-stream';
+}
+
+function inferExtFromRow(row) {
+  const path = row.file_path || row.image_url || '';
+  const match = String(path).match(/\.([a-z0-9]+)(?:\?|$)/i);
+  if (match) {
+    const ext = match[1].toLowerCase();
+    if (['png', 'jpg', 'jpeg', 'webp', 'avif'].includes(ext)) {
+      return ext === 'jpeg' ? 'jpg' : ext;
+    }
+  }
+  return 'png';
 }
 
 /**
@@ -188,12 +246,52 @@ async function existsOnS3(client, bucket, key) {
   }
 }
 
+function createRdsPool() {
+  const host = process.env.DATABASE_HOST;
+  const user = process.env.DATABASE_USER;
+  const password = process.env.DATABASE_PASSWORD;
+  const database = process.env.DATABASE_NAME || 'postgres';
+  const port = parseInt(process.env.DATABASE_PORT || '5432', 10);
+  if (!host || !user || !password) return null;
+
+  const sslReject = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false';
+  const ssl =
+    process.env.DATABASE_SSL === 'true' || process.env.DATABASE_SSL === '1'
+      ? { rejectUnauthorized: sslReject }
+      : false;
+
+  return new pg.Pool({
+    host,
+    port,
+    user,
+    password,
+    database,
+    ssl,
+    max: 3,
+  });
+}
+
+async function updateRdsS3Key(pool, screenshotId, s3Key, dryRun) {
+  if (dryRun) {
+    console.log('[dry-run-db]', screenshotId, s3Key);
+    return;
+  }
+  await pool.query(
+    `UPDATE public.screenshots SET s3_key = $2 WHERE id = $1`,
+    [screenshotId, s3Key],
+  );
+}
+
 async function run() {
   const args = parseArgs(process.argv);
   const env = loadEnv();
   const supabase = createClient(env.supabaseUrl, env.supabaseKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const rdsPool = args.updateRds ? createRdsPool() : null;
+  if (args.updateRds && !rdsPool) {
+    throw new Error('--update-rds requires DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD');
+  }
 
   const auditIdSet =
     env.auditMode === 'file' ? loadAuditIdSet(env.auditIdsFile) : new Set();
@@ -223,6 +321,9 @@ async function run() {
         until: env.until,
         auditMode: env.auditMode,
         skipExisting: args.skipExisting,
+        preservePath: args.preservePath,
+        noTranscode: args.noTranscode,
+        updateRds: args.updateRds,
       },
       null,
       2,
@@ -270,12 +371,39 @@ async function run() {
 
       try {
         const raw = await downloadOriginal(supabase, row);
-        const out = await transcodeForArchive(raw, audit);
-        const key = buildS3Key({ ...keyBase, ext: out.ext });
+        let key;
+        let body;
+        let contentType;
+        let tier;
+
+        if (args.preservePath && args.noTranscode) {
+          key = buildS3Key({ ...keyBase, filePath: row.file_path, preservePath: true });
+          body = raw;
+          contentType = contentTypeFromPath(key);
+          tier = 'preserve-original';
+        } else if (args.noTranscode) {
+          const ext = inferExtFromRow(row);
+          key = buildS3Key({ ...keyBase, ext, preservePath: false });
+          body = raw;
+          contentType = contentTypeFromPath(`x.${ext}`);
+          tier = 'dated-layout-original';
+        } else {
+          const out = await transcodeForArchive(raw, audit);
+          key = buildS3Key({
+            ...keyBase,
+            ext: out.ext,
+            filePath: row.file_path,
+            preservePath: args.preservePath,
+          });
+          body = out.body;
+          contentType = out.contentType;
+          tier = out.tier;
+        }
 
         if (args.skipExisting && !args.dryRun) {
           const exists = await existsOnS3(env.s3, env.bucket, key);
           if (exists) {
+            if (rdsPool) await updateRdsS3Key(rdsPool, row.id, key, args.dryRun);
             skipped++;
             processed++;
             indexInBatch++;
@@ -285,26 +413,28 @@ async function run() {
         }
 
         if (args.dryRun) {
-          console.log('[dry-run]', { key, tier: out.tier, bytes: out.body.length, audit });
+          console.log('[dry-run]', { key, tier, bytes: body.length, audit });
+          if (rdsPool) await updateRdsS3Key(rdsPool, row.id, key, true);
           uploaded++;
         } else {
           await env.s3.send(
             new PutObjectCommand({
               Bucket: env.bucket,
               Key: key,
-              Body: out.body,
-              ContentType: out.contentType,
-                Metadata: {
-                  'source-screenshot-id': String(row.id).replace(/[^a-z0-9-]/gi, ''),
-                  'source-user-id': String(row.user_id).replace(/[^a-z0-9-]/gi, ''),
-                  'captured-at-utc': String(row.captured_at).replace(/[^\w.+-]/g, '_'),
-                  'compression-tier': String(out.tier).replace(/[^\w.-]/g, '_'),
-                  'audit-lossless': audit ? 'true' : 'false',
-                },
+              Body: body,
+              ContentType: contentType,
+              Metadata: {
+                'source-screenshot-id': String(row.id).replace(/[^a-z0-9-]/gi, ''),
+                'source-user-id': String(row.user_id).replace(/[^a-z0-9-]/gi, ''),
+                'captured-at-utc': String(row.captured_at).replace(/[^\w.+-]/g, '_'),
+                'compression-tier': String(tier).replace(/[^\w.-]/g, '_'),
+                'audit-lossless': audit ? 'true' : 'false',
+              },
             }),
           );
+          if (rdsPool) await updateRdsS3Key(rdsPool, row.id, key, false);
           uploaded++;
-          console.log('[upload]', key, out.tier, out.body.length);
+          console.log('[upload]', key, tier, body.length);
         }
       } catch (e) {
         failed++;
@@ -325,6 +455,7 @@ async function run() {
       2,
     ),
   );
+  if (rdsPool) await rdsPool.end();
   if (failed > 0) process.exitCode = 1;
 }
 

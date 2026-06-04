@@ -10,6 +10,7 @@ try {
 }
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '../web/.env') });
 
 function loadConfig() {
   console.log('🔧 Loading desktop agent configuration...');
@@ -27,7 +28,13 @@ function loadConfig() {
       if (trimmedLine && !trimmedLine.startsWith('#')) {
         const [key, ...valueParts] = trimmedLine.split('=');
         if (key && valueParts.length > 0) {
-          const value = valueParts.join('=').trim();
+          let value = valueParts.join('=').trim();
+          if (
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))
+          ) {
+            value = value.slice(1, -1);
+          }
           envConfig[key.trim()] = value;
         }
       }
@@ -59,36 +66,89 @@ function loadConfig() {
                       embeddedConfig.SUPABASE_ANON_KEY || 
                       jsonConfig.supabase_key || '';
   
+  const authProvider =
+    process.env.VITE_AUTH_PROVIDER ||
+    process.env.AUTH_PROVIDER ||
+    envConfig.VITE_AUTH_PROVIDER ||
+    envConfig.AUTH_PROVIDER ||
+    embeddedConfig.VITE_AUTH_PROVIDER ||
+    embeddedConfig.AUTH_PROVIDER ||
+    jsonConfig.auth_provider ||
+    'supabase';
+
+  const cognitoRegion =
+    process.env.VITE_COGNITO_REGION ||
+    process.env.COGNITO_REGION ||
+    envConfig.VITE_COGNITO_REGION ||
+    embeddedConfig.VITE_COGNITO_REGION ||
+    embeddedConfig.COGNITO_REGION ||
+    '';
+  const cognitoUserPoolId =
+    process.env.VITE_COGNITO_USER_POOL_ID ||
+    process.env.COGNITO_USER_POOL_ID ||
+    envConfig.VITE_COGNITO_USER_POOL_ID ||
+    embeddedConfig.VITE_COGNITO_USER_POOL_ID ||
+    embeddedConfig.COGNITO_USER_POOL_ID ||
+    '';
+  const cognitoClientId =
+    process.env.VITE_COGNITO_CLIENT_ID ||
+    process.env.COGNITO_CLIENT_ID ||
+    envConfig.VITE_COGNITO_CLIENT_ID ||
+    embeddedConfig.VITE_COGNITO_CLIENT_ID ||
+    embeddedConfig.COGNITO_CLIENT_ID ||
+    '';
+
+  const apiBaseUrl =
+    process.env.VITE_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    envConfig.VITE_API_BASE_URL ||
+    jsonConfig.api_base_url ||
+    'http://localhost:3000';
+
+  const backendApiUrl =
+    process.env.BACKEND_API_URL ||
+    envConfig.BACKEND_API_URL ||
+    jsonConfig.backend_api_url ||
+    `${apiBaseUrl.replace(/\/$/, '')}/sync/desktop-action`;
+
+  const internalApiKey =
+    process.env.INTERNAL_API_KEY || envConfig.INTERNAL_API_KEY || jsonConfig.backend_api_key || '';
+
+  const useCognito =
+    authProvider === 'cognito' && Boolean(cognitoUserPoolId && cognitoClientId);
+
   const config = {
     ...jsonConfig,
     supabase_url: supabaseUrl,
     supabase_key: supabaseKey,
-    // Also include VITE_ prefixed versions for compatibility with config-manager.js
     VITE_SUPABASE_URL: supabaseUrl,
     VITE_SUPABASE_ANON_KEY: supabaseKey,
     SUPABASE_URL: supabaseUrl,
     SUPABASE_ANON_KEY: supabaseKey,
-    // SECURITY: Service role key removed from client.
-    // All writes go through the desktop-sync edge function.
     supabase_service_key: '',
-    SUPABASE_SERVICE_ROLE_KEY: ''
+    SUPABASE_SERVICE_ROLE_KEY: '',
+    auth_provider: useCognito ? 'cognito' : 'supabase',
+    cognito_region: cognitoRegion,
+    cognito_user_pool_id: cognitoUserPoolId,
+    cognito_client_id: cognitoClientId,
+    api_base_url: apiBaseUrl,
+    backend_api_url: backendApiUrl,
+    backend_api_key: internalApiKey,
   };
-  
-  // Validate required credentials
-  if (!config.supabase_url || !config.supabase_key) {
-    console.error('❌ Missing Supabase credentials!');
-    console.error('   Please ensure either:');
-    console.error('   1. .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
-    console.error('   2. OR environment variables VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set');
-    console.error('   3. OR config.json contains supabase_url and supabase_key');
-    console.error('   4. OR embedded config is available (for packaged apps)');
+
+  if (!useCognito && (!config.supabase_url || !config.supabase_key)) {
+    console.error('❌ Missing Supabase credentials (or set VITE_AUTH_PROVIDER=cognito with Cognito vars)');
     throw new Error('Missing required Supabase environment variables');
   }
-  
+
   console.log('✅ Configuration loaded successfully');
-  console.log(`   Using Supabase URL: ${config.supabase_url}`);
-  console.log(`   Using credentials from: ${envConfig.SUPABASE_URL ? '.env file' : embeddedConfig.SUPABASE_URL ? 'embedded config' : 'config.json'}`);
-  console.log(`   Service role key: NOT EMBEDDED (uses edge function)`);
+  console.log(`   Auth provider: ${config.auth_provider}`);
+  if (useCognito) {
+    console.log(`   Cognito pool: ${cognitoUserPoolId}`);
+    console.log(`   API base: ${apiBaseUrl}`);
+  } else {
+    console.log(`   Using Supabase URL: ${config.supabase_url}`);
+  }
   
   return config;
 }

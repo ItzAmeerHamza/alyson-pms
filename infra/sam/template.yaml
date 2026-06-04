@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: TimeFlow NestJS API — API Gateway HTTP API + Lambda (container image)
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: ECR image URI for the API Lambda (Nest serverless-express handler)
+  VpcSubnetIds:
+    Type: CommaDelimitedList
+    Description: Private subnet IDs for Lambda (RDS Proxy access)
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Security group(s) for Lambda — must allow egress to RDS Proxy
+  DatabaseHost:
+    Type: String
+    Description: RDS Proxy hostname
+  DatabaseName:
+    Type: String
+    Default: timeflow
+  DatabaseUser:
+    Type: String
+    Default: timeflow_admin
+  DatabasePassword:
+    Type: String
+    NoEcho: true
+    Description: Prefer Secrets Manager in production; parameter for dev only
+  S3BucketName:
+    Type: String
+    Description: Private screenshots bucket
+  S3Prefix:
+    Type: String
+    Default: alyson-td-screenshots
+  AllowedOrigins:
+    Type: String
+    Default: http://localhost:8080
+    Description: Comma-separated CORS origins (matches Nest ALLOWED_ORIGINS)
+  InternalApiKey:
+    Type: String
+    NoEcho: true
+    Description: Desktop agent /sync/* authentication
+Globals:
+  Function:
+    Timeout: 29
+    MemorySize: 1024
+    Architectures:
+      - arm64
+
+Resources:
+  TimeFlowApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Environment:
+        Variables:
+          NODE_ENV: production
+          SERVERLESS_MODE: '1'
+          DISABLE_GRAPHQL: '1'
+          DATABASE_HOST: !Ref DatabaseHost
+          DATABASE_NAME: !Ref DatabaseName
+          DATABASE_USER: !Ref DatabaseUser
+          DATABASE_PASSWORD: !Ref DatabasePassword
+          DATABASE_SSL: 'true'
+          DATABASE_POOL_MAX: '2'
+          AWS_S3_SCREENSHOTS_BUCKET: !Ref S3BucketName
+          AWS_S3_SCREENSHOTS_PREFIX: !Ref S3Prefix
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          INTERNAL_API_KEY: !Ref InternalApiKey
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref S3BucketName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: '*'
+      Events:
+        ProxyApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TimeFlowHttpApi
+            Path: /{proxy+}
+            Method: ANY
+        RootApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TimeFlowHttpApi
+            Path: /
+            Method: ANY
+
+  TimeFlowHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: !Split [',', !Ref AllowedOrigins]
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+          - x-api-key
+        AllowCredentials: true
+      # Auth is enforced in Nest (Cognito JWT + INTERNAL_API_KEY for /sync).
+      # Do not set a default API Gateway JWT authorizer — it would block /sync/desktop-action.
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API base URL (no trailing slash)
+    Value: !Sub 'https://${TimeFlowHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  ApiFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt TimeFlowApiFunction.Arn

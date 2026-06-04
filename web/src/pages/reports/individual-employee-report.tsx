@@ -6,8 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmployeeFilterCombobox } from '@/components/shared/employee-filter-combobox';
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchIdleLogs } from '@/domains/monitoring/services/idle-logs.service';
+import { fetchAiInsights } from '@/domains/monitoring/services/ai-insights.service';
+import { fetchOrgUsers } from '@/domains/people';
+import { supabase } from '@/integrations/supabase/client';
 import { calculateSmartSessionSeconds } from '@/lib/time-utils';
 import { useAuth } from "@/providers/auth-provider";
 import { ManualHoursModal } from "@/components/ManualHoursModal";
@@ -153,25 +157,16 @@ export default function IndividualEmployeeReport() {
       // Fetch AI insights from ai_employee_insights table
       // Note: Data is stored in 'insights' JSONB column, columns are:
       // analysis_type, period_start, period_end, insights (jsonb), created_at
-      const { data, error } = await supabase
-        .from('ai_employee_insights')
-        .select('*')
-        .eq('user_id', selectedEmployee)
-        .gte('period_start', start.toISOString())
-        .lte('period_end', end.toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') {
-        console.warn('AI insights query error:', error);
-      }
-      
+      const rows = await fetchAiInsights(start, end, {
+        organizationId,
+        isSuperAdmin,
+      }, { userId: selectedEmployee, limit: 1 });
+      const data = rows[0];
+
       if (data) {
-        // Transform data: extract from 'insights' JSONB column
         const insights = (data.insights || {}) as Record<string, any>;
         const transformed: AIInsight = {
-          id: data.id,
+          id: data.id || '',
           productivity_score: insights.productivity_score || 0,
           activity_percentage: insights.activity_percentage || 0,
           risk_level: insights.risk_level || 'low',
@@ -247,21 +242,12 @@ export default function IndividualEmployeeReport() {
 
   const loadEmployees = async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, full_name, email, role')
-        .in('role', ['employee', 'admin', 'manager']);
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('full_name');
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
 
-      if (error) throw error;
-
-      const employeeList = (data || []).map(emp => ({
+      const employeeList = data.map(emp => ({
         id: emp.id,
         name: emp.full_name || 'Unknown',
         email: emp.email,
@@ -296,47 +282,17 @@ export default function IndividualEmployeeReport() {
       setEndDate(end);
 
       // Get time logs for the selected employee (paginated to bypass PostgREST row cap)
-      const timeLogsData = await fetchPaginated<any>(
-        supabase
-          .from('time_logs')
-          .select(`
-            id,
-            user_id,
-            project_id,
-            start_time,
-            end_time,
-            is_idle,
-            idle_seconds,
-            projects (
-              name
-            )
-          `)
-          .eq('user_id', selectedEmployee)
-          .gte('start_time', start.toISOString())
-          .lte('start_time', end.toISOString())
-          .order('start_time', { ascending: false })
-      );
-
-      // Also get screenshots for users who might not have time logs
-      const screenshotsData = await fetchPaginated<any>(
-        supabase
-          .from('screenshots')
-          .select('id, captured_at, activity_percent, app_name, window_title')
-          .eq('user_id', selectedEmployee)
-          .gte('captured_at', start.toISOString())
-          .lte('captured_at', end.toISOString())
-          .order('captured_at', { ascending: false })
-      );
-
-      // Fetch idle_logs to compute per-session idle time
-      const idleLogsData = await fetchPaginated<any>(
-        supabase
-          .from('idle_logs')
-          .select('user_id, idle_start, idle_end, duration_seconds')
-          .eq('user_id', selectedEmployee)
-          .gte('idle_start', start.toISOString())
-          .lte('idle_start', end.toISOString())
-      );
+      const [timeLogsData, screenshotsData, idleLogsData] = await Promise.all([
+        fetchDetailedTimeLogs(start, end, { organizationId, isSuperAdmin }, {
+          userId: selectedEmployee,
+          limit: 10000,
+        }),
+        fetchScreenshotsApi(
+          { organizationId, isSuperAdmin },
+          { start, end, userId: selectedEmployee, limit: 10000 },
+        ),
+        fetchIdleLogs(start, end, { organizationId, isSuperAdmin }, { userId: selectedEmployee }),
+      ]);
 
       // Build a map of last screenshot time per session time range
       const screenshotTimes = (screenshotsData || []).map((s: any) => new Date(s.captured_at).getTime()).sort((a: number, b: number) => a - b);

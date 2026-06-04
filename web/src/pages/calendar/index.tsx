@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, momentLocalizer, View } from 'react-big-calendar';
 import moment from 'moment';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { calculateSessionHours } from '@/lib/time-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -87,34 +87,23 @@ export default function CalendarPage() {
       
       console.log(`Fetching data for ${currentView} view:`, startDate, 'to', endDate);
 
-      let query = supabase
-        .from('time_logs')
-        .select(`
-          id,
-          start_time,
-          end_time,
-          user_id,
-          users!inner(full_name, email, organization_id)
-        `)
-        .gte('start_time', startDate)
-        .lte('start_time', endDate);
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('users.organization_id', organizationId);
-      }
-      
-      const timeLogs = await fetchPaginated<any>(
-        query.order('start_time', { ascending: true })
+      const orgUsers = await fetchOrgUsers({ organizationId, isSuperAdmin });
+      const userById = new Map(orgUsers.map((u) => [u.id, u]));
+
+      const timeLogs = await fetchDetailedTimeLogs(
+        new Date(startDate),
+        new Date(endDate),
+        { organizationId, isSuperAdmin },
+        { limit: 10000 },
       );
 
-      // Convert to calendar events
-      const calendarEvents: CalendarEvent[] = timeLogs?.map(log => {
+      const calendarEvents: CalendarEvent[] = timeLogs?.map((log: any) => {
         const start = new Date(log.start_time);
         const sessionHours = calculateSessionHours(log.start_time, log.end_time);
         const end = log.end_time ? new Date(log.end_time) : new Date(start.getTime() + sessionHours * 3600000);
-        const userName = log.users?.full_name || log.users?.email || 'Unknown';
-        const userEmail = log.users?.email || '';
+        const user = userById.get(log.user_id) || log.users;
+        const userName = user?.full_name || user?.email || 'Unknown';
+        const userEmail = user?.email || '';
         const duration = Math.round(sessionHours * 60);
         
         return {

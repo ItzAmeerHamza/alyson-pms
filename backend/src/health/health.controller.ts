@@ -1,11 +1,19 @@
 import { Controller, Get } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { ConfigService } from '@nestjs/config';
+import { DatabaseService } from '../database/database.service';
+
+interface HealthCheckEntry {
+  status: string;
+  latency_ms: number;
+  error?: string;
+  backend?: 'rds' | 'supabase';
+}
 
 interface HealthCheck {
   status: 'healthy' | 'degraded' | 'unhealthy';
-  checks: Record<string, { status: string; latency_ms: number; error?: string }>;
+  checks: Record<string, HealthCheckEntry>;
   timestamp: string;
   uptime_seconds: number;
 }
@@ -15,13 +23,18 @@ const startTime = Date.now();
 @SkipThrottle()
 @Controller('health')
 export class HealthController {
-  private readonly supabase;
+  private readonly supabase: SupabaseClient | null;
 
-  constructor(private configService: ConfigService) {
-    this.supabase = createClient(
-      this.configService.get<string>('SUPABASE_URL'),
-      this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY'),
-    );
+  constructor(
+    private configService: ConfigService,
+    private databaseService: DatabaseService,
+  ) {
+    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
+    const supabaseKey = this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    this.supabase =
+      supabaseUrl && supabaseKey
+        ? createClient(supabaseUrl, supabaseKey)
+        : null;
   }
 
   @Get()
@@ -30,21 +43,44 @@ export class HealthController {
 
     const dbStart = Date.now();
     try {
-      const { error } = await this.supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-      const latency = Date.now() - dbStart;
-      checks.database = {
-        status: error ? 'unhealthy' : latency > 2000 ? 'degraded' : 'healthy',
-        latency_ms: latency,
-        ...(error && { error: error.message }),
-      };
-    } catch (e: any) {
+      if (this.databaseService.isEnabled()) {
+        const ping = await this.databaseService.ping();
+        const latency = ping.latencyMs;
+        checks.database = {
+          status: ping.ok
+            ? latency > 2000
+              ? 'degraded'
+              : 'healthy'
+            : 'unhealthy',
+          latency_ms: latency,
+          backend: 'rds',
+          ...(ping.error && { error: ping.error }),
+        };
+      } else if (this.supabase) {
+        const { error } = await this.supabase
+          .from('users')
+          .select('id')
+          .limit(1);
+        const latency = Date.now() - dbStart;
+        checks.database = {
+          status: error ? 'unhealthy' : latency > 2000 ? 'degraded' : 'healthy',
+          latency_ms: latency,
+          backend: 'supabase',
+          ...(error && { error: error.message }),
+        };
+      } else {
+        checks.database = {
+          status: 'unhealthy',
+          latency_ms: 0,
+          error: 'No database configured (set DATABASE_URL or Supabase env)',
+        };
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unknown error';
       checks.database = {
         status: 'unhealthy',
         latency_ms: Date.now() - dbStart,
-        error: e.message,
+        error: message,
       };
     }
 

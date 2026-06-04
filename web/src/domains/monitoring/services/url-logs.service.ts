@@ -1,6 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { backendGet } from '@/lib/backend-api';
 import { getLogDuration } from '@/lib/time-utils';
-import { fetchPaginated } from '@/lib/supabase-utils';
 
 export interface UrlLogRow {
   id?: string;
@@ -13,6 +12,8 @@ export interface UrlLogRow {
   browser: string | null;
   category: string | null;
   user_id?: string;
+  url?: string | null;
+  timestamp?: string | null;
 }
 
 export interface UrlUsageStat {
@@ -45,35 +46,35 @@ export async function fetchUrlLogs(
   start: Date,
   end: Date,
   ctx: OrgContext,
-  selectedUser?: string
+  selectedUser?: string,
 ): Promise<UrlLogRow[]> {
-  let query = supabase
-    .from('url_logs_compat')
-    .select('site_url, domain, started_at, ended_at, duration_seconds, title, browser, user_id')
-    .gte('started_at', start.toISOString())
-    .lte('started_at', end.toISOString())
-    .not('site_url', 'is', null)
-    .not('site_url', 'ilike', '%browser-activity-detected.local%');
-
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+    limit: '10000',
+  });
   if (selectedUser && selectedUser !== 'all') {
-    query = query.eq('user_id', selectedUser);
+    params.set('userId', selectedUser);
   }
+
+  const rows = await backendGet<UrlLogRow[]>(`/data/url-logs?${params.toString()}`);
 
   if (ctx.organizationId && !ctx.isSuperAdmin && ctx.orgUserIds?.length) {
-    query = query.in('user_id', ctx.orgUserIds);
+    const ids = new Set(ctx.orgUserIds);
+    return rows.filter((r) => r.user_id && ids.has(r.user_id));
   }
-
-  return await fetchPaginated<UrlLogRow>(query);
+  return rows;
 }
 
 export function aggregateUrlUsage(logs: UrlLogRow[]): UrlUsageStat[] {
   const stats = new Map<string, { url: string; total: number; count: number; category: string }>();
 
   for (const log of logs) {
-    const domain = log.domain || extractDomain(log.site_url || '');
+    const siteUrl = log.site_url || log.url || '';
+    const domain = log.domain || extractDomain(siteUrl);
     const dur = getLogDuration(log);
     const existing = stats.get(domain) || {
-      url: log.site_url || '',
+      url: siteUrl,
       total: 0,
       count: 0,
       category: log.category || 'Other',

@@ -11,9 +11,12 @@ export default defineConfig(({ mode }) => {
   const isAdminOnly = env.VITE_ADMIN_ONLY === 'true';
 
   // Validate required environment variables
-  const requiredEnvVars = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'];
+  const useCognito = env.VITE_AUTH_PROVIDER === 'cognito';
+  const requiredEnvVars = useCognito
+    ? ['VITE_COGNITO_REGION', 'VITE_COGNITO_USER_POOL_ID', 'VITE_COGNITO_CLIENT_ID', 'VITE_API_BASE_URL']
+    : ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'];
   const missingVars = requiredEnvVars.filter(varName => !env[varName]);
-  
+
   if (missingVars.length > 0) {
     console.warn(`Warning: Missing environment variables: ${missingVars.join(', ')}`);
   }
@@ -34,8 +37,15 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: {
+      global: "globalThis",
+      "process.env": JSON.stringify({}),
       "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(env.VITE_SUPABASE_URL || ""),
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(env.VITE_SUPABASE_ANON_KEY || ""),
+      "import.meta.env.VITE_AUTH_PROVIDER": JSON.stringify(env.VITE_AUTH_PROVIDER || "supabase"),
+      "import.meta.env.VITE_COGNITO_REGION": JSON.stringify(env.VITE_COGNITO_REGION || ""),
+      "import.meta.env.VITE_COGNITO_USER_POOL_ID": JSON.stringify(env.VITE_COGNITO_USER_POOL_ID || ""),
+      "import.meta.env.VITE_COGNITO_CLIENT_ID": JSON.stringify(env.VITE_COGNITO_CLIENT_ID || ""),
+      "import.meta.env.VITE_API_BASE_URL": JSON.stringify(env.VITE_API_BASE_URL || "http://localhost:3000"),
       "import.meta.env.VITE_ADMIN_ONLY": JSON.stringify(isAdminOnly ? 'true' : 'false')
     },
     build: {

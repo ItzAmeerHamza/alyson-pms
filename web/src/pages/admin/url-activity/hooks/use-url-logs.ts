@@ -1,7 +1,7 @@
 // Main data fetching and management hook for URL logs
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import {
@@ -43,58 +43,45 @@ export const useUrlLogs = (filters: FilterOptions) => {
       const currentOrgId = userDetails?.organization_id;
       const currentIsSuperAdmin = isSuperAdmin;
       
-      let usersQuery = supabase
-        .from('users')
-        .select('id, full_name, email')
-        .eq('role', 'employee');
-      
-      if (currentOrgId && !currentIsSuperAdmin) {
-        usersQuery = usersQuery.eq('organization_id', currentOrgId);
-      }
-      
-      const { data: usersData, error: usersError } = await usersQuery.order('full_name');
-      if (usersError) throw usersError;
+      const usersData = await fetchOrgUsers(
+        { organizationId: currentOrgId, isSuperAdmin: currentIsSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
       if (signal?.cancelled) return;
-      
-      const fetchedUsers = usersData || [];
+
+      const fetchedUsers: User[] = usersData.map((u) => ({
+        id: u.id,
+        full_name: u.full_name || u.email,
+        email: u.email,
+      }));
       setUsers(fetchedUsers);
-      
-      const orgUserIds = fetchedUsers.map(u => u.id);
-      
+
+      const orgUserIds = fetchedUsers.map((u) => u.id);
+
       if (orgUserIds.length === 0) {
         setUrlLogs([]);
         setLoading(false);
         return;
       }
 
-      let urlQuery = supabase
-        .from('url_logs')
-        .select(`
-          id,
-          url,
-          title,
-          user_id,
-          timestamp,
-          domain,
-          browser,
-          time_log_id
-        `)
-        .in('user_id', orgUserIds)
-        .gte('timestamp', filters.dateRange.from.toISOString())
-        .lte('timestamp', filters.dateRange.to.toISOString())
-        .not('url', 'ilike', '%browser-activity-detected.local%')
-        .order('timestamp', { ascending: false });
-
-      if (filters.userFilter && filters.userFilter !== 'all') {
-        urlQuery = urlQuery.eq('user_id', filters.userFilter);
-      }
-
-      const urlData = await fetchPaginated<any>(urlQuery);
+      const urlData = await fetchUrlLogs(
+        filters.dateRange.from,
+        filters.dateRange.to,
+        { organizationId: currentOrgId, isSuperAdmin: currentIsSuperAdmin, orgUserIds },
+        filters.userFilter && filters.userFilter !== 'all' ? filters.userFilter : undefined,
+      );
       if (signal?.cancelled) return;
 
-      const logs: URLLog[] = urlData.map(log => ({
-        ...log,
-        users: fetchedUsers.find(user => user.id === log.user_id) || null
+      const logs: URLLog[] = urlData.map((log) => ({
+        id: log.id || '',
+        url: log.url || log.site_url || '',
+        title: log.title,
+        user_id: log.user_id || '',
+        timestamp: log.timestamp || log.started_at || '',
+        domain: log.domain,
+        browser: log.browser,
+        time_log_id: log.time_log_id,
+        users: fetchedUsers.find((user) => user.id === log.user_id) || null,
       })) as URLLog[];
 
       setUrlLogs(logs);

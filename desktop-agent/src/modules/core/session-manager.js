@@ -69,11 +69,11 @@ class SessionManager {
         refresh_token: refreshToken,
         expires_at: expiresAt,
         remember_me: true,
-        // Multi-tenant organization info
+        auth_provider: incomingSession?.auth_provider || userData.auth_provider || 'supabase',
         organization_id: organizationId,
         organization_slug: organizationSlug,
         is_org_admin: isOrgAdmin,
-        is_super_admin: isSuperAdmin
+        is_super_admin: isSuperAdmin,
       };
 
       // Persist to disk
@@ -88,9 +88,14 @@ class SessionManager {
       global.currentUserRole = role;
       global.currentOrganizationId = organizationId;
 
-      // Optionally forward session to main Supabase service if available
+      // Forward Supabase session only for legacy Supabase auth (not Cognito JWT)
       try {
-        if (this.supabaseService?.auth?.setSession && accessToken && refreshToken) {
+        if (
+          sessionToSave.auth_provider !== 'cognito' &&
+          this.supabaseService?.auth?.setSession &&
+          accessToken &&
+          refreshToken
+        ) {
           await this.supabaseService.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
         }
       } catch (e) {
@@ -437,10 +442,10 @@ class SessionManager {
       
       console.log(`🧹 [CLEANUP] Found ${staleSessions.length} stale sessions to close`);
       
-      // Close each session with end_time = start_time + 1 hour (reasonable estimate)
+      // Close each session at stop time (not start+1h — that inflated "worked today" in the UI)
+      const nowIso = new Date().toISOString();
       for (const session of staleSessions) {
-        const startTime = new Date(session.start_time);
-        const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // +1 hour
+        const endTime = nowIso;
         
         const { error: updateError } = await this.supabaseService
           .from('time_logs')

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,19 +67,17 @@ export default function URLActivity() {
 
   const fetchUsers = async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, full_name, email')
-        .eq('role', 'employee');
-      
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('full_name');
-
-      if (error) throw error;
-      setUsers(data || []);
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
+      setUsers(
+        data.map((u) => ({
+          id: u.id,
+          full_name: u.full_name || u.email,
+          email: u.email,
+        })),
+      );
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -88,47 +86,26 @@ export default function URLActivity() {
   const fetchURLLogs = async () => {
     try {
       setLoading(true);
-      
-      // Note: url_logs table uses 'url' and 'timestamp' columns
-      let query = supabase
-        .from('url_logs')
-        .select(`
-          id,
-          url,
-          title,
-          user_id,
-          timestamp,
-          domain,
-          browser,
-          time_log_id
-        `)
-        .gte('timestamp', dateRange.from.toISOString())
-        .lte('timestamp', dateRange.to.toISOString())
-        .not('url', 'ilike', '%browser-activity-detected.local%')
-        .order('timestamp', { ascending: false });
 
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
+      const data = await fetchUrlLogs(
+        dateRange.from,
+        dateRange.to,
+        { organizationId, isSuperAdmin },
+        selectedUser || undefined,
+      );
 
-      if (selectedUser) {
-        query = query.eq('user_id', selectedUser);
-      }
+      const userById = new Map(users.map((u) => [u.id, u]));
 
-      const data = await fetchPaginated<any>(query);
-
-      // Get user details separately
-      const userIds = [...new Set(data.map(log => log.user_id).filter((id): id is string => id !== null))];
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id, full_name, email')
-        .in('id', userIds);
-
-      // Combine the data
-      const logs: URLLog[] = (data || []).map(log => ({
+      const logs: URLLog[] = (data || []).map((log) => ({
         ...log,
-        users: userData?.find(user => user.id === log.user_id) || null
+        url: log.url || (log as { site_url?: string }).site_url || '',
+        timestamp: log.timestamp || log.started_at || '',
+        users: log.user_id
+          ? {
+              full_name: userById.get(log.user_id)?.full_name || 'Unknown',
+              email: userById.get(log.user_id)?.email || '',
+            }
+          : null,
       })) as URLLog[];
 
       setUrlLogs(logs);

@@ -1,3 +1,6 @@
+const cognitoAuth = require('./cognito-auth');
+const { fetchAuthMe, isCognitoAuthEnabled } = require('./auth-api');
+
 class AuthManager {
   constructor(supabaseClient, ipcRenderer, uiManager, notificationManager) {
     this.supabaseClient = supabaseClient;
@@ -8,11 +11,25 @@ class AuthManager {
     this.currentUser = null;
     this.credentialManager = null;
     this.isAuthenticated = false;
+    this.authConfig = null;
+    this.useCognito = false;
     this.init();
   }
 
   async init() {
     console.log('🔐 AuthManager initializing...');
+
+    try {
+      this.authConfig = await this.ipcRenderer.invoke('get-config');
+      this.useCognito = isCognitoAuthEnabled(this.authConfig);
+      console.log(
+        this.useCognito
+          ? '✅ [AUTH] Using Amazon Cognito (same as web portal)'
+          : 'ℹ️ [AUTH] Using Supabase sign-in',
+      );
+    } catch (e) {
+      console.warn('⚠️ [AUTH] Could not load auth config:', e?.message || e);
+    }
     
     // Initialize credential manager
     try {
@@ -123,6 +140,16 @@ class AuthManager {
       
       if (savedUserSession && savedUserSession.success && savedUserSession.session && savedUserSession.session.remember_me) {
         const session = savedUserSession.session;
+
+        if (session.auth_provider === 'cognito' || (this.useCognito && session.access_token)) {
+          return await this.tryAutoLoginCognito(session);
+        }
+
+        if (!this.supabaseClient) {
+          console.warn('⚠️ [AUTH] Supabase client unavailable for session restore');
+          return false;
+        }
+
         console.log('📂 [AUTH] Found saved user session, attempting auto-login...', {
           email: session.email,
           remember_me: session.remember_me
@@ -232,6 +259,115 @@ class AuthManager {
     return false;
   }
 
+  async tryAutoLoginCognito(savedSession) {
+    try {
+      let idToken = savedSession.access_token;
+      const stored = await cognitoAuth.getCurrentCognitoSession(this.authConfig);
+      if (stored?.idToken) {
+        idToken = stored.idToken;
+      }
+      if (!idToken) {
+        await this.ipcRenderer.invoke('user-logged-out');
+        return false;
+      }
+
+      const profile = await fetchAuthMe(idToken, this.authConfig);
+      const details = profile.user;
+      const org = profile.organization;
+
+      this.currentUser = {
+        id: details.id,
+        email: details.email,
+        name: details.full_name || details.email.split('@')[0],
+        role: details.role || 'employee',
+        organization_id: details.organization_id,
+        organization_slug: org?.slug || savedSession.organization_slug || null,
+        is_org_admin: details.is_org_admin,
+        is_super_admin: details.is_super_admin,
+      };
+
+      await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
+      localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+
+      this.uiManager.showMainApp();
+      this.notificationManager.showNotification('Welcome back! Automatically signed in.', 'success');
+      console.log('✅ [AUTH] Cognito auto-login successful');
+      return true;
+    } catch (error) {
+      console.warn('⚠️ [AUTH] Cognito auto-login failed:', error?.message || error);
+      await this.ipcRenderer.invoke('user-logged-out');
+      cognitoAuth.clearCognitoSession();
+      return false;
+    }
+  }
+
+  async handleCognitoLogin(email, password, company, rememberMe) {
+    const stored = await cognitoAuth.signInWithEmailPassword(email, password, this.authConfig);
+    const profile = await fetchAuthMe(stored.idToken, this.authConfig);
+    const details = profile.user;
+    const org = profile.organization;
+
+    const companySlug = company ? company.trim().toLowerCase() : '';
+    if (companySlug && org?.slug && org.slug !== companySlug) {
+      cognitoAuth.signOutCognito(this.authConfig);
+      throw new Error('You are not a member of this organization. Please check the company name.');
+    }
+
+    this.currentUser = {
+      id: details.id,
+      email: details.email,
+      name: details.full_name || details.email.split('@')[0],
+      role: details.role || 'employee',
+      organization_id: details.organization_id,
+      organization_slug: org?.slug || companySlug || null,
+      is_org_admin: details.is_org_admin,
+      is_super_admin: details.is_super_admin,
+    };
+
+    await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
+    localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+
+    if (this.credentialManager) {
+      await this.credentialManager.saveCredentials(email, password);
+    }
+    if (companySlug) {
+      localStorage.setItem('alyson_remember_company', companySlug);
+    }
+
+    await this.ipcRenderer.invoke('user-logged-in', {
+      user: this.currentUser,
+      session: {
+        access_token: stored.idToken,
+        refresh_token: stored.refreshToken,
+        expires_at: stored.expiresAt,
+        email,
+        remember_me: rememberMe,
+        auth_provider: 'cognito',
+        organization_id: this.currentUser.organization_id,
+        organization_slug: this.currentUser.organization_slug,
+      },
+    });
+
+    localStorage.removeItem('auth_failure_count');
+
+    try {
+      const updateStatus = await this.ipcRenderer.invoke('check-for-update');
+      if (updateStatus?.updateAvailable && this.uiManager?.showUpdateModal) {
+        this.uiManager.showUpdateModal({
+          newVersion: updateStatus.newVersion,
+          currentVersion: updateStatus.currentVersion,
+        });
+        this.notificationManager.showNotification('Update required before continuing.', 'warning');
+        return;
+      }
+    } catch (updateError) {
+      console.log('⚠️ [AUTH] Update check failed, proceeding:', updateError.message);
+    }
+
+    window.dispatchEvent(new Event('userLoggedIn'));
+    this.notificationManager.showNotification('Login successful! Welcome to Alyson PM.', 'success');
+  }
+
   async handleLogin(e) {
     e.preventDefault();
     
@@ -264,12 +400,17 @@ class AuthManager {
       }
     }
 
-    console.log('🔐 Starting Supabase authentication...');
+    console.log(
+      this.useCognito
+        ? '🔐 Starting Cognito authentication...'
+        : '🔐 Starting Supabase authentication...',
+    );
     console.log('📊 Login attempt details:', {
       company: company || '(none)',
       email: email,
       passwordLength: password.length,
-      rememberMe: rememberMe
+      rememberMe: rememberMe,
+      provider: this.useCognito ? 'cognito' : 'supabase',
     });
 
     // Show loading state
@@ -279,6 +420,15 @@ class AuthManager {
     if (errorDiv) errorDiv.style.display = 'none';
 
     try {
+      if (this.useCognito) {
+        await this.handleCognitoLogin(email, password, company, rememberMe);
+        return;
+      }
+
+      if (!this.supabaseClient) {
+        throw new Error('Supabase is not configured. Set VITE_AUTH_PROVIDER=cognito in desktop-agent/.env');
+      }
+
       const LOGIN_TIMEOUT_MS = 15000;
       const withTimeout = (promise, ms) => Promise.race([
         promise,
@@ -480,7 +630,18 @@ class AuthManager {
       const msg = error.message || '';
       if (msg === 'CONNECTION_TIMEOUT' || msg.includes('fetch failed') || msg.includes('ConnectTimeoutError') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
         errorMessage = 'Cannot connect to the server. Please check your internet connection and try again.';
-      } else if (msg.includes('Invalid login credentials')) {
+      } else if (
+        msg.includes('Account not found') ||
+        msg.includes('not found. Ask your admin')
+      ) {
+        errorMessage =
+          'Your Cognito account is not linked to an employee profile yet. Ask your admin to add your email in the system.';
+      } else if (
+        msg.includes('Invalid credentials') ||
+        msg.includes('Incorrect username or password') ||
+        msg.includes('User does not exist') ||
+        msg.includes('Invalid login credentials')
+      ) {
         errorMessage = 'Invalid email or password. Please check your credentials.';
         
         // Track login failures to auto-clear bad stored credentials
@@ -539,8 +700,11 @@ class AuthManager {
     try {
       console.log('🚪 Logging out user...');
       
-      // Sign out from Supabase
-      await this.supabaseClient.auth.signOut();
+      if (this.useCognito) {
+        cognitoAuth.signOutCognito(this.authConfig);
+      } else if (this.supabaseClient) {
+        await this.supabaseClient.auth.signOut();
+      }
       
       // Clear stored credentials securely (optional - user can choose to keep them)
       // We don't automatically delete credentials on logout, only on explicit "forget me" action

@@ -1,8 +1,11 @@
 // Activity Issues Data Hook
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
 import { useAuth } from '@/providers/auth-provider';
+import { fetchOrgUsers } from '@/domains/people';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchAppLogs } from '@/domains/monitoring/services/app-logs.service';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { fetchIdleLogs } from '@/domains/monitoring/services/idle-logs.service';
 import { 
   FilterOptions, 
   DetectedIssue, 
@@ -111,20 +114,18 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
   // Fetch users
   const fetchUsers = useCallback(async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, email, full_name, role')
-        .not('email', 'ilike', '%@example.com%');
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error: usersError } = await query.order('full_name');
-
-      if (usersError) throw usersError;
-      setUsers(data || []);
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { excludeTestEmails: true },
+      );
+      setUsers(
+        data.map((u) => ({
+          id: u.id,
+          email: u.email,
+          full_name: u.full_name || u.email,
+          role: u.role || 'employee',
+        })),
+      );
     } catch (err) {
       console.error('Error fetching users:', err);
     } finally {
@@ -157,22 +158,17 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
         return;
       }
 
-      // 1. Fetch duplicate screenshots with proper chain linking
-      // Use duplicate_matched_id to build chains of duplicates
-      let dupQuery = supabase
-        .from('screenshots')
-        .select('id, user_id, image_url, captured_at, activity_percent, app_name, duplicate_group_hash, is_duplicate, duplicate_matched_id')
-        .eq('is_duplicate', true)
-        .in('user_id', orgUserIds)
-        .gte('captured_at', startDate)
-        .lte('captured_at', endDate)
-        .order('captured_at', { ascending: false });
+      const allScreenshots = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds },
+        { start: dateRange.start, end: dateRange.end, limit: 10000 },
+      );
+      const scopedShots =
+        filters.userFilter !== 'all'
+          ? allScreenshots.filter((s) => s.user_id === filters.userFilter)
+          : allScreenshots;
 
-      if (filters.userFilter !== 'all') {
-        dupQuery = dupQuery.eq('user_id', filters.userFilter);
-      }
-
-      const duplicates = await fetchPaginated<any>(dupQuery);
+      // 1. Duplicate screenshots
+      const duplicates = scopedShots.filter((s) => s.is_duplicate);
 
       // Build proper duplicate chains using duplicate_matched_id
       // This uses Union-Find to group all screenshots that are duplicates of each other
@@ -299,22 +295,11 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
         }
       });
 
-      // 2. Fetch low activity screenshots
-      let lowActivityQuery = supabase
-        .from('screenshots')
-        .select('id, user_id, image_url, captured_at, activity_percent, app_name, is_duplicate')
-        .eq('is_duplicate', false)
-        .in('user_id', orgUserIds)
-        .lt('activity_percent', ISSUE_THRESHOLDS.LOW_ACTIVITY_PERCENT)
-        .gte('captured_at', startDate)
-        .lte('captured_at', endDate)
-        .order('activity_percent', { ascending: true });
-
-      if (filters.userFilter !== 'all') {
-        lowActivityQuery = lowActivityQuery.eq('user_id', filters.userFilter);
-      }
-
-      const lowActivity = await fetchPaginated<any>(lowActivityQuery);
+      const lowActivity = scopedShots.filter(
+        (s) =>
+          !s.is_duplicate &&
+          (s.activity_percent ?? 100) < ISSUE_THRESHOLDS.LOW_ACTIVITY_PERCENT,
+      );
 
       // Group low activity by user
       type LowActivityRow = { id: string; user_id: string; image_url: string; captured_at: string; activity_percent: number | null; app_name: string | null; is_duplicate: boolean | null };
@@ -361,22 +346,11 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
       // This prevents false positives like "Teams = social media" when it's actually a work meeting
       // See Section 5 below for AI-based detection
 
-      // 5. AI-BASED ACTIVITY DETECTION (Dynamic - No Static Domain Lists!)
-      // Query screenshots that have been analyzed by Vision AI with non-work categories
-      let visionAnalyzedQuery = supabase
-        .from('screenshots')
-        .select('id, user_id, image_url, captured_at, activity_percent, app_name, vision_category, vision_detected_content, vision_confidence')
-        .in('user_id', orgUserIds)
-        .in('vision_category', ['social_media', 'entertainment', 'gaming', 'shopping'])
-        .gte('captured_at', startDate)
-        .lte('captured_at', endDate)
-        .order('captured_at', { ascending: false });
-
-      if (filters.userFilter !== 'all') {
-        visionAnalyzedQuery = visionAnalyzedQuery.eq('user_id', filters.userFilter);
-      }
-
-      const visionScreenshots = await fetchPaginated<any>(visionAnalyzedQuery);
+      const visionScreenshots = scopedShots.filter((s) =>
+        ['social_media', 'entertainment', 'gaming', 'shopping'].includes(
+          (s as any).vision_category || '',
+        ),
+      );
 
       // Group by user and AI-detected category
       type VisionIssueData = { 
@@ -500,28 +474,17 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
         }
       });
 
-      // 5. Fetch excessive idle screenshots with full data for proof
-      let idleQuery = supabase
-        .from('screenshots')
-        .select('id, user_id, image_url, captured_at, activity_percent, app_name, idle_inferred')
-        .in('user_id', orgUserIds)
-        .eq('idle_inferred', true)
-        .gte('captured_at', startDate)
-        .lte('captured_at', endDate)
-        .order('captured_at', { ascending: false });
+      const idleShots = scopedShots.filter((s) => s.idle_inferred);
 
-      if (filters.userFilter !== 'all') {
-        idleQuery = idleQuery.eq('user_id', filters.userFilter);
-      }
-
-      const idleShots = await fetchPaginated<any>(idleQuery);
-
-      // Calculate idle percentage per user and group idle screenshots
       const totalByUser: Record<string, number> = {};
       const idleByUser: Record<string, { count: number; screenshots: ProofScreenshot[] }> = {};
 
-      // Group idle shots first so we only count users who have idle activity
-      (idleShots || []).forEach(s => {
+      scopedShots.forEach((s) => {
+        if (!s.user_id) return;
+        totalByUser[s.user_id] = (totalByUser[s.user_id] || 0) + 1;
+      });
+
+      idleShots.forEach((s) => {
         if (!s.user_id) return;
         if (!idleByUser[s.user_id]) {
           idleByUser[s.user_id] = { count: 0, screenshots: [] };
@@ -530,30 +493,13 @@ export function useActivityIssues(isAdmin: boolean): UseActivityIssuesResult {
         if (idleByUser[s.user_id].screenshots.length < 4) {
           idleByUser[s.user_id].screenshots.push({
             id: s.id,
-            imageUrl: s.image_url,
+            imageUrl: s.image_url || '',
             capturedAt: s.captured_at,
             activityPercent: s.activity_percent || 0,
             appName: s.app_name || undefined,
           });
         }
       });
-
-      // Use COUNT queries per user instead of fetching all rows (much faster)
-      const usersWithIdle = Object.keys(idleByUser);
-      if (usersWithIdle.length > 0) {
-        await Promise.all(
-          usersWithIdle.map(async (userId) => {
-            let q = supabase
-              .from('screenshots')
-              .select('id', { count: 'exact', head: true })
-              .eq('user_id', userId)
-              .gte('captured_at', startDate)
-              .lte('captured_at', endDate);
-            const { count } = await q;
-            totalByUser[userId] = count ?? 0;
-          })
-        );
-      }
 
       Object.entries(idleByUser).forEach(([userId, data]) => {
         const total = totalByUser[userId] || 1;

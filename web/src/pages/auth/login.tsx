@@ -15,6 +15,8 @@ import { useForm } from "react-hook-form";
 import { Building2, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isCognitoAuthEnabled } from "@/integrations/cognito/config";
+import { fetchOrganizationBySlug } from "@/lib/auth-api";
 import { loginFormSchema, type LoginFormValues } from "@/lib/schemas";
 import { sanitizeInput, validateAndSanitizeEmail } from "@/components/security/input-sanitizer";
 
@@ -49,6 +51,19 @@ export default function LoginPage() {
 
     try {
       const sanitizedSlug = sanitizeInput(slug).toLowerCase().trim();
+
+      if (isCognitoAuthEnabled) {
+        const orgData = await fetchOrganizationBySlug(sanitizedSlug);
+        if (!orgData?.is_active) {
+          setOrganizationValidated(false);
+          setOrganizationName(null);
+          return;
+        }
+        setOrganizationValidated(true);
+        setOrganizationName(orgData.name);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('organizations')
         .select('id, name, slug, logo_url, is_active')
@@ -79,14 +94,18 @@ export default function LoginPage() {
         throw new Error("Invalid credentials. Please check and try again.");
       }
 
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .select('id, name, slug, logo_url, is_active')
-        .eq('slug', sanitizedCompany)
-        .single();
+      if (isCognitoAuthEnabled) {
+        await fetchOrganizationBySlug(sanitizedCompany);
+      } else {
+        const { data: orgData, error: orgError } = await supabase
+          .from('organizations')
+          .select('id, name, slug, logo_url, is_active')
+          .eq('slug', sanitizedCompany)
+          .single();
 
-      if (orgError || !orgData || !orgData.is_active) {
-        throw new Error("Invalid credentials. Please check and try again.");
+        if (orgError || !orgData || !orgData.is_active) {
+          throw new Error("Invalid credentials. Please check and try again.");
+        }
       }
 
       await signIn(sanitizedEmail, values.password, values.rememberMe, sanitizedCompany);

@@ -250,11 +250,18 @@ async function initializeModules() {
       IPCManager: typeof IPCManager
     });
     
-    // Ensure Supabase client is ready
-    if (!supabaseClient) {
+    const runtimeConfig = await ipcRenderer.invoke('get-config');
+    const useCognito =
+      runtimeConfig?.auth_provider === 'cognito' &&
+      runtimeConfig?.cognito_user_pool_id &&
+      runtimeConfig?.cognito_client_id;
+
+    if (!supabaseClient && !useCognito) {
       console.log('🔧 Initializing Supabase client...');
       await initializeSupabaseClient();
       console.log('✅ Supabase client ready');
+    } else if (useCognito) {
+      console.log('🔐 Cognito auth enabled — skipping Supabase client init for login');
     }
     
     // Initialize modules in dependency order
@@ -2165,23 +2172,30 @@ window.loadRecentScreenshots = loadRecentScreenshots;
 ipcRenderer.on('screenshot-saved', (event, data) => {
     console.log('📡 [CACHE_BYPASS] Screenshot saved event received:', data);
     window.screenshotCacheBypass = true;
-    
-    // Auto-refresh screenshots if we're on the screenshots page
+
+    const refreshDelay = 1500;
+
     const screenshotsPage = document.getElementById('screenshotsPage');
     if (screenshotsPage && screenshotsPage.style.display !== 'none') {
         console.log('🔄 [AUTO_REFRESH] Auto-refreshing screenshots page');
-        setTimeout(loadRecentScreenshots, 1000); // Delay to ensure DB sync
+        setTimeout(loadRecentScreenshots, refreshDelay);
     }
-    
-    // Auto-refresh tracker screenshots if we're on the time tracker page
+
     const timetrackerPage = document.getElementById('timetrackerPage');
     if (timetrackerPage && timetrackerPage.style.display !== 'none') {
         console.log('🔄 [AUTO_REFRESH] Auto-refreshing tracker screenshots');
         setTimeout(() => {
-            if (moduleInstances.uiManager && moduleInstances.uiManager.loadTrackerScreenshots) {
-                moduleInstances.uiManager.loadTrackerScreenshots(true);
-            }
-        }, 1500); // Slightly longer delay to ensure DB sync
+            moduleInstances.uiManager?.loadTrackerScreenshots?.(true);
+        }, refreshDelay);
+    }
+
+    const activityPage = document.getElementById('activity-between-screenshotsPage');
+    if (activityPage && activityPage.style.display !== 'none') {
+        console.log('🔄 [AUTO_REFRESH] Auto-refreshing activity monitor screenshots');
+        setTimeout(() => {
+            moduleInstances.uiManager?.loadScreenshotActivity?.();
+            window.moduleInstances?.activityMonitor?.loadRecentScreenshots?.();
+        }, refreshDelay);
     }
 });
 

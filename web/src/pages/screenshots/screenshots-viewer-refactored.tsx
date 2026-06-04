@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Trash2, Timer, BarChart3, Activity, Pause, ChevronUp, ChevronDown, Copy, Loader2, Brain, Sparkles, Cpu, AlertTriangle, Eye, EyeOff, Moon, Wallet } from 'lucide-react';
+import { RefreshCw, Trash2, Timer, BarChart3, Activity, Pause, ChevronUp, ChevronDown, Copy, Loader2, Brain, Sparkles, Cpu, AlertTriangle, Eye, EyeOff, Moon, Wallet, UserRound } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/providers/auth-provider';
@@ -50,8 +50,8 @@ export default function ScreenshotsViewer() {
   
   // Filter state
   const [filters, setFilters] = useState<FilterOptions>({
-    selectedDate: new Date().toLocaleDateString('en-CA'), // en-CA gives YYYY-MM-DD format in local timezone
-    ...DEFAULT_FILTER_OPTIONS
+    selectedDate: null,
+    ...DEFAULT_FILTER_OPTIONS,
   });
 
   // Handle URL parameter for user filter
@@ -484,7 +484,7 @@ export default function ScreenshotsViewer() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Screenshots</h1>
         <p className="text-muted-foreground">
-          Monitor employee activity through screenshot analysis
+          Select an employee to view all of their screenshots, or optionally filter to a single day.
         </p>
       </div>
 
@@ -1026,8 +1026,19 @@ export default function ScreenshotsViewer() {
               {timeGroups.length === 0 ? (
                 <Card>
                   <CardContent className="pt-6">
-                    <div className="text-center py-8 text-muted-foreground">
-                      No screenshots found for the selected date and filters.
+                    <div className="text-center py-8 text-muted-foreground space-y-2">
+                      {!filters.selectedDate && filters.userFilter === 'all' ? (
+                        <>
+                          <UserRound className="h-10 w-10 mx-auto opacity-40" />
+                          <p className="font-medium text-foreground">Choose an employee to get started</p>
+                          <p className="text-sm max-w-md mx-auto">
+                            Pick someone from the employee dropdown above to load their full screenshot
+                            history. Use &quot;One day&quot; only when you want to filter by date.
+                          </p>
+                        </>
+                      ) : (
+                        <p>No screenshots found for the selected filters.</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

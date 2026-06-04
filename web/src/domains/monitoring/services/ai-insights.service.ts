@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { backendGet } from '@/lib/backend-api';
 
 export interface AiInsightRow {
   id?: string;
@@ -9,7 +9,10 @@ export interface AiInsightRow {
   summary?: string | null;
   recommendations?: string | null;
   created_at?: string | null;
-  users?: { full_name: string; email?: string } | null;
+  updated_at?: string | null;
+  insights?: Record<string, unknown>;
+  analysis_version?: string | null;
+  users?: { id: string; full_name: string; email?: string; role?: string; organization_id?: string | null } | null;
 }
 
 interface OrgContext {
@@ -22,27 +25,16 @@ export async function fetchAiInsights(
   start: Date,
   end: Date,
   ctx: OrgContext,
-  opts?: { userId?: string; limit?: number }
+  opts?: { userId?: string; limit?: number },
 ): Promise<AiInsightRow[]> {
-  let query = supabase
-    .from('ai_employee_insights')
-    .select('*, users(full_name, email)')
-    .gte('period_start', start.toISOString())
-    .lte('period_start', end.toISOString())
-    .order('created_at', { ascending: false });
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+    limit: String(opts?.limit ?? 5000),
+  });
+  if (opts?.userId) params.set('userId', opts.userId);
 
-  if (opts?.userId) {
-    query = query.eq('user_id', opts.userId);
-  }
-
-  if (opts?.limit) {
-    query = query.limit(opts.limit);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  let rows = (data || []) as AiInsightRow[];
+  let rows = await backendGet<AiInsightRow[]>(`/data/ai-insights?${params.toString()}`);
 
   if (ctx.organizationId && !ctx.isSuperAdmin && ctx.orgUserIds?.length) {
     const ids = new Set(ctx.orgUserIds);
@@ -53,23 +45,14 @@ export async function fetchAiInsights(
 }
 
 export async function fetchLatestAiInsight(): Promise<AiInsightRow | null> {
-  const { data, error } = await supabase
-    .from('ai_employee_insights')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  if (error) throw error;
-  return data?.[0] || null;
+  const end = new Date();
+  const start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const rows = await backendGet<AiInsightRow[]>(
+    `/data/ai-insights?start=${start.toISOString()}&end=${end.toISOString()}&limit=1`,
+  );
+  return rows[0] || null;
 }
 
-export async function fetchOrganizations(): Promise<{ id: string; name: string }[]> {
-  const { data, error } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('is_active', true)
-    .order('name');
-
-  if (error) throw error;
-  return (data || []) as { id: string; name: string }[];
+export async function fetchOrganizations(): Promise<{ id: string; name: string; slug?: string; logo_url?: string }[]> {
+  return backendGet('/data/organizations');
 }

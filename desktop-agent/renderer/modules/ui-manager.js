@@ -1509,7 +1509,7 @@ class UIManager {
         const keys = it.keystrokes || it.keys || 0;
         const moves = it.mouse_movements || it.moves || 0;
         const activity = it.activity_percent ?? 0;
-        const img = it.file_path || it.image_url || '';
+        const img = it.image_url || it.file_path || '';
         
         return `
           <div class="recent-screenshot-item" style="display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1px solid #e5e7eb;">

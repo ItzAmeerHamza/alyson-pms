@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { backendDelete, backendGet } from '@/lib/backend-api';
 
 export interface UserRow {
   id: string;
@@ -19,26 +19,15 @@ export async function fetchOrgUsers(
   ctx: OrgContext,
   opts?: { roles?: string[]; excludeTestEmails?: boolean }
 ): Promise<UserRow[]> {
-  let query = supabase
-    .from('users')
-    .select('id, full_name, email, role, organization_id, avatar_url, is_active')
-    .order('full_name');
-
-  if (ctx.organizationId && !ctx.isSuperAdmin) {
-    query = query.eq('organization_id', ctx.organizationId);
-  }
-
+  const users = await backendGet<UserRow[]>('/data/users');
+  let filtered = users;
   if (opts?.roles?.length) {
-    query = query.in('role', opts.roles);
+    filtered = filtered.filter((u) => u.role && opts.roles!.includes(u.role));
   }
-
   if (opts?.excludeTestEmails) {
-    query = query.not('email', 'ilike', '%example.com%');
+    filtered = filtered.filter((u) => !u.email.toLowerCase().includes('example.com'));
   }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []) as UserRow[];
+  return filtered;
 }
 
 export async function fetchOrgUserIds(ctx: OrgContext): Promise<string[]> {
@@ -47,20 +36,11 @@ export async function fetchOrgUserIds(ctx: OrgContext): Promise<string[]> {
 }
 
 export async function fetchUserById(userId: string): Promise<UserRow | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, full_name, email, role, organization_id, avatar_url, is_active')
-    .eq('id', userId)
-    .single();
-
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
-  return data as UserRow;
+  // Reuses the same cached GET /data/users response as fetchOrgUsers (no extra network call within TTL).
+  const users = await backendGet<UserRow[]>('/data/users');
+  return users.find((u) => u.id === userId) || null;
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  const { error } = await supabase.from('users').delete().eq('id', userId);
-  if (error) throw error;
+  await backendDelete<{ success: boolean }>(`/data/users/${userId}`);
 }

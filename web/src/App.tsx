@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { shouldRetryQuery } from '@/lib/api-error';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
@@ -116,9 +117,10 @@ document.createElement = function (tagName: string) {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 3,
+      retry: shouldRetryQuery,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      refetchOnWindowFocus: false, // Disable auto-refetch on window focus to prevent page refreshes when switching apps
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
     mutations: {
     },

@@ -1,5 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { backendGet } from '@/lib/backend-api';
 
 export interface IdleLogRow {
   id?: string;
@@ -25,28 +24,22 @@ export async function fetchIdleLogs(
   start: Date,
   end: Date,
   ctx: OrgContext,
-  opts?: FetchOptions
+  opts?: FetchOptions,
 ): Promise<IdleLogRow[]> {
-  let query = supabase
-    .from('idle_logs')
-    .select('id, user_id, idle_start, idle_end, duration_seconds, project_id, organization_id')
-    .gte('idle_start', start.toISOString())
-    .lte('idle_start', end.toISOString())
-    .order('idle_start', { ascending: false });
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+    limit: '10000',
+  });
+  if (opts?.userId) params.set('userId', opts.userId);
 
-  if (opts?.userId) {
-    query = query.eq('user_id', opts.userId);
-  }
+  let rows = await backendGet<IdleLogRow[]>(`/data/idle-logs?${params.toString()}`);
 
   if (opts?.projectId) {
-    query = query.eq('project_id', opts.projectId);
+    rows = rows.filter((r) => r.project_id === opts.projectId);
   }
 
-  if (ctx.organizationId && !ctx.isSuperAdmin) {
-    query = query.eq('organization_id', ctx.organizationId);
-  }
-
-  return await fetchPaginated<IdleLogRow>(query);
+  return rows;
 }
 
 export function computeIdleStats(logs: IdleLogRow[]) {

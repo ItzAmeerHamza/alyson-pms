@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { backendGet } from '@/lib/backend-api';
 import { calculateMergedHoursByUser } from '@/lib/time-utils';
 
 export interface TimeLogRow {
@@ -35,50 +35,23 @@ interface FetchOptions {
   onlyCompleted?: boolean;
 }
 
-function applyOrgFilter<T>(query: T, ctx: OrgContext): T {
-  if (ctx.organizationId && !ctx.isSuperAdmin) {
-    return (query as any).eq('organization_id', ctx.organizationId);
-  }
-  return query;
-}
-
 export async function fetchTimeLogs(
   start: Date,
   end: Date,
   ctx: OrgContext,
   opts?: FetchOptions
 ): Promise<TimeLogRow[]> {
-  let query = supabase
-    .from('time_logs')
-    .select('*')
-    .gte('start_time', start.toISOString())
-    .lte('start_time', end.toISOString());
-
-  query = applyOrgFilter(query, ctx);
-
-  if (opts?.userId) {
-    query = query.eq('user_id', opts.userId);
-  }
-
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
+  if (opts?.userId) params.set('userId', opts.userId);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const logs = await backendGet<TimeLogRow[]>(`/data/time-logs?${params.toString()}`);
   if (opts?.onlyCompleted) {
-    query = query.not('end_time', 'is', null);
+    return logs.filter((l) => Boolean(l.end_time));
   }
-
-  if (opts?.limit) {
-    query = query.limit(opts.limit);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  let logs = data || [];
-
-  if (ctx.organizationId && !ctx.isSuperAdmin && ctx.orgUserIds?.length) {
-    const ids = new Set(ctx.orgUserIds);
-    logs = logs.filter((log: TimeLogRow) => ids.has(log.user_id));
-  }
-
-  return logs as TimeLogRow[];
+  return logs;
 }
 
 export async function fetchDetailedTimeLogs(
@@ -87,38 +60,18 @@ export async function fetchDetailedTimeLogs(
   ctx: OrgContext,
   opts?: FetchOptions
 ): Promise<TimeLogRow[]> {
-  let query = supabase
-    .from('time_logs')
-    .select('*, users(full_name, email), projects(name)')
-    .gte('start_time', start.toISOString())
-    .lte('start_time', end.toISOString())
-    .order('start_time', { ascending: false });
-
-  query = applyOrgFilter(query, ctx);
-
-  if (opts?.userId) {
-    query = query.eq('user_id', opts.userId);
-  }
-
+  const params = new URLSearchParams({
+    start: start.toISOString(),
+    end: end.toISOString(),
+    detailed: '1',
+  });
+  if (opts?.userId) params.set('userId', opts.userId);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const logs = await backendGet<TimeLogRow[]>(`/data/time-logs?${params.toString()}`);
   if (opts?.onlyCompleted) {
-    query = query.not('end_time', 'is', null);
+    return logs.filter((l) => Boolean(l.end_time));
   }
-
-  if (opts?.limit) {
-    query = query.limit(opts.limit);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  let logs = data || [];
-
-  if (ctx.organizationId && !ctx.isSuperAdmin && ctx.orgUserIds?.length) {
-    const ids = new Set(ctx.orgUserIds);
-    logs = logs.filter((log: TimeLogRow) => ids.has(log.user_id));
-  }
-
-  return logs as TimeLogRow[];
+  return logs;
 }
 
 export async function fetchActiveSession(
@@ -128,21 +81,15 @@ export async function fetchActiveSession(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let query = supabase
-    .from('time_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .is('end_time', null)
-    .gte('start_time', today.toISOString())
-    .order('start_time', { ascending: false })
-    .limit(1);
-
-  query = applyOrgFilter(query, ctx);
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return data?.[0] || null;
+  const end = new Date();
+  const params = new URLSearchParams({
+    start: today.toISOString(),
+    end: end.toISOString(),
+    userId,
+    limit: '20',
+  });
+  const logs = await backendGet<TimeLogRow[]>(`/data/time-logs?${params.toString()}`);
+  return logs.find((l) => !l.end_time) || null;
 }
 
 export function computeTimeLogStats(logs: TimeLogRow[]): TimeLogStats {

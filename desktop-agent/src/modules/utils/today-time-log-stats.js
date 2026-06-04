@@ -18,27 +18,7 @@ function endOfLocalDayExclusive(d = new Date()) {
  * @param {string|null} currentTimeLogId - open row to count as "live" in totalTime only
  * @returns {Promise<{ completedClosedSeconds: number, ongoingCurrentSessionSeconds: number, totalTime: number, timeLogsCount: number }>}
  */
-async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
-  if (!supabase || !userId) {
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
-  }
-
-  const startOfDay = startOfLocalDay();
-  const endOfDay = endOfLocalDayExclusive();
-
-  const { data: timeLogs, error } = await supabase
-    .from('time_logs')
-    .select('id, start_time, end_time')
-    .eq('user_id', userId)
-    .gte('start_time', startOfDay.toISOString())
-    .lt('start_time', endOfDay.toISOString())
-    .order('start_time', { ascending: false });
-
-  if (error) {
-    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Query failed:', error.message);
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
-  }
-
+function aggregateTimeLogRows(timeLogs, currentTimeLogId) {
   let completedClosedSeconds = 0;
   let ongoingCurrentSessionSeconds = 0;
   const now = Date.now();
@@ -59,6 +39,48 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
   const totalTime = completedClosedSeconds + ongoingCurrentSessionSeconds;
   const timeLogsCount = (timeLogs || []).length;
   return { completedClosedSeconds, ongoingCurrentSessionSeconds, totalTime, timeLogsCount };
+}
+
+async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
+  if (!userId) {
+    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+  }
+
+  const startOfDay = startOfLocalDay();
+  const endOfDay = endOfLocalDayExclusive();
+
+  try {
+    const { isBackendTimeLogsEnabled, getTodayTimeLogs } = require('./backend-time-logs');
+    if (isBackendTimeLogsEnabled()) {
+      const timeLogs = await getTodayTimeLogs(userId);
+      const inRange = (timeLogs || []).filter((log) => {
+        const t = new Date(log.start_time).getTime();
+        return t >= startOfDay.getTime() && t < endOfDay.getTime();
+      });
+      return aggregateTimeLogRows(inRange, currentTimeLogId);
+    }
+  } catch (err) {
+    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend query failed:', err.message);
+  }
+
+  if (!supabase) {
+    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+  }
+
+  const { data: timeLogs, error } = await supabase
+    .from('time_logs')
+    .select('id, start_time, end_time')
+    .eq('user_id', userId)
+    .gte('start_time', startOfDay.toISOString())
+    .lt('start_time', endOfDay.toISOString())
+    .order('start_time', { ascending: false });
+
+  if (error) {
+    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Query failed:', error.message);
+    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+  }
+
+  return aggregateTimeLogRows(timeLogs, currentTimeLogId);
 }
 
 module.exports = {

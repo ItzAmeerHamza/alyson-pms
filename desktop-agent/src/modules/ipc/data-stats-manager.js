@@ -942,10 +942,39 @@ class DataStatsManager {
           return { success: false, error: 'Missing user_id or date parameter', screenshots: [], duplicates: [] };
         }
         
-        // SECURITY CHECK: Ensure user can only access their own screenshots
-        if (this.config.user_id && user_id !== this.config.user_id) {
-          console.warn('🔒 Security violation: User', this.config.user_id, 'attempted to access enhanced screenshots for user', user_id);
+        const effectiveSelf =
+          this.global.currentUserId || this.config?.user_id || this.config?.userId;
+        if (effectiveSelf && user_id !== effectiveSelf) {
+          console.warn('🔒 Access denied: user', user_id, '!=', effectiveSelf);
           return { success: false, error: 'Access denied: Can only view your own screenshots', screenshots: [], duplicates: [] };
+        }
+
+        const {
+          fetchScreenshotsFromBackend,
+          usesBackendScreenshots,
+          applyActivityFilter,
+          buildEnhancedResponse,
+        } = require('../utils/backend-screenshots');
+
+        if (usesBackendScreenshots(this.config)) {
+          const backendRows = await fetchScreenshotsFromBackend(user_id, this.config, {
+            date,
+            limit,
+          });
+          if (Array.isArray(backendRows)) {
+            const withImages = backendRows.filter(
+              (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
+            );
+            const filtered = applyActivityFilter(withImages, activity_filter);
+            console.log(`✅ [ENHANCED-SCREENSHOTS] Backend/RDS: ${filtered.length} rows for ${date}`);
+            if (filtered.length === 0) {
+              console.warn(
+                '⚠️ [ENHANCED-SCREENSHOTS] No RDS rows for this date. S3-only uploads (failed screenshot_upload_complete) will not appear until complete succeeds.',
+              );
+            }
+            return buildEnhancedResponse(filtered);
+          }
+          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Backend fetch failed, falling back to Supabase');
         }
         
         // Build query with activity filtering using service role client for admin access
@@ -1070,23 +1099,36 @@ class DataStatsManager {
       try {
         this.logger && this.logger.info({ category: 'IPC', step: 'get-screenshot-activity: START' });
         console.log('📸 [IPC] Fetching screenshot activity data...');
-      // Prefer global current user; fall back to config in case global was not synced yet
       const effectiveUserId = this.global.currentUserId || this.config.user_id || this.config.userId;
       console.log('🔍 [IPC-DEBUG] User ID (effective):', effectiveUserId);
-      console.log('🔍 [IPC-DEBUG] Supabase service available:', !!this.supabaseService);
-        
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
         
         if (!effectiveUserId) {
           return { success: false, error: 'User not authenticated' };
         }
+
+        const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('../utils/backend-screenshots');
+
+        if (usesBackendScreenshots(this.config)) {
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const rows = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
+            startIso: since,
+            endIso: new Date().toISOString(),
+            limit: 20,
+          });
+          if (Array.isArray(rows)) {
+            console.log(`✅ [IPC] Backend screenshot activity: ${rows.length} records`);
+            return { success: true, data: rows, source: 'backend' };
+          }
+          console.warn('⚠️ [IPC] Backend screenshot activity failed, trying Supabase');
+        }
+
+        if (!this.supabaseService) {
+          throw new Error('Supabase service client not initialized');
+        }
         
-        // Get screenshots from last 24 hours for current user
         const { data, error } = await this.supabaseService
           .from('screenshots')
-          .select('file_path, captured_at, activity_percent, app_name, window_title, time_log_id, mouse_clicks, keystrokes, mouse_movements')
+          .select('file_path, image_url, captured_at, activity_percent, app_name, window_title, time_log_id, mouse_clicks, keystrokes, mouse_movements, is_duplicate, duplicate_reason, duplicate_group_hash')
           .eq('user_id', effectiveUserId)
           .gte('captured_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
           .order('captured_at', { ascending: false })
@@ -1097,10 +1139,9 @@ class DataStatsManager {
           return { success: false, error: error.message };
         }
         
-        console.log(`✅ [IPC] Fetched ${data?.length || 0} screenshot activity records`);
-        console.log('🧩 [PARSE-DB] ScreenshotActivity: start normalize/process', { records: data?.length || 0 });
+        console.log(`✅ [IPC] Fetched ${data?.length || 0} screenshot activity records (Supabase)`);
         this.logger && this.logger.info({ category: 'IPC', step: 'get-screenshot-activity: SUCCESS', ctx: { records: data?.length || 0 } });
-        return { success: true, data: data || [] };
+        return { success: true, data: data || [], source: 'supabase' };
         
       } catch (error) {
         console.error('❌ Error in get-screenshot-activity:', error);
@@ -2004,26 +2045,40 @@ class DataStatsManager {
     this.ipcMain.handle('get-today-screenshots', async () => {
       try {
         console.log('📸 [TODAY-SCREENSHOTS] Fetching today\'s screenshots...');
-        
-        if (!this.supabaseService) {
-          console.error('❌ [TODAY-SCREENSHOTS] Supabase service not available');
-          return { success: false, error: 'Database service not available' };
-        }
 
-        // Get effective user ID
         const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
-        
+
         if (!effectiveUserId) {
           console.warn('⚠️ [TODAY-SCREENSHOTS] No user ID available — returning empty list');
           return { success: true, data: [] };
+        }
+
+        const {
+          fetchTodayScreenshotsFromBackend,
+          usesBackendScreenshots,
+        } = require('../utils/backend-screenshots');
+
+        if (usesBackendScreenshots(this.config)) {
+          const backendRows = await fetchTodayScreenshotsFromBackend(effectiveUserId, this.config);
+          if (Array.isArray(backendRows) && backendRows.length >= 0) {
+            const withImages = backendRows.filter(
+              (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
+            );
+            console.log(`✅ [TODAY-SCREENSHOTS] Backend/RDS: ${withImages.length} screenshots`);
+            return { success: true, data: withImages, source: 'backend' };
+          }
+          console.warn('⚠️ [TODAY-SCREENSHOTS] Backend fetch failed, falling back to Supabase');
+        }
+
+        if (!this.supabaseService) {
+          console.error('❌ [TODAY-SCREENSHOTS] No backend or Supabase available');
+          return { success: false, error: 'Database service not available' };
         }
 
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
-
-        console.log(`📸 [TODAY-SCREENSHOTS] Fetching screenshots for user ${effectiveUserId} from ${todayStart.toISOString()}`);
 
         const { data, error } = await this.supabaseService
           .from('screenshots')
@@ -2034,32 +2089,13 @@ class DataStatsManager {
           .order('captured_at', { ascending: false });
 
         if (error) {
-          // 🔧 IMPROVED: Better error handling for screenshot fetch failures
           const errorMessage = error.message || String(error);
-          const isNetworkError = errorMessage.includes('fetch failed') || 
-                                errorMessage.includes('network') ||
-                                errorMessage.includes('timeout') ||
-                                errorMessage.includes('ENOTFOUND');
-          
-          if (isNetworkError) {
-            console.warn('⚠️ [TODAY-SCREENSHOTS] Network error fetching screenshots (will retry):', {
-              message: errorMessage.split('\n')[0], // First line only
-              hint: 'This is likely a temporary network issue'
-            });
-          } else {
-            console.error('❌ [TODAY-SCREENSHOTS] Error fetching screenshots:', {
-              message: errorMessage.split('\n')[0], // First line only
-              details: errorMessage,
-              hint: 'This appears to be a persistent error'
-            });
-          }
-          
+          console.error('❌ [TODAY-SCREENSHOTS] Supabase error:', errorMessage.split('\n')[0]);
           return { success: false, error: errorMessage };
         }
 
-        console.log(`✅ [TODAY-SCREENSHOTS] Fetched ${data?.length || 0} screenshots`);
-        return { success: true, data: data || [] };
-        
+        console.log(`✅ [TODAY-SCREENSHOTS] Supabase: ${data?.length || 0} screenshots`);
+        return { success: true, data: data || [], source: 'supabase' };
       } catch (error) {
         console.error('❌ [TODAY-SCREENSHOTS] Error:', error);
         return { success: false, error: error.message };

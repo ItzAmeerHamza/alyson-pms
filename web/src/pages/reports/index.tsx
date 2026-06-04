@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchPaginated } from "@/lib/supabase-utils";
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { fetchIdleLogs } from '@/domains/monitoring/services/idle-logs.service';
+import { fetchOrgUsers, fetchProjects as fetchProjectsApi } from '@/domains/people';
 import { useAuth } from "@/providers/auth-provider";
 import { 
   Download, 
@@ -113,86 +114,67 @@ export default function ReportsPage() {
           startDate = subDays(now, 30);
       }
 
-      // First, get organization users if not super admin
-      let orgUserIds: string[] = [];
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers, error: orgUsersError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('organization_id', organizationId);
-        
-        if (orgUsersError) throw orgUsersError;
-        orgUserIds = (orgUsers || []).map(u => u.id);
-        
-        // If no users in organization, return empty data
-        if (orgUserIds.length === 0) {
-          setReportData({
-            totalHours: 0,
-            totalUsers: 0,
-            totalProjects: 0,
-            avgHoursPerUser: 0,
-            topProjects: [],
-            topUsers: [],
-            dailyActivity: [],
-            productivityMetrics: { activeTime: 0, idleTime: 0, focusScore: 0 }
-          });
-          setLoading(false);
-          return;
-        }
+      const ctx = { organizationId, isSuperAdmin };
+      const orgUsers = await fetchOrgUsers(ctx);
+      const orgUserIds = orgUsers.map((u) => u.id);
+
+      if (organizationId && !isSuperAdmin && orgUserIds.length === 0) {
+        setReportData({
+          totalHours: 0,
+          totalUsers: 0,
+          totalProjects: 0,
+          avgHoursPerUser: 0,
+          topProjects: [],
+          topUsers: [],
+          dailyActivity: [],
+          productivityMetrics: { activeTime: 0, idleTime: 0, focusScore: 0 },
+        });
+        setLoading(false);
+        return;
       }
 
-      // Fetch time logs with related data
-      let query = supabase
-        .from('time_logs')
-        .select(`
-          id,
-          user_id,
-          project_id,
-          start_time,
-          end_time,
-          is_idle,
-          idle_seconds,
-          projects (
-            id,
-            name
-          ),
-          users (
-            id,
-            full_name,
-            email,
-            organization_id
-          )
-        `)
-        .gte('start_time', startDate.toISOString())
-        .lte('start_time', endDate.toISOString());
+      const timeLogOpts =
+        userDetails?.role === 'employee'
+          ? { userId: userDetails.id, limit: 10000 }
+          : { limit: 10000 };
 
-      // Filter by user role and organization
+      const timeLogs = await fetchDetailedTimeLogs(startDate, endDate, ctx, timeLogOpts);
+
+      const filteredTimeLogs =
+        userDetails?.role === 'employee'
+          ? timeLogs
+          : organizationId && !isSuperAdmin
+            ? timeLogs.filter((l) => orgUserIds.includes(l.user_id))
+            : timeLogs;
+
+      const projects = await fetchProjectsApi(ctx);
+      const userById = new Map(orgUsers.map((u) => [u.id, u]));
+      const projectById = new Map(projects.map((p) => [p.id, p.name]));
+
+      const timeLogsEnriched = filteredTimeLogs.map((log) => ({
+        ...log,
+        users: userById.get(log.user_id)
+          ? {
+              id: log.user_id,
+              full_name: userById.get(log.user_id)!.full_name,
+              email: userById.get(log.user_id)!.email,
+              organization_id: userById.get(log.user_id)!.organization_id,
+            }
+          : log.users,
+        projects: log.project_id
+          ? { id: log.project_id, name: projectById.get(log.project_id) || 'Unknown' }
+          : log.projects,
+      }));
+
+      let idleLogs = await fetchIdleLogs(startDate, endDate, ctx);
       if (userDetails?.role === 'employee') {
-        query = query.eq('user_id', userDetails.id);
-      } else if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        query = query.in('user_id', orgUserIds);
+        idleLogs = idleLogs.filter((l) => l.user_id === userDetails.id);
+      } else if (organizationId && !isSuperAdmin) {
+        idleLogs = idleLogs.filter((l) => orgUserIds.includes(l.user_id));
       }
-
-      const timeLogs = await fetchPaginated<any>(query);
-
-      // Fetch idle_logs for the same date range to compute per-session idle time
-      let idleQuery = supabase
-        .from('idle_logs')
-        .select('user_id, idle_start, idle_end, duration_seconds')
-        .gte('idle_start', startDate.toISOString())
-        .lte('idle_start', endDate.toISOString());
-
-      if (userDetails?.role === 'employee') {
-        idleQuery = idleQuery.eq('user_id', userDetails.id);
-      } else if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        idleQuery = idleQuery.in('user_id', orgUserIds);
-      }
-
-      const idleLogsData = await fetchPaginated<any>(idleQuery);
 
       // Filter out test users and projects in JavaScript
-      // (PostgREST doesn't support .not() filtering on embedded resources correctly)
-      const filteredLogs = (timeLogs || []).filter(log => {
+      const filteredLogs = (timeLogsEnriched || []).filter((log) => {
         const email = log.users?.email?.toLowerCase() || '';
         const fullName = log.users?.full_name?.toLowerCase() || '';
         const projectName = log.projects?.name?.toLowerCase() || '';
@@ -210,7 +192,7 @@ export default function ReportsPage() {
         const logStart = new Date(log.start_time).getTime();
         const logEnd = log.end_time ? new Date(log.end_time).getTime() : Date.now();
         let totalIdleMs = 0;
-        (idleLogsData || []).forEach(idle => {
+        (idleLogs || []).forEach((idle) => {
           if (idle.user_id !== log.user_id) return;
           const idleStart = new Date(idle.idle_start).getTime();
           const idleEnd = idle.idle_end ? new Date(idle.idle_end).getTime() : Date.now();

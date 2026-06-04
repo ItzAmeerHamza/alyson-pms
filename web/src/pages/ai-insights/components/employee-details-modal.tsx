@@ -14,7 +14,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchAppLogs } from '@/domains/monitoring/services/app-logs.service';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { useAuth } from '@/providers/auth-provider';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
@@ -97,6 +100,8 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'
 
 export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDetailsModalProps) {
   const navigate = useNavigate();
+  const { userDetails, isSuperAdmin } = useAuth();
+  const organizationId = userDetails?.organization_id;
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('activity');
   
@@ -141,17 +146,18 @@ export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDe
   };
 
   const loadTimelineData = async (userId: string, start: string, end: string) => {
-    const { data } = await supabase
-      .from('screenshots')
-      .select('id, image_url, ai_analyzed_at, idle_inferred, category, is_duplicate, activity_percent, captured_at')
-      .eq('user_id', userId)
-      .gte('captured_at', start)
-      .lte('captured_at', end)
-      .order('captured_at', { ascending: false });
+    const data = await fetchScreenshotsApi(
+      { organizationId, isSuperAdmin },
+      {
+        start: new Date(start),
+        end: new Date(end),
+        userId,
+        limit: 10000,
+      },
+    );
 
-    // Build hourly timeline
     const buckets: Record<string, { work: number; idle: number; dup: number }> = {};
-    (data || []).forEach((row: any) => {
+    data.forEach((row: any) => {
       const dt = new Date(row.captured_at);
       const key = `${dt.getHours().toString().padStart(2, '0')}:00`;
       if (!buckets[key]) buckets[key] = { work: 0, idle: 0, dup: 0 };
@@ -179,17 +185,16 @@ export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDe
   };
 
   const loadAppData = async (userId: string, start: string, end: string) => {
-    const { data: appLogs } = await supabase
-      .from('app_logs')
-      .select('app_name')
-      .eq('user_id', userId)
-      .gte('created_at', start)
-      .lte('created_at', end)
-      .limit(1000);
+    const appLogs = await fetchAppLogs(
+      new Date(start),
+      new Date(end),
+      { organizationId, isSuperAdmin },
+      userId,
+    );
 
     // Top apps
     const appCounts: Record<string, number> = {};
-    (appLogs || []).forEach((r: any) => {
+    appLogs.forEach((r: any) => {
       const name = r.app_name || 'Unknown';
       appCounts[name] = (appCounts[name] || 0) + 1;
     });
@@ -202,15 +207,13 @@ export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDe
 
     // Detect social media apps
     const socialMediaApps = AI_CONTENT_PATTERNS.social_media.apps;
-    const { data: screenshots } = await supabase
-      .from('screenshots')
-      .select('id, image_url, app_name, captured_at, is_duplicate')
-      .eq('user_id', userId)
-      .gte('captured_at', start)
-      .lte('captured_at', end);
+    const screenshots = await fetchScreenshotsApi(
+      { organizationId, isSuperAdmin },
+      { start: new Date(start), end: new Date(end), userId, limit: 10000 },
+    );
 
     const appsMap: Record<string, any[]> = {};
-    (screenshots || []).forEach((r: any) => {
+    screenshots.forEach((r: any) => {
       if (!r.app_name || r.is_duplicate) return;
       const appNameLower = r.app_name.toLowerCase();
       const matchedApp = socialMediaApps.find(socialApp => 
@@ -238,19 +241,18 @@ export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDe
   };
 
   const loadUrlData = async (userId: string, start: string, end: string) => {
-    const { data: urlData } = await supabase
-      .from('url_logs')
-      .select('url, domain, timestamp, duration_seconds')
-      .eq('user_id', userId)
-      .gte('timestamp', start)
-      .lte('timestamp', end)
-      .limit(1000);
+    const urlData = await fetchUrlLogs(
+      new Date(start),
+      new Date(end),
+      { organizationId, isSuperAdmin },
+      userId,
+    );
 
     // Top domains
     const domainCounts: Record<string, { visits: number; time_spent: number }> = {};
     const socialUrlsMap: Record<string, { count: number; time_spent: number }> = {};
 
-    (urlData || []).forEach((r: any) => {
+    urlData.forEach((r: any) => {
       let domain = r.domain;
       if (!domain && r.url) {
         try {
@@ -309,16 +311,13 @@ export function EmployeeDetailsModal({ open, onOpenChange, insight }: EmployeeDe
   };
 
   const loadScreenshotIssues = async (userId: string, start: string, end: string) => {
-    const { data } = await supabase
-      .from('screenshots')
-      .select('id, image_url, captured_at, is_duplicate, duplicate_group_hash, activity_percent, app_name, idle_inferred, vision_category')
-      .eq('user_id', userId)
-      .gte('captured_at', start)
-      .lte('captured_at', end);
+    const data = await fetchScreenshotsApi(
+      { organizationId, isSuperAdmin },
+      { start: new Date(start), end: new Date(end), userId, limit: 10000 },
+    );
 
-    // Duplicate groups
     const duplicatesMap: Record<string, any[]> = {};
-    (data || []).forEach((r: any) => {
+    data.forEach((r: any) => {
       if (r.is_duplicate && r.duplicate_group_hash && r.image_url) {
         if (!duplicatesMap[r.duplicate_group_hash]) {
           duplicatesMap[r.duplicate_group_hash] = [];

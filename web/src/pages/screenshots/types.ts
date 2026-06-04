@@ -134,7 +134,8 @@ export interface AnalysisResult {
 }
 
 export interface FilterOptions {
-  selectedDate: string;
+  /** YYYY-MM-DD for a single day; null = all dates (requires a specific employee). */
+  selectedDate: string | null;
   userFilter: string;
   projectFilter: string;
   contentFilter: string;

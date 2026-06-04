@@ -1,13 +1,17 @@
 
 import * as React from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 import { useToast } from "@/components/ui/use-toast";
-import { validateUserId } from "@/utils/uuid-validation";
+import { isCognitoAuthEnabled } from "@/integrations/cognito/config";
+import {
+  getCurrentCognitoSession,
+  signInWithEmailPassword,
+  signOutCognito,
+} from "@/integrations/cognito/auth";
+import { fetchAuthMe } from "@/lib/auth-api";
 
-// Define the UserDetails type based on actual database columns
 interface UserDetails {
   id: string;
   email: string;
@@ -19,7 +23,6 @@ interface UserDetails {
   is_super_admin: boolean;
 }
 
-// Organization details
 interface OrganizationDetails {
   id: string;
   name: string;
@@ -27,107 +30,159 @@ interface OrganizationDetails {
   logo_url: string | null;
 }
 
+/** Minimal session shape for components that read session.user / access_token */
+export interface AppSession {
+  user: { id: string; email: string };
+  access_token: string;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: User | AppSession["user"] | null;
   userDetails: UserDetails | null;
   organization: OrganizationDetails | null;
-  session: Session | null;
+  session: Session | AppSession | null;
   signIn: (email: string, password: string, rememberMe?: boolean, companySlug?: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
   error: string | null;
   isSuperAdmin: boolean;
   isOrgAdmin: boolean;
+  /** Cognito id token when using RDS + Cognito auth */
+  idToken: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function mapProfileToState(profile: Awaited<ReturnType<typeof fetchAuthMe>>) {
+  const userDetails: UserDetails = {
+    id: profile.user.id,
+    email: profile.user.email,
+    full_name: profile.user.full_name,
+    role: profile.user.role,
+    avatar_url: profile.user.avatar_url,
+    organization_id: profile.user.organization_id,
+    is_org_admin: profile.user.is_org_admin,
+    is_super_admin: profile.user.is_super_admin,
+  };
+  const organization: OrganizationDetails | null = profile.organization
+    ? {
+        id: profile.organization.id,
+        name: profile.organization.name,
+        slug: profile.organization.slug,
+        logo_url: profile.organization.logo_url,
+      }
+    : null;
+  return { userDetails, organization };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const useCognito = isCognitoAuthEnabled;
+
+  const [user, setUser] = useState<User | AppSession["user"] | null>(null);
   const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [organization, setOrganization] = useState<OrganizationDetails | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | AppSession | null>(null);
+  const [idToken, setIdToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
-
-  // Track which user ID has already been fetched to prevent duplicate calls
-  // from both loadInitialSession and onAuthStateChange firing for the same user
   const fetchedUserIdRef = useRef<string | null>(null);
 
+  async function applyCognitoSession(idTok: string, email: string) {
+    const profile = await fetchAuthMe(idTok);
+    const { userDetails: details, organization: org } = mapProfileToState(profile);
+    setUserDetails(details);
+    setOrganization(org);
+    setUser({ id: details.id, email: details.email });
+    setSession({
+      user: { id: details.id, email: details.email },
+      access_token: idTok,
+    });
+    setIdToken(idTok);
+    fetchedUserIdRef.current = details.id;
+    setError(null);
+  }
+
   useEffect(() => {
+    if (!useCognito) return;
+
+    let mounted = true;
+
+    async function initCognito() {
+      setLoading(true);
+      try {
+        const stored = await getCurrentCognitoSession();
+        if (!mounted) return;
+        if (stored?.idToken) {
+          await applyCognitoSession(stored.idToken, stored.email);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        console.error("Cognito session init failed:", err);
+        setError("Failed to restore session");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    initCognito();
+    return () => {
+      mounted = false;
+    };
+  }, [useCognito]);
+
+  useEffect(() => {
+    if (useCognito) return;
+
     let mounted = true;
     const abortController = new AbortController();
     setLoading(true);
     setError(null);
     fetchedUserIdRef.current = null;
 
-    // Helper to check if a fetch error is due to abort/unmount (should be silenced)
     function isAbortedError(err: unknown): boolean {
       if (!mounted) return true;
-      if (err instanceof DOMException && err.name === 'AbortError') return true;
-      if (err instanceof TypeError && err.message === 'Failed to fetch') return true;
+      if (err instanceof DOMException && err.name === "AbortError") return true;
+      if (err instanceof TypeError && err.message === "Failed to fetch") return true;
       return false;
     }
 
     async function fetchOrganizationDetailsInner(orgId: string) {
       try {
-        const { data, error } = await supabase
+        const { data, error: orgError } = await supabase
           .from("organizations")
-          .select(`
-            id,
-            name,
-            slug,
-            logo_url
-          `)
+          .select(`id, name, slug, logo_url`)
           .eq("id", orgId)
           .single();
 
         if (!mounted) return;
-
-        if (error) {
-          // Only log if the component is still mounted (not a cleanup race)
-          console.error("Error fetching organization details:", error);
+        if (orgError) {
+          console.error("Error fetching organization details:", orgError);
           return;
         }
-
         setOrganization(data);
-      } catch (error) {
-        if (isAbortedError(error)) return;
-        console.error("Unexpected error fetching organization:", error);
+      } catch (err) {
+        if (isAbortedError(err)) return;
+        console.error("Unexpected error fetching organization:", err);
       }
     }
 
     async function fetchUserDetailsInner(userId: string) {
       try {
-        const validUserId = validateUserId(userId);
-        if (!validUserId) {
-          console.error('Invalid user ID provided:', userId);
-          if (mounted) setError('Invalid user session');
-          return;
-        }
-
-        const { data, error } = await supabase
+        const { data, error: userError } = await supabase
           .from("users")
           .select(`
-            id,
-            email,
-            full_name,
-            role,
-            avatar_url,
-            organization_id,
-            is_org_admin,
-            is_super_admin
+            id, email, full_name, role, avatar_url,
+            organization_id, is_org_admin, is_super_admin
           `)
-          .eq("id", validUserId)
+          .eq("id", userId)
           .single();
 
         if (!mounted) return;
-
-        if (error) {
-          console.error("Error fetching user details:", error);
-          if (error.code !== 'PGRST116') {
-            setError(`Failed to load user profile: ${error.message}`);
+        if (userError) {
+          console.error("Error fetching user details:", userError);
+          if (userError.code !== "PGRST116") {
+            setError(`Failed to load user profile: ${userError.message}`);
           }
           return;
         }
@@ -145,28 +200,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setOrganization(null);
         }
-      } catch (error) {
-        if (isAbortedError(error)) return;
-        console.error("Unexpected error fetching user details:", error);
+      } catch (err) {
+        if (isAbortedError(err)) return;
+        console.error("Unexpected error fetching user details:", err);
         if (mounted) setError("Failed to load user profile");
       }
     }
 
-    // Set up auth state listener (synchronous setup for proper cleanup)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
+      async (_event: AuthChangeEvent, nextSession: Session | null) => {
         if (!mounted) return;
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
 
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          // Skip if loadInitialSession already fetched this user's details
-          if (fetchedUserIdRef.current === session.user.id) return;
-
+        if (nextSession?.user) {
+          if (fetchedUserIdRef.current === nextSession.user.id) return;
           setTimeout(() => {
-            if (mounted && fetchedUserIdRef.current !== session.user.id) {
-              fetchUserDetailsInner(session.user.id);
+            if (mounted && fetchedUserIdRef.current !== nextSession.user.id) {
+              fetchUserDetailsInner(nextSession.user.id);
             }
           }, 0);
         } else {
@@ -174,261 +225,161 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setOrganization(null);
           fetchedUserIdRef.current = null;
         }
-      }
+      },
     );
 
-    // Fetch initial session asynchronously
     async function loadInitialSession() {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session: initial }, error: sessionError } =
+          await supabase.auth.getSession();
 
         if (!mounted) return;
-
         if (sessionError) {
-          console.error("Error getting session:", sessionError);
           setError(`Authentication error: ${sessionError.message}`);
-          if (toast) {
-            toast({
-              title: "Authentication error",
-              description: "There was a problem with your session. Please try logging in again.",
-              variant: "destructive",
-            });
-          }
         } else {
-          setSession(session);
-
-          if (session?.user) {
-            setUser(session.user);
-            await fetchUserDetailsInner(session.user.id);
+          setSession(initial);
+          if (initial?.user) {
+            setUser(initial.user);
+            await fetchUserDetailsInner(initial.user.id);
           }
         }
       } catch (err) {
-        if (isAbortedError(err)) return;
-
-        console.error("Auth initialization error:", err);
-        setError("Failed to initialize authentication");
-        if (toast) {
-          toast({
-            title: "System Error",
-            description: "Failed to initialize authentication system. Please refresh the page.",
-            variant: "destructive",
-          });
+        if (!isAbortedError(err)) {
+          setError("Failed to initialize authentication");
         }
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     }
 
     loadInitialSession();
 
-    // Cleanup: abort in-flight fetches and unsubscribe
     return () => {
       mounted = false;
       abortController.abort();
       subscription.unsubscribe();
     };
-  }, [toast]);
+  }, [useCognito]);
 
-  // Standalone fetch for signIn flow (not tied to the effect's AbortController)
-  async function fetchUserDetails(userId: string) {
-    try {
-      const validUserId = validateUserId(userId);
-      if (!validUserId) {
-        console.error('Invalid user ID provided:', userId);
-        setError('Invalid user session');
-        return;
+  async function signIn(
+    email: string,
+    password: string,
+    _rememberMe: boolean = false,
+    companySlug?: string,
+  ) {
+    setError(null);
+
+    if (useCognito) {
+      const stored = await signInWithEmailPassword(email, password);
+      const profile = await fetchAuthMe(stored.idToken);
+      const { userDetails: details, organization: org } = mapProfileToState(profile);
+
+      if (companySlug && org?.slug !== companySlug.trim().toLowerCase()) {
+        signOutCognito();
+        throw new Error(
+          "You are not a member of this organization. Please check the company name.",
+        );
       }
 
-      const { data, error } = await supabase
+      setUserDetails(details);
+      setOrganization(org);
+      setUser({ id: details.id, email: details.email });
+      setSession({
+        user: { id: details.id, email: details.email },
+        access_token: stored.idToken,
+      });
+      setIdToken(stored.idToken);
+      fetchedUserIdRef.current = details.id;
+
+      if (toast) {
+        toast({ title: "Successfully signed in", description: "Welcome back!" });
+      }
+      return;
+    }
+
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) throw signInError;
+
+    if (companySlug && data.user) {
+      const { data: userData, error: userError } = await supabase
         .from("users")
-        .select(`
-          id,
-          email,
-          full_name,
-          role,
-          avatar_url,
-          organization_id,
-          is_org_admin,
-          is_super_admin
-        `)
-        .eq("id", validUserId)
+        .select("organization_id")
+        .eq("id", data.user.id)
         .single();
 
-      if (error) {
-        console.error("Error fetching user details:", error);
-        if (error.code !== 'PGRST116') {
-          setError(`Failed to load user profile: ${error.message}`);
-        }
-        return;
+      if (userError) {
+        await supabase.auth.signOut();
+        throw new Error(
+          "Unable to verify your account. Please contact your administrator.",
+        );
       }
 
-      setUserDetails({
-        ...data,
-        is_org_admin: data.is_org_admin ?? false,
-        is_super_admin: data.is_super_admin ?? false,
-      });
-      setError(null);
-
-      if (data.organization_id) {
-        await fetchOrganizationDetails(data.organization_id);
-      } else {
-        setOrganization(null);
-      }
-    } catch (error) {
-      console.error("Unexpected error fetching user details:", error);
-      setError("Failed to load user profile");
-    }
-  }
-
-  async function fetchOrganizationDetails(orgId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("organizations")
-        .select(`
-          id,
-          name,
-          slug,
-          logo_url
-        `)
-        .eq("id", orgId)
-        .single();
-
-      if (error) {
-        console.error("Error fetching organization details:", error);
-        return;
-      }
-
-      setOrganization(data);
-    } catch (error) {
-      console.error("Unexpected error fetching organization:", error);
-    }
-  }
-
-  async function signIn(email: string, password: string, rememberMe: boolean = false, companySlug?: string) {
-    try {
-      setError(null);
-
-      // First, authenticate with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      // If company slug provided, validate user belongs to that organization
-      if (companySlug && data.user) {
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("organization_id")
-          .eq("id", data.user.id)
+      if (userData.organization_id) {
+        const { data: orgData, error: orgError } = await supabase
+          .from("organizations")
+          .select("slug")
+          .eq("id", userData.organization_id)
           .single();
 
-        if (userError) {
-          // Sign out if we can't verify the user
+        if (orgError || orgData?.slug !== companySlug) {
           await supabase.auth.signOut();
-          throw new Error("Unable to verify your account. Please contact your administrator.");
-        }
-
-        if (userData.organization_id) {
-          // Verify the organization matches the slug
-          const { data: orgData, error: orgError } = await supabase
-            .from("organizations")
-            .select("slug")
-            .eq("id", userData.organization_id)
-            .single();
-
-          if (orgError || orgData?.slug !== companySlug) {
-            // Sign out if organization doesn't match
-            await supabase.auth.signOut();
-            throw new Error("You are not a member of this organization. Please check the company name.");
-          }
+          throw new Error(
+            "You are not a member of this organization. Please check the company name.",
+          );
         }
       }
+    }
 
-      if (toast) {
-        toast({
-          title: "Successfully signed in",
-          description: "Welcome back!",
-        });
-      }
-    } catch (error: any) {
-      const errorMessage = error.message || "An unexpected error occurred";
-      setError(errorMessage);
-      if (toast) {
-        toast({
-          title: "Error signing in",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
-      throw error;
+    if (toast) {
+      toast({ title: "Successfully signed in", description: "Welcome back!" });
     }
   }
 
-  const navigate = useNavigate();
-
   async function signOut() {
-    try {
-      setError(null);
+    setError(null);
 
-      // Sign out from Supabase FIRST to invalidate the session
-      // before clearing local state (prevents race with auto-refresh)
-      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
-
-      if (signOutError) {
-        console.warn("Supabase signOut error:", signOutError.message);
-      }
-
-      // Clear local state after Supabase signOut completes
+    if (useCognito) {
+      signOutCognito();
       setUser(null);
       setUserDetails(null);
       setOrganization(null);
       setSession(null);
-
-      // Clear any persisted session data from localStorage as a fallback
-      try {
-        const storageKeys = Object.keys(localStorage);
-        storageKeys.forEach((key) => {
-          if (key.startsWith('sb-') && (key.endsWith('-auth-token') || key.endsWith('auth-token'))) {
-            localStorage.removeItem(key);
-          }
-        });
-      } catch (e) {
-        // localStorage might not be available
-      }
-
-      if (toast) {
-        toast({
-          title: "Successfully signed out",
-        });
-      }
-
-      // Force a hard redirect to clear all in-memory state reliably
-      window.location.href = '/login';
-    } catch (error: any) {
-      const errorMessage = error.message || "Error signing out";
-      setError(errorMessage);
-      if (toast) {
-        toast({
-          title: "Error signing out",
-          description: errorMessage,
-          variant: "destructive",
-        });
-      }
-      // Even if error occurs, force redirect with hard navigation
-      window.location.href = '/login';
+      setIdToken(null);
+      fetchedUserIdRef.current = null;
+      if (toast) toast({ title: "Successfully signed out" });
+      window.location.href = "/login";
+      return;
     }
+
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+    if (signOutError) {
+      console.warn("Supabase signOut error:", signOutError.message);
+    }
+
+    setUser(null);
+    setUserDetails(null);
+    setOrganization(null);
+    setSession(null);
+
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("sb-") && key.includes("auth")) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+
+    if (toast) toast({ title: "Successfully signed out" });
+    window.location.href = "/login";
   }
 
-  const isSuperAdmin = userDetails?.is_super_admin ?? false;
-  const isOrgAdmin = userDetails?.is_org_admin ?? false;
-
-  const value = {
+  const value: AuthContextType = {
     user,
     userDetails,
     organization,
@@ -437,8 +388,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     loading,
     error,
-    isSuperAdmin,
-    isOrgAdmin,
+    isSuperAdmin: userDetails?.is_super_admin ?? false,
+    isOrgAdmin: userDetails?.is_org_admin ?? false,
+    idToken: useCognito ? idToken : null,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

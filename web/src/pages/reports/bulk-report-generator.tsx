@@ -6,8 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchAppLogs } from '@/domains/monitoring/services/app-logs.service';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { fetchIdleLogs } from '@/domains/monitoring/services/idle-logs.service';
+import { fetchAiInsights } from '@/domains/monitoring/services/ai-insights.service';
+import { fetchOrgUsers } from '@/domains/people';
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { 
@@ -114,22 +119,20 @@ export default function BulkReportGenerator() {
 
   const fetchEmployees = async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, full_name, email, role')
-        .in('role', ['employee', 'admin', 'manager'])
-        .eq('is_active', true);
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-      
-      const { data, error } = await query.order('full_name');
-
-      if (error) throw error;
-      setEmployees(data || []);
-      setSelectedEmployees((data || []).map(emp => emp.id));
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { roles: ['employee', 'admin', 'manager'] },
+      );
+      const active = data.filter((u) => u.is_active !== false);
+      setEmployees(
+        active.map((u) => ({
+          id: u.id,
+          full_name: u.full_name || u.email,
+          email: u.email,
+          role: u.role || 'employee',
+        })),
+      );
+      setSelectedEmployees(active.map((emp) => emp.id));
     } catch (error) {
       console.error('Error fetching employees:', error);
       toast.error('Failed to fetch employees');
@@ -191,20 +194,14 @@ export default function BulkReportGenerator() {
       
       // Fetch AI insights for selected employees
       // Note: data is stored in 'insights' JSONB column
-      const { data: insightsData, error } = await supabase
-        .from('ai_employee_insights')
-        .select('*')
-        .in('user_id', employeeIds)
-        .gte('period_start', start.toISOString())
-        .lte('period_end', end.toISOString())
-        .order('created_at', { ascending: false });
+      const insightsData = await fetchAiInsights(start, end, {
+        organizationId,
+        isSuperAdmin,
+        orgUserIds: employeeIds,
+      }, { limit: 5000 });
+      const filteredInsights = insightsData.filter((row) => employeeIds.includes(row.user_id));
 
-      if (error) {
-        console.warn('Error fetching AI insights:', error);
-        return;
-      }
-
-      if (!insightsData || insightsData.length === 0) {
+      if (!filteredInsights.length) {
         setAiSummary(null);
         return;
       }
@@ -213,8 +210,8 @@ export default function BulkReportGenerator() {
       const employeeMap = new Map(employees.map(e => [e.id, e.full_name]));
 
       // Process AI insights - extract from 'insights' JSONB column
-      const processedInsights: AIEmployeeSummary[] = insightsData.map(row => {
-        const ins = (row.insights as any) || {};
+      const processedInsights: AIEmployeeSummary[] = filteredInsights.map(row => {
+        const ins = (row.insights as Record<string, unknown>) || {};
         return {
           user_id: row.user_id,
           employee_name: employeeMap.get(row.user_id) || 'Unknown',
@@ -276,91 +273,26 @@ export default function BulkReportGenerator() {
       
       // Fetch time logs
       console.log('📊 Fetching time logs for employees:', selectedEmployees);
-      const timeLogs = await fetchPaginated<any>(
-        supabase
-          .from('time_logs')
-          .select(`
-            id,
-            user_id,
-            project_id,
-            start_time,
-            end_time,
-            is_idle,
-            idle_seconds,
-            status,
-            projects (name),
-            users (full_name, email, role)
-          `)
-          .in('user_id', selectedEmployees)
-          .gte('start_time', start.toISOString())
-          .lte('start_time', end.toISOString())
-          .order('start_time')
-      );
+      const ctx = { organizationId, isSuperAdmin, orgUserIds: selectedEmployees };
+      const [allTimeLogs, screenshots, idleLogs] = await Promise.all([
+        fetchDetailedTimeLogs(start, end, ctx, { limit: 10000 }),
+        fetchScreenshotsApi(ctx, { start, end, limit: 10000 }),
+        fetchIdleLogs(start, end, ctx),
+      ]);
+      const timeLogs = allTimeLogs.filter((log) => selectedEmployees.includes(log.user_id));
       console.log(`✅ Time logs fetched successfully: ${timeLogs.length} records`);
 
-      // Always fetch screenshots (needed for smart session capping even if not displayed)
-      const screenshots = await fetchPaginated<any>(
-        supabase
-          .from('screenshots')
-          .select(includeScreenshots
-            ? 'id, user_id, captured_at, activity_percent, focus_percent, users (full_name, email)'
-            : 'user_id, captured_at')
-          .in('user_id', selectedEmployees)
-          .gte('captured_at', start.toISOString())
-          .lte('captured_at', end.toISOString())
-      );
-
-      // Fetch app logs if requested
       let appLogs: any[] = [];
       if (includeApps) {
-        appLogs = await fetchPaginated<any>(
-          supabase
-            .from('app_logs')
-            .select(`
-              id,
-              user_id,
-              app_name,
-              window_title,
-              timestamp,
-              users (full_name, email)
-            `)
-            .in('user_id', selectedEmployees)
-            .gte('timestamp', start.toISOString())
-            .lte('timestamp', end.toISOString())
-        );
+        appLogs = await fetchAppLogs(start, end, ctx);
+        appLogs = appLogs.filter((log) => selectedEmployees.includes(log.user_id || ''));
       }
 
-      // Fetch URL logs if requested
       let urlLogs: any[] = [];
       if (includeUrls) {
-        urlLogs = await fetchPaginated<any>(
-          supabase
-            .from('url_logs')
-            .select(`
-              id,
-              user_id,
-              url,
-              site_url,
-              domain,
-              title,
-              timestamp,
-              users (full_name, email)
-            `)
-            .in('user_id', selectedEmployees)
-            .gte('timestamp', start.toISOString())
-            .lte('timestamp', end.toISOString())
-        );
+        urlLogs = await fetchUrlLogs(start, end, ctx);
+        urlLogs = urlLogs.filter((log) => log.user_id && selectedEmployees.includes(log.user_id));
       }
-
-      // Fetch idle_logs to calculate actual idle time (not just is_idle flag on time_logs)
-      const idleLogs = await fetchPaginated<any>(
-        supabase
-          .from('idle_logs')
-          .select('user_id, duration_seconds, idle_start, idle_end')
-          .in('user_id', selectedEmployees)
-          .lte('idle_start', end.toISOString())
-          .or(`idle_end.gte.${start.toISOString()},idle_end.is.null`)
-      );
 
       // Process the data based on groupBy setting
       console.log('🔄 Processing report data...');

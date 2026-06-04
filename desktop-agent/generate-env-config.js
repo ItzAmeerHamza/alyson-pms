@@ -9,6 +9,7 @@ const path = require('path');
 
 // Load environment variables from .env file if it exists
 require('dotenv').config({ path: path.join(process.cwd(), '.env') });
+require('dotenv').config({ path: path.join(process.cwd(), '../web/.env') });
 
 console.log('ðŸ”§ Generating embedded environment configuration...');
 
@@ -25,19 +26,28 @@ const credentials = {
   VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
   SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '',
-  // SECURITY: Service role key is NO LONGER embedded in the client.
-  // All writes go through the desktop-sync edge function which holds the key server-side.
-  NODE_ENV: isBuildProcess ? 'production' : (process.env.NODE_ENV || 'development')
+  VITE_AUTH_PROVIDER: process.env.VITE_AUTH_PROVIDER || process.env.AUTH_PROVIDER || 'supabase',
+  VITE_COGNITO_REGION: process.env.VITE_COGNITO_REGION || process.env.COGNITO_REGION || '',
+  VITE_COGNITO_USER_POOL_ID: process.env.VITE_COGNITO_USER_POOL_ID || process.env.COGNITO_USER_POOL_ID || '',
+  VITE_COGNITO_CLIENT_ID: process.env.VITE_COGNITO_CLIENT_ID || process.env.COGNITO_CLIENT_ID || '',
+  VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3000',
+  NODE_ENV: isBuildProcess ? 'production' : (process.env.NODE_ENV || 'development'),
 };
 
 // During build process, credentials must be available
 if (isBuildProcess) {
   console.log('ðŸ—ï¸ Build process detected - validating credentials...');
   
-  if (!credentials.VITE_SUPABASE_URL || !credentials.VITE_SUPABASE_ANON_KEY) {
+  const cognitoBuild =
+    credentials.VITE_AUTH_PROVIDER === 'cognito' &&
+    credentials.VITE_COGNITO_USER_POOL_ID &&
+    credentials.VITE_COGNITO_CLIENT_ID;
+
+  if (!cognitoBuild && (!credentials.VITE_SUPABASE_URL || !credentials.VITE_SUPABASE_ANON_KEY)) {
     console.error('âŒ Missing required environment variables for build:');
     console.error('   VITE_SUPABASE_URL or SUPABASE_URL');
     console.error('   VITE_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY');
+    console.error('   OR VITE_AUTH_PROVIDER=cognito with VITE_COGNITO_*');
     console.error('');
     console.error('ðŸ’¡ For builds, set these environment variables:');
     console.error('   export VITE_SUPABASE_URL="your_url"');
@@ -61,6 +71,11 @@ module.exports = {
   VITE_SUPABASE_ANON_KEY: '${credentials.VITE_SUPABASE_ANON_KEY}',
   SUPABASE_URL: '${credentials.SUPABASE_URL}',
   SUPABASE_ANON_KEY: '${credentials.SUPABASE_ANON_KEY}',
+  VITE_AUTH_PROVIDER: '${credentials.VITE_AUTH_PROVIDER}',
+  VITE_COGNITO_REGION: '${credentials.VITE_COGNITO_REGION}',
+  VITE_COGNITO_USER_POOL_ID: '${credentials.VITE_COGNITO_USER_POOL_ID}',
+  VITE_COGNITO_CLIENT_ID: '${credentials.VITE_COGNITO_CLIENT_ID}',
+  VITE_API_BASE_URL: '${credentials.VITE_API_BASE_URL}',
   NODE_ENV: '${credentials.NODE_ENV}',
   _generated: true,
   _build_process: ${isBuildProcess}

@@ -5,6 +5,16 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EmployeeFilterCombobox } from '@/components/shared/employee-filter-combobox';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  fetchAiInsights,
+  fetchLatestAiInsight,
+  fetchOrganizations as fetchOrganizationsApi,
+} from '@/domains/monitoring/services/ai-insights.service';
+import { fetchUrlLogs } from '@/domains/monitoring/services/url-logs.service';
+import { fetchOrgUsers } from '@/domains/people';
+import { fetchScreenshots as fetchScreenshotsApi } from '@/domains/monitoring/services/screenshots.service';
+import { fetchAppLogs } from '@/domains/monitoring/services/app-logs.service';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
 import { useAuth } from '@/providers/auth-provider';
 import { format, subDays, subMonths, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns';
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -24,11 +34,6 @@ import { AlertsPanel } from '@/components/admin/AlertsPanel';
 import { VisionAnalysisPanel } from '@/components/admin/VisionAnalysisPanel';
 import { CompactEmployeeCard, getPerformanceStatus, getPerformanceStatusBadge, AIInsight } from './components/compact-employee-card';
 import { EmployeeDetailsModal } from './components/employee-details-modal';
-
-import { fetchPaginated } from '@/lib/supabase-utils';
-
-// Alias kept so call-sites below don't need renaming
-const fetchAllRows = fetchPaginated;
 
 // Performance status types - imported from components
 type PerformanceStatus = 'excellent' | 'good' | 'needs_improvement' | 'concerning' | 'pending';
@@ -276,14 +281,8 @@ export default function AIInsightsPage() {
   const fetchOrganizations = async () => {
     if (!isSuperAdmin) return;
     try {
-      const { data, error } = await (supabase
-        .from('organizations' as any)
-        .select('id, name, slug, logo_url') as any)
-        .eq('is_active', true)
-        .order('name');
-      
-      if (error) throw error;
-      setOrganizations((data as any[]) || []);
+      const data = await fetchOrganizationsApi();
+      setOrganizations(data as any[]);
     } catch (error) {
       console.error('Error fetching organizations:', error);
     }
@@ -291,22 +290,10 @@ export default function AIInsightsPage() {
 
   const fetchUsers = async () => {
     try {
-      let q = (supabase
-        .from('users') as any)
-        .select('id, email, full_name, role, organization_id')
-        .order('full_name');
-
-      // Exclude demo/test users by default
-      q = q.not('email', 'ilike', '%@example.com%');
-      
-      // Filter by organization unless super admin
-      if (organizationId && !isSuperAdmin) {
-        q = q.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await q;
-      
-      if (error) throw error;
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { excludeTestEmails: true },
+      );
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -320,27 +307,14 @@ export default function AIInsightsPage() {
       
       const { start: startDate, end: endDate } = getPeriodDateRange();
 
-      // Paginate AI insights (Supabase server caps at 1000 rows, but there may be thousands)
-      let baseQuery = (supabase
-        .from('ai_employee_insights') as any)
-        .select(`
-          *,
-          users (
-            id,
-            email,
-            full_name,
-            role,
-            organization_id
-          )
-        `)
-        .gte('created_at', startDate.toISOString())
-        .order('created_at', { ascending: false });
-
-      if (selectedUser !== 'all') {
-        baseQuery = baseQuery.eq('user_id', selectedUser);
-      }
-
-      const allAIData = await fetchAllRows(baseQuery);
+      const allAIData = await fetchAiInsights(startDate, endDate, {
+        organizationId,
+        isSuperAdmin,
+        orgUserIds: users.map((u) => u.id),
+      }, {
+        userId: selectedUser !== 'all' ? selectedUser : undefined,
+        limit: 5000,
+      });
       
       // Deduplicate: keep only the most recent row per user (query is ordered by created_at DESC)
       const seenUserIds = new Set<string>();
@@ -367,9 +341,7 @@ export default function AIInsightsPage() {
       // Fetch all organizations for lookup if super admin
       let orgMap = new Map<string, { id: string; name: string; slug: string; logo_url?: string }>();
       if (isSuperAdmin) {
-        const { data: orgsData } = await (supabase
-          .from('organizations' as any)
-          .select('id, name, slug, logo_url') as any);
+        const orgsData = await fetchOrganizationsApi();
         (orgsData || []).forEach((org: any) => {
           orgMap.set(org.id, org);
         });
@@ -383,13 +355,18 @@ export default function AIInsightsPage() {
       if (aiUserIds.length > 0) {
         try {
           // Fetch activity per-user with pagination (Supabase server caps at 1000 rows)
-          const shotActivityData = await fetchAllRows(
-            supabase
-              .from('screenshots')
-              .select('user_id, activity_percent')
-              .in('user_id', aiUserIds)
-              .gte('captured_at', startDate.toISOString())
-              .lte('captured_at', endDate.toISOString())
+          const shotActivityData = await fetchScreenshotsApi(
+            { organizationId, isSuperAdmin, orgUserIds: users.map((u) => u.id) },
+            {
+              start: startDate,
+              end: endDate,
+              limit: 10000,
+            },
+          ).then((rows) =>
+            rows.filter((r) => aiUserIds.includes(r.user_id)).map((r) => ({
+              user_id: r.user_id,
+              activity_percent: r.activity_percent,
+            })),
           );
           const actSums: Record<string, { total: number; sum: number }> = {};
           shotActivityData.forEach((r: any) => {
@@ -470,43 +447,28 @@ export default function AIInsightsPage() {
       
       // Auto-generate simple insights if none exist, using BATCH queries (fast)
       if (transformedData.length === 0) {
-        let usersQuery = (supabase
-          .from('users') as any)
-          .select('id, email, full_name, role, organization_id')
-          .not('email', 'ilike', '%@example.com%')
-          .order('full_name');
-        
-        if (organizationId && !isSuperAdmin) {
-          usersQuery = usersQuery.eq('organization_id', organizationId);
-        }
-        
-        const { data: users } = await usersQuery;
-        const typedUsers = (users || []) as any[];
+        const typedUsers = await fetchOrgUsers(
+          { organizationId, isSuperAdmin },
+          { excludeTestEmails: true },
+        );
         if (typedUsers.length > 0) {
-          const allUserIds = typedUsers.map((u: any) => u.id);
-          const userMap = new Map<string, any>(typedUsers.map((u: any) => [u.id, u]));
+          const allUserIds = typedUsers.map((u) => u.id);
+          const userMap = new Map(typedUsers.map((u) => [u.id, u]));
 
-          // Batch queries -- paginated screenshots + other queries in parallel
-          const [shotsData, appsRes, timeRes] = await Promise.all([
-            fetchAllRows(
-              supabase.from('screenshots')
-                .select('user_id, idle_inferred, is_duplicate, activity_percent')
-                .in('user_id', allUserIds)
-                .gte('captured_at', startDate.toISOString())
-                .lte('captured_at', endDate.toISOString())
+          const [shotsData, appLogs, timeLogs] = await Promise.all([
+            fetchScreenshotsApi(
+              { organizationId, isSuperAdmin, orgUserIds: allUserIds },
+              { start: startDate, end: endDate, limit: 10000 },
             ),
-            supabase.from('app_logs')
-              .select('user_id, app_name')
-              .in('user_id', allUserIds)
-              .gte('created_at', startDate.toISOString())
-              .lte('created_at', endDate.toISOString())
-              .limit(1000),
-            supabase.from('time_logs')
-              .select('user_id, start_time, end_time')
-              .in('user_id', allUserIds)
-              .gte('start_time', startDate.toISOString())
-              .lte('start_time', endDate.toISOString())
-              .not('end_time', 'is', null),
+            fetchAppLogs(startDate, endDate, {
+              organizationId,
+              isSuperAdmin,
+              orgUserIds: allUserIds,
+            }),
+            fetchDetailedTimeLogs(startDate, endDate, {
+              organizationId,
+              isSuperAdmin,
+            }, { limit: 10000 }),
           ]);
 
           // Group by user
@@ -516,13 +478,13 @@ export default function AIInsightsPage() {
             shotsByUser[s.user_id].push(s);
           });
           const appsByUser: Record<string, Record<string, number>> = {};
-          (appsRes.data || []).forEach((a: any) => {
+          appLogs.forEach((a: any) => {
             if (!appsByUser[a.user_id]) appsByUser[a.user_id] = {};
             const n = a.app_name || 'Application';
             appsByUser[a.user_id][n] = (appsByUser[a.user_id][n] || 0) + 1;
           });
           const hoursByUser: Record<string, number> = {};
-          (timeRes.data || []).forEach((t: any) => {
+          timeLogs.filter((t) => t.end_time).forEach((t: any) => {
             const ms = Math.max(0, new Date(t.end_time).getTime() - new Date(t.start_time).getTime());
             hoursByUser[t.user_id] = (hoursByUser[t.user_id] || 0) + ms;
           });
@@ -591,11 +553,13 @@ export default function AIInsightsPage() {
         .filter((i: any) => !i.users)
         .map((i: any) => i.user_id);
       if (missingIds.length > 0) {
-        const { data: fillUsers } = await (supabase
-          .from('users') as any)
-          .select('id, email, full_name, role')
-          .in('id', missingIds);
-        const fillMap = new Map((fillUsers || []).map((u: any) => [u.id, u]));
+        const fillUsers = await fetchOrgUsers(
+          { organizationId, isSuperAdmin },
+          { excludeTestEmails: true },
+        );
+        const fillMap = new Map(
+          fillUsers.filter((u) => missingIds.includes(u.id)).map((u) => [u.id, u]),
+        );
         transformedData.forEach((i: any) => {
           if (!i.users && fillMap.has(i.user_id)) i.users = fillMap.get(i.user_id);
         });
@@ -603,18 +567,10 @@ export default function AIInsightsPage() {
 
       // Include ALL employees -- generate placeholder insights using BATCH queries (fast)
       const userIdsWithInsights = new Set(transformedData.map((i: AIInsight) => i.user_id));
-      let allUsersQuery = (supabase
-        .from('users') as any)
-        .select('id, email, full_name, role, organization_id')
-        .not('email', 'ilike', '%@example.com%')
-        .order('full_name');
-      
-      if (organizationId && !isSuperAdmin) {
-        allUsersQuery = allUsersQuery.eq('organization_id', organizationId);
-      }
-      
-      const { data: allUsers } = await allUsersQuery;
-      const typedAllUsers = (allUsers || []) as any[];
+      const typedAllUsers = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { excludeTestEmails: true },
+      );
       
       // Filter to users without insights
       const missingUsers = typedAllUsers.filter((u: any) => {
@@ -627,33 +583,21 @@ export default function AIInsightsPage() {
         const missingUserIds = missingUsers.map((u: any) => u.id);
         const missingUserMap = new Map<string, any>(missingUsers.map((u: any) => [u.id, u]));
 
-        // Batch: get screenshot counts + metrics per user (single query)
-        const batchShots = await fetchAllRows(
-          supabase
-            .from('screenshots')
-            .select('user_id, activity_percent, idle_inferred, is_duplicate')
-            .in('user_id', missingUserIds)
-            .gte('captured_at', startDate.toISOString())
-            .lte('captured_at', endDate.toISOString())
-        );
-
-        // Batch: get app logs per user (single query)
-        const { data: batchAppLogs } = await supabase
-          .from('app_logs')
-          .select('user_id, app_name')
-          .in('user_id', missingUserIds)
-          .gte('created_at', startDate.toISOString())
-          .lte('created_at', endDate.toISOString())
-          .limit(1000);
-
-        // Batch: get time logs per user (single query)
-        const { data: batchTimeLogs } = await supabase
-          .from('time_logs')
-          .select('user_id, start_time, end_time')
-          .in('user_id', missingUserIds)
-          .gte('start_time', startDate.toISOString())
-          .lte('start_time', endDate.toISOString())
-          .not('end_time', 'is', null);
+        const [batchShots, batchAppLogs, batchTimeLogs] = await Promise.all([
+          fetchScreenshotsApi(
+            { organizationId, isSuperAdmin, orgUserIds: missingUserIds },
+            { start: startDate, end: endDate, limit: 10000 },
+          ),
+          fetchAppLogs(startDate, endDate, {
+            organizationId,
+            isSuperAdmin,
+            orgUserIds: missingUserIds,
+          }),
+          fetchDetailedTimeLogs(startDate, endDate, {
+            organizationId,
+            isSuperAdmin,
+          }, { limit: 10000 }),
+        ]);
 
         // Group screenshots by user
         const shotsByUser: Record<string, any[]> = {};
@@ -664,7 +608,7 @@ export default function AIInsightsPage() {
 
         // Group app logs by user
         const appsByUser: Record<string, Record<string, number>> = {};
-        (batchAppLogs || []).forEach((a: any) => {
+        batchAppLogs.forEach((a: any) => {
           if (!appsByUser[a.user_id]) appsByUser[a.user_id] = {};
           const n = a.app_name || 'Application';
           appsByUser[a.user_id][n] = (appsByUser[a.user_id][n] || 0) + 1;
@@ -672,7 +616,7 @@ export default function AIInsightsPage() {
 
         // Group time logs by user and compute hours
         const hoursByUser: Record<string, number> = {};
-        (batchTimeLogs || []).forEach((t: any) => {
+        batchTimeLogs.filter((t) => t.end_time).forEach((t: any) => {
           const ms = Math.max(0, new Date(t.end_time).getTime() - new Date(t.start_time).getTime());
           hoursByUser[t.user_id] = (hoursByUser[t.user_id] || 0) + ms;
         });
@@ -753,141 +697,115 @@ export default function AIInsightsPage() {
       console.error('Error fetching AI insights:', error);
       toast.error('Failed to load AI insights');
       
-      // Fallback: Generate insights from existing data
       try {
-        console.log('Attempting fallback: generating insights from existing data...');
-        
         const { start: startDate, end: endDate } = getPeriodDateRange();
-        
-        // Get all users (filtered by organization)
-        let fallbackUsersQuery = (supabase
-          .from('users') as any)
-          .select('id, email, full_name, role, organization_id')
-          .not('email', 'ilike', '%@example.com%')
-          .order('full_name');
-        
-        // Filter by organization unless super admin
-        if (organizationId && !isSuperAdmin) {
-          fallbackUsersQuery = fallbackUsersQuery.eq('organization_id', organizationId);
-        }
-        
-        const { data: users } = await fallbackUsersQuery;
-        const typedFallbackUsers = (users || []) as any[];
-
-        if (typedFallbackUsers.length > 0) {
-          // Generate insights for each user from existing data
-          const generatedInsights: AIInsight[] = [];
-          
-          for (const user of typedFallbackUsers) {
-            // Get user's screenshots for the period
-            const { data: screenshots, count: screenshotCount } = await supabase
-              .from('screenshots')
-              .select('*', { count: 'exact' })
-              .eq('user_id', user.id)
-              .gte('captured_at', startDate.toISOString())
-              .lte('captured_at', endDate.toISOString());
-
-            if (screenshotCount && screenshotCount > 0) {
-              // Calculate productivity metrics
-              const totalScreenshots = screenshotCount;
-              const duplicateScreenshots = screenshots?.filter((s: any) => s.is_duplicate)?.length || 0;
-              const uniqueScreenshots = totalScreenshots - duplicateScreenshots;
-              
-              // Calculate activity percentage (simplified)
-              const activityPercentage = Math.min(100, Math.max(0, 
-                screenshots?.reduce((sum: number, s: any) => sum + (s.activity_percent || 0), 0) / totalScreenshots || 0
-              ));
-              
-              // Generate productivity score based on activity and duplicate rate
-              const productivityScore = Math.max(0, Math.min(100, 
-                activityPercentage - (duplicateScreenshots / totalScreenshots * 20)
-              ));
-
-              // Get user's app usage
-              const { data: appLogs } = await supabase
-                .from('app_logs')
-                .select('app_name')
-                .eq('user_id', user.id)
-                .gte('created_at', startDate.toISOString())
-                .lte('created_at', endDate.toISOString());
-
-              const topApps = appLogs?.reduce((acc: Record<string, number>, log: any) => {
-                if (log.app_name) {
-                  acc[log.app_name] = (acc[log.app_name] || 0) + 1;
-                }
-                return acc;
-              }, {} as Record<string, number>);
-
-              const sortedFallbackApps = Object.entries(topApps || {})
-                .sort(([,a], [,b]) => b - a);
-              const mainApp = sortedFallbackApps[0]?.[0] || 'Various applications';
-              const secondFallbackApp = sortedFallbackApps[1]?.[0];
-              const fallbackAppList = [mainApp, secondFallbackApp].filter(Boolean).join(', ');
-
-              // Query actual hours from time_logs
-              let fallbackHours = Math.max(1, Math.round((totalScreenshots * 0.1) * 10) / 10);
-              try {
-                const { data: fbTimeLogs } = await supabase
-                  .from('time_logs')
-                  .select('start_time, end_time')
-                  .eq('user_id', user.id)
-                  .gte('start_time', startDate.toISOString())
-                  .lte('start_time', endDate.toISOString())
-                  .not('end_time', 'is', null);
-                if (fbTimeLogs && fbTimeLogs.length > 0) {
-                  const totalMs = fbTimeLogs.reduce((sum: number, log: any) => {
-                    const s = new Date(log.start_time).getTime();
-                    const e = new Date(log.end_time).getTime();
-                    return sum + Math.max(0, e - s);
-                  }, 0);
-                  const hrs = Math.round((totalMs / (1000 * 60 * 60)) * 10) / 10;
-                  if (hrs > 0) fallbackHours = hrs;
-                }
-              } catch (_) { /* ignore */ }
-
-              // Cap productivity to 95% when no distractions detected (avoids inflated 100%)
-              const cappedProductivityScore = Math.round(productivityScore) === 100 
-                ? 95 
-                : Math.round(productivityScore);
-
-              const generatedInsight: AIInsight = {
-                id: `generated_${user.id}_${Date.now()}`,
-                user_id: user.id,
-                period_type: getPeriodTypeForDB(),
-                period_start: startDate.toISOString(),
-                period_end: endDate.toISOString(),
-                total_hours: fallbackHours,
-                activity_percentage: Math.round(activityPercentage),
-                productivity_score: cappedProductivityScore,
-                screenshots_analyzed: totalScreenshots,
-                risk_level: 'low' as const,
-                ai_insights: {
-                  work_description: `Working with ${fallbackAppList}`,
-                  productivity_insights: `User shows ${Math.round(activityPercentage)}% activity level with ${uniqueScreenshots} unique screenshots`,
-                  executive_summary: `${user.full_name || 'User'} primarily used ${fallbackAppList}. ${totalScreenshots} screenshots captured with ${Math.round(activityPercentage)}% activity.`
-                },
-                productivity_indicators: {},
-                distraction_indicators: {},
-                behavioral_patterns: {},
-                analysis_version: 'auto-generated',
-                computed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                users: {
-                  id: user.id,
-                  email: user.email,
-                  full_name: user.full_name || 'Unknown User',
-                  role: user.role || 'User'
-                }
-              };
-
-              generatedInsights.push(generatedInsight);
-            }
-          }
-
-          setInsights(generatedInsights);
-          console.log(`Fallback successful: Generated ${generatedInsights.length} insights from existing data`);
-        } else {
+        const typedFallbackUsers = await fetchOrgUsers(
+          { organizationId, isSuperAdmin },
+          { excludeTestEmails: true },
+        );
+        if (typedFallbackUsers.length === 0) {
           setInsights([]);
+        } else {
+          const allUserIds = typedFallbackUsers.map((u) => u.id);
+          const [shotsData, appLogs, timeLogs] = await Promise.all([
+            fetchScreenshotsApi(
+              { organizationId, isSuperAdmin, orgUserIds: allUserIds },
+              { start: startDate, end: endDate, limit: 10000 },
+            ),
+            fetchAppLogs(startDate, endDate, {
+              organizationId,
+              isSuperAdmin,
+              orgUserIds: allUserIds,
+            }),
+            fetchDetailedTimeLogs(startDate, endDate, {
+              organizationId,
+              isSuperAdmin,
+            }, { limit: 10000 }),
+          ]);
+          const shotsByUser: Record<string, typeof shotsData> = {};
+          shotsData.forEach((s) => {
+            if (!shotsByUser[s.user_id]) shotsByUser[s.user_id] = [];
+            shotsByUser[s.user_id].push(s);
+          });
+          const appsByUser: Record<string, Record<string, number>> = {};
+          appLogs.forEach((a) => {
+            if (!a.user_id) return;
+            if (!appsByUser[a.user_id]) appsByUser[a.user_id] = {};
+            const n = a.app_name || 'Application';
+            appsByUser[a.user_id][n] = (appsByUser[a.user_id][n] || 0) + 1;
+          });
+          const hoursByUser: Record<string, number> = {};
+          timeLogs.filter((t) => t.end_time).forEach((t) => {
+            const ms = Math.max(
+              0,
+              new Date(t.end_time!).getTime() - new Date(t.start_time).getTime(),
+            );
+            hoursByUser[t.user_id] = (hoursByUser[t.user_id] || 0) + ms;
+          });
+          const generatedInsights: AIInsight[] = [];
+          for (const user of typedFallbackUsers) {
+            const screenshots = shotsByUser[user.id];
+            if (!screenshots?.length) continue;
+            const totalScreenshots = screenshots.length;
+            const duplicateScreenshots = screenshots.filter((s) => s.is_duplicate).length;
+            const uniqueScreenshots = totalScreenshots - duplicateScreenshots;
+            const activityPercentage = Math.min(
+              100,
+              Math.max(
+                0,
+                screenshots.reduce((sum, s) => sum + (s.activity_percent || 0), 0) / totalScreenshots,
+              ),
+            );
+            const productivityScore = Math.max(
+              0,
+              Math.min(100, activityPercentage - (duplicateScreenshots / totalScreenshots) * 20),
+            );
+            const sortedFallbackApps = Object.entries(appsByUser[user.id] || {}).sort(
+              ([, a], [, b]) => b - a,
+            );
+            const fallbackAppList =
+              sortedFallbackApps
+                .slice(0, 2)
+                .map(([name]) => name)
+                .join(', ') || 'Various applications';
+            const totalMs = hoursByUser[user.id] || 0;
+            const fallbackHours =
+              totalMs > 0
+                ? Math.round((totalMs / (1000 * 60 * 60)) * 10) / 10
+                : Math.max(1, Math.round(totalScreenshots * 0.1));
+            const cappedProductivityScore =
+              Math.round(productivityScore) === 100 ? 95 : Math.round(productivityScore);
+            generatedInsights.push({
+              id: `generated_${user.id}_${Date.now()}`,
+              user_id: user.id,
+              period_type: getPeriodTypeForDB(),
+              period_start: startDate.toISOString(),
+              period_end: endDate.toISOString(),
+              total_hours: fallbackHours,
+              activity_percentage: Math.round(activityPercentage),
+              productivity_score: cappedProductivityScore,
+              screenshots_analyzed: totalScreenshots,
+              risk_level: 'low',
+              ai_insights: {
+                work_description: `Working with ${fallbackAppList}`,
+                productivity_insights: `User shows ${Math.round(activityPercentage)}% activity level with ${uniqueScreenshots} unique screenshots`,
+                executive_summary: `${user.full_name || 'User'} primarily used ${fallbackAppList}. ${totalScreenshots} screenshots captured with ${Math.round(activityPercentage)}% activity.`,
+              },
+              productivity_indicators: {},
+              distraction_indicators: {},
+              behavioral_patterns: {},
+              analysis_version: 'auto-generated',
+              computed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              users: {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name || 'Unknown User',
+                role: user.role || 'User',
+              },
+            } as AIInsight);
+          }
+          setInsights(generatedInsights);
         }
       } catch (fallbackError) {
         console.error('Fallback also failed:', fallbackError);
@@ -901,29 +819,18 @@ export default function AIInsightsPage() {
   const fetchScreenshotsAnalyzed = async () => {
     try {
       const { start: startDate, end: endDate } = getPeriodDateRange();
-      
-      // Get user IDs for the organization (for filtering)
-      let orgUserIds: string[] | null = null;
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers } = await (supabase
-          .from('users') as any)
-          .select('id')
-          .eq('organization_id', organizationId);
-        orgUserIds = (orgUsers || []).map((u: any) => u.id);
-      }
-      
-      let q = supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .gte('captured_at', startDate.toISOString())
-        .lte('captured_at', endDate.toISOString());
-      if (selectedUser !== 'all') {
-        q = q.eq('user_id', selectedUser);
-      } else if (orgUserIds) {
-        q = q.in('user_id', orgUserIds);
-      }
-      const { count } = await q;
-      setShotsAnalyzed(typeof count === 'number' ? count : 0);
+      const orgUserIds =
+        organizationId && !isSuperAdmin ? users.map((u) => u.id) : undefined;
+      const shots = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds },
+        {
+          start: startDate,
+          end: endDate,
+          userId: selectedUser !== 'all' ? selectedUser : undefined,
+          limit: 10000,
+        },
+      );
+      setShotsAnalyzed(shots.length);
     } catch (_) {
       setShotsAnalyzed(0);
     }
@@ -931,143 +838,83 @@ export default function AIInsightsPage() {
 
   const fetchAnalyzerHealth = async () => {
     try {
-      // Read AI status directly from database instead of calling edge function
-      const { count: pendingScreenshots } = await supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('ai_analysis_status', 'pending');
-
-      const { count: completedScreenshots } = await supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('ai_analysis_status', 'completed');
-
-      const { data: latestInsight } = await (supabase
-        .from('ai_employee_insights') as any)
-        .select('created_at')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
+      const pendingShots = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds: users.map((u) => u.id) },
+        { aiStatus: 'pending', limit: 10000 },
+      );
+      const latestInsight = await fetchLatestAiInsight();
       setHealth({
-        openai_enabled: true, // Using Hugging Face
+        openai_enabled: true,
         ai_use_openai: true,
-        pending: pendingScreenshots || 0,
-        lastRun: latestInsight?.created_at || null
+        pending: pendingShots.length,
+        lastRun: latestInsight?.created_at || null,
       });
-    } catch (e) {
-      // ignore – RLS might block some queries
+    } catch {
       setHealth({ openai_enabled: true, ai_use_openai: true, pending: 0 });
     }
   };
 
   const fetchPendingCount = async () => {
     try {
-      const { count, error } = await supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('ai_analysis_status', 'pending');
-      if (!error && typeof count === 'number') setPendingCount(count);
-    } catch (_) {
-      // RLS might block this; leave null silently
+      const pendingShots = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds: users.map((u) => u.id) },
+        { aiStatus: 'pending', limit: 10000 },
+      );
+      setPendingCount(pendingShots.length);
+    } catch {
+      // leave null silently
     }
   };
 
   const fetchAggregates = async () => {
     try {
       const { start: startDate, end: endDate } = getPeriodDateRange();
+      const orgUserIds =
+        organizationId && !isSuperAdmin ? users.map((u) => u.id) : undefined;
+      const ctx = { organizationId, isSuperAdmin, orgUserIds };
+      const userFilter = selectedUser !== 'all' ? selectedUser : undefined;
 
-      // Get user IDs for the organization (for filtering)
-      let orgUserIds: string[] | null = null;
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers } = await (supabase
-          .from('users') as any)
-          .select('id')
-          .eq('organization_id', organizationId);
-        orgUserIds = (orgUsers || []).map((u: any) => u.id);
-      }
+      const [apps, sites, shots] = await Promise.all([
+        fetchAppLogs(startDate, endDate, ctx, userFilter),
+        fetchUrlLogs(startDate, endDate, ctx, userFilter),
+        fetchScreenshotsApi(ctx, {
+          start: startDate,
+          end: endDate,
+          userId: userFilter,
+          limit: 10000,
+        }),
+      ]);
 
-      // Top apps - filtered by selected period and organization
-      let appQuery = supabase
-        .from('app_logs')
-        .select('app_name')
-        .not('app_name', 'is', null)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .limit(1000);
-      if (selectedUser !== 'all') {
-        appQuery = appQuery.eq('user_id', selectedUser);
-      } else if (orgUserIds) {
-        appQuery = appQuery.in('user_id', orgUserIds);
-      }
-      const { data: apps } = await appQuery;
       const appCounts: Record<string, number> = {};
-      (apps || []).forEach((r: any) => {
+      apps.forEach((r) => {
         const name = r.app_name || 'Unknown';
         appCounts[name] = (appCounts[name] || 0) + 1;
       });
       const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7300'];
-      const appArr = Object.entries(appCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([name, value], i) => ({ name, value: Number(value), fill: COLORS[i % COLORS.length] }));
-      setTopApps(appArr);
+      setTopApps(
+        Object.entries(appCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([name, value], i) => ({ name, value: Number(value), fill: COLORS[i % COLORS.length] })),
+      );
 
-      // Top sites - filtered by selected period and organization
-      let siteQuery = supabase
-        .from('url_logs')
-        .select('domain')
-        .not('domain', 'is', null)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString())
-        .limit(1000);
-      if (selectedUser !== 'all') {
-        siteQuery = siteQuery.eq('user_id', selectedUser);
-      } else if (orgUserIds) {
-        siteQuery = siteQuery.in('user_id', orgUserIds);
-      }
-      const { data: sites } = await siteQuery;
       const siteCounts: Record<string, number> = {};
-      (sites || []).forEach((r: any) => {
+      sites.forEach((r) => {
         const name = r.domain || 'unknown.site';
         siteCounts[name] = (siteCounts[name] || 0) + 1;
       });
-      const siteArr = Object.entries(siteCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([name, value], i) => ({ name, value: Number(value), fill: COLORS[i % COLORS.length] }));
-      setTopSites(siteArr)
+      setTopSites(
+        Object.entries(siteCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([name, value], i) => ({ name, value: Number(value), fill: COLORS[i % COLORS.length] })),
+      );
 
-      // Idle and duplicate rates (scoped by captured_at for accurate period stats and organization)
-      let idleQ = supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('idle_inferred', true)
-        .gte('captured_at', startDate.toISOString())
-        .lte('captured_at', endDate.toISOString());
-      let totalQ = supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .gte('captured_at', startDate.toISOString())
-        .lte('captured_at', endDate.toISOString());
-      let dupQ = supabase
-        .from('screenshots')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_duplicate', true)
-        .gte('captured_at', startDate.toISOString())
-        .lte('captured_at', endDate.toISOString());
-      if (selectedUser !== 'all') {
-        idleQ = idleQ.eq('user_id', selectedUser);
-        totalQ = totalQ.eq('user_id', selectedUser);
-        dupQ = dupQ.eq('user_id', selectedUser);
-      } else if (orgUserIds) {
-        idleQ = idleQ.in('user_id', orgUserIds);
-        totalQ = totalQ.in('user_id', orgUserIds);
-        dupQ = dupQ.in('user_id', orgUserIds);
-      }
-      const [{ count: idleCount }, { count: totalScreens }, { count: dupCount }] = await Promise.all([idleQ, totalQ, dupQ]);
-      setIdleRate(totalScreens ? Math.round(((idleCount || 0) / totalScreens) * 100) : 0);
-      setDupRate(totalScreens ? Math.round(((dupCount || 0) / totalScreens) * 100) : 0);
+      const totalScreens = shots.length;
+      const idleCount = shots.filter((s) => s.idle_inferred).length;
+      const dupCount = shots.filter((s) => s.is_duplicate).length;
+      setIdleRate(totalScreens ? Math.round((idleCount / totalScreens) * 100) : 0);
+      setDupRate(totalScreens ? Math.round((dupCount / totalScreens) * 100) : 0);
     } catch (_) {
       // Silent fail; charts are adjunct
     }
@@ -1077,31 +924,20 @@ export default function AIInsightsPage() {
   const fetchDuplicateGroups = async () => {
     try {
       const { start: startDate, end: endDate } = getPeriodDateRange();
-      
-      // Get user IDs for the organization (for filtering)
-      let orgUserIds: string[] | null = null;
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers } = await (supabase
-          .from('users') as any)
-          .select('id')
-          .eq('organization_id', organizationId);
-        orgUserIds = (orgUsers || []).map((u: any) => u.id);
-      }
-      
-      let q = supabase
-        .from('screenshots')
-        .select('duplicate_group_hash, duplicate_hash, captured_at, user_id')
-        .eq('is_duplicate', true)
-        .gte('captured_at', startDate.toISOString())
-        .lte('captured_at', endDate.toISOString());
-      if (selectedUser !== 'all') {
-        q = q.eq('user_id', selectedUser);
-      } else if (orgUserIds) {
-        q = q.in('user_id', orgUserIds);
-      }
-      const { data } = await q;
+      const orgUserIds =
+        organizationId && !isSuperAdmin ? users.map((u) => u.id) : undefined;
+      const data = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds },
+        {
+          start: startDate,
+          end: endDate,
+          userId: selectedUser !== 'all' ? selectedUser : undefined,
+          isDuplicate: true,
+          limit: 10000,
+        },
+      );
       const g: Record<string, number> = {};
-      (data || []).forEach((r: any) => {
+      data.forEach((r: any) => {
         const key = r.duplicate_group_hash || r.duplicate_hash;
         if (!key) return;
         g[key] = (g[key] || 0) + 1;
@@ -1121,17 +957,11 @@ export default function AIInsightsPage() {
     try {
       const { start: startDate, end: endDate } = getPeriodDateRange();
 
-      // Get user IDs for the organization (for filtering)
-      let orgUserIds: Set<string> | null = null;
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers } = await (supabase
-          .from('users') as any)
-          .select('id')
-          .eq('organization_id', organizationId);
-        orgUserIds = new Set((orgUsers || []).map((u: any) => u.id));
-      }
+      const orgUserIds =
+        organizationId && !isSuperAdmin
+          ? new Set(users.map((u) => u.id))
+          : null;
 
-      // Count issues per user and track what each issue is
       const counts: Record<string, number> = {};
       const details: Record<string, string[]> = {};
       const addIssue = (userId: string, desc: string) => {
@@ -1140,39 +970,28 @@ export default function AIInsightsPage() {
         details[userId].push(desc);
       };
 
-      // 1. Duplicate screenshots (grouped by duplicate_group_hash) -- paginated
-      const duplicates = await fetchAllRows(
-        supabase
-          .from('screenshots')
-          .select('user_id, duplicate_group_hash')
-          .eq('is_duplicate', true)
-          .gte('captured_at', startDate.toISOString())
-          .lte('captured_at', endDate.toISOString())
+      const allShots = await fetchScreenshotsApi(
+        { organizationId, isSuperAdmin, orgUserIds: users.map((u) => u.id) },
+        { start: startDate, end: endDate, limit: 10000 },
       );
 
       const dupGroupsByUser: Record<string, Record<string, number>> = {};
-      duplicates.forEach((d: any) => {
-        if (!d.user_id || !d.duplicate_group_hash) return;
-        if (orgUserIds && !orgUserIds.has(d.user_id)) return;
-        if (!dupGroupsByUser[d.user_id]) dupGroupsByUser[d.user_id] = {};
-        dupGroupsByUser[d.user_id][d.duplicate_group_hash] = (dupGroupsByUser[d.user_id][d.duplicate_group_hash] || 0) + 1;
-      });
+      allShots
+        .filter((d) => d.is_duplicate)
+        .forEach((d: any) => {
+          if (!d.user_id || !d.duplicate_group_hash) return;
+          if (orgUserIds && !orgUserIds.has(d.user_id)) return;
+          if (!dupGroupsByUser[d.user_id]) dupGroupsByUser[d.user_id] = {};
+          dupGroupsByUser[d.user_id][d.duplicate_group_hash] =
+            (dupGroupsByUser[d.user_id][d.duplicate_group_hash] || 0) + 1;
+        });
       Object.entries(dupGroupsByUser).forEach(([userId, groups]) => {
-        const significantGroups = Object.values(groups).filter(count => count >= 3).length;
+        const significantGroups = Object.values(groups).filter((count) => count >= 3).length;
         if (significantGroups >= 3) {
           const totalDups = Object.values(groups).reduce((s, c) => s + c, 0);
           addIssue(userId, `${totalDups} duplicate screenshots`);
         }
       });
-
-      // 2-4: Fetch ALL screenshots once and compute issues from them -- paginated
-      const allShots = await fetchAllRows(
-        supabase
-          .from('screenshots')
-          .select('user_id, activity_percent, idle_inferred, is_duplicate, vision_category')
-          .gte('captured_at', startDate.toISOString())
-          .lte('captured_at', endDate.toISOString())
-      );
 
       // Build per-user stats from the single query
       const userStats: Record<string, {

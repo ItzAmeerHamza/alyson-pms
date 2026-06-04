@@ -48,13 +48,11 @@ class SyncManager {
 
     this.supabase = createClient(config.supabase_url, config.supabase_key, syncOptions);
 
-    // SECURITY: Use server-side edge function for all writes instead of service_role key
-    // The service_role key NEVER leaves the server — it exists only in the edge function.
-    this.edgeFunctionUrl = `${config.supabase_url}/functions/v1/desktop-sync`;
-    this.supabaseAnonKey = config.supabase_key; // anon key for edge function auth header
-    
-    console.log(`🔧 [SYNC-MANAGER] Using secure edge function proxy for database writes`);
-    console.log(`🔧 [SYNC-MANAGER] Edge function URL: ${this.edgeFunctionUrl}`);
+    // AWS/RDS cutover path: send all writes to backend API protected by INTERNAL_API_KEY.
+    this.desktopSyncApiUrl = config.backend_api_url || process.env.BACKEND_API_URL || 'http://localhost:3000/sync/desktop-action';
+    this.internalApiKey = config.backend_api_key || process.env.INTERNAL_API_KEY || '';
+    console.log(`🔧 [SYNC-MANAGER] Using backend sync API for database writes`);
+    console.log(`🔧 [SYNC-MANAGER] Sync API URL: ${this.desktopSyncApiUrl}`);
     this.isOnline = true;
     this.syncInterval = null;
     // Use user data directory instead of app.asar path
@@ -163,27 +161,21 @@ class SyncManager {
   }
 
   /**
-   * Call the desktop-sync edge function with the user's JWT.
-   * The edge function uses the service_role key SERVER-SIDE to write to the DB.
+   * Call backend desktop sync action endpoint.
    * @param {string} action - The action to perform
    * @param {object} data - The data payload
    * @returns {Promise<object>} The response body
    */
   async _callEdgeFunction(action, data) {
-    // Get the current user session token
-    const { data: sessionData } = await this.supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
-    
-    if (!accessToken) {
-      throw new Error('No authenticated session - cannot call edge function');
+    if (!this.internalApiKey) {
+      throw new Error('Missing INTERNAL_API_KEY for backend sync API');
     }
 
-    const response = await fetch(this.edgeFunctionUrl, {
+    const response = await fetch(this.desktopSyncApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': this.supabaseAnonKey,
+        'x-api-key': this.internalApiKey,
       },
       body: JSON.stringify({ action, data }),
     });

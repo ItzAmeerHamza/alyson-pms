@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
-import { fetchPaginated } from '@/lib/supabase-utils';
+import { fetchDetailedTimeLogs } from '@/domains/time/services/time-logs.service';
+import { backendPatch } from '@/lib/backend-api';
+import { fetchOrgUsers, fetchProjects as fetchProjectsApi } from '@/domains/people';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -88,58 +89,13 @@ export default function TimeLogs() {
     try {
       setLoading(true);
 
-      // First, get user IDs for the organization to filter time_logs properly
-      let orgUserIds: string[] = [];
-      if (organizationId && !isSuperAdmin) {
-        const { data: orgUsers, error: orgUsersError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('organization_id', organizationId);
-        
-        if (orgUsersError) {
-          console.error('Error fetching org users:', orgUsersError);
-          throw orgUsersError;
-        }
-        orgUserIds = (orgUsers || []).map(u => u.id);
-        
-        // If no users in org, return empty
-        if (orgUserIds.length === 0) {
-          setLogs([]);
-          setLoading(false);
-          return;
-        }
-      }
+      const ctx = { organizationId, isSuperAdmin };
+      const range = dateFilter !== 'all' ? getDateFilterRange() : null;
+      const start = range?.start ?? new Date(0);
+      const end = range?.end ?? new Date();
 
-      // Use joins to fetch user and project data with time logs
-      let query = supabase
-        .from('time_logs')
-        .select(`
-          *,
-          users(id, full_name, email, organization_id),
-          projects(id, name)
-        `)
-        .order('start_time', { ascending: false });
-
-      // Apply date filter at database level for better performance
-      // Filter by sessions that started in the selected range.
-      // NOTE: Using PostgREST `or=(and(...),end_time.is.null)` has been causing 400s in some environments.
-      // Active sessions for the day are still included because their start_time is within the range.
-      if (dateFilter !== 'all') {
-        const range = getDateFilterRange();
-        if (range) {
-          query = query
-            .gte('start_time', range.start.toISOString())
-            .lte('start_time', range.end.toISOString());
-        }
-      }
-
-      // Filter by user IDs from organization (if not super admin)
-      if (organizationId && !isSuperAdmin && orgUserIds.length > 0) {
-        query = query.in('user_id', orgUserIds);
-      }
-
-      const data = await fetchPaginated<any>(query);
-      setLogs(data);
+      const data = await fetchDetailedTimeLogs(start, end, ctx, { limit: 10000 });
+      setLogs(data as TimeLog[]);
     } catch (error) {
       console.error('Error fetching time logs:', error);
     } finally {
@@ -149,20 +105,20 @@ export default function TimeLogs() {
 
   const fetchUsers = async () => {
     try {
-      let query = supabase
-        .from('users')
-        .select('id, email, full_name, organization_id')
-        .not('email', 'ilike', '%@example.com%')
-        .not('full_name', 'ilike', '%TEST%');
-      
-      // Filter by organization if user is not a super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setUsers(data || []);
+      const data = await fetchOrgUsers(
+        { organizationId, isSuperAdmin },
+        { excludeTestEmails: true },
+      );
+      setUsers(
+        data
+          .filter((u) => !u.full_name?.toUpperCase().includes('TEST'))
+          .map((u) => ({
+            id: u.id,
+            email: u.email,
+            full_name: u.full_name,
+            organization_id: u.organization_id,
+          })),
+      );
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -170,20 +126,16 @@ export default function TimeLogs() {
 
   const fetchProjects = async () => {
     try {
-      let query = supabase
-        .from('projects')
-        .select('id, name, organization_id')
-        .not('name', 'ilike', '%test-%')
-        .not('description', 'ilike', '%E2E testing%');
-      
-      // Filter by organization if user is not a super admin
-      if (organizationId && !isSuperAdmin) {
-        query = query.eq('organization_id', organizationId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      setProjects(data || []);
+      const data = await fetchProjectsApi({ organizationId, isSuperAdmin });
+      setProjects(
+        data
+          .filter(
+            (p) =>
+              !p.name?.toLowerCase().includes('test-') &&
+              !p.description?.toLowerCase().includes('e2e testing'),
+          )
+          .map((p) => ({ id: p.id, name: p.name })),
+      );
     } catch (error) {
       console.error('Error fetching projects:', error);
     }
@@ -274,14 +226,9 @@ export default function TimeLogs() {
   // Close orphaned session
   const closeOrphanedSession = async (logId: string) => {
     try {
-      const { error } = await supabase
-        .from('time_logs')
-        .update({ end_time: new Date().toISOString() })
-        .eq('id', logId);
-
-      if (error) throw error;
-      
-      // Refresh the data
+      await backendPatch(`/data/time-logs/${logId}`, {
+        end_time: new Date().toISOString(),
+      });
       fetchTimeLogs();
     } catch (error) {
       console.error('Error closing session:', error);
