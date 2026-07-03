@@ -22,17 +22,25 @@ function getApiBase(config) {
   ).replace(/\/$/, '');
 }
 
+function localDateIso(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function sameUserId(a, b) {
+  return a != null && b != null && String(a) === String(b);
+}
+
 function resolveDesktopSync(config) {
-  const url =
-    config?.backend_api_url ||
-    process.env.BACKEND_API_URL ||
-  '';
-  const apiKey = config?.backend_api_key || process.env.INTERNAL_API_KEY || '';
-  if (!url || !apiKey) return null;
+  const { resolveBackendCredentials } = require('./backend-time-logs');
+  const { url, key } = resolveBackendCredentials(config);
+  if (!url || !key) return null;
   const syncUrl = url.includes('/sync/desktop-action')
     ? url
     : `${url.replace(/\/$/, '')}/sync/desktop-action`;
-  return { syncUrl, apiKey };
+  return { syncUrl, apiKey: key };
 }
 
 function usesBackendScreenshots(config) {
@@ -228,9 +236,7 @@ function buildEnhancedResponse(screenshots) {
 }
 
 async function fetchTodayScreenshotsFromBackend(userId, config) {
-  const today = new Date();
-  const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  return fetchScreenshotsFromBackend(userId, config, { date, limit: 50 });
+  return fetchScreenshotsFromBackend(userId, config, { date: localDateIso(), limit: 50 });
 }
 
 module.exports = {
@@ -241,4 +247,6 @@ module.exports = {
   applyActivityFilter,
   buildEnhancedResponse,
   normalizeScreenshotRow,
+  localDateIso,
+  sameUserId,
 };

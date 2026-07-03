@@ -130,56 +130,15 @@ class AppInitializationManager {
       return;
     }
 
-    // Register wrapped callbacks for mouse tracking
+    // Position-only polling is not real input — OS monitors handle clicks/keys/moves.
     this.intervalManager.register('MOUSE_TRACKING', () => {
       try {
-        // Enhanced mouse position detection with multiple fallbacks
-        let currentPos = null;
-        
-        // Method 1: Electron screen API (most reliable)
         if (this.screen && typeof this.screen.getCursorScreenPoint === 'function') {
-          try {
-            currentPos = this.screen.getCursorScreenPoint();
-          } catch (screenError) {
-            console.log('📍 Screen API failed, trying fallback...', screenError.message);
+          const currentPos = this.screen.getCursorScreenPoint();
+          if (currentPos) {
+            this.lastMousePos.x = currentPos.x;
+            this.lastMousePos.y = currentPos.y;
           }
-        }
-        
-        // Method 2: Custom mouse position function
-        if (!currentPos) {
-          currentPos = this.getCurrentMousePosition();
-        }
-        
-        // Method 3: Generate realistic activity if both fail
-        if (!currentPos || (currentPos.x === 0 && currentPos.y === 0)) {
-          // Simulate mouse activity based on system idle time
-          const idleTime = this.getSystemIdleTime();
-          if (idleTime < 5000) { // Less than 5 seconds idle = likely mouse activity
-            currentPos = {
-              x: this.lastMousePos.x + (Math.random() * 20 - 10), // Small random movement
-              y: this.lastMousePos.y + (Math.random() * 20 - 10)
-            };
-            console.log('🖱️ [SIMULATED] Mouse activity detected via idle time | Idle: ' + Math.round(idleTime/1000) + 's');
-          }
-        }
-        
-        if (currentPos && (currentPos.x !== this.lastMousePos.x || currentPos.y !== this.lastMousePos.y)) {
-          const distance = Math.sqrt(
-            Math.pow(currentPos.x - this.lastMousePos.x, 2) + 
-            Math.pow(currentPos.y - this.lastMousePos.y, 2)
-          );
-          
-          // Update activity tracking
-          global.recordActivityForDisplay && global.recordActivityForDisplay('move', {
-            x: currentPos.x,
-            y: currentPos.y,
-            distance: Math.round(distance)
-          });
-          
-          // Update last mouse position
-          this.lastMousePos.x = currentPos.x;
-          this.lastMousePos.y = currentPos.y;
-          global.lastActivity = Date.now();
         }
       } catch (error) {
         console.error('❌ Mouse tracking error:', error.message);

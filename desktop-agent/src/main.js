@@ -819,30 +819,41 @@ if (isElectronMain) {
   global._isStoppingTracking = false; // Reentrancy guard
   global.stopTracking = async function stopTracking(reason = 'manual', details = null, options = {}) {
     console.log(`🛑 [GLOBAL] stopTracking called with reason: ${reason}`, options?.endTimeOverride ? `endTimeOverride: ${options.endTimeOverride}` : '');
-    
+
+    const gracefulShutdownManager = require('./modules/core/graceful-shutdown-manager');
+
     // FIX-8: Store endTimeOverride globally so gracefulShutdownManager and
     // trackingManager can use it for the database update.
     if (options?.endTimeOverride) {
       global._stopEndTimeOverride = options.endTimeOverride;
+    } else {
+      gracefulShutdownManager.captureStopMoment();
     }
-    
-    // Reentrancy guard: prevent concurrent/duplicate stop calls
+
+    // Reentrancy guard: await an in-flight stop instead of bailing out
     if (global._isStoppingTracking) {
-      console.log(`⚠️ [STOP-TRACKING] Already in progress, ignoring duplicate call (reason: ${reason})`);
+      console.log(`⚠️ [STOP-TRACKING] Already in progress, awaiting existing stop (reason: ${reason})`);
+      if (gracefulShutdownManager.shutdownPromise) {
+        return gracefulShutdownManager.shutdownPromise;
+      }
       return { success: false, message: 'Stop already in progress' };
     }
-    
-    // Check if already stopped
-    if (!global.isTracking && !global.currentTimeLogId) {
+
+    const timeLogId =
+      global.currentTimeLogId || global.trackingManager?.currentTimeLogId;
+    const isTrackingActive =
+      global.isTracking || global.trackingManager?.isTracking;
+
+    // Check if already stopped (but still close orphaned open time logs)
+    if (!isTrackingActive && !timeLogId) {
       console.log('⚠️ [STOP-TRACKING] Already stopped, skipping duplicate call');
       return { success: false, message: 'Already stopped' };
     }
-    
+
     global._isStoppingTracking = true;
 
     // Use GracefulShutdownManager for centralized, reliable stop
     try {
-      const gracefulShutdownManager = require('./modules/core/graceful-shutdown-manager');
       const result = await gracefulShutdownManager.gracefulStop(reason, { details });
       
       // GSM is the single stop path — no redundant trackingManager.stopTracking call.
@@ -1233,13 +1244,12 @@ try {
     global._pendingSessionRecoveryDone = false;
     global._runPendingSessionRecovery = async () => {
       if (global._pendingSessionRecoveryDone) return;
-      global._pendingSessionRecoveryDone = true;
       try {
         await gracefulShutdownManager.processPendingSessionCloses();
+        global._pendingSessionRecoveryDone = true;
         console.log('✅ [STARTUP] Pending session recovery complete');
       } catch (error) {
         console.error('❌ [STARTUP] Pending session recovery failed:', error.message);
-        global._pendingSessionRecoveryDone = false; // allow retry
       }
     };
   } catch (error) {
@@ -1283,6 +1293,24 @@ try {
     try {
       const existingSession = await sessionManager.loadDesktopAgentSession();
       if (existingSession && existingSession.access_token) {
+        const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
+        const restoredUserId = normalizeTenantUserId(
+          existingSession.id || existingSession.user?.id || existingSession.user_id,
+        );
+        if (restoredUserId) {
+          global.currentUserId = restoredUserId;
+          if (global.config) global.config.user_id = restoredUserId;
+          console.log('🔐 [SESSION] Restored currentUserId from session file:', restoredUserId);
+        }
+
+        try {
+          const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('./modules/utils/workspace-settings');
+          await refreshWorkspaceSettings(global.config, { restartCapture: false });
+          startWorkspaceSettingsRefresh(global.config);
+        } catch (settingsErr) {
+          console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
+        }
+
         console.log('🔐 [SESSION] Setting existing user session in main Supabase client...');
         const { data, error } = await supabase.auth.setSession({
           access_token: existingSession.access_token,
@@ -1965,47 +1993,57 @@ async function initializeInputDetectionSystem() {
     let lastLogTime = 0;
     let eventCount = 0;
 
+    const forwardEnhancedActivity = (type, method, details = {}) => {
+      if (!global.isTracking) {
+        return;
+      }
+
+      let idleSeconds = 0;
+      try {
+        const getIdleTime = global.unifiedInputManager?.getIdleTime?.bind(global.unifiedInputManager);
+        idleSeconds = typeof getIdleTime === 'function' ? (getIdleTime() || 0) : 0;
+      } catch (_) { }
+      const idleStatus = global.enhancedIdleMonitor?.getIdleStatus?.();
+      const idleThreshold = (global.enhancedIdleMonitor && global.enhancedIdleMonitor.IDLE_THRESHOLD) || 60;
+      const isIdle = (idleStatus ? !!idleStatus.isIdle : false) || (idleSeconds > idleThreshold);
+      if (isIdle) {
+        if (!global.__lastIdleDrop || Date.now() - global.__lastIdleDrop > 15000) {
+          console.log(`[SYSTEM] IDLE-GATE – Dropped '${type}' from '${method}' while idle (${idleSeconds}s)`);
+          global.__lastIdleDrop = Date.now();
+        }
+        return;
+      }
+
+      recordEnhancedActivity(type, method || 'legacy', details);
+
+      try {
+        if (global.activityManager && typeof global.activityManager.enqueueActivityEvent === 'function') {
+          global.activityManager.enqueueActivityEvent(type, method, details);
+        }
+      } catch (_) { }
+
+      try {
+        if (global.antiCheatDetector && global.antiCheatDetector.isMonitoring) {
+          const now = Date.now();
+          const antiCheatType = type === 'click' ? 'mouse_click' : type === 'key' ? 'keyboard' : type === 'move' ? 'mouse_move' : null;
+          if (antiCheatType) {
+            const hasPosition = details && (details.x !== undefined || details.position);
+            const pos = details?.position || (hasPosition ? { x: details.x, y: details.y } : null);
+            const antiCheatData = pos ? { x: pos.x, y: pos.y, timestamp: now } : { timestamp: now };
+            global.antiCheatDetector.recordActivity(antiCheatType, antiCheatData);
+          }
+        }
+      } catch (_) { }
+    };
+
+    global.recordEnhancedActivity = forwardEnhancedActivity;
+    global.recordActivityForDisplay = forwardEnhancedActivity;
+
     const connectInputToActivity = (type, method, details = {}) => {
       try {
-        // CRITICAL FIX: Only record activity when tracking is active
-        if (!global.isTracking) {
-          // Don't record any activity when timer is not running
-          return;
-        }
-
-        // Accept external OS-level input monitors (e.g., Python/Quartz on macOS)
-        // These are real user inputs and must NOT be filtered out.
-
-        // Hard idle gate here as well (before any counters update)
-        let idleSeconds = 0;
-        try {
-          const getIdleTime = global.unifiedInputManager?.getIdleTime?.bind(global.unifiedInputManager);
-          idleSeconds = typeof getIdleTime === 'function' ? (getIdleTime() || 0) : 0;
-        } catch (_) { }
-        const idleStatus = global.enhancedIdleMonitor?.getIdleStatus?.();
-        const idleThreshold = (global.enhancedIdleMonitor && global.enhancedIdleMonitor.IDLE_THRESHOLD) || 60;
-        const isIdle = (idleStatus ? !!idleStatus.isIdle : false) || (idleSeconds > idleThreshold);
-        if (isIdle) {
-          if (!global.__lastIdleDrop || Date.now() - global.__lastIdleDrop > 15000) {
-            console.log(`[SYSTEM] IDLE-GATE – Dropped '${type}' from '${method}' while idle (${idleSeconds}s)`);
-            global.__lastIdleDrop = Date.now();
-          }
-          return;
-        }
-
-        // Call the global activity recording function (single source of truth for counters + activity queue)
-        if (typeof recordEnhancedActivity === 'function') {
-          recordEnhancedActivity(type, method, details);
-        }
-
-        // PERFORMANCE FIX: Drastically reduce logging to prevent slowdowns
+        forwardEnhancedActivity(type, method || 'unified-manager', details);
         eventCount++;
-        const now = Date.now();
-
-        // Silence granular input logs; summaries handled elsewhere
-      } catch (error) {
-        // Silent error handling to prevent log spam
-      }
+      } catch (_) { }
     };
 
     // Connect ONLY unified input manager events (no duplicates)
@@ -2037,155 +2075,14 @@ async function initializeInputDetectionSystem() {
       console.log('⚠️ [INPUT→SCREENSHOT] Failed to connect input manager:', e?.message || String(e));
     }
 
-    // 🔧 CRITICAL FIX: Add missing activity recording functions
-    global.recordEnhancedActivity = function (type, method, details = {}) {
-      try {
-        // Accept external OS-level monitors (macOS/Windows/Linux) as valid real input
-        // They provide actual click/key/move events via platform scripts; do not drop them
-
-        // Hard idle gate: do not count any activity while idle
-        let idleSeconds = 0;
-        try {
-          const getIdleTime = global.unifiedInputManager?.getIdleTime?.bind(global.unifiedInputManager);
-          idleSeconds = typeof getIdleTime === 'function' ? (getIdleTime() || 0) : 0;
-        } catch (_) { }
-        const idleStatus = global.enhancedIdleMonitor?.getIdleStatus?.();
-        const idleThreshold = (global.enhancedIdleMonitor && global.enhancedIdleMonitor.IDLE_THRESHOLD) || 60;
-        const isIdle = (idleStatus ? !!idleStatus.isIdle : false) || (idleSeconds > idleThreshold);
-        if (isIdle) {
-          if (!global.__lastIdleDrop || Date.now() - global.__lastIdleDrop > 15000) {
-            console.log(`[SYSTEM] IDLE-GATE – Dropped '${type}' from '${method}' while idle (${idleSeconds}s)`);
-            global.__lastIdleDrop = Date.now();
-          }
-          return;
-        }
-
-        // MEMORY FIX: Throttle per-event activity logging to reduce V8 string retention
-        // These fire dozens of times per second — logging each one wastes ~5-15MB/hr
-        // Activity is still recorded; only the console.log is throttled
-
-        // Update global activity counters
-        if (!global.betweenScreenshotsActivity) {
-          global.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-        }
-
-        if (!global.displayActivityStats) {
-          global.displayActivityStats = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-        }
-
-        // Record the activity - CRITICAL FIX: Update BOTH simple and total fields
-        // CRITICAL FIX (DEBUG): Also update enhancedActivityManager.betweenScreenshotsActivity
-        // Screenshot capture reads from this object FIRST, so it must stay in sync
-        switch (type) {
-          case 'click':
-            global.betweenScreenshotsActivity.clicks++;
-            if (global.enhancedActivityManager?.betweenScreenshotsActivity) global.enhancedActivityManager.betweenScreenshotsActivity.clicks++;
-            global.displayActivityStats.clicks++;
-            if (!global.displayActivityStats.totalClicks) global.displayActivityStats.totalClicks = 0;
-            global.displayActivityStats.totalClicks++;  // CRITICAL FIX: Also update totalClicks
-            if (!global.displayActivityStats.sessionClicks) global.displayActivityStats.sessionClicks = 0;
-            global.displayActivityStats.sessionClicks++; // CRITICAL FIX: Also update sessionClicks
-            break;
-          case 'key':
-            global.betweenScreenshotsActivity.keys++;
-            if (global.enhancedActivityManager?.betweenScreenshotsActivity) global.enhancedActivityManager.betweenScreenshotsActivity.keys++;
-            global.displayActivityStats.keys++;
-            if (!global.displayActivityStats.totalKeys) global.displayActivityStats.totalKeys = 0;
-            global.displayActivityStats.totalKeys++;    // CRITICAL FIX: Also update totalKeys
-            if (!global.displayActivityStats.sessionKeys) global.displayActivityStats.sessionKeys = 0;
-            global.displayActivityStats.sessionKeys++;   // CRITICAL FIX: Also update sessionKeys
-            break;
-          case 'move':
-            global.betweenScreenshotsActivity.moves++;
-            if (global.enhancedActivityManager?.betweenScreenshotsActivity) global.enhancedActivityManager.betweenScreenshotsActivity.moves++;
-            global.displayActivityStats.moves++;
-            if (!global.displayActivityStats.totalMoves) global.displayActivityStats.totalMoves = 0;
-            global.displayActivityStats.totalMoves++;    // CRITICAL FIX: Also update totalMoves
-            if (!global.displayActivityStats.sessionMoves) global.displayActivityStats.sessionMoves = 0;
-            global.displayActivityStats.sessionMoves++;  // CRITICAL FIX: Also update sessionMoves
-            break;
-        }
-
-        // Update timestamps
-        const now = Date.now();
-        global.betweenScreenshotsActivity.lastUpdate = now;
-        if (global.enhancedActivityManager?.betweenScreenshotsActivity) global.enhancedActivityManager.betweenScreenshotsActivity.lastUpdate = now;
-        global.displayActivityStats.lastUpdate = now;
-
-        try {
-          if (global.activityManager && typeof global.activityManager.enqueueActivityEvent === 'function') {
-            global.activityManager.enqueueActivityEvent(type, method, details);
-          }
-        } catch (_) {}
-
-        // CRITICAL FIX: Forward activity to AntiCheatDetector for fraud detection
-        try {
-          if (global.antiCheatDetector && global.antiCheatDetector.isMonitoring) {
-            const antiCheatType = type === 'click' ? 'mouse_click' : type === 'key' ? 'keyboard' : type === 'move' ? 'mouse_move' : null;
-            if (antiCheatType) {
-              // Get position from event details (Python monitor provides x, y coordinates)
-              const hasPosition = details && (details.x !== undefined || details.position);
-              const pos = details?.position || (hasPosition ? { x: details.x, y: details.y } : null);
-              const antiCheatData = pos ? { x: pos.x, y: pos.y, timestamp: now } : { timestamp: now };
-              global.antiCheatDetector.recordActivity(antiCheatType, antiCheatData);
-            }
-          }
-        } catch (e) { /* Silent - don't break activity recording */ }
-
-        // MEMORY FIX: Log activity summary every 30s instead of every event
-        if (!global._lastActivityLogTime || (Date.now() - global._lastActivityLogTime > 30000)) {
-          global._lastActivityLogTime = Date.now();
-          const a = global.betweenScreenshotsActivity;
-          console.log(`📊 [ACTIVITY-FIX] Counters: C:${a.clicks} K:${a.keys} M:${a.moves}`);
-        }
-      } catch (_) { }
-    };
-
-    global.recordActivityForDisplay = global.recordEnhancedActivity; // Alias for compatibility
-
-    // CRITICAL FIX: Listen for real-input-detected events as fallback
-    process.removeAllListeners('real-input-detected'); // Clear any existing listeners
+    // Fallback only when the unified input manager is not running (avoids double-counting)
+    process.removeAllListeners('real-input-detected');
     process.on('real-input-detected', (data) => {
       try {
-        console.log('🔄 [INPUT-FALLBACK] Received real-input-detected event:', data.type);
-        // Use the global recordEnhancedActivity function if available
-        if (typeof recordEnhancedActivity === 'function') {
-          recordEnhancedActivity(data.type, data.method || 'fallback');
-        } else if (global.enhancedActivityManager) {
-          global.enhancedActivityManager.recordEnhancedActivity(data.type, data.method || 'fallback');
-        } else {
-          // Direct update as last resort
-          if (!global.displayActivityStats) {
-            global.displayActivityStats = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-          }
-
-          // CRITICAL: Also update betweenScreenshotsActivity for screenshot capture
-          if (!global.betweenScreenshotsActivity) {
-            global.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-          }
-
-          if (data.type === 'click') {
-            global.displayActivityStats.clicks++;
-            global.betweenScreenshotsActivity.clicks++;
-            console.log('🖱️ [INPUT-FALLBACK] Click recorded, total:', global.displayActivityStats.clicks, '| Screenshot activity:', global.betweenScreenshotsActivity.clicks);
-          } else if (data.type === 'key') {
-            global.displayActivityStats.keys++;
-            global.betweenScreenshotsActivity.keys++;
-            console.log('⌨️ [INPUT-FALLBACK] Key recorded, total:', global.displayActivityStats.keys, '| Screenshot activity:', global.betweenScreenshotsActivity.keys);
-          } else if (data.type === 'move') {
-            global.displayActivityStats.moves++;
-            global.betweenScreenshotsActivity.moves++;
-          }
-
-          // Send immediate UI update
-          if (global.enhancedSyncManager) {
-            global.enhancedSyncManager.batchActivityUpdate({
-              mouseClicks: global.displayActivityStats.clicks,
-              keystrokes: global.displayActivityStats.keys,
-              mouseMovements: global.displayActivityStats.moves
-            });
-          }
+        if (globalInputManager?.isActive) {
+          return;
         }
+        forwardEnhancedActivity(data.type, data.method || 'fallback', data);
       } catch (error) {
         console.error('❌ [INPUT-FALLBACK] Error processing real-input-detected:', error);
       }
@@ -3658,6 +3555,15 @@ if (isElectronContext && ipcMain) {
     }
   });
 
+  ipcMain.handle('auth:fetch-me', async (_event, { idToken }) => {
+    const { fetchAuthMeFromApi } = require('./modules/utils/backend-auth-fetch');
+    const authConfig = {
+      api_base_url: config?.api_base_url || process.env.VITE_API_BASE_URL,
+      backend_api_url: config?.backend_api_url || process.env.BACKEND_API_URL,
+    };
+    return fetchAuthMeFromApi(idToken, authConfig);
+  });
+
   registerDeveloperConsoleHandlers();
 
   // Note: start-timer and start-tracking handlers are now managed by the dedicated IPCHandlers module
@@ -3849,7 +3755,7 @@ if (isElectronContext && ipcMain) {
   const ipcHandlersManager = new IPCHandlersManager({
     ipcMain,
     resumeTracking,
-    stopTracking,
+    stopTracking: global.stopTracking,
     appSettings,
     antiCheatDetector,
     AntiCheatDetector,
@@ -4632,6 +4538,12 @@ if (isElectronContext && ipcMain) {
 
       // Define startMainApplication inside app.whenReady to have access to Electron modules
       async function startMainApplication() {
+        if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+          console.log('⚠️ [MAIN] startMainApplication skipped — window already exists');
+          mainApplicationStarted = true;
+          return;
+        }
+
         try {
           const StartupManager = require('./modules/core/startup-manager');
           const startupManager = new StartupManager(
@@ -5125,6 +5037,11 @@ if (isElectronContext && ipcMain) {
           // STEP 3: Create window and immediately update tracking controller
           console.log('🔧 [FALLBACK] Creating main window since startMainApplication failed');
           try {
+            if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+              console.log('✅ [FALLBACK] Main window already exists — skipping duplicate create');
+              return;
+            }
+
             // Create window directly since windowManager isn't initialized in fallback mode
             const mainWindow = new BrowserWindow({
               width: 1000,
@@ -5789,30 +5706,9 @@ if (isElectronContext && ipcMain) {
         }
       });
 
-      // CRITICAL FIX: Call startMainApplication after all initialization is complete
-      console.log('🚀 [MAIN] Performance optimization complete - calling startMainApplication...');
-      Promise.resolve()
-        .then(async () => {
-          // CRITICAL FIX: Use robust startup lock
-          const lockResult = await acquireStartupLock();
-          if (!lockResult) {
-            console.log('⚠️ [MAIN] Startup already completed, skipping Promise chain');
-            return; // Already started
-          }
-
-          // CRITICAL FIX: Actually call the function!!!
-          console.log('🚀 [MAIN] Calling startMainApplication() now...');
-          await startMainApplication();
-          console.log('✅ [MAIN] startMainApplication() completed successfully');
-        })
-        .then(() => {
-          console.log('✅ [MAIN] Main application started successfully via app.whenReady callback');
-        })
-        .catch((error) => {
-          const message = (error && error.message) ? error.message : String(error);
-          console.error('❌ [MAIN] startMainApplication failed in app.whenReady callback:', message);
-          // Continue with fallback initialization
-        });
+      // Startup is triggered once via acquireStartupLock() above.
+      // Do not call startMainApplication() again here — that created a second BrowserWindow.
+      console.log('✅ [MAIN] Startup lock path complete (single window)');
 
     });
   } else {
@@ -5893,7 +5789,7 @@ if (isElectronContext && ipcMain) {
         console.log('🔬 [SYSTEM-MONITOR] Stopped periodic health monitoring');
 
         // CRITICAL: Wait for stopTracking to complete (closes time_log in database)
-        await stopTracking();
+        await global.stopTracking('quit', 'Application closed — session saved');
 
         // AGGRESSIVE INTERVAL CLEANUP TO PREVENT MEMORY LEAKS
         console.log('🧹 Performing aggressive cleanup...');
@@ -5950,7 +5846,7 @@ if (isElectronContext && ipcMain) {
     powerMonitor,
     mainWindow,
     isTracking,
-    stopTracking,
+    stopTracking: global.stopTracking,
     antiCheatDetector,
     safeLog,
     debounceEvent: (name, handler) => handler // Simple fallback for debounceEvent
@@ -6053,31 +5949,67 @@ if (isElectronContext && ipcMain) {
 
   // Today's time_logs aggregate (always register — DataStatsManager does not own this channel)
   try { ipcMain.removeHandler('get-today-time-stats'); } catch {}
+  try { ipcMain.removeHandler('set-frozen-total-at-stop'); } catch {}
+  ipcMain.handle('set-frozen-total-at-stop', async (_event, totalSeconds) => {
+    const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    if (sec > 0) {
+      global._rendererFrozenTotalAtStop = sec;
+      global._lastTodayTotalAtStop = Math.max(
+        global._lastTodayTotalAtStop || 0,
+        sec,
+      );
+    }
+    return { success: true, totalSeconds: sec };
+  });
   ipcMain.handle('get-today-time-stats', async () => {
     try {
-      try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
-      if (!global.supabaseService && !global.supabase) {
-        console.log('⚠️ [TODAY-TIME-STATS] No Supabase service available');
+      const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
+      if (!global.supabaseService && !global.supabase && !isBackendTimeLogsEnabled()) {
+        console.log('⚠️ [TODAY-TIME-STATS] No database backend available');
         return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
       }
 
       const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
+      const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
       const supabase = global.supabaseService || global.supabase;
-      const userId = global.currentUserId || config.user_id || config.userId;
+      const rawUserId = global.currentUserId || config.user_id || config.userId;
+      const userId = normalizeTenantUserId(rawUserId);
       if (!userId) {
         return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'User not authenticated' };
       }
 
-      const currentTimeLogId = global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null;
-      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId);
+      const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
+      const currentTimeLogId = isTracking
+        ? (global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null)
+        : null;
+      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
 
-      try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: agg.totalTime, completed_closed: agg.completedClosedSeconds } }); } catch { }
+      let completedClosedSeconds = agg.completedClosedSeconds;
+      if (!isTracking) {
+        const floor = Math.max(
+          0,
+          Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+          Math.floor(Number(global._rendererFrozenTotalAtStop) || 0),
+        );
+        if (floor > completedClosedSeconds) {
+          completedClosedSeconds = floor;
+        } else if (completedClosedSeconds >= floor) {
+          global._lastTodayTotalAtStop = null;
+          global._rendererFrozenTotalAtStop = null;
+        }
+      }
+
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: agg.totalTime, completed_closed: completedClosedSeconds } }); } catch { }
 
       const today = new Date();
+      const totalTime = isTracking
+        ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
+        : completedClosedSeconds;
       return {
-        totalTime: agg.totalTime,
-        completedTodayBeforeCurrentSessionSeconds: agg.completedClosedSeconds,
+        totalTime,
+        completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,
         userId,
@@ -6086,6 +6018,26 @@ if (isElectronContext && ipcMain) {
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
       return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: error.message };
+    }
+  });
+
+  // Monthly work report (always register — renderer loads before DataStatsManager.initialize())
+  try { ipcMain.removeHandler('get-monthly-report-data'); } catch {}
+  ipcMain.handle('get-monthly-report-data', async () => {
+    try {
+      const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
+      const { buildMonthlyReportData } = require('./modules/utils/monthly-report-data');
+      if (!global.supabaseService && !global.supabase && !isBackendTimeLogsEnabled()) {
+        return { error: 'No database connection' };
+      }
+      return await buildMonthlyReportData({
+        global,
+        config,
+        supabaseService: global.supabaseService || global.supabase,
+      });
+    } catch (error) {
+      console.error('❌ [MONTHLY-REPORT] get-monthly-report-data error:', error);
+      return { error: error.message };
     }
   });
 
@@ -6304,33 +6256,54 @@ if (isElectronContext && ipcMain) {
   // Get user profile information
   ipcMain.handle('get-user-profile', async () => {
     try {
-      if (!global.supabaseService && !global.supabase) {
-        return { error: 'No database connection' };
-      }
-
-      const supabase = global.supabaseService || global.supabase;
       const userId = global.currentUserId || config.user_id;
-
       if (!userId) {
         return { error: 'No user ID available' };
       }
 
-      const { data: userProfile, error } = await supabase
-        .from('users')
-        .select('id, email, full_name, role')
-        .eq('id', userId)
-        .maybeSingle();
+      let profile = null;
+      try {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        const sessionPath = path.join(os.homedir(), '.alyson_work_time_agent_session.json');
+        if (fs.existsSync(sessionPath)) {
+          const session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+          const u = session?.user;
+          if (u && String(u.id) === String(userId)) {
+            profile = {
+              id: String(u.id),
+              email: u.email,
+              full_name: u.name || u.full_name || u.email?.split('@')[0],
+              role: u.role || 'employee',
+            };
+          }
+        }
+      } catch {
+        /* session read optional */
+      }
 
-      if (error && (!error.status || error.status !== 406)) {
-        console.error('❌ [USER-PROFILE] Database error:', error);
-        return { error: error.message };
+        // Skip legacy public.users — profile comes from Cognito session file or /auth/me.
+      if (!profile && global.authManager?.currentUser) {
+        const u = global.authManager.currentUser;
+        if (String(u.id) === String(userId)) {
+          profile = {
+            id: String(u.id),
+            email: u.email,
+            full_name: u.name || u.full_name || u.email?.split('@')[0],
+            role: u.role || 'employee',
+          };
+        }
+      }
+
+      if (!profile) {
+        return { success: true, profile: null };
       }
 
       return {
         success: true,
-        profile: userProfile || null
+        profile,
       };
-
     } catch (error) {
       console.error('❌ [USER-PROFILE] Error:', error.message);
       return { error: error.message };

@@ -189,11 +189,14 @@ class EventManager {
     this.isQuitting = true;
     
     // Check tracking state from multiple sources for robustness
-    const isTrackingActive = global.isTracking || global.trackingManager?.isTracking;
+    const timeLogId =
+      global.currentTimeLogId || global.trackingManager?.currentTimeLogId;
+    const isTrackingActive =
+      global.isTracking || global.trackingManager?.isTracking;
     const stopTrackingFn = global.stopTracking || (global.trackingManager?.stopTracking?.bind(global.trackingManager));
     
-    // If tracking is active, we need to stop it before quitting
-    if (isTrackingActive && typeof stopTrackingFn === 'function') {
+    // If tracking is active or an open time log exists, stop it before quitting
+    if ((isTrackingActive || timeLogId) && typeof stopTrackingFn === 'function') {
       // Prevent the quit to give time for async cleanup
       event.preventDefault();
       
@@ -202,6 +205,8 @@ class EventManager {
       // Perform async cleanup then re-trigger quit
       const cleanup = async () => {
         try {
+          const gracefulShutdownManager = require('./graceful-shutdown-manager');
+          gracefulShutdownManager.captureStopMoment();
           // Await the stop tracking to ensure database is updated
           await stopTrackingFn('quit', 'App quit - session ended automatically');
           console.log('✅ [EVENTS] Tracking session stopped successfully');

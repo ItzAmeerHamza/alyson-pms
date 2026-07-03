@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.183",
+  "version": "1.0.184",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",
@@ -12,11 +12,12 @@
     "start": "electron .",
     "electron": "electron .",
     "generate:icons": "node scripts/generate-icons.mjs",
+    "prestart": "node scripts/generate-icons.mjs",
     "setup-python": "bash scripts/setup-python-deps.sh",
     "bundle-python": "bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1",
     "bundle-python-windows": "node scripts/bundle-python-windows.js",
-    "prebuild": "node scripts/setup-dist.js && node generate-env-config.js --build && (bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1)",
-    "prebuild:mac": "node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/build-swift-helper.sh",
+    "prebuild": "npm run generate:icons && node scripts/setup-dist.js && node generate-env-config.js --build && (bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1)",
+    "prebuild:mac": "npm run generate:icons && node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/build-swift-helper.sh && npx electron-rebuild -f -w uiohook-napi",
     "prebuild:win": "node generate-env-config.js --build && node scripts/bundle-python-windows.js",
     "build": "npm run prebuild && electron-builder",
     "postbuild": "node ../scripts/cleanup-electron-build.cjs",
@@ -38,6 +39,7 @@
     "keytar": "^7.9.0",
     "node-cron": "^4.2.1",
     "screenshot-desktop": "^1.14.0",
+    "uiohook-napi": "^1.5.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -89,7 +91,8 @@
       "python-windows/**/*",
       "node_modules/active-win/**/*",
       "node_modules/keytar/**/*",
-      "node_modules/screenshot-desktop/**/*"
+      "node_modules/screenshot-desktop/**/*",
+      "node_modules/uiohook-napi/**/*"
     ],
     "afterPack": "scripts/after-pack.js",
     "mac": {

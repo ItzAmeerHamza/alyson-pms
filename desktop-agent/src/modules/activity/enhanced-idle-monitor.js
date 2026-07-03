@@ -252,21 +252,26 @@ class EnhancedIdleMonitor {
       };
       
       // Save to database using correct table name
-      const { error } = await global.supabaseService
-        .from('idle_logs')
-        .insert(idleData);
-      
-      if (!error) {
-        console.log('✅ [IDLE-LOG] Idle period saved to idle_logs table');
-        
-        // Update UI
-        global.safeSendToRenderer?.('idle-period-logged', {
-          duration: durationSeconds,
-          timestamp: new Date().toISOString()
-        });
+      const { isBackendTimeLogsEnabled, insertIdleLog } = require('../utils/backend-time-logs');
+      if (isBackendTimeLogsEnabled(this.config || global.config)) {
+        await insertIdleLog(idleData, this.config || global.config);
+        console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
       } else {
-        console.error('❌ [IDLE-LOG] Database error:', error.message);
+        const { error } = await global.supabaseService
+          .from('idle_logs')
+          .insert(idleData);
+
+        if (error) {
+          console.error('❌ [IDLE-LOG] Database error:', error.message);
+          return;
+        }
+        console.log('✅ [IDLE-LOG] Idle period saved to idle_logs table');
       }
+      
+      global.safeSendToRenderer?.('idle-period-logged', {
+        duration: durationSeconds,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       console.log('❌ [IDLE-LOG] Error logging idle period:', error.message);
     }

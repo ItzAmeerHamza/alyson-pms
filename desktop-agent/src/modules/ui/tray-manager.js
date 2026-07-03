@@ -88,6 +88,79 @@ class TrayManager {
   }
 
   /**
+   * Resolve tray asset path (dev + packaged builds).
+   */
+  _resolveAssetPath(fileName) {
+    const candidates = [
+      path.join(__dirname, '../../../assets', fileName),
+      this.app?.getAppPath ? path.join(this.app.getAppPath(), 'assets', fileName) : null,
+      global.__alysonIconPath ? path.join(path.dirname(global.__alysonIconPath), fileName) : null,
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+    return candidates[0];
+  }
+
+  /**
+   * Build a macOS template tray image from the Alyson tray assets.
+   */
+  _loadMacTrayImage() {
+    const templatePath = this._resolveAssetPath('tray-iconTemplate.png');
+    const template2xPath = this._resolveAssetPath('tray-iconTemplate@2x.png');
+    const coloredTrayPath = this._resolveAssetPath('tray-icon.png');
+    const appIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
+
+    const tryImage = (imagePath, asTemplate = true) => {
+      if (!imagePath || !fs.existsSync(imagePath)) return null;
+      const image = nativeImage.createFromPath(imagePath);
+      if (!image || image.isEmpty()) return null;
+      if (asTemplate && typeof image.setTemplateImage === 'function') {
+        image.setTemplateImage(true);
+      }
+      return image;
+    };
+
+    if (fs.existsSync(templatePath) && fs.existsSync(template2xPath)) {
+      const image = nativeImage.createFromPath(templatePath);
+      const image2x = nativeImage.createFromPath(template2xPath);
+      if (!image.isEmpty()) {
+        image.addRepresentation({
+          scaleFactor: 2,
+          buffer: image2x.toPNG(),
+          width: image2x.getSize().width,
+          height: image2x.getSize().height,
+        });
+        if (typeof image.setTemplateImage === 'function') {
+          image.setTemplateImage(true);
+        }
+        console.log('✅ [TRAY] Loaded macOS template tray icon');
+        return image;
+      }
+    }
+
+    const templateFallback = tryImage(templatePath, true);
+    if (templateFallback) {
+      console.log('✅ [TRAY] Loaded macOS template tray icon (1x only)');
+      return templateFallback;
+    }
+
+    const coloredFallback = tryImage(coloredTrayPath, false);
+    if (coloredFallback) {
+      console.log('⚠️ [TRAY] Using colored tray icon on macOS');
+      return coloredFallback.resize({ width: 22, height: 22 });
+    }
+
+    const appIconFallback = tryImage(appIconPath, false);
+    if (appIconFallback) {
+      console.log('⚠️ [TRAY] Using app icon fallback on macOS');
+      return appIconFallback.resize({ width: 22, height: 22 });
+    }
+
+    return null;
+  }
+
+  /**
    * Create system tray
    */
   create() {
@@ -96,53 +169,41 @@ class TrayManager {
       return;
     }
 
-    // Create tray icon with platform-specific handling
-    // macOS uses Template.png suffix for auto dark/light mode support
     const isMac = process.platform === 'darwin';
-    const iconName = isMac ? 'tray-iconTemplate.png' : 'tray-icon.png';
-    const iconPath = path.join(__dirname, '../../../assets', iconName);
-    
+    const iconPath = this._resolveAssetPath(isMac ? 'tray-iconTemplate.png' : 'tray-icon.png');
+
     console.log('🔍 [TRAY] Icon path:', iconPath);
     console.log('🔍 [TRAY] File exists:', fs.existsSync(iconPath));
     console.log('🔍 [TRAY] Platform:', process.platform);
-    
-    // Platform-specific tray icon:
-    // macOS: MUST use the 22x22 Template.png file (auto dark/light mode support)
-    //        Using icon.png (1024x1024 app icon) makes the tray invisible on macOS
-    // Windows/Linux: Use the Alyson release icon for a branded tray
-    let trayIcon = null;
-    if (!isMac) {
-      const alysonIconPath = global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png');
-      if (fs.existsSync(alysonIconPath)) {
-        console.log('🎨 [TRAY] Using Alyson release icon for tray (Windows/Linux)');
-        trayIcon = nativeImage.createFromPath(alysonIconPath);
-      }
-    }
 
+    let trayIcon = null;
     try {
       if (isMac) {
-        console.log('🔍 [TRAY] Creating macOS tray from Template icon path...');
-        this.tray = new this.Tray(iconPath);
-        console.log('✅ [TRAY] macOS tray created with Template icon');
+        trayIcon = this._loadMacTrayImage();
+        if (!trayIcon) {
+          throw new Error('No macOS tray icon assets found — run npm run generate:icons');
+        }
+        this.tray = new this.Tray(trayIcon);
+        console.log('✅ [TRAY] macOS tray created with Alyson template icon');
       } else {
-        console.log('🔍 [TRAY] Creating standard tray icon...');
-        this.tray = new this.Tray(trayIcon || iconPath);
+        const alysonIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
+        const trayPngPath = this._resolveAssetPath('tray-icon.png');
+        if (fs.existsSync(trayPngPath)) {
+          trayIcon = nativeImage.createFromPath(trayPngPath);
+        } else if (fs.existsSync(alysonIconPath)) {
+          trayIcon = nativeImage.createFromPath(alysonIconPath);
+        }
+        if (!trayIcon || trayIcon.isEmpty()) {
+          throw new Error('No tray icon assets found — run npm run generate:icons');
+        }
+        this.tray = new this.Tray(trayIcon);
         console.log('✅ [TRAY] Standard tray created');
       }
     } catch (error) {
       console.error('❌ [TRAY] Error creating tray icon:', error?.message);
-      // Fallback: try the Alyson release icon directly
-      try {
-        const alysonPath = path.join(__dirname, '../../../assets/icon.png');
-        this.tray = new this.Tray(alysonPath);
-        trayIcon = nativeImage.createFromPath(alysonPath);
-        console.log('⚠️ [TRAY] Using Alyson icon fallback');
-      } catch (fallbackError) {
-        console.error('❌ [TRAY] Failed to create tray with fallback:', fallbackError?.message);
-        throw fallbackError;
-      }
+      throw error;
     }
-    
+
     // Cache the base icon for status indicator overlays (Windows/Linux only)
     this._baseIcon = trayIcon || nativeImage.createFromPath(iconPath);
     this._generateStatusIcons();
@@ -151,7 +212,7 @@ class TrayManager {
     this._setStoppedIcon();
     
     // Set tooltip
-    this.tray.setToolTip('⏹ Alyson PM — Not Tracking');
+    this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
     
     // Create initial menu
     this.updateMenu();
@@ -345,6 +406,7 @@ class TrayManager {
         const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
         const cumulativeSeconds = Math.max(0, baseSec + elapsed);
         const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
+        this._lastCumulativeSeconds = cumulativeSeconds;
 
         if (process.platform === 'darwin') {
           // macOS: show timer text next to tray icon in the menu bar
@@ -384,6 +446,9 @@ class TrayManager {
 
     tick(); // immediate first tick
     this._timerInterval = setInterval(tick, 1000);
+    if (typeof this._timerInterval.unref === 'function') {
+      this._timerInterval.unref();
+    }
     console.log('⏱️ [TRAY] Timer started');
   }
 
@@ -402,7 +467,7 @@ class TrayManager {
       if (process.platform === 'darwin') {
         this.tray.setTitle('');
       }
-      this.tray.setToolTip('⏹ Alyson PM — Not Tracking');
+      this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
     }
     console.log('⏱️ [TRAY] Timer stopped');
   }
@@ -559,9 +624,11 @@ class TrayManager {
       const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
       const supabase = global.supabaseClient || global.supabaseService || global.supabase;
       const userId = global.currentUserId || global.trackingManager?.currentSession?.user_id;
-      const currentTimeLogId = global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null;
-      if (!supabase || !userId) return;
-      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId);
+      const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
+      const currentTimeLogId = isTracking
+        ? (global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null)
+        : null;
+      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
       this._cumulativeBaseSeconds = agg.completedClosedSeconds;
       console.log('⏱️ [TRAY] Cumulative base synced from DB:', this._cumulativeBaseSeconds, 's');
     } catch (e) {

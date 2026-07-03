@@ -1,0 +1,22 @@
+# Alyson Time Doctor API — AWS Lambda container (arm64)
+FROM node:20-bookworm-slim AS jwks-fetch
+ARG COGNITO_ISSUER=https://cognito-idp.us-west-2.amazonaws.com/us-west-2_ZL4ElZy4r
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && curl -sfL "${COGNITO_ISSUER}/.well-known/jwks.json" -o /jwks.json \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+FROM node:20-bookworm-slim AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM public.ecr.aws/lambda/nodejs:20-arm64
+WORKDIR ${LAMBDA_TASK_ROOT}
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/dist ./dist
+COPY --from=jwks-fetch /jwks.json ./cognito-jwks.json
+CMD ["dist/src/lambda.handler"]

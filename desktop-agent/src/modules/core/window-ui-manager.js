@@ -50,7 +50,7 @@ class WindowUIManager {
       icon: path.join(__dirname, '../../../assets/icon.png'),
       show: false,
       titleBarStyle: 'default',
-      title: 'Alyson PM',
+      title: 'Alyson Time Doctor',
       backgroundColor: '#ffffff'
     });
 
@@ -213,6 +213,13 @@ class WindowUIManager {
     
     // Handle window close - quit on Windows, hide on macOS
     this.mainWindow.on('close', (event) => {
+      const gracefulShutdownManager = require('../core/graceful-shutdown-manager');
+      const { app } = require('electron');
+
+      if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, { app })) {
+        return;
+      }
+
       if (global.isQuitting) {
         return; // Allow close
       }
@@ -220,7 +227,6 @@ class WindowUIManager {
       // FIX v1.0.136: On Windows/Linux, pressing X should quit the app entirely
       if (process.platform !== 'darwin') {
         global.isQuitting = true;
-        const { app } = require('electron');
         app.quit();
         return;
       }

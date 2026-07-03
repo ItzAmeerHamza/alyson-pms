@@ -8,6 +8,7 @@ class IPCManager {
     this.trackingStatus = 'stopped'; // 'active', 'paused', 'stopped'
     this.sessionStartTime = null;
     this.sessionTimer = null;
+    this.startInProgress = false;
     this.activityStats = {
       mouseClicks: 0,
       keystrokes: 0,
@@ -308,6 +309,33 @@ class IPCManager {
     // This ensures Recent Sessions / Top Projects refresh with the latest data
     this.ipcRenderer.on('session-data-updated', (event, data) => {
       console.log('🔄 [IPC] Session data updated (post-DB save):', data);
+      const frozenFloor = Math.max(
+        0,
+        Math.floor(Number(data?.frozenTotalSeconds) || 0),
+        Math.floor(Number(window.__todayBaseAtLastStop) || 0),
+      );
+      if (typeof window.refreshTodayCompletedBaseSeconds === 'function') {
+        void window.refreshTodayCompletedBaseSeconds().then(() => {
+          const trackerTimer = document.getElementById('trackerTime');
+          if (!trackerTimer || this.isTracking) return;
+          return window.ipc?.invoke('get-today-time-stats').then((s) => {
+            if (s && typeof s.totalTime === 'number') {
+              const sec = Math.max(
+                Math.max(0, Math.floor(s.totalTime)),
+                frozenFloor,
+                typeof window.readTrackerDisplaySeconds === 'function'
+                  ? window.readTrackerDisplaySeconds()
+                  : 0,
+              );
+              const h = Math.floor(sec / 3600);
+              const m = Math.floor((sec % 3600) / 60);
+              const ss = sec % 60;
+              trackerTimer.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+              window.__todayBaseAtLastStop = sec;
+            }
+          });
+        });
+      }
       // Force-refresh the monthly report so the stopped session appears immediately
       if (this.uiManager && typeof this.uiManager.loadMonthlyReport === 'function') {
         this.uiManager.loadMonthlyReport(true).catch(err => {
@@ -622,18 +650,18 @@ class IPCManager {
     });
   }
 
-  stopSessionTimer() {
+  stopSessionTimer(options = {}) {
+    const { clearDisplayTimers = true } = options;
     if (this.sessionTimer) {
       clearInterval(this.sessionTimer);
       this.sessionTimer = null;
     }
     
-    // CRITICAL FIX: Use global cleanup function to clear all timers
-    if (window.clearAllTimers) {
-      window.clearAllTimers();
-    } else {
-      // Fallback: clear manual timer intervals directly
-      if (window.timerUpdateInterval) {
+    if (clearDisplayTimers) {
+      // CRITICAL FIX: Use global cleanup function to clear all timers
+      if (window.clearAllTimers) {
+        window.clearAllTimers();
+      } else if (window.timerUpdateInterval) {
         clearInterval(window.timerUpdateInterval);
         window.timerUpdateInterval = null;
         console.log('✅ [IPC-MANAGER] Cleared manual timer interval (fallback)');
@@ -811,6 +839,7 @@ class IPCManager {
   async startTracking(projectId) {
     try {
       console.log('🚀 [IPC-MANAGER] Starting tracking with project ID:', projectId);
+      this.startInProgress = true;
       
       // OPTIMISTIC START: Start timer immediately
       const optimisticStartTime = new Date();
@@ -818,6 +847,10 @@ class IPCManager {
       this.trackingStatus = 'active';
       this.sessionStartTime = optimisticStartTime;
       this.optimisticMode = true; // Flag to track optimistic state
+      
+      if (typeof window.beginLocalTrackingClock === 'function') {
+        window.beginLocalTrackingClock(optimisticStartTime);
+      }
       
       // Start session timer immediately
       this.startSessionTimer();
@@ -869,8 +902,11 @@ class IPCManager {
           if (timeDiff > 1000) { // If more than 1 second difference
             console.log('🔄 [IPC-MANAGER] Reconciling time difference:', timeDiff, 'ms');
             this.sessionStartTime = serverTime;
-            // Restart timer with server time
-            this.stopSessionTimer();
+            if (typeof window.beginLocalTrackingClock === 'function') {
+              window.beginLocalTrackingClock(serverTime);
+            }
+            // Restart session timer only — keep display watchdog running
+            this.stopSessionTimer({ clearDisplayTimers: false });
             this.startSessionTimer();
           }
         }
@@ -958,6 +994,8 @@ class IPCManager {
       
       this.notificationManager.showNotification('Failed to start tracking: ' + error.message, 'error');
       throw error;
+    } finally {
+      this.startInProgress = false;
     }
   }
 
@@ -965,8 +1003,19 @@ class IPCManager {
     console.log('⏹️ [IPC] Stop tracking requested - waiting for complete stop');
     
     try {
-      // REVERTED: Wait for stop to complete before updating UI
-      // This ensures everything is actually stopped
+      // Freeze the displayed total at click time (DB save may finish seconds later)
+      if (typeof window.readTrackerDisplaySeconds === 'function') {
+        const frozen = window.readTrackerDisplaySeconds();
+        if (frozen > 0) {
+          window.__todayBaseAtLastStop = frozen;
+          window.setTrackerDisplaySeconds?.(frozen);
+          void this.ipcRenderer.invoke('set-frozen-total-at-stop', frozen).catch(() => {});
+        }
+      }
+      this.stopSessionTimer();
+      window.clearAllTimers?.();
+
+      // Wait for stop to complete before updating UI
       const result = await this.ipcRenderer.invoke('stop-tracking');
       console.log('⏹️ Stop tracking result:', result);
       

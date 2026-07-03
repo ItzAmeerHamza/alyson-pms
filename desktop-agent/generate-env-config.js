@@ -31,6 +31,8 @@ const credentials = {
   VITE_COGNITO_USER_POOL_ID: process.env.VITE_COGNITO_USER_POOL_ID || process.env.COGNITO_USER_POOL_ID || '',
   VITE_COGNITO_CLIENT_ID: process.env.VITE_COGNITO_CLIENT_ID || process.env.COGNITO_CLIENT_ID || '',
   VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3000',
+  BACKEND_API_URL: process.env.BACKEND_API_URL || '',
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || '',
   NODE_ENV: isBuildProcess ? 'production' : (process.env.NODE_ENV || 'development'),
 };
 
@@ -61,25 +63,16 @@ if (isBuildProcess) {
   console.log('ðŸ”§ Development mode - will use fallback loading');
 }
 
-// Generate the embedded config
+// Generate the embedded config (JSON.stringify keeps API keys with / + safe)
 const configContent = `// Auto-generated embedded configuration
 // Generated: ${new Date().toISOString()}
 // Build process: ${isBuildProcess}
 
-module.exports = {
-  VITE_SUPABASE_URL: '${credentials.VITE_SUPABASE_URL}',
-  VITE_SUPABASE_ANON_KEY: '${credentials.VITE_SUPABASE_ANON_KEY}',
-  SUPABASE_URL: '${credentials.SUPABASE_URL}',
-  SUPABASE_ANON_KEY: '${credentials.SUPABASE_ANON_KEY}',
-  VITE_AUTH_PROVIDER: '${credentials.VITE_AUTH_PROVIDER}',
-  VITE_COGNITO_REGION: '${credentials.VITE_COGNITO_REGION}',
-  VITE_COGNITO_USER_POOL_ID: '${credentials.VITE_COGNITO_USER_POOL_ID}',
-  VITE_COGNITO_CLIENT_ID: '${credentials.VITE_COGNITO_CLIENT_ID}',
-  VITE_API_BASE_URL: '${credentials.VITE_API_BASE_URL}',
-  NODE_ENV: '${credentials.NODE_ENV}',
+module.exports = ${JSON.stringify({
+  ...credentials,
   _generated: true,
-  _build_process: ${isBuildProcess}
-};
+  _build_process: isBuildProcess,
+}, null, 2)};
 `;
 
 // Write the generated config

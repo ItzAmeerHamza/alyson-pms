@@ -1,18 +1,12 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { SupabaseService } from '../common/supabase.service';
 import { DatabaseService } from '../database/database.service';
+import {
+  parseTenantUserId,
+  USER_PROFILE_SELECT,
+  WORKSPACE_AS_ORG_SELECT,
+} from '../database/time-doctor-sql';
 import { CognitoService } from './cognito.service';
-
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  role: string;
-  aud: string;
-  exp: number;
-  iat: number;
-}
 
 export interface User {
   id: string;
@@ -46,22 +40,19 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    private jwtService: JwtService,
     private configService: ConfigService,
-    private supabaseService: SupabaseService,
     private databaseService: DatabaseService,
     private cognitoService: CognitoService,
   ) {}
 
   async getAuthProfile(token: string): Promise<AuthProfileResponse> {
-    if (this.cognitoService.isEnabled() && this.databaseService.isEnabled()) {
-      return this.getProfileFromCognitoToken(token);
+    if (!this.databaseService.isEnabled()) {
+      throw new UnauthorizedException('Database not configured');
     }
-    const user = await this.getUserFromToken(token);
-    const organization = user.organization_id
-      ? await this.getOrganizationById(user.organization_id)
-      : null;
-    return { user, organization };
+    if (!this.cognitoService.isEnabled()) {
+      throw new UnauthorizedException('Cognito not configured');
+    }
+    return this.getProfileFromCognitoToken(token);
   }
 
   async getProfileFromCognitoToken(token: string): Promise<AuthProfileResponse> {
@@ -73,8 +64,11 @@ export class AuthService {
     if (!user && email) {
       user = await this.findUserByEmail(email);
       if (user) {
-        await this.linkCognitoSub(user.id, payload.sub);
-        user = { ...user, cognito_sub: payload.sub };
+        await this.ensureUserExtension(parseTenantUserId(user.id), payload.sub);
+        user = (await this.findUserByCognitoSub(payload.sub)) ?? {
+          ...user,
+          cognito_sub: payload.sub,
+        };
       }
     }
 
@@ -93,57 +87,31 @@ export class AuthService {
   }
 
   async getOrganizationBySlug(slug: string): Promise<OrganizationSummary | null> {
+    if (!this.databaseService.isEnabled()) return null;
     const normalized = slug.trim().toLowerCase();
-    if (this.databaseService.isEnabled()) {
-      const result = await this.databaseService.query<OrganizationSummary>(
-        `SELECT id, name, slug, logo_url, COALESCE(is_active, true) AS is_active
-         FROM public.organizations
-         WHERE lower(slug) = $1
-         LIMIT 1`,
-        [normalized],
-      );
-      return result.rows[0] ?? null;
-    }
-
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('organizations')
-      .select('id, name, slug, logo_url, is_active')
-      .eq('slug', normalized)
-      .single();
-
-    if (error || !data) return null;
-    return data as OrganizationSummary;
+    const result = await this.databaseService.query<OrganizationSummary>(
+      `${WORKSPACE_AS_ORG_SELECT}
+       WHERE lower(coalesce(w.key, w.id::text)) = $1
+          OR w.id::text = $1
+          OR lower(w.name) = $1
+       LIMIT 1`,
+      [normalized],
+    );
+    return result.rows[0] ?? null;
   }
 
   async getOrganizationById(orgId: string): Promise<OrganizationSummary | null> {
-    if (this.databaseService.isEnabled()) {
-      const result = await this.databaseService.query<OrganizationSummary>(
-        `SELECT id, name, slug, logo_url, COALESCE(is_active, true) AS is_active
-         FROM public.organizations WHERE id = $1 LIMIT 1`,
-        [orgId],
-      );
-      return result.rows[0] ?? null;
-    }
-
-    const { data, error } = await this.supabaseService
-      .getClient()
-      .from('organizations')
-      .select('id, name, slug, logo_url, is_active')
-      .eq('id', orgId)
-      .single();
-
-    if (error || !data) return null;
-    return data as OrganizationSummary;
+    if (!this.databaseService.isEnabled()) return null;
+    const result = await this.databaseService.query<OrganizationSummary>(
+      `${WORKSPACE_AS_ORG_SELECT} WHERE w.id = $1::int LIMIT 1`,
+      [orgId],
+    );
+    return result.rows[0] ?? null;
   }
 
   private async findUserByCognitoSub(sub: string): Promise<User | null> {
     const result = await this.databaseService.query<User>(
-      `SELECT id, email, full_name, role, avatar_url, organization_id,
-              COALESCE(is_org_admin, false) AS is_org_admin,
-              COALESCE(is_super_admin, false) AS is_super_admin,
-              cognito_sub, created_at, updated_at
-       FROM public.users WHERE cognito_sub = $1 LIMIT 1`,
+      `${USER_PROFILE_SELECT} WHERE ext.cognito_sub = $1 LIMIT 1`,
       [sub],
     );
     return result.rows[0] ?? null;
@@ -151,89 +119,57 @@ export class AuthService {
 
   private async findUserByEmail(email: string): Promise<User | null> {
     const result = await this.databaseService.query<User>(
-      `SELECT id, email, full_name, role, avatar_url, organization_id,
-              COALESCE(is_org_admin, false) AS is_org_admin,
-              COALESCE(is_super_admin, false) AS is_super_admin,
-              cognito_sub, created_at, updated_at
-       FROM public.users WHERE lower(email) = $1 LIMIT 1`,
+      `${USER_PROFILE_SELECT} WHERE lower(u.email) = $1 LIMIT 1`,
       [email],
     );
     return result.rows[0] ?? null;
   }
 
-  private async linkCognitoSub(userId: string, cognitoSub: string): Promise<void> {
+  private async ensureUserExtension(userId: number, cognitoSub?: string): Promise<void> {
+    const ws = await this.databaseService.query<{ workspace_id: number }>(
+      `SELECT pw.workspace_id
+       FROM tenant.profile p
+       JOIN tenant.profile_workspace pw ON pw.profile_id = p.id
+       WHERE p.user_id = $1 AND coalesce(pw.active, true) = true
+       ORDER BY pw.id
+       LIMIT 1`,
+      [userId],
+    );
+    const workspaceId = ws.rows[0]?.workspace_id ?? null;
     await this.databaseService.query(
-      `UPDATE public.users SET cognito_sub = $1, updated_at = NOW()
-       WHERE id = $2 AND (cognito_sub IS NULL OR cognito_sub = $1)`,
-      [cognitoSub, userId],
+      `INSERT INTO time_doctor.user_extensions (user_id, workspace_id, cognito_sub)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id) DO UPDATE SET
+         cognito_sub = COALESCE(time_doctor.user_extensions.cognito_sub, EXCLUDED.cognito_sub),
+         workspace_id = COALESCE(time_doctor.user_extensions.workspace_id, EXCLUDED.workspace_id),
+         updated_at = NOW()`,
+      [userId, workspaceId, cognitoSub ?? null],
     );
   }
 
-  async validateToken(token: string): Promise<JwtPayload> {
-    try {
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('SUPABASE_JWT_SECRET'),
-      });
-
-      return payload;
-    } catch (error) {
-      this.logger.error('Token validation failed:', error);
-      throw new UnauthorizedException('Invalid token');
-    }
-  }
-
   async getUserFromToken(token: string): Promise<User> {
-    if (this.cognitoService.isEnabled() && this.databaseService.isEnabled()) {
-      const profile = await this.getProfileFromCognitoToken(token);
-      return profile.user;
-    }
-
-    const payload = await this.validateToken(token);
-
-    const { data: user, error } = await this.supabaseService
-      .getClient()
-      .from('users')
-      .select('*')
-      .eq('id', payload.sub)
-      .single();
-
-    if (error || !user) {
-      this.logger.error('User not found:', error);
-      throw new UnauthorizedException('User not found');
-    }
-
-    return user;
+    const profile = await this.getProfileFromCognitoToken(token);
+    return profile.user;
   }
 
   async validateUserRole(userId: string, requiredRoles: string[]): Promise<boolean> {
-    if (this.databaseService.isEnabled()) {
-      const result = await this.databaseService.query<{ role: string }>(
-        `SELECT role FROM public.users WHERE id = $1 LIMIT 1`,
-        [userId],
-      );
-      const user = result.rows[0];
-      return user ? requiredRoles.includes(user.role) : false;
-    }
-
-    const { data: user, error } = await this.supabaseService
-      .getClient()
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single();
-
-    if (error || !user) {
-      return false;
-    }
-
-    return requiredRoles.includes(user.role);
+    const uid = parseTenantUserId(userId);
+    const result = await this.databaseService.query<{ role: string }>(
+      `SELECT coalesce(ext.pulse_role, 'employee') AS role
+       FROM tenant."user" u
+       LEFT JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [uid],
+    );
+    const user = result.rows[0];
+    return user ? requiredRoles.includes(user.role) : false;
   }
 
   extractTokenFromHeader(authHeader: string): string {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Invalid authorization header');
     }
-
     return authHeader.substring(7);
   }
 }

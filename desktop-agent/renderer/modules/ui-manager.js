@@ -60,6 +60,20 @@ class UIManager {
     };
   }
 
+  /** Retry IPC invoke while main process is still registering handlers at startup. */
+  async _invokeIpcWhenReady(channel, maxAttempts = 24, delayMs = 250) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.ipcRenderer.invoke(channel);
+      } catch (err) {
+        const msg = String(err?.message || err);
+        const notReady = msg.includes('No handler registered');
+        if (!notReady || attempt === maxAttempts - 1) throw err;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
   initializeUICache() {
     if (this.cachedElements) return this.cachedElements;
     
@@ -1242,6 +1256,37 @@ class UIManager {
     }
   }
 
+  /** First name for welcome banners (supports Cognito `name` or RDS `full_name`). */
+  firstNameFromProfile(userProfile) {
+    if (!userProfile) return 'User';
+    const raw =
+      userProfile.first_name ||
+      userProfile.name ||
+      userProfile.full_name ||
+      userProfile.email?.split('@')[0] ||
+      'User';
+    const first = String(raw).trim().split(/\s+/)[0];
+    return first || 'User';
+  }
+
+  /** Apply welcome text from renderer auth state (Cognito path — no Supabase profile). */
+  syncWelcomeFromAuthManager() {
+    try {
+      const authUser =
+        window.moduleInstances?.authManager?.getCurrentUser?.() ||
+        window.moduleInstances?.authManager?.currentUser;
+      if (!authUser) return;
+      this.updateUserDisplay({
+        email: authUser.email,
+        full_name: authUser.name || authUser.full_name,
+        name: authUser.name,
+        role: authUser.role,
+      });
+    } catch (e) {
+      console.warn('[UI-MANAGER] syncWelcomeFromAuthManager failed:', e?.message || e);
+    }
+  }
+
   async loadUserProfile() {
     try {
       if (this.ipcRenderer) {
@@ -1256,10 +1301,12 @@ class UIManager {
   }
 
   updateUserDisplay(userProfile) {
-    const displayName = userProfile.full_name || userProfile.email.split('@')[0];
-    const initials = userProfile.full_name
-      ? userProfile.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
-      : userProfile.email.split('@')[0].substring(0, 2).toUpperCase();
+    const firstName = this.firstNameFromProfile(userProfile);
+    const displayName =
+      userProfile.full_name || userProfile.name || userProfile.email?.split('@')[0] || firstName;
+    const initials = displayName
+      ? displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+      : userProfile.email?.split('@')[0].substring(0, 2).toUpperCase();
     
     // Update user name in sidebar
     const sidebarName = document.getElementById('userName');
@@ -1270,13 +1317,13 @@ class UIManager {
     // Update dashboard welcome (if exists)
     const welcomeName = document.getElementById('welcomeUserName');
     if (welcomeName) {
-      welcomeName.textContent = displayName;
+      welcomeName.textContent = firstName;
     }
     
     // Update Time Tracker welcome section
     const trackerWelcomeName = document.getElementById('trackerWelcomeUserName');
     if (trackerWelcomeName) {
-      trackerWelcomeName.textContent = displayName;
+      trackerWelcomeName.textContent = firstName;
     }
     
     // Update user initials - dashboard
@@ -2711,31 +2758,45 @@ class UIManager {
       }
       
       if (!projectData || projectData.length === 0) {
-        const noProjectsOption = '<option value="" disabled>No projects assigned</option>';
+        let emptyMessage = 'No projects assigned — ask your admin';
+        try {
+          const appConfig = await this.ipcRenderer.invoke('get-config');
+          const backendReady = !!(appConfig?.backend_api_url && appConfig?.backend_api_key);
+          if (appConfig?.auth_provider === 'cognito' && !backendReady) {
+            emptyMessage =
+              'App build missing API config — rebuild with generate-env-config.js --build';
+            console.warn('⚠️ [UI-MANAGER] Cognito mode but backend API keys not embedded in this build');
+          }
+        } catch (_) {}
+
+        const noProjectsOption = `<option value="" disabled>${emptyMessage}</option>`;
         if (projectSelect) projectSelect.innerHTML += noProjectsOption;
         if (dashboardProjectSelect) dashboardProjectSelect.innerHTML += noProjectsOption;
-        console.log('⚠️ [UI-MANAGER] No projects assigned to user');
+        console.log('⚠️ [UI-MANAGER] No projects for user', currentUser.id);
         return;
       }
       
       // Add projects to both dropdowns
-      projectData.forEach(assignment => {
-        if (assignment.projects) {
-          // Add to Time Tracker dropdown
-          if (projectSelect) {
-            const option = document.createElement('option');
-            option.value = assignment.project_id;
-            option.textContent = assignment.projects.name;
-            projectSelect.appendChild(option);
-          }
-          
-          // Add to Dashboard dropdown
-          if (dashboardProjectSelect) {
-            const option = document.createElement('option');
-            option.value = assignment.project_id;
-            option.textContent = assignment.projects.name;
-            dashboardProjectSelect.appendChild(option);
-          }
+      projectData.forEach((assignment) => {
+        const project =
+          assignment.projects ||
+          (assignment.project_id && assignment.name
+            ? { id: assignment.project_id, name: assignment.name }
+            : null);
+        if (!project?.name) return;
+
+        if (projectSelect) {
+          const option = document.createElement('option');
+          option.value = assignment.project_id || project.id;
+          option.textContent = project.name;
+          projectSelect.appendChild(option);
+        }
+
+        if (dashboardProjectSelect) {
+          const option = document.createElement('option');
+          option.value = assignment.project_id || project.id;
+          option.textContent = project.name;
+          dashboardProjectSelect.appendChild(option);
         }
       });
       
@@ -2743,6 +2804,11 @@ class UIManager {
       
     } catch (error) {
       console.error('❌ [UI-MANAGER] Error loading main app projects:', error);
+      const projectSelect = document.getElementById('projectSelect');
+      const dashboardProjectSelect = document.getElementById('dashboardProjectSelect');
+      const errorOption = '<option value="" disabled>Could not load projects</option>';
+      if (projectSelect) projectSelect.innerHTML = errorOption;
+      if (dashboardProjectSelect) dashboardProjectSelect.innerHTML = errorOption;
     }
   }
 
@@ -2790,6 +2856,7 @@ class UIManager {
       
       // Load user profile for welcome banner
       console.log('🔧 [UI-MANAGER] Loading user profile...');
+      this.syncWelcomeFromAuthManager();
       this.loadUserProfile();
       
       // Load projects for main app dropdowns
@@ -2964,7 +3031,7 @@ class UIManager {
     // override the button state during async tracking start
     if (status === 'stopped') {
       const ipcMgr = this.ipcManager || window.ipcManager || (typeof moduleInstances !== 'undefined' && moduleInstances.ipcManager);
-      if (ipcMgr && ipcMgr.optimisticMode) {
+      if (ipcMgr && (ipcMgr.optimisticMode || ipcMgr.startInProgress)) {
         console.log('⚠️ UIManager: Ignoring stopped status - optimistic tracking in progress');
         return; // Don't override button state during optimistic mode
       }
@@ -3227,15 +3294,82 @@ class UIManager {
     if (!totalSeconds || totalSeconds === 0) {
       return '0h 0m';
     }
-    
+
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
-    } else {
-      return `${minutes}m`;
     }
+    return `${minutes}m`;
+  }
+
+  /**
+   * Precise duration for monthly report — always shows seconds so session rows add up to totals.
+   */
+  formatReportDuration(totalSeconds) {
+    const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    if (sec === 0) return '0m';
+
+    const hours = Math.floor(sec / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    const seconds = sec % 60;
+
+    if (hours > 0) {
+      if (seconds > 0) return `${hours}h ${minutes}m ${seconds}s`;
+      if (minutes > 0) return `${hours}h ${minutes}m`;
+      return `${hours}h`;
+    }
+    if (minutes > 0) {
+      return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+    }
+    return `${seconds}s`;
+  }
+
+  _localDateStr(d = new Date()) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  _formatShortLocalDate(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  _getWeekDisplayLabel(weekStart, weekEnd) {
+    const todayStr = this._localDateStr();
+    const range = `${this._formatShortLocalDate(weekStart)} – ${this._formatShortLocalDate(weekEnd)}`;
+
+    if (todayStr >= weekStart && todayStr <= weekEnd) {
+      return { title: 'This week', range, isCurrent: true };
+    }
+
+    const [ey, em, ed] = weekEnd.split('-').map(Number);
+    const weekEndDate = new Date(ey, em - 1, ed);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysSinceWeekEnded = Math.floor((today - weekEndDate) / (24 * 60 * 60 * 1000));
+    if (daysSinceWeekEnded >= 0 && daysSinceWeekEnded < 7) {
+      return { title: 'Last week', range, isCurrent: false };
+    }
+
+    return {
+      title: `Week of ${this._formatShortLocalDate(weekStart)}`,
+      range,
+      isCurrent: false,
+    };
+  }
+
+  _filterVisibleWeeks(weeks) {
+    const todayStr = this._localDateStr();
+    return (weeks || []).filter((week) => {
+      if ((week.totalTime || 0) > 0) return true;
+      return todayStr >= week.weekStart && todayStr <= week.weekEnd;
+    });
   }
 
   // Hardware acceleration for smooth transitions
@@ -3328,8 +3462,10 @@ class UIManager {
           // FIX-5: If the tray timer is actively sending ticks, it is the
           // authoritative timer source. Don't reset displays on stale/failed
           // state queries — the tray timer will correct any drift within 1s.
-          if (window.__trayTimerActive) {
+          if (typeof window.isTrayTimerDrivingDisplay === 'function' && window.isTrayTimerDrivingDisplay()) {
             console.log('⚠️ [TIMER-REFRESH] State says not tracking, but tray timer is active — skipping reset');
+          } else if (this.ipcManager?.optimisticMode || this.ipcManager?.startInProgress) {
+            console.log('⚠️ [TIMER-REFRESH] Start in progress — skipping stopped reset');
           } else {
             this.setTrackingStatus('stopped');
             
@@ -3338,10 +3474,13 @@ class UIManager {
               try {
                 const today = await this.ipcRenderer.invoke('get-today-time-stats');
                 if (today && typeof today.totalTime === 'number') {
-                  const t = Math.max(0, Math.floor(today.totalTime));
-                  const th = Math.floor(t / 3600);
-                  const tm = Math.floor((t % 3600) / 60);
-                  const ts = t % 60;
+                  const displaySec =
+                    typeof window.resolveStoppedDisplaySeconds === 'function'
+                      ? window.resolveStoppedDisplaySeconds(today.totalTime)
+                      : Math.max(0, Math.floor(today.totalTime));
+                  const th = Math.floor(displaySec / 3600);
+                  const tm = Math.floor((displaySec % 3600) / 60);
+                  const ts = displaySec % 60;
                   timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
                 } else {
                   timerElement.textContent = '00:00:00';
@@ -3692,10 +3831,14 @@ class UIManager {
 
     // Set default date to today if not already set
     if (dateInput && !dateInput.value) {
-      dateInput.value = new Date().toISOString().split('T')[0];
+      const d = new Date();
+      dateInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
-    const selectedDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+    const selectedDate = dateInput ? dateInput.value : (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
 
     // Show loading
     if (loadingEl) loadingEl.style.display = 'block';
@@ -3899,8 +4042,7 @@ class UIManager {
     if (contentEl) contentEl.style.display = 'none';
 
     try {
-      // Fetch report data (single handler has everything we need)
-      const reportData = await this.ipcRenderer.invoke('get-monthly-report-data');
+      const reportData = await this._invokeIpcWhenReady('get-monthly-report-data');
 
       console.log('[MONTHLY-REPORT] Data fetched:', {
         totalSeconds: reportData?.totalSeconds,
@@ -3912,8 +4054,20 @@ class UIManager {
       // Hide loading
       if (loadingEl) loadingEl.style.display = 'none';
 
+      if (reportData?.error) {
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          emptyEl.innerHTML = `
+            <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: #f59e0b; margin-bottom: 12px;"></i>
+            <p style="color: #64748b; font-size: 14px;">Could not load report data.<br>${reportData.error}</p>
+          `;
+        }
+        if (labelEl) labelEl.textContent = 'Unavailable';
+        return;
+      }
+
       // Check for empty state
-      if (!reportData || reportData.error || (reportData.totalSessions === 0 && reportData.totalSeconds === 0)) {
+      if (!reportData || (reportData.totalSessions === 0 && reportData.totalSeconds === 0)) {
         if (emptyEl) emptyEl.style.display = 'block';
         if (labelEl) labelEl.textContent = reportData?.monthLabel || 'No data';
         return;
@@ -3963,7 +4117,7 @@ class UIManager {
 
     // Total hours
     const totalHoursEl = document.getElementById('mrTotalHours');
-    if (totalHoursEl) totalHoursEl.textContent = this.formatDuration(totalSeconds);
+    if (totalHoursEl) totalHoursEl.textContent = this.formatReportDuration(totalSeconds);
 
     // Sessions
     const sessionsEl = document.getElementById('mrTotalSessions');
@@ -3973,7 +4127,7 @@ class UIManager {
     const avgPerDayEl = document.getElementById('mrAvgPerDay');
     if (avgPerDayEl) {
       const avgSecondsPerDay = activeDays > 0 ? Math.floor(totalSeconds / activeDays) : 0;
-      avgPerDayEl.textContent = this.formatDuration(avgSecondsPerDay);
+      avgPerDayEl.textContent = this.formatReportDuration(avgSecondsPerDay);
     }
 
     // Activity level
@@ -4009,8 +4163,7 @@ class UIManager {
       const isToday = day.date === todayStr;
       const isZero = day.totalSeconds === 0;
       const dayNum = parseInt(day.date.split('-')[2], 10);
-      const tooltip = `${day.dayName} ${dayNum}: ${this.formatDuration(day.totalSeconds)}`;
-
+      const tooltip = `${day.dayName} ${dayNum}: ${this.formatReportDuration(day.totalSeconds)}`;
       html += `
         <div class="mr-day-bar-wrapper">
           <div class="mr-day-bar ${isToday ? 'today' : ''} ${isZero ? 'zero' : ''}"
@@ -4029,28 +4182,34 @@ class UIManager {
     const container = document.getElementById('mrWeeklyBreakdown');
     if (!container) return;
 
-    const weeks = reportData?.weeklyBreakdown || [];
+    const weeks = this._filterVisibleWeeks(reportData?.weeklyBreakdown || []);
     if (weeks.length === 0) {
-      container.innerHTML = '<div style="color: #94a3b8; font-size: 13px;">No weekly data</div>';
+      container.innerHTML = '<div style="color: #94a3b8; font-size: 13px;">No tracked time yet this month. Start a timer and your weekly totals will appear here.</div>';
       return;
     }
 
-    const maxTime = Math.max(...weeks.map(w => w.totalTime), 1);
+    const maxTime = Math.max(...weeks.map((w) => w.totalTime), 1);
 
     let html = '';
-    weeks.forEach((week, idx) => {
-      const startParts = week.weekStart.split('-');
-      const endParts = week.weekEnd.split('-');
-      const label = `Week ${idx + 1} (${parseInt(startParts[1])}/${parseInt(startParts[2])} - ${parseInt(endParts[1])}/${parseInt(endParts[2])})`;
-      const pct = Math.round((week.totalTime / maxTime) * 100);
+    weeks.forEach((week) => {
+      const { title, range, isCurrent } = this._getWeekDisplayLabel(week.weekStart, week.weekEnd);
+      const pct = week.totalTime > 0 ? Math.max(8, Math.round((week.totalTime / maxTime) * 100)) : 0;
+      const durationLabel = this.formatReportDuration(week.totalTime);
+      const emptyHint = week.totalTime === 0
+        ? '<div class="mr-week-label-range">No time tracked yet</div>'
+        : '';
 
       html += `
-        <div class="mr-week-row">
-          <div class="mr-week-label">${label}</div>
-          <div class="mr-week-bar-track">
+        <div class="mr-week-row${isCurrent ? ' is-current' : ''}">
+          <div class="mr-week-label">
+            <div class="mr-week-label-title">${this._escapeHtml(title)}</div>
+            <div class="mr-week-label-range">${this._escapeHtml(range)}</div>
+            ${emptyHint}
+          </div>
+          <div class="mr-week-bar-track" title="${durationLabel} tracked this week">
             <div class="mr-week-bar-fill" style="width: ${pct}%;"></div>
           </div>
-          <div class="mr-week-value">${this.formatDuration(week.totalTime)}</div>
+          <div class="mr-week-value">${durationLabel}</div>
         </div>
       `;
     });
@@ -4087,7 +4246,7 @@ class UIManager {
             </div>
           </div>
           <div class="mr-project-stats">
-            <strong>${this.formatDuration(proj.totalSeconds)}</strong> (${share}%)
+            <strong>${this.formatReportDuration(proj.totalSeconds)}</strong> (${share}%)
           </div>
         </div>
       `;
@@ -4107,8 +4266,11 @@ class UIManager {
       return;
     }
 
+    let listedSeconds = 0;
     let html = '';
-    sessions.slice(0, 10).forEach(session => {
+    sessions.forEach((session) => {
+      const durationSec = session.durationSeconds || 0;
+      listedSeconds += durationSec;
       const startDate = new Date(session.startTime);
       const dateStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       const startTimeStr = startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -4116,14 +4278,14 @@ class UIManager {
       if (session.endTime) {
         endTimeStr = new Date(session.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
       }
-      const durationStr = this.formatDuration(session.durationSeconds || 0);
+      const durationStr = this.formatReportDuration(durationSec);
       const isActive = session.status === 'active';
 
       html += `
         <div class="mr-session-row">
           <div class="mr-session-date">${dateStr}</div>
           <div class="mr-session-project">${this._escapeHtml(session.projectName)}</div>
-          <div class="mr-session-time">${startTimeStr} - ${endTimeStr}</div>
+          <div class="mr-session-time">${startTimeStr} – ${endTimeStr}</div>
           <div class="mr-session-duration">${durationStr}</div>
           <div class="mr-session-status ${isActive ? 'active' : 'completed'}">
             <span class="mr-session-status-dot"></span>
@@ -4133,6 +4295,13 @@ class UIManager {
       `;
     });
 
+    const monthTotal = reportData?.totalSeconds || 0;
+    const totalsMatch = listedSeconds === monthTotal;
+    const footerNote = totalsMatch
+      ? `${sessions.length} session${sessions.length === 1 ? '' : 's'} · listed durations total <strong>${this.formatReportDuration(listedSeconds)}</strong>`
+      : `${sessions.length} session${sessions.length === 1 ? '' : 's'} shown · listed <strong>${this.formatReportDuration(listedSeconds)}</strong> of <strong>${this.formatReportDuration(monthTotal)}</strong> month total`;
+
+    html += `<div class="mr-session-footer">${footerNote}</div>`;
     container.innerHTML = html;
   }
 

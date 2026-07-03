@@ -1,6 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: TimeFlow NestJS API — API Gateway HTTP API + Lambda (container image)
+Description: Alyson Time Doctor NestJS API — API Gateway HTTP API + Lambda (container image)
+
+# Deploy stack name (you choose at sam deploy): alyson-time-doctor-api-dev
+# ECR repository name: alyson-time-doctor-api
+# Required resource tag on all supported services: team = alyson PM
 
 Parameters:
   ImageUri:
@@ -12,15 +16,23 @@ Parameters:
   VpcSecurityGroupIds:
     Type: CommaDelimitedList
     Description: Security group(s) for Lambda — must allow egress to RDS Proxy
+  VpcId:
+    Type: String
+    Default: vpc-0b6659ffcf9d60888
+    Description: VPC for Lambda and interface endpoints (Cognito JWKS)
+  CognitoEndpointSubnetIds:
+    Type: CommaDelimitedList
+    Default: subnet-0ddb23264a678e2dc
+    Description: Subnet(s) for Cognito IDP VPC endpoint (must be AZs that support cognito-idp, e.g. us-west-2c not 2d)
   DatabaseHost:
     Type: String
     Description: RDS Proxy hostname
   DatabaseName:
     Type: String
-    Default: timeflow
+    Default: revclouddb
   DatabaseUser:
     Type: String
-    Default: timeflow_admin
+    Default: alyson_time_doctor_api
   DatabasePassword:
     Type: String
     NoEcho: true
@@ -39,19 +51,61 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Desktop agent /sync/* authentication
+  CognitoRegion:
+    Type: String
+    Default: us-west-2
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito user pool for JWT validation
+  CognitoClientId:
+    Type: String
+    Description: Cognito app client id
+
 Globals:
   Function:
     Timeout: 29
     MemorySize: 1024
     Architectures:
       - arm64
+    Tags:
+      team: alyson PM
 
 Resources:
-  TimeFlowApiFunction:
+  CognitoIdpEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Alyson Time Doctor API - Cognito IDP VPC endpoint ingress
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: team
+          Value: alyson PM
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Select [0, !Ref VpcSecurityGroupIds]
+
+  CognitoIdpVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.cognito-idp
+      VpcId: !Ref VpcId
+      SubnetIds: !Ref CognitoEndpointSubnetIds
+      SecurityGroupIds:
+        - !Ref CognitoIdpEndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: team
+          Value: alyson PM
+
+  AlysonTimeDoctorApiFunction:
     Type: AWS::Serverless::Function
     Properties:
       PackageType: Image
       ImageUri: !Ref ImageUri
+      Tags:
+        team: alyson PM
       Environment:
         Variables:
           NODE_ENV: production
@@ -67,6 +121,10 @@ Resources:
           AWS_S3_SCREENSHOTS_PREFIX: !Ref S3Prefix
           ALLOWED_ORIGINS: !Ref AllowedOrigins
           INTERNAL_API_KEY: !Ref InternalApiKey
+          COGNITO_REGION: !Ref CognitoRegion
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
       VpcConfig:
         SubnetIds: !Ref VpcSubnetIds
         SecurityGroupIds: !Ref VpcSecurityGroupIds
@@ -85,19 +143,21 @@ Resources:
         ProxyApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref TimeFlowHttpApi
+            ApiId: !Ref AlysonTimeDoctorHttpApi
             Path: /{proxy+}
             Method: ANY
         RootApi:
           Type: HttpApi
           Properties:
-            ApiId: !Ref TimeFlowHttpApi
+            ApiId: !Ref AlysonTimeDoctorHttpApi
             Path: /
             Method: ANY
 
-  TimeFlowHttpApi:
+  AlysonTimeDoctorHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      Tags:
+        team: Alyson PM
       CorsConfiguration:
         AllowOrigins: !Split [',', !Ref AllowedOrigins]
         AllowMethods:
@@ -118,7 +178,7 @@ Resources:
 Outputs:
   ApiEndpoint:
     Description: HTTP API base URL (no trailing slash)
-    Value: !Sub 'https://${TimeFlowHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Value: !Sub 'https://${AlysonTimeDoctorHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
   ApiFunctionArn:
     Description: Lambda function ARN
-    Value: !GetAtt TimeFlowApiFunction.Arn
+    Value: !GetAtt AlysonTimeDoctorApiFunction.Arn

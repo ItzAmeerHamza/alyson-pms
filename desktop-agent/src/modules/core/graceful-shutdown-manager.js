@@ -33,6 +33,44 @@ class GracefulShutdownManager {
   }
 
   /**
+   * Freeze end_time and today's displayed total at the earliest possible moment
+   * (button click, window close, app quit). Safe to call multiple times.
+   */
+  captureStopMoment() {
+    if (!global._stopEndTimeOverride) {
+      global._stopEndTimeOverride = new Date().toISOString();
+    }
+    if (global.trackingManager?._captureStopTodayTotalSnapshot) {
+      global.trackingManager._captureStopTodayTotalSnapshot();
+    }
+    return global._stopEndTimeOverride;
+  }
+
+  hasActiveSessionToClose() {
+    return !!(
+      global.isTracking ||
+      global.trackingManager?.isTracking ||
+      global.currentTimeLogId ||
+      global.trackingManager?.currentTimeLogId
+    );
+  }
+
+  /**
+   * Persist the active session using the moment captured at close/quit click time.
+   */
+  async saveActiveSessionOnClose(reason = 'window_close', message = null) {
+    this.captureStopMoment();
+    if (typeof global.stopTracking !== 'function') {
+      return { success: false, message: 'stopTracking unavailable' };
+    }
+    const defaultMessage =
+      reason === 'window_close'
+        ? 'Window closed — session saved'
+        : 'Application closed — session saved';
+    return global.stopTracking(reason, message || defaultMessage);
+  }
+
+  /**
    * SINGLE ENTRY POINT for all stop/shutdown scenarios
    * Call this from everywhere instead of scattered stop logic
    * 
@@ -46,6 +84,8 @@ class GracefulShutdownManager {
       console.log(`⚠️ [GRACEFUL-SHUTDOWN] Already shutting down (reason: ${this.shutdownReason}), skipping duplicate call`);
       return this.shutdownPromise || { success: false, reason: 'already_shutting_down' };
     }
+
+    this.captureStopMoment();
 
     this.isShuttingDown = true;
     this.shutdownReason = reason;
@@ -77,6 +117,66 @@ class GracefulShutdownManager {
   }
 
   /**
+   * BrowserWindow close handler — saves active session at close instant, then hides or quits.
+   * @returns {boolean} true if close was intercepted for async save
+   */
+  handleWindowCloseEvent(event, mainWindow, options = {}) {
+    const { app, showTrayNotification } = options;
+
+    if (global.isQuitting) {
+      return false;
+    }
+
+    if (!this.hasActiveSessionToClose() || global._windowCloseHandled) {
+      return false;
+    }
+
+    if (event?.preventDefault) {
+      event.preventDefault();
+    }
+
+    if (global._windowCloseSaveInProgress) {
+      return true;
+    }
+
+    global._windowCloseSaveInProgress = true;
+    void (async () => {
+      try {
+        await this.saveActiveSessionOnClose('window_close');
+        global._windowCloseHandled = true;
+      } catch (err) {
+        console.error('❌ [GRACEFUL-SHUTDOWN] Window close save failed:', err?.message || err);
+      } finally {
+        global._windowCloseSaveInProgress = false;
+      }
+
+      if (process.platform !== 'darwin') {
+        global.isQuitting = true;
+        if (app?.quit) {
+          app.quit();
+        } else {
+          const { app: electronApp } = require('electron');
+          electronApp.quit();
+        }
+        return;
+      }
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.hide();
+        const notify =
+          showTrayNotification ||
+          ((title, body) => global.trayManager?.showNotification?.(title, body));
+        notify(
+          'Alyson PM',
+          'App continues running in background. Click the tray icon to restore.',
+        );
+      }
+    })();
+
+    return true;
+  }
+
+  /**
    * Execute the graceful stop sequence
    */
   async _executeGracefulStop(reason, options) {
@@ -91,6 +191,9 @@ class GracefulShutdownManager {
       // CRITICAL: Capture timeLogId BEFORE clearing local state
       // Otherwise _updateDatabase won't have the ID to close
       this._capturedTimeLogId = global.trackingManager?.currentTimeLogId || global.currentTimeLogId;
+
+      // Notify renderer immediately so the clock freezes at click-time (not after slow DB I/O).
+      results.renderer = this._notifyRenderer(reason);
 
       // STEP 1: Update local tracking state immediately (sync)
       this._updateLocalState();
@@ -113,14 +216,14 @@ class GracefulShutdownManager {
       // STEP 6: Stop remaining managers (URL, app, idle, activity — NOT screenshots, already dead)
       await this._stopRemainingManagers();
 
-      // STEP 7: Notify renderer
-      results.renderer = this._notifyRenderer(reason);
-
-      // STEP 8: Save pending data locally (for offline recovery)
+      // STEP 7: Save pending data locally (for offline recovery)
       await this._savePendingData();
 
-      // STEP 9: Update tray
+      // STEP 8: Update tray
       this._updateTray();
+
+      // STEP 9: Tell renderer DB save finished so reports can refresh
+      this._notifySessionDataUpdated(reason);
 
       const allSuccess = results.database; // Database is the critical one
       return { 
@@ -176,13 +279,14 @@ class GracefulShutdownManager {
         return true; // Not a failure - just no session to close
       }
 
-      // Get Supabase client
+      // Get database client(s)
+      const backendTimeLogs = require('../utils/backend-time-logs');
+      const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
       const supabase = global.supabaseService || global.supabaseClient;
       
-      if (!supabase) {
-        console.error('❌ [GRACEFUL-SHUTDOWN] No Supabase client available');
-        // Store for later recovery
-        this._storePendingClose(timeLogId, reason);
+      if (!useBackend && !supabase) {
+        console.error('❌ [GRACEFUL-SHUTDOWN] No database client available');
+        this._storePendingClose(timeLogId, reason, global._stopEndTimeOverride || new Date().toISOString());
         return false;
       }
 
@@ -194,25 +298,33 @@ class GracefulShutdownManager {
       }
       
       // Store pending close first (for recovery if this fails)
-      this._storePendingClose(timeLogId, reason);
+      this._storePendingClose(timeLogId, reason, endTime);
 
-      const { error } = await supabase
-        .from('time_logs')
-        .update({
+      if (useBackend) {
+        await backendTimeLogs.updateTimeLog(timeLogId, {
           end_time: endTime,
-          status: 'completed'
-        })
-        .eq('id', timeLogId);
+          status: 'completed',
+        });
+      } else {
+        const { error } = await supabase
+          .from('time_logs')
+          .update({
+            end_time: endTime,
+            status: 'completed',
+          })
+          .eq('id', timeLogId);
 
-      if (error) {
-        console.error('❌ [GRACEFUL-SHUTDOWN] Database update failed:', error.message);
-        return false;
+        if (error) {
+          console.error('❌ [GRACEFUL-SHUTDOWN] Database update failed:', error.message);
+          return false;
+        }
       }
 
       console.log('✅ [GRACEFUL-SHUTDOWN] Database updated successfully');
       
       // Clear pending close since we succeeded
       this._clearPendingClose(timeLogId);
+      global._stopEndTimeOverride = null;
       
       return true;
 
@@ -225,7 +337,7 @@ class GracefulShutdownManager {
   /**
    * Store pending close for recovery on next startup
    */
-  _storePendingClose(timeLogId, reason) {
+  _storePendingClose(timeLogId, reason, endTime = null) {
     try {
       const fs = require('fs');
       const path = require('path');
@@ -239,7 +351,7 @@ class GracefulShutdownManager {
       const pendingFile = path.join(pendingDir, `${timeLogId}.json`);
       fs.writeFileSync(pendingFile, JSON.stringify({
         timeLogId,
-        endTime: new Date().toISOString(),
+        endTime: endTime || new Date().toISOString(),
         userId: global.config?.user_id || global.currentUserId,
         reason,
         createdAt: new Date().toISOString()
@@ -448,11 +560,16 @@ class GracefulShutdownManager {
     
     try {
       if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+        const frozenTotalSeconds = Math.max(
+          0,
+          Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+        );
         global.mainWindow.webContents.send('tracking-stopped', {
           reason: reason || 'manual',
           message: 'Time tracking stopped',
-          timestamp: new Date().toISOString(),
-          forceStop: true
+          timestamp: global._stopEndTimeOverride || new Date().toISOString(),
+          forceStop: true,
+          frozenTotalSeconds,
         });
         console.log('✅ [GRACEFUL-SHUTDOWN] Renderer notified');
         return true;
@@ -461,6 +578,23 @@ class GracefulShutdownManager {
     } catch (error) {
       console.error('❌ [GRACEFUL-SHUTDOWN] Failed to notify renderer:', error);
       return false;
+    }
+  }
+
+  _notifySessionDataUpdated(reason) {
+    try {
+      if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+        global.mainWindow.webContents.send('session-data-updated', {
+          reason: reason || 'tracking-stopped',
+          timestamp: new Date().toISOString(),
+          frozenTotalSeconds: Math.max(
+            0,
+            Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+          ),
+        });
+      }
+    } catch (error) {
+      console.warn('⚠️ [GRACEFUL-SHUTDOWN] Failed to send session-data-updated:', error?.message);
     }
   }
 
@@ -542,51 +676,79 @@ class GracefulShutdownManager {
       
       const pendingDir = path.join(app.getPath('userData'), 'pending_sessions');
       
-      if (!fs.existsSync(pendingDir)) {
-        console.log('✅ [GRACEFUL-SHUTDOWN] No pending sessions directory');
-        return;
-      }
-      
-      const files = fs.readdirSync(pendingDir).filter(f => f.endsWith('.json'));
-      
-      if (files.length === 0) {
-        console.log('✅ [GRACEFUL-SHUTDOWN] No pending sessions to process');
-        return;
-      }
-      
-      console.log(`🔄 [GRACEFUL-SHUTDOWN] Found ${files.length} pending session(s) to close`);
-      
+      const files = fs.existsSync(pendingDir)
+        ? fs.readdirSync(pendingDir).filter(f => f.endsWith('.json'))
+        : [];
+      const backendTimeLogs = require('../utils/backend-time-logs');
+      const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
       const supabase = global.supabaseService || global.supabaseClient;
-      
-      if (!supabase) {
-        console.warn('⚠️ [GRACEFUL-SHUTDOWN] No Supabase client - will retry later');
-        return;
-      }
-      
-      for (const file of files) {
+
+      if (files.length === 0) {
+        console.log('✅ [GRACEFUL-SHUTDOWN] No pending session files');
+      } else {
+        console.log(`🔄 [GRACEFUL-SHUTDOWN] Found ${files.length} pending session(s) to close`);
+
+        if (!useBackend && !supabase) {
+          console.warn('⚠️ [GRACEFUL-SHUTDOWN] No database client - will retry later');
+          return;
+        }
+
+        for (const file of files) {
         try {
           const filePath = path.join(pendingDir, file);
           const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
           
-          console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId}`);
+          console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId} at ${data.endTime}`);
           
-          const { error } = await supabase
-            .from('time_logs')
-            .update({
-              end_time: data.endTime,
-              status: 'completed'
-            })
-            .eq('id', data.timeLogId);
-          
-          if (error) {
-            console.error(`❌ [GRACEFUL-SHUTDOWN] Failed to close ${data.timeLogId}:`, error.message);
+          if (useBackend) {
+            await backendTimeLogs.updateTimeLog(
+              data.timeLogId,
+              { end_time: data.endTime, status: 'completed' },
+            );
           } else {
-            console.log(`✅ [GRACEFUL-SHUTDOWN] Closed pending session: ${data.timeLogId}`);
-            fs.unlinkSync(filePath);
+            const { error } = await supabase
+              .from('time_logs')
+              .update({
+                end_time: data.endTime,
+                status: 'completed'
+              })
+              .eq('id', data.timeLogId);
+            if (error) {
+              throw error;
+            }
           }
+
+          console.log(`✅ [GRACEFUL-SHUTDOWN] Closed pending session: ${data.timeLogId}`);
+          fs.unlinkSync(filePath);
           
         } catch (e) {
           console.error('❌ [GRACEFUL-SHUTDOWN] Error processing pending file:', e.message);
+        }
+      }
+      }
+
+      if (useBackend) {
+        const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+        const userId = normalizeTenantUserId(
+          global.currentUserId || global.config?.user_id || global.config?.userId,
+        );
+        if (userId) {
+        try {
+          const { getDeviceId } = require('../utils/device-id');
+          const deviceId = getDeviceId();
+          await backendTimeLogs.closeActiveSessions(userId, deviceId);
+          console.log('✅ [GRACEFUL-SHUTDOWN] Reconciled remaining open time_logs via RDS');
+          const reconcileResult = await backendTimeLogs.reconcileInflatedTimeLogs(
+            userId,
+            deviceId,
+          );
+          const reconciled = reconcileResult?.reconciled ?? 0;
+          if (reconciled > 0) {
+            console.log(`✅ [GRACEFUL-SHUTDOWN] Corrected ${reconciled} inflated time_log(s) via RDS`);
+          }
+        } catch (reconcileErr) {
+          console.warn('⚠️ [GRACEFUL-SHUTDOWN] RDS reconcile failed:', reconcileErr.message);
+        }
         }
       }
       

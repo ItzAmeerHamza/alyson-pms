@@ -23,8 +23,7 @@ describe('App Integration', () => {
     expect(app).toBeDefined();
   });
 
-  it('should have GraphQL endpoint', async () => {
-    // This is a basic test to ensure the app starts correctly
+  it('should start without GraphQL or workers', async () => {
     expect(app.getHttpServer()).toBeDefined();
   });
 }); 

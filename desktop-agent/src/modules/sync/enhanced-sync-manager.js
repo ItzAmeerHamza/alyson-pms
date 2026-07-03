@@ -5,6 +5,11 @@
  */
 
 const cleanupRegistry = require('../core/cleanup-registry');
+const {
+  isBackendTimeLogsEnabled,
+  insertAppLogsBatch,
+  insertUrlLogsBatch,
+} = require('../utils/backend-time-logs');
 
 class EnhancedSyncManager {
   constructor(config, supabaseService) {
@@ -408,6 +413,13 @@ class EnhancedSyncManager {
       const remainingMs = this.dbBackoff.nextRetryAt - Date.now();
       throw new Error(`Database in backoff, retry in ${remainingMs}ms`);
     }
+
+    if (isBackendTimeLogsEnabled(this.config)) {
+      await insertUrlLogsBatch(batch, this.config);
+      this.clearDbBackoff();
+      console.log(`✅ [URL-SYNC] Inserted ${batch.length} URL logs via backend RDS`);
+      return;
+    }
     
     let perfPost = null;
     try { if (global.performanceMonitor) { perfPost = global.performanceMonitor.trackSyncPost(); } } catch {}
@@ -806,6 +818,12 @@ class EnhancedSyncManager {
     
     try {
       console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
+
+      if (isBackendTimeLogsEnabled(this.config)) {
+        await insertAppLogsBatch(items, this.config);
+        console.log(`✅ [SYNC] Successfully inserted ${items.length} app logs via backend RDS`);
+        return;
+      }
       
       // Filter out queue-specific fields before inserting
       const rows = items.map(row => {

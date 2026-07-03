@@ -191,26 +191,6 @@ export class DataController {
     return this.dataService.listOrganizations(req.user);
   }
 
-  @Get('ai-insights')
-  async aiInsights(
-    @Req() req: { user: any },
-    @Query('start') start?: string,
-    @Query('end') end?: string,
-    @Query('userId') userId?: string,
-    @Query('limit') limit?: string,
-  ) {
-    if ((start && !end) || (!start && end)) {
-      throw new BadRequestException('Both start and end are required for date filtering');
-    }
-    return this.dataService.listAiInsights(
-      req.user,
-      start,
-      end,
-      userId,
-      limit ? Number(limit) : undefined,
-    );
-  }
-
   @Get('screenshots')
   async screenshots(
     @Req() req: { user: any },

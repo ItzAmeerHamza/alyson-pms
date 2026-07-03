@@ -66,9 +66,10 @@ class ConfigManager {
    */
   async loadEnvironmentConfig() {
     try {
-      // Load from env-config.js if it exists
-      const envConfigPath = path.join(__dirname, '../../env-config.js');
+      // Load from env-config.js at desktop-agent root (not src/)
+      const envConfigPath = path.join(__dirname, '../../../env-config.js');
       if (fs.existsSync(envConfigPath)) {
+        delete require.cache[require.resolve(envConfigPath)];
         this.envConfig = require(envConfigPath);
         console.log('✅ [CONFIG] Environment config loaded');
       }
@@ -78,7 +79,8 @@ class ConfigManager {
         ...this.envConfig,
         VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || this.envConfig.VITE_SUPABASE_URL,
         VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || this.envConfig.VITE_SUPABASE_ANON_KEY,
-        // SECURITY: Service role key removed from client — uses edge function instead
+        BACKEND_API_URL: process.env.BACKEND_API_URL || this.envConfig.BACKEND_API_URL,
+        INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || this.envConfig.INTERNAL_API_KEY,
         USER_ID: process.env.USER_ID || this.envConfig.USER_ID,
         NODE_ENV: process.env.NODE_ENV || 'production'
       };
@@ -118,8 +120,47 @@ class ConfigManager {
    * Merge all configuration sources
    */
   mergeConfigurations() {
+    const prior = global.config && typeof global.config === 'object' ? global.config : {};
+    const backendUrl =
+      prior.backend_api_url ||
+      this.envConfig.BACKEND_API_URL ||
+      process.env.BACKEND_API_URL ||
+      '';
+    const backendKey =
+      prior.backend_api_key ||
+      this.envConfig.INTERNAL_API_KEY ||
+      process.env.INTERNAL_API_KEY ||
+      '';
+
     this.config = {
+      ...prior,
       ...this.envConfig,
+      supabase_url:
+        prior.supabase_url ||
+        this.envConfig.VITE_SUPABASE_URL ||
+        this.envConfig.SUPABASE_URL ||
+        '',
+      supabase_key:
+        prior.supabase_key ||
+        this.envConfig.VITE_SUPABASE_ANON_KEY ||
+        this.envConfig.SUPABASE_ANON_KEY ||
+        '',
+      auth_provider:
+        prior.auth_provider ||
+        this.envConfig.VITE_AUTH_PROVIDER ||
+        this.envConfig.AUTH_PROVIDER ||
+        'supabase',
+      cognito_region: prior.cognito_region || this.envConfig.VITE_COGNITO_REGION || '',
+      cognito_user_pool_id:
+        prior.cognito_user_pool_id || this.envConfig.VITE_COGNITO_USER_POOL_ID || '',
+      cognito_client_id: prior.cognito_client_id || this.envConfig.VITE_COGNITO_CLIENT_ID || '',
+      api_base_url:
+        prior.api_base_url ||
+        this.envConfig.VITE_API_BASE_URL ||
+        this.envConfig.API_BASE_URL ||
+        '',
+      backend_api_url: backendUrl,
+      backend_api_key: backendKey,
       ...this.userConfig,
       winUrlCapture: {
         enableCdp: process.env.WIN_URL_ENABLE_CDP === 'true',

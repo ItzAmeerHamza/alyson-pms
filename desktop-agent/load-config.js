@@ -102,17 +102,25 @@ function loadConfig() {
     process.env.VITE_API_BASE_URL ||
     process.env.API_BASE_URL ||
     envConfig.VITE_API_BASE_URL ||
+    envConfig.API_BASE_URL ||
+    embeddedConfig.VITE_API_BASE_URL ||
+    embeddedConfig.API_BASE_URL ||
     jsonConfig.api_base_url ||
     'http://localhost:3000';
 
   const backendApiUrl =
     process.env.BACKEND_API_URL ||
     envConfig.BACKEND_API_URL ||
+    embeddedConfig.BACKEND_API_URL ||
     jsonConfig.backend_api_url ||
     `${apiBaseUrl.replace(/\/$/, '')}/sync/desktop-action`;
 
   const internalApiKey =
-    process.env.INTERNAL_API_KEY || envConfig.INTERNAL_API_KEY || jsonConfig.backend_api_key || '';
+    process.env.INTERNAL_API_KEY ||
+    envConfig.INTERNAL_API_KEY ||
+    embeddedConfig.INTERNAL_API_KEY ||
+    jsonConfig.backend_api_key ||
+    '';
 
   const useCognito =
     authProvider === 'cognito' && Boolean(cognitoUserPoolId && cognitoClientId);
@@ -146,6 +154,8 @@ function loadConfig() {
   if (useCognito) {
     console.log(`   Cognito pool: ${cognitoUserPoolId}`);
     console.log(`   API base: ${apiBaseUrl}`);
+    const backendReady = Boolean(backendApiUrl && internalApiKey);
+    console.log(`   Backend sync: ${backendReady ? 'configured' : 'MISSING (projects/time logs need BACKEND_API_URL + INTERNAL_API_KEY)'}`);
   } else {
     console.log(`   Using Supabase URL: ${config.supabase_url}`);
   }

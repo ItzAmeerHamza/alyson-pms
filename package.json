@@ -1,35 +1,24 @@
 {
-  "name": "alyson-time-doctor",
+  "name": "alyson-pulse",
   "private": true,
-  "version": "1.0.118",
-  "description": "Alyson PM monorepo — web portal, desktop agent, and backend",
+  "version": "2.0.0",
+  "description": "Alyson Pulse — desktop agent, API, and database",
   "workspaces": [
-    "web",
     "desktop-agent",
-    "backend"
+    "backend",
+    "tasks"
   ],
   "scripts": {
-    "dev": "npm run dev -w web",
-    "dev:web": "npm run dev -w web",
-    "dev:desktop": "npm run start -w desktop-agent",
     "dev:backend": "npm run start:dev -w backend",
-    "build": "npm run build -w web",
-    "build:web": "npm run build -w web",
-    "build:dev": "npm run build:dev -w web",
-    "lint": "npm run lint -w web",
-    "preview": "npm run preview -w web",
-    "db:types": "npm run db:types -w web",
-    "clean": "npm run clean -w web",
-    "clean:all": "npm run clean -w web && npm run clean -w desktop-agent && npm run clean -w backend",
-    "deploy:web": "./scripts/deploy-web-updates.sh",
-    "test:e2e": "cd tests && playwright test",
-    "test:e2e:ui": "cd tests && playwright test --ui",
-    "test:e2e:debug": "cd tests && playwright test --debug",
-    "test:e2e:headed": "cd tests && playwright test --headed",
-    "test:e2e:report": "cd tests && playwright show-report",
-    "test:e2e:ci": "cd tests && NODE_ENV=test TEST_MODE=1 playwright test --reporter=list,junit,html --workers=2",
-    "pretest:e2e": "cd tests && playwright install --with-deps",
-    "test:e2e:install": "cd tests && npm install && npm run install:browsers"
+    "dev:desktop": "npm run start -w desktop-agent",
+    "build:backend": "npm run build -w backend",
+    "build:desktop": "npm run build -w desktop-agent",
+    "test:backend": "npm run test -w backend",
+    "db:migrate": "psql \"$DATABASE_URL\" -f db/migrations/001_pulse_additive.sql",
+    "db:schema": "psql \"$DATABASE_URL\" -f db/schema.sql",
+    "tasks:close-sessions": "npm run close-stale-sessions -w tasks",
+    "tasks:cleanup-screenshots": "npm run cleanup-screenshots -w tasks",
+    "clean:all": "npm run clean -w backend && npm run clean -w desktop-agent 2>/dev/null || true"
   },
   "engines": {
     "node": ">=20"

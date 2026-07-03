@@ -52,8 +52,14 @@ class AppLifecycleManager {
   async createMainWindow() {
     const { BrowserWindow, screen, app } = this.electronModules;
     
-    if (this.mainWindow) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       console.log('⚠️ [APP-LIFECYCLE] Main window already exists');
+      return this.mainWindow;
+    }
+
+    if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+      console.log('⚠️ [APP-LIFECYCLE] Reusing existing global main window');
+      this.mainWindow = global.mainWindow;
       return this.mainWindow;
     }
 
@@ -162,6 +168,20 @@ class AppLifecycleManager {
     // Handle window CLOSE (before it actually closes)
     // FIX v1.0.136: On Windows, pressing X should quit the app (not hide to tray)
     this.mainWindow.on('close', (event) => {
+      const gracefulShutdownManager = require('./graceful-shutdown-manager');
+      const { app } = require('electron');
+
+      if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, {
+        app,
+        showTrayNotification: (title, body) => {
+          if (global.trayManager?.showNotification) {
+            global.trayManager.showNotification(title, body);
+          }
+        },
+      })) {
+        return;
+      }
+
       // If app is quitting (from tray menu, dock quit, etc.), allow the close
       if (global.isQuitting) {
         console.log('🛑 [APP-LIFECYCLE] App is quitting - allowing window close');
@@ -173,7 +193,6 @@ class AppLifecycleManager {
       if (process.platform !== 'darwin') {
         console.log('🛑 [APP-LIFECYCLE] Window X pressed on Windows - triggering app quit');
         global.isQuitting = true;
-        const { app } = require('electron');
         app.quit();
         return;
       }

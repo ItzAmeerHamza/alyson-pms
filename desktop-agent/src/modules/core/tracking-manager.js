@@ -36,6 +36,7 @@ class TrackingManager extends EventEmitter {
     this.consecutiveScreenshotFailures = 0;
     this.lastSuccessfulScreenshotTime = 0;
     this.screenshotFailureStart = null;
+    this._timeLogCheckpointInterval = null;
     
     console.log('✅ TrackingManager initialized');
   }
@@ -90,6 +91,10 @@ try {
       global.isScreenLocked = false;
       // Clear the explicit stop flag so session recovery works again
       global.userExplicitlyStopped = false;
+      global._windowCloseHandled = false;
+      global._stopEndTimeOverride = null;
+
+      await this._waitForPriorStopToFinish();
 
       debugLogger.init('tracking', 'Starting tracking session', {
         projectId: projectId,
@@ -508,8 +513,8 @@ try {
         try {
           const supabase = global.supabaseClient || this.supabaseService || global.supabaseService || global.supabase;
           if (supabase && effectiveUserId && timeLog?.id) {
-            const agg = await computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id);
-            completedTodayBeforeSessionSeconds = agg.completedClosedSeconds;
+            const agg = await computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id, true);
+            completedTodayBeforeSessionSeconds = this._resolveTodayBaseSeconds(agg.completedClosedSeconds);
           }
         } catch (aggErr) {
           console.warn('⚠️ [TRACKING-MANAGER] Could not load today cumulative base:', aggErr?.message || aggErr);
@@ -600,13 +605,20 @@ try {
         global.enhancedScreenshotManager.updateTrackingState(true, this.currentSession);
         
         // CRITICAL FIX: Force start screenshot capture immediately
-        setTimeout(() => {
+        setTimeout(async () => {
           try {
             console.log('🔧 [SCREENSHOT-FIX] Forcing screenshot capture start...');
-            
+
+            try {
+              const { refreshWorkspaceSettings } = require('../utils/workspace-settings');
+              await refreshWorkspaceSettings(global.config, { restartCapture: false });
+            } catch (settingsErr) {
+              console.warn('⚠️ [SCREENSHOT-FIX] Workspace settings refresh failed:', settingsErr?.message || settingsErr);
+            }
+
             // CRITICAL: Ensure nextScreenshotTime is always set
-            if (!global.nextScreenshotTime) {
-              const interval = Math.floor(Math.random() * (360000 - 180000 + 1)) + 180000; // 3-6 minutes
+            if (!global.nextScreenshotTime && global.enhancedScreenshotManager?.getConfiguredScreenshotIntervalMs) {
+              const interval = global.enhancedScreenshotManager.getConfiguredScreenshotIntervalMs();
               global.nextScreenshotTime = new Date(Date.now() + interval);
               console.log(`📸 [SCREENSHOT-FIX] Set nextScreenshotTime to ${global.nextScreenshotTime.toLocaleTimeString()}`);
             }
@@ -770,24 +782,7 @@ try {
         console.error('❌ [TRACKING-MANAGER] Failed to start app detection:', error);
       }
 
-      // CRITICAL FIX: Start anti-cheat detection when tracking begins
-      try {
-        if (global.antiCheatDetector) {
-          console.log('🛡️ [TRACKING-MANAGER] Starting anti-cheat detection...');
-          if (!global.antiCheatDetector.isMonitoring) {
-            global.antiCheatDetector.startMonitoring();
-            console.log('✅ [TRACKING-MANAGER] Anti-cheat detection started');
-          } else {
-            console.log('ℹ️ [TRACKING-MANAGER] Anti-cheat detection already monitoring');
-          }
-        } else {
-          console.warn('⚠️ [TRACKING-MANAGER] AntiCheatDetector not available');
-        }
-      } catch (error) {
-        console.error('❌ [TRACKING-MANAGER] Failed to start anti-cheat detection:', error);
-      }
-
-      // FREEZE FIX: Start monitoring manager NON-BLOCKING.
+      // Start monitoring manager NON-BLOCKING.
       // Previously awaited startAllMonitoring() which runs 7 sequential awaits,
       // blocking the event loop for several seconds on slow machines.
       try {
@@ -854,6 +849,8 @@ try {
       __phase('All subsystems initialized');
       console.log(`✅ [TRACKING-MANAGER] Tracking started with time log ID: ${this.currentTimeLogId}`);
 
+      this._startTimeLogCheckpoint();
+
       // Tray icon was already updated immediately after state set (before subsystem init).
       // No second updateState call needed here.
 
@@ -905,6 +902,10 @@ try {
       
       // Capture timeLogId for background DB update
       const timeLogIdForBackground = this.currentTimeLogId;
+
+      // Freeze end time and displayed total at click — DB write may finish seconds later.
+      global._stopEndTimeOverride = new Date().toISOString();
+      this._captureStopTodayTotalSnapshot();
       
       // Update local state immediately
       this.isTracking = false;
@@ -957,6 +958,8 @@ try {
       } catch (e) {
         console.warn('⚠️ [URL] Failed to stop UrlCaptureManager:', e?.message || e);
       }
+
+      this._stopTimeLogCheckpoint();
       // Update screenshot manager state IMMEDIATELY
       if (global.enhancedScreenshotManager) {
         global.enhancedScreenshotManager.isTracking = false;
@@ -1013,17 +1016,6 @@ try {
       // These were never being stopped, causing log spam and wasted CPU after tracking stops
       this._stopMonitoringSystemsSync();
 
-      // Stop anti-cheat detection when tracking stops
-      try {
-        if (global.antiCheatDetector && global.antiCheatDetector.isMonitoring) {
-          console.log('🛡️ [TRACKING-MANAGER] Stopping anti-cheat detection...');
-          global.antiCheatDetector.stopMonitoring();
-          console.log('✅ [TRACKING-MANAGER] Anti-cheat detection stopped');
-        }
-      } catch (error) {
-        console.error('❌ [TRACKING-MANAGER] Failed to stop anti-cheat detection:', error);
-      }
-      
       // Reset screenshot failure tracking
       this.consecutiveScreenshotFailures = 0;
       this.lastSuccessfulScreenshotTime = 0;
@@ -1132,6 +1124,7 @@ try {
       } finally {
         // Clear stopping flag when done
         global.isStopping = false;
+        global._stopEndTimeOverride = null;
       }
 
       // Emit event for other modules
@@ -1206,8 +1199,11 @@ try {
     // CRITICAL FIX: Set stopping flag to prevent session recovery from restoring tracking
     // This must be set BEFORE changing isTracking to prevent race conditions
     global.isStopping = true;
-    
-    // Update local state
+
+    global._stopEndTimeOverride = new Date().toISOString();
+    this._captureStopTodayTotalSnapshot();
+
+    const timeLogIdForBackground = this.currentTimeLogId;
     this.isTracking = false;
     this.isPaused = false;
     
@@ -1432,6 +1428,82 @@ try {
       
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] Error in sync monitoring stop:', error);
+    }
+  }
+
+  async _waitForPriorStopToFinish(maxMs = 15000) {
+    const started = Date.now();
+    while ((global.isStopping || global._isStoppingTracking) && Date.now() - started < maxMs) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (global.isStopping || global._isStoppingTracking) {
+      console.warn('⚠️ [TRACKING-MANAGER] Starting while a prior stop is still in progress');
+    }
+  }
+
+  _captureStopTodayTotalSnapshot() {
+    try {
+      const tray = global.trayManager;
+      const base = Math.max(0, Math.floor(Number(tray?._cumulativeBaseSeconds) || 0));
+      const start = this.sessionStartTime || global.sessionStartTime;
+      const elapsed = start
+        ? Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000))
+        : 0;
+      const freshTotal = base + elapsed;
+      const trayCumulative =
+        typeof tray?._lastCumulativeSeconds === 'number' ? Math.floor(tray._lastCumulativeSeconds) : 0;
+      const total = Math.max(freshTotal, trayCumulative, global._lastTodayTotalAtStop || 0);
+      if (total > 0) {
+        global._lastTodayTotalAtStop = total;
+        console.log(`⏱️ [TRACKING-MANAGER] Stop snapshot: ${total}s (fresh=${freshTotal}, tray=${trayCumulative})`);
+      }
+    } catch (error) {
+      console.warn('⚠️ [TRACKING-MANAGER] Stop snapshot failed:', error?.message || error);
+    }
+  }
+
+  _resolveTodayBaseSeconds(dbCompletedSeconds) {
+    const db = Math.max(0, Math.floor(Number(dbCompletedSeconds) || 0));
+    const floor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
+    const resolved = Math.max(db, floor);
+    if (floor > db) {
+      console.log(`⏱️ [TRACKING-MANAGER] Using stop snapshot total ${floor}s (DB had ${db}s)`);
+    }
+    if (db >= floor) {
+      global._lastTodayTotalAtStop = null;
+    }
+    return resolved;
+  }
+
+  _startTimeLogCheckpoint() {
+    this._stopTimeLogCheckpoint();
+    if (!backendTimeLogs.isBackendTimeLogsEnabled(this.config)) return;
+
+    const CHECKPOINT_MS = 90 * 1000;
+    this._timeLogCheckpointInterval = setInterval(() => {
+      void this._checkpointCurrentTimeLog();
+    }, CHECKPOINT_MS);
+  }
+
+  _stopTimeLogCheckpoint() {
+    if (this._timeLogCheckpointInterval) {
+      clearInterval(this._timeLogCheckpointInterval);
+      this._timeLogCheckpointInterval = null;
+    }
+  }
+
+  async _checkpointCurrentTimeLog() {
+    const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
+    if (!this.isTracking || !timeLogId) return;
+
+    try {
+      await backendTimeLogs.updateTimeLog(
+        timeLogId,
+        { status: 'active' },
+        this.config,
+      );
+    } catch (err) {
+      console.warn('⚠️ [TRACKING-MANAGER] Time log checkpoint failed:', err?.message || err);
     }
   }
 

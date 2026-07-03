@@ -42,19 +42,8 @@ function getScreenStatus() {
       if (electronStatus === 'denied') return 'denied';
       if (electronStatus === 'restricted') return 'restricted';
 
-      // Fallback probe: if a real screenshot works, treat as authorized.
-      try {
-        const screenshot = require('screenshot-desktop');
-        screenshot({ format: 'png' })
-          .then((buf) => {
-            if (buf && buf.length > 0) {
-              console.log('[perm] Screenshot probe succeeded despite non-granted status:', electronStatus);
-            }
-          })
-          .catch(() => {});
-      } catch (_) {}
-
-      console.log('🔥 [EMERGENCY] Returning "not-determined" (status was:', electronStatus, ')');
+      // Do NOT run screenshot-desktop probes here — they trigger macOS permission
+      // dialogs on every poll (login screen checks every ~4s).
       return 'not-determined';
     } catch (error) {
       console.error('[perm] Error checking macOS screen recording status via Electron:', error);
@@ -119,17 +108,11 @@ function getAccessibilityAuthorized() {
       }
     }
 
-    // Pragmatic fallback for stale TCC API reads:
-    // if Screen Recording is confirmed authorized, treat Accessibility as granted
-    // for UX/status checks to avoid false "Not detected" loops.
-    // Actual input activity still validates at runtime.
-    try {
-      const screenStatus = getScreenStatus();
-      if (screenStatus === 'authorized') {
-        console.warn('[perm] Accessibility API returned false but screen is authorized; assuming accessibility granted for status checks');
-        return true;
-      }
-    } catch (_) {}
+    // Installed builds spawn a separate macos-input-helper binary — do not infer
+    // Accessibility from Screen Recording alone (causes "0% activity" false OK).
+    if (app?.isPackaged && global.pythonDiagnostics?.permissionDenied) {
+      return false;
+    }
 
     return false;
   } else if (platform === 'win32') {
@@ -154,6 +137,96 @@ function getAccessibilityAuthorized() {
   }
 
   return true; // Default for other platforms
+}
+
+/**
+ * Live probe for Screen Recording (macOS). Uses desktopCapturer — safe for manual refresh only.
+ */
+async function probeMacScreenCaptureAuthorized() {
+  if (process.platform !== 'darwin') return false;
+  try {
+    const { desktopCapturer, BrowserWindow } = require('electron');
+    if (!desktopCapturer || typeof desktopCapturer.getSources !== 'function') return false;
+    if (BrowserWindow && BrowserWindow.getAllWindows().length === 0) return false;
+
+    const sources = await Promise.race([
+      desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1, height: 1 },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('screen-probe-timeout')), 4000)),
+    ]);
+
+    return (
+      Array.isArray(sources) &&
+      sources.some((source) => source?.thumbnail && !source.thumbnail.isEmpty())
+    );
+  } catch (error) {
+    console.warn('[perm] Screen capture probe failed:', error?.message || error);
+    return false;
+  }
+}
+
+/**
+ * Live probe for Accessibility (macOS). Uses AppleScript against System Events.
+ */
+async function probeMacAccessibilityAuthorized() {
+  if (process.platform !== 'darwin') return false;
+  try {
+    const { execFile } = require('child_process');
+    const { promisify } = require('util');
+    const execFileAsync = promisify(execFile);
+    const script =
+      'tell application "System Events" to return name of first application process whose frontmost is true';
+    const { stdout } = await execFileAsync('osascript', ['-e', script], { timeout: 4000 });
+    return Boolean(String(stdout || '').trim());
+  } catch (error) {
+    console.warn('[perm] Accessibility probe failed:', error?.message || error);
+    return false;
+  }
+}
+
+/**
+ * Resolve permission booleans for UI display.
+ * @param {{ deepCheck?: boolean }} options - When true, run live macOS probes after API checks.
+ */
+async function resolveDisplayPermissions({ deepCheck = false } = {}) {
+  let screenStatus = getScreenStatus();
+  let accessibility = getAccessibilityAuthorized();
+
+  if (process.platform === 'darwin') {
+    if (screenStatus !== 'authorized') {
+      try {
+        const raw = systemPreferences.getMediaAccessStatus('screen');
+        if (raw === 'granted' || raw === 'authorized' || raw === 'limited') {
+          screenStatus = 'authorized';
+        }
+      } catch (_) {}
+    }
+
+    if (deepCheck) {
+      if (screenStatus !== 'authorized') {
+        const probed = await probeMacScreenCaptureAuthorized();
+        if (probed) {
+          console.log('[perm] Screen Recording confirmed via live probe');
+          screenStatus = 'authorized';
+        }
+      }
+      if (!accessibility) {
+        const probed = await probeMacAccessibilityAuthorized();
+        if (probed) {
+          console.log('[perm] Accessibility confirmed via live probe');
+          accessibility = true;
+        }
+      }
+    }
+  }
+
+  return {
+    screen: screenStatus === 'authorized',
+    accessibility: !!accessibility,
+    screenStatus,
+  };
 }
 
 /**
@@ -286,11 +359,24 @@ async function ensureMacOSScreenRecordingPermission() {
     return true;
   }
 
-  // Request permission first
+  // Respect macOS TCC when already granted (Settings toggle on) even if helper APIs lag.
+  try {
+    const raw = systemPreferences.getMediaAccessStatus('screen');
+    if (raw === 'granted' || raw === 'authorized' || raw === 'limited') {
+      return true;
+    }
+  } catch (_) {}
+
+  // Only trigger the native request when permission has never been decided.
   if (askForScreenCaptureAccess) {
     try {
-      console.log('[perm] Requesting screen capture access...');
-      askForScreenCaptureAccess();
+      const raw = systemPreferences.getMediaAccessStatus('screen');
+      if (raw === 'not-determined') {
+        console.log('[perm] Requesting screen capture access...');
+        askForScreenCaptureAccess();
+      } else {
+        console.log('[perm] Skipping screen capture prompt (status:', raw, ') — open Settings instead');
+      }
     } catch (error) {
       console.error('[perm] Error requesting screen capture access:', error);
     }
@@ -532,7 +618,7 @@ async function ensureMacOSAccessibilityPermission() {
     const choice = await showBlocker({
       title: 'Enable Accessibility',
       message: 'This app needs Accessibility to detect input activity.',
-      detail: 'System Settings → Privacy & Security → Accessibility. Tick the checkbox next to this app.'
+      detail: 'System Settings → Privacy & Security → Accessibility → enable **Alyson PM** only (one checkbox). Then quit and reopen the app if you already granted Screen Recording.'
     });
 
     if (choice === 0) {
@@ -711,5 +797,8 @@ module.exports = {
   getScreenStatus,
   getAccessibilityAuthorized,
   getInputMonitoringAuthorized,
-  getPermissionDiagnosticSnapshot
+  getPermissionDiagnosticSnapshot,
+  probeMacScreenCaptureAuthorized,
+  probeMacAccessibilityAuthorized,
+  resolveDisplayPermissions,
 };

@@ -42,6 +42,19 @@ class SessionManager {
       const incomingSession = userData.session || userData;
 
       const userId = incomingUser?.id || userData.id;
+      const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+      const normalizedUserId = normalizeTenantUserId(userId);
+      if (!normalizedUserId) {
+        console.warn(
+          '⚠️ [SESSION] Ignoring login with non-integer user id (clear old session):',
+          userId,
+        );
+        return {
+          success: false,
+          message:
+            'Invalid user profile id. Sign out, clear saved session, and sign in again.',
+        };
+      }
       const email = incomingUser?.email || userData.email || incomingSession?.email;
       const role = incomingUser?.role || userData.role || 'employee';
       const fullName = incomingUser?.name || incomingUser?.full_name || email?.split('@')[0] || 'User';
@@ -61,7 +74,7 @@ class SessionManager {
       }
 
       const sessionToSave = {
-        id: userId,
+        id: normalizedUserId,
         email,
         role,
         full_name: fullName,
@@ -81,10 +94,10 @@ class SessionManager {
 
       // Update config/globals for downstream modules
       if (this.config) {
-        this.config.user_id = userId;
+        this.config.user_id = normalizedUserId;
         this.config.organization_id = organizationId;
       }
-      global.currentUserId = userId;
+      global.currentUserId = normalizedUserId;
       global.currentUserRole = role;
       global.currentOrganizationId = organizationId;
 
@@ -103,6 +116,13 @@ class SessionManager {
       }
 
       console.log('✅ [SESSION] User login handled and session persisted for:', email, organizationSlug ? `(org: ${organizationSlug})` : '');
+      try {
+        const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('../utils/workspace-settings');
+        await refreshWorkspaceSettings(this.config, { restartCapture: false });
+        startWorkspaceSettingsRefresh(this.config);
+      } catch (settingsErr) {
+        console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
+      }
       return { success: true, message: 'Session saved' };
     } catch (error) {
       console.error('❌ [SESSION] handleUserLogin error:', error);
@@ -168,6 +188,17 @@ class SessionManager {
       });
       
       if (!session) return null;
+
+      const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+      if (
+        (session.auth_provider === 'cognito' || !session.auth_provider) &&
+        session.id &&
+        !normalizeTenantUserId(session.id)
+      ) {
+        console.warn('⚠️ Clearing stale session with non-integer user id:', session.id);
+        await this.clearDesktopAgentSession();
+        return null;
+      }
       
       // Check if session is expired
       if (session.expires_at && Date.now() > session.expires_at) {

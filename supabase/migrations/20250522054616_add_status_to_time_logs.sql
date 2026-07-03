@@ -1,2 +1,0 @@
-ALTER TABLE public.time_logs
-  ADD COLUMN IF NOT EXISTS status VARCHAR;

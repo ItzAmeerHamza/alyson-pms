@@ -47,6 +47,9 @@ class IPCHandlers {
       console.log('🛑 [IPC] Stop tracking requested - OPTIMIZED (fast sync + background DB)');
       
       try {
+        const gracefulShutdownManager = require('./core/graceful-shutdown-manager');
+        gracefulShutdownManager.captureStopMoment();
+
         // Route ALL stops through global.stopTracking → GracefulShutdownManager
         // This ensures screenshots are killed synchronously before async DB work
         const result = await global.stopTracking?.('manual')
@@ -261,9 +264,12 @@ class IPCHandlers {
                   console.log('⚠️ [IPC-HANDLERS] Random project selection failed (login):', selErr?.message || selErr);
                 }
               }
-              if (!projectId) projectId = '00000000-0000-0000-0000-000000000001';
+              if (!projectId) {
+                console.log('⚠️ [IPC-HANDLERS] AUTO_START skipped — no project assigned');
+              } else {
               const startResult = await this.trackingManager.startTracking(projectId);
               console.log('🎬 [IPC-HANDLERS] AUTO_START_TRACKING (login) result:', startResult?.success, 'timeLogId:', startResult?.timeLogId);
+              }
             }
           } catch (e) {
             console.log('⚠️ [IPC-HANDLERS] AUTO_START_TRACKING after login failed:', e.message);
@@ -298,9 +304,12 @@ class IPCHandlers {
                   console.log('⚠️ [IPC-HANDLERS] Random project selection failed (fallback login):', selErr?.message || selErr);
                 }
               }
-              if (!projectId) projectId = '00000000-0000-0000-0000-000000000001';
+              if (!projectId) {
+                console.log('⚠️ [IPC-HANDLERS] AUTO_START skipped — no project assigned');
+              } else {
               const startResult = await this.trackingManager.startTracking(projectId);
               console.log('🎬 [IPC-HANDLERS] AUTO_START_TRACKING (fallback login) result:', startResult?.success, 'timeLogId:', startResult?.timeLogId);
+              }
             }
           } catch (e) {
             console.log('⚠️ [IPC-HANDLERS] AUTO_START_TRACKING after fallback login failed:', e.message);
@@ -373,7 +382,43 @@ class IPCHandlers {
       });
       
       if (!effectiveUserId) {
-        console.log('⚠️ [IPC] No user ID provided, returning fallback projects');
+        console.log('⚠️ [IPC] No user ID provided, returning empty project list');
+        return this._getFallbackProjects();
+      }
+
+      const backendTimeLogs = require('./utils/backend-time-logs');
+      const effectiveConfig = this.configManager?.getConfig?.() || global.config;
+      const backendEnabled = backendTimeLogs.isBackendTimeLogsEnabled(effectiveConfig);
+      if (!backendEnabled) {
+        console.error(
+          '❌ [IPC-PROJECTS] Backend sync not configured — check BACKEND_API_URL + INTERNAL_API_KEY in env-config.js',
+        );
+      }
+      if (backendEnabled) {
+        try {
+          const projects = await backendTimeLogs.listUserProjects(effectiveUserId, effectiveConfig);
+          if (Array.isArray(projects)) {
+            if (projects.length > 0) {
+              console.log(`✅ [IPC-PROJECTS] Found ${projects.length} projects from backend`);
+              if (global.trayManager?.setProjectList) {
+                global.trayManager.setProjectList(projects);
+              }
+              return projects;
+            }
+            console.log(`⚠️ [IPC-PROJECTS] Backend returned no assignments for user ${effectiveUserId}`);
+            return [];
+          }
+        } catch (error) {
+          console.error('❌ [IPC-PROJECTS] Backend project fetch failed:', error.message);
+        }
+      }
+
+      const { normalizeTenantUserId } = require('./utils/tenant-user-id');
+      if (
+        (effectiveConfig?.auth_provider === 'cognito' || global.config?.auth_provider === 'cognito') &&
+        normalizeTenantUserId(effectiveUserId)
+      ) {
+        console.log('⚠️ [IPC-PROJECTS] Cognito/RDS mode — skipping legacy Supabase project query');
         return this._getFallbackProjects();
       }
       
@@ -486,18 +531,8 @@ class IPCHandlers {
     
     // Helper method for fallback projects
     this._getFallbackProjects = () => {
-      console.log('🔄 [IPC] Using fallback projects');
-      return [
-        {
-          project_id: '00000000-0000-0000-0000-000000000001',
-          name: 'Default Project',
-          description: 'Default project for time tracking',
-          projects: {
-            id: '00000000-0000-0000-0000-000000000001',
-            name: 'Default Project'
-          }
-        }
-      ];
+      console.log('🔄 [IPC] No projects available — returning empty list');
+      return [];
     };
 
     console.log('✅ Session management handlers registered');
@@ -750,21 +785,35 @@ class IPCHandlers {
 
     this.ipcMain.handle('test-database-connection', async () => {
       try {
+        const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
+        const { checkBackendHealth } = require('../utils/backend-health');
+
+        if (isBackendRdsEnabled(this.configManager?.config || global.config)) {
+          const health = await checkBackendHealth(this.configManager?.config || global.config);
+          if (!health.ok) {
+            throw new Error(health.error || 'Backend health check failed');
+          }
+          return {
+            success: true,
+            message: 'RDS backend connection successful (time_doctor schema)',
+          };
+        }
+
         const supabase = this.configManager.getSupabaseClient();
-        const { data, error } = await supabase.from('users').select('count').limit(1);
-        
+        const { error } = await supabase.from('time_logs').select('id').limit(1);
+
         if (error) {
           throw error;
         }
-        
+
         return {
           success: true,
-          message: 'Database connection successful'
+          message: 'Database connection successful',
         };
       } catch (error) {
         return {
           success: false,
-          error: error.message
+          error: error.message,
         };
       }
     });

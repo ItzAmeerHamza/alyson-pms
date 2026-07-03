@@ -696,21 +696,25 @@ class SyncManager {
   monitorConnection() {
     setInterval(async () => {
       try {
-        // Enhanced connectivity test with longer timeout and fallback method
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Connection test timeout')), 20000)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection test timeout')), 20000),
         );
-        
-        // Skip health check endpoint (requires auth) - use database query directly
-        const healthCheckPromise = this.supabase
-          .from('users')
-          .select('id')
-          .limit(1);
-          
-        const { data, error } = await Promise.race([healthCheckPromise, timeoutPromise]);
+
+        const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
+        const { checkBackendHealth } = require('../utils/backend-health');
+
+        let online = false;
+        if (isBackendRdsEnabled(this.config)) {
+          const health = await Promise.race([checkBackendHealth(this.config), timeoutPromise]);
+          online = Boolean(health?.ok);
+        } else if (this.supabase) {
+          const healthCheckPromise = this.supabase.from('time_logs').select('id').limit(1);
+          const { error } = await Promise.race([healthCheckPromise, timeoutPromise]);
+          online = !error;
+        }
 
         const wasOnline = this.isOnline;
-        this.isOnline = !error;
+        this.isOnline = online;
 
         if (!wasOnline && this.isOnline) {
           logger.info({ category: 'SYNC', step: 'ONLINE', message: 'Connection restored - starting sync' });

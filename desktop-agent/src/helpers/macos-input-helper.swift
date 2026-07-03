@@ -38,7 +38,28 @@ func emitJSON(_ dict: [String: Any]) {
 // MARK: - Permission check
 
 func isAccessibilityGranted() -> Bool {
-    // AXIsProcessTrusted() returns true if Accessibility permission is granted
+    return AXIsProcessTrusted()
+}
+
+/// Wait for Accessibility on THIS helper binary (separate from the Electron app in installed builds).
+/// Shows the system prompt once, then polls until granted or timeout.
+func waitForAccessibilityGranted(maxWaitSeconds: Int = 90) -> Bool {
+    if AXIsProcessTrusted() { return true }
+
+    let promptOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    _ = AXIsProcessTrustedWithOptions(promptOptions)
+
+    emitJSON([
+        "type": "permission_prompt",
+        "message": "Enable Accessibility for the Alyson PM input helper in System Settings",
+        "fix": "System Settings → Privacy & Security → Accessibility → enable Alyson PM (and macos-input-helper if listed)"
+    ])
+
+    let deadline = Date().addingTimeInterval(TimeInterval(maxWaitSeconds))
+    while Date() < deadline {
+        if AXIsProcessTrusted() { return true }
+        Thread.sleep(forTimeInterval: 1.0)
+    }
     return AXIsProcessTrusted()
 }
 
@@ -91,12 +112,11 @@ class InputMonitor {
     var keyEventTap: CFMachPort?        // CGEvent tap for key monitoring
 
     func start() {
-        // Check Accessibility permission first
-        if !isAccessibilityGranted() {
+        if !waitForAccessibilityGranted(maxWaitSeconds: 90) {
             emitJSON([
                 "type": "permission_denied",
-                "message": "Accessibility permission required - AXIsProcessTrusted() returned false",
-                "fix": "System Settings > Privacy & Security > Accessibility > enable Alyson PM"
+                "message": "Accessibility permission required for input tracking helper",
+                "fix": "System Settings → Privacy & Security → Accessibility → enable Alyson PM and macos-input-helper if shown"
             ])
             exit(2) // Exit code 2 = permission denied
         }

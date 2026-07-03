@@ -1,7 +1,10 @@
+import { createPublicKey } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { JwksClient } from 'jwks-rsa';
+import { JwksClient, SigningKey } from 'jwks-rsa';
 
 export interface CognitoIdTokenPayload {
   sub: string;
@@ -12,6 +15,50 @@ export interface CognitoIdTokenPayload {
   token_use: string;
   exp: number;
   iat: number;
+}
+
+type JwkKey = { kid?: string; kty?: string; [key: string]: unknown };
+
+function loadBundledJwks(): JwkKey[] | null {
+  const candidates = [
+    path.join(process.cwd(), 'cognito-jwks.json'),
+    path.join(__dirname, '../../cognito-jwks.json'),
+    path.join(__dirname, '../cognito-jwks.json'),
+  ];
+  for (const filePath of candidates) {
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { keys?: JwkKey[] };
+      if (Array.isArray(parsed.keys) && parsed.keys.length > 0) {
+        return parsed.keys;
+      }
+    } catch {
+      /* try next path */
+    }
+  }
+  return null;
+}
+
+function signingKeyFromJwk(jwk: JwkKey): SigningKey {
+  const publicKey = createPublicKey({ key: jwk, format: 'jwk' });
+  const pem = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+  return {
+    kid: String(jwk.kid || ''),
+    getPublicKey: () => pem,
+  } as SigningKey;
+}
+
+function createBundledJwksClient(keys: JwkKey[]): JwksClient {
+  const byKid = new Map(keys.filter((k) => k.kid).map((k) => [String(k.kid), k]));
+  return {
+    getSigningKey: (kid: string) => {
+      const jwk = byKid.get(kid);
+      if (!jwk) {
+        return Promise.reject(new Error(`JWK kid ${kid} not found in bundled Cognito keys`));
+      }
+      return Promise.resolve(signingKeyFromJwk(jwk));
+    },
+  } as unknown as JwksClient;
 }
 
 @Injectable()
@@ -31,12 +78,18 @@ export class CognitoService {
 
     if (this.enabled) {
       const issuer = this.getIssuer();
-      this.jwksClient = new JwksClient({
-        jwksUri: `${issuer}/.well-known/jwks.json`,
-        cache: true,
-        rateLimit: true,
-      });
-      this.logger.log(`Cognito JWT verification enabled (${issuer})`);
+      const bundled = loadBundledJwks();
+      if (bundled) {
+        this.jwksClient = createBundledJwksClient(bundled);
+        this.logger.log(`Cognito JWT verification enabled with bundled JWKS (${issuer})`);
+      } else {
+        this.jwksClient = new JwksClient({
+          jwksUri: `${issuer}/.well-known/jwks.json`,
+          cache: true,
+          rateLimit: true,
+        });
+        this.logger.log(`Cognito JWT verification enabled via remote JWKS (${issuer})`);
+      }
     }
   }
 
@@ -74,7 +127,8 @@ export class CognitoService {
 
       return payload;
     } catch (error) {
-      this.logger.warn('Cognito token verification failed');
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Cognito token verification failed: ${detail}`);
       throw new UnauthorizedException('Invalid token');
     }
   }

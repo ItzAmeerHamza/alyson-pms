@@ -114,13 +114,47 @@ class CrossPlatformInputDetector extends EventEmitter {
   async startMacOSDetection() {
     console.log('🍎 Initializing macOS input detection...');
 
-    // Method 1: Use native Swift helper with NSEvent (requires Accessibility permission)
-    // This replaces the old Python/CGEventTap approach that required Input Monitoring permission
+    // PRIMARY: in-process uiohook — same Accessibility grant as Alyson PM (production UX)
+    const inProcessStarted = await this.startMacOSInProcessInput();
+    if (inProcessStarted) {
+      if (this.electronModules.powerMonitor) {
+        this.startElectronPowerMonitorDetection();
+      }
+      return;
+    }
+
+    // FALLBACK: external Swift helper (legacy / dev if uiohook unavailable)
+    console.warn('⚠️ [macOS] In-process input unavailable — falling back to Swift helper');
     await this.startNativeMacOSInputMonitor();
 
-    // Method 2: Electron PowerMonitor enhancement (minimal usage)
     if (this.electronModules.powerMonitor) {
       this.startElectronPowerMonitorDetection();
+    }
+  }
+
+  async startMacOSInProcessInput() {
+    try {
+      const { MacOSUiohookInput } = require('../platform/macos-uiohook-input');
+      if (!MacOSUiohookInput.isAvailable()) {
+        const msg = MacOSUiohookInput.loadErrorMessage();
+        console.warn('⚠️ [UIOHOOK] Not available:', msg || 'unknown');
+        if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
+        global.pythonDiagnostics.uiohookUnavailable = msg;
+        return false;
+      }
+
+      this.uiohookMonitor = new MacOSUiohookInput((event) => {
+        this.handleExternalPythonEvent(event);
+      });
+      this.uiohookMonitor.start();
+      this.monitors.push({ type: 'uiohook', stop: () => this.uiohookMonitor?.stop() });
+
+      if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
+      global.pythonDiagnostics.inputMode = 'uiohook-in-process';
+      return true;
+    } catch (error) {
+      console.error('❌ [UIOHOOK] Failed to start in-process input:', error?.message || error);
+      return false;
     }
   }
 
@@ -153,8 +187,22 @@ class CrossPlatformInputDetector extends EventEmitter {
       console.log(`📍 [SWIFT] Helper path: "${helperPath}"`);
       console.log(`📍 [SWIFT] Helper exists? ${fs.existsSync(helperPath)}`);
 
+      if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
+      global.pythonDiagnostics.helperPath = helperPath;
+      global.pythonDiagnostics.helperExists = fs.existsSync(helperPath);
+
+      if (isPackaged) {
+        try {
+          const { systemPreferences } = require('electron');
+          if (systemPreferences?.isTrustedAccessibilityClient) {
+            systemPreferences.isTrustedAccessibilityClient(true);
+          }
+        } catch (_) {}
+      }
+
       if (!fs.existsSync(helperPath)) {
         console.error(`❌ [SWIFT] Helper binary not found at: ${helperPath}`);
+        global.pythonDiagnostics.helperMissing = true;
 
         // Dev convenience: auto-build the helper if Swift toolchain exists.
         // In production the helper must be shipped via extraResources.
@@ -264,6 +312,9 @@ class CrossPlatformInputDetector extends EventEmitter {
           console.log('🔒 [SWIFT] Accessibility permission denied (exit code 2) — NOT retrying');
           if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
           global.pythonDiagnostics.permissionDenied = true;
+          this._notifyInputHelperPermissionNeeded({
+            fix: 'System Settings → Privacy & Security → Accessibility → enable Alyson PM and macos-input-helper',
+          });
           return;
         }
 
@@ -756,6 +807,10 @@ class CrossPlatformInputDetector extends EventEmitter {
         });
         break;
       case 'key':
+        // Modifier-only key events inflate keystroke counts; real typing uses keyDown.
+        if (event.source === 'flagsChanged') {
+          break;
+        }
 // CRITICAL FIX: Only emit event, don't call recordActivity
         this.emit('keyPress', { 
           method: `platform-external_python_${event.platform || 'macos'}`, 
@@ -764,8 +819,11 @@ class CrossPlatformInputDetector extends EventEmitter {
         });
         break;
       case 'move':
-        // Throttle moves: emit at most once per second instead of random 10% sampling
-        if (!this._lastMoveEmit || now - this._lastMoveEmit >= 1000) {
+        {
+          const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+          if (this._lastMoveEmit && now - this._lastMoveEmit < moveMinMs) {
+            break;
+          }
           this._lastMoveEmit = now;
           this.emit('mouseMovement', { 
             method: `platform-external_python_${event.platform || 'macos'}`, 
@@ -794,10 +852,15 @@ class CrossPlatformInputDetector extends EventEmitter {
         console.log(`❌ External Python error (${event.platform}): ${event.message}`);
         break;
       case 'permission_denied':
-        console.log(`🔒 [INPUT] Accessibility permission denied: ${event.message}`);
+      case 'permission_prompt':
+        console.log(`🔒 [INPUT] Accessibility: ${event.message}`);
         if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
-        global.pythonDiagnostics.permissionDenied = true;
-        this.pythonDisabled = true;
+        global.pythonDiagnostics.permissionDenied = event.type === 'permission_denied';
+        global.pythonDiagnostics.permissionMessage = event.message;
+        if (event.type === 'permission_denied') {
+          this.pythonDisabled = true;
+          this._notifyInputHelperPermissionNeeded(event);
+        }
         break;
       case 'stopped':
         console.log(`🛑 External Python monitor stopped on ${event.platform}`);
@@ -815,6 +878,40 @@ class CrossPlatformInputDetector extends EventEmitter {
   // Automation permission was denied (-1743). The Accessibility permission gate in
   // permissions-check.js now ensures the Swift helper has the permission it needs before starting,
   // making this fallback unnecessary. See: system/permissions-check.js → ensureMacOSAccessibilityPermission()
+
+  _notifyInputHelperPermissionNeeded(event = {}) {
+    if (this._inputPermDialogShown) return;
+    this._inputPermDialogShown = true;
+    try {
+      const { dialog, shell } = require('electron');
+      const detail = [
+        'Enable Accessibility for Alyson PM only:',
+        '',
+        'System Settings → Privacy & Security → Accessibility → Alyson PM ✓',
+        '',
+        'Quit Alyson PM completely, then reopen and start tracking again.',
+        event.fix || '',
+      ].filter(Boolean).join('\n');
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Activity tracking needs Accessibility',
+        message: 'Input activity is 0% until Accessibility is granted to the installed app.',
+        detail,
+        buttons: ['Open Accessibility Settings', 'OK'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) {
+          shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
+        }
+        this._inputPermDialogShown = false;
+      }).catch(() => {
+        this._inputPermDialogShown = false;
+      });
+    } catch (err) {
+      console.warn('[INPUT] Could not show permission dialog:', err?.message || err);
+      this._inputPermDialogShown = false;
+    }
+  }
 
   startElectronPowerMonitorDetection() {
     const { powerMonitor } = this.electronModules;
@@ -946,33 +1043,37 @@ class CrossPlatformInputDetector extends EventEmitter {
         });
         break;
         
-      case 'mouseMovement':
-        this.stats.mouseMovements++;
-        
-        // [IN1] Mouse move (throttled, detailed platform data)
-        const shouldLogMove = this.stats.mouseMovements % 100 === 0; // Throttle to every 100 moves
-        if (shouldLogMove) {
-          debugLogger.in1('Mouse move (platform)', {
-            dx: details.details?.dx || 'unknown',
-            dy: details.details?.dy || 'unknown',
-            method: details.method,
+      case 'mouseMovement': {
+          const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+          if (timestamp - (this._lastMoveRecordAt || 0) < moveMinMs) {
+            break;
+          }
+          this._lastMoveRecordAt = timestamp;
+          this.stats.mouseMovements++;
+
+          const shouldLogMove = this.stats.mouseMovements % 100 === 0;
+          if (shouldLogMove) {
+            debugLogger.in1('Mouse move (platform)', {
+              dx: details.details?.dx || 'unknown',
+              dy: details.details?.dy || 'unknown',
+              method: details.method,
+              total: this.stats.mouseMovements,
+              throttled: true,
+              platform: this.platform,
+              distance: details.distance || 'unknown'
+            });
+          }
+
+          if (process.env.DEBUG_INPUT === '1' && this.stats.mouseMovements % 250 === 0) {
+            logger.debug({ category: 'INPUT', step: 'EVENT', message: 'MOVE', ctx: { method: details.method, total: this.stats.mouseMovements } });
+          }
+          this.emit('mouseMovement', {
+            timestamp,
             total: this.stats.mouseMovements,
-            throttled: true,
-            platform: this.platform,
-            distance: details.distance || 'unknown'
+            method: details.method
           });
+          break;
         }
-        
-        // Reduce spam: only emit detailed per-event logs when DEBUG_INPUT=1
-        if (process.env.DEBUG_INPUT === '1' && this.stats.mouseMovements % 250 === 0) {
-          logger.debug({ category: 'INPUT', step: 'EVENT', message: 'MOVE', ctx: { method: details.method, total: this.stats.mouseMovements } });
-        }
-        this.emit('mouseMovement', {
-          timestamp,
-          total: this.stats.mouseMovements,
-          method: details.method
-        });
-        break;
     }
   }
 
@@ -1110,6 +1211,12 @@ class CrossPlatformInputDetector extends EventEmitter {
     this.monitors.forEach(monitor => {
       if (typeof monitor === 'number') {
         clearInterval(monitor);
+      } else if (monitor && typeof monitor.stop === 'function') {
+        try {
+          monitor.stop();
+        } catch (e) {
+          console.warn('⚠️ [STOP] monitor.stop failed:', e?.message || e);
+        }
       } else if (monitor.kill) {
         try {
           if (process.platform === 'win32') {

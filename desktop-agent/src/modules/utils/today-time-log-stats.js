@@ -18,21 +18,27 @@ function endOfLocalDayExclusive(d = new Date()) {
  * @param {string|null} currentTimeLogId - open row to count as "live" in totalTime only
  * @returns {Promise<{ completedClosedSeconds: number, ongoingCurrentSessionSeconds: number, totalTime: number, timeLogsCount: number }>}
  */
-function aggregateTimeLogRows(timeLogs, currentTimeLogId) {
+function aggregateTimeLogRows(timeLogs, currentTimeLogId, isTracking = false) {
   let completedClosedSeconds = 0;
   let ongoingCurrentSessionSeconds = 0;
   const now = Date.now();
 
   for (const log of timeLogs || []) {
-    if (log.start_time && log.end_time) {
-      const start = new Date(log.start_time).getTime();
+    if (!log.start_time) continue;
+
+    const start = new Date(log.start_time).getTime();
+    const isActiveRow = log.status === 'active';
+    const countsActiveAsLive =
+      isActiveRow && (!isTracking || !currentTimeLogId || log.id === currentTimeLogId);
+    const isCurrentLive =
+      countsActiveAsLive ||
+      (isTracking && currentTimeLogId && log.id === currentTimeLogId);
+
+    if (isCurrentLive) {
+      ongoingCurrentSessionSeconds += Math.max(0, Math.floor((now - start) / 1000));
+    } else if (log.end_time) {
       const end = new Date(log.end_time).getTime();
       completedClosedSeconds += Math.max(0, Math.floor((end - start) / 1000));
-    } else if (log.start_time && !log.end_time) {
-      if (currentTimeLogId && log.id === currentTimeLogId) {
-        const start = new Date(log.start_time).getTime();
-        ongoingCurrentSessionSeconds += Math.max(0, Math.floor((now - start) / 1000));
-      }
     }
   }
 
@@ -41,7 +47,7 @@ function aggregateTimeLogRows(timeLogs, currentTimeLogId) {
   return { completedClosedSeconds, ongoingCurrentSessionSeconds, totalTime, timeLogsCount };
 }
 
-async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
+async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking = false) {
   if (!userId) {
     return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
   }
@@ -57,10 +63,14 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
         const t = new Date(log.start_time).getTime();
         return t >= startOfDay.getTime() && t < endOfDay.getTime();
       });
-      return aggregateTimeLogRows(inRange, currentTimeLogId);
+      return aggregateTimeLogRows(inRange, currentTimeLogId, isTracking);
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend query failed:', err.message);
+    const { normalizeTenantUserId } = require('./tenant-user-id');
+    if (normalizeTenantUserId(userId)) {
+      return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+    }
   }
 
   if (!supabase) {
@@ -69,7 +79,7 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
 
   const { data: timeLogs, error } = await supabase
     .from('time_logs')
-    .select('id, start_time, end_time')
+    .select('id, start_time, end_time, status')
     .eq('user_id', userId)
     .gte('start_time', startOfDay.toISOString())
     .lt('start_time', endOfDay.toISOString())
@@ -80,7 +90,7 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId) {
     return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
   }
 
-  return aggregateTimeLogRows(timeLogs, currentTimeLogId);
+  return aggregateTimeLogRows(timeLogs, currentTimeLogId, isTracking);
 }
 
 module.exports = {

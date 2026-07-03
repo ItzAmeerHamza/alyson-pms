@@ -62,7 +62,7 @@ class WindowManager extends EventEmitter {
         spellcheck: false
       },
       icon: global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png'),
-      title: 'Alyson PM',
+      title: 'Alyson Time Doctor',
       resizable: true,
       show: true,
       minWidth: 800,
@@ -110,6 +110,18 @@ class WindowManager extends EventEmitter {
     });
 
     this.mainWindow.on('close', (event) => {
+      const gracefulShutdownManager = require('../core/graceful-shutdown-manager');
+      const { app } = require('electron');
+
+      if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, {
+        app,
+        showTrayNotification: this.showTrayNotification
+          ? (title, body) => this.showTrayNotification(body || title)
+          : undefined,
+      })) {
+        return;
+      }
+
       // If app is already quitting, allow the close
       if (global.isQuitting) {
         console.log('🛑 [WINDOW-MANAGER] App is quitting - allowing window close');
@@ -120,7 +132,6 @@ class WindowManager extends EventEmitter {
       if (process.platform !== 'darwin') {
         console.log('🛑 [WINDOW-MANAGER] Window X pressed on Windows - triggering app quit');
         global.isQuitting = true;
-        const { app } = require('electron');
         app.quit();
         return;
       }

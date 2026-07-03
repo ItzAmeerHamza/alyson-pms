@@ -33,7 +33,12 @@ export function mergeTimeIntervals(intervals: TimeInterval[]): TimeInterval[] {
  * Returns a Map of userId -> effective hours.
  */
 export function calculateMergedHoursByUser(
-  logs: Array<{ user_id: string; start_time: string; end_time: string | null; idle_seconds?: number | null }>,
+  logs: Array<{
+    user_id: string;
+    start_time: string | Date;
+    end_time: string | Date | null;
+    idle_seconds?: number | null;
+  }>,
 ): Map<string, number> {
   const byUser = new Map<string, Array<{ interval: TimeInterval }>>();
 

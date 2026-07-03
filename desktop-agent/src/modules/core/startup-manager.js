@@ -27,6 +27,11 @@ class StartupManager {
     console.log('🔍 [STARTUP-MANAGER] Platform:', process.platform);
     console.log('🔍 [STARTUP-MANAGER] Node version:', process.version);
     console.log('🔍 [STARTUP-MANAGER] Electron version:', process.versions.electron);
+
+    if (global.mainWindow && !global.mainWindow.isDestroyed()) {
+      console.log('⚠️ [STARTUP-MANAGER] Main window already exists — skipping duplicate window creation');
+      return;
+    }
     
     try {
       // PERFORMANCE FIX: Load only critical managers first, show window immediately
@@ -456,8 +461,9 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       // Initialize event system first
       global.eventManager.initialize();
 
-      // Register data/stats IPC handlers BEFORE creating/loading the window to avoid renderer race conditions
-      // This ensures channels like 'get-today-screenshots' are available when the UI boots
+      // Register data/stats IPC handlers AFTER ipc-event-map so RDS handlers win over legacy stubs
+      global.ipcEventMap.initialize();
+
       await global.dataStatsManager.initialize();
       
       // AppLifecycleManager already initialized in startMainApplication() for early window display
@@ -526,7 +532,7 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       } catch {}
       global.windowUIManager.initialize();
       global.enhancedIdleMonitor.initialize({ isTracking: false });
-      global.ipcEventMap.initialize();
+      // ipcEventMap + dataStatsManager initialized earlier (before window) for screenshot IPC
       global.trackingManager.initialize({
         wrappers: this.wrappers,
         consolidationFixes: global.consolidationFixes,
@@ -559,20 +565,23 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
               console.log('⚠️ [STARTUP-MANAGER] Random project selection failed:', e?.message || e);
             }
           }
-          if (!projectId) projectId = '00000000-0000-0000-0000-000000000001';
-          setTimeout(async () => {
-            if (!global.isTracking) {
-              console.log('🎬 [STARTUP-MANAGER] AUTO_START_TRACKING enabled — starting tracking');
-              try {
-                const result = global.trackingManager?.startTracking
-                  ? await global.trackingManager.startTracking(projectId)
-                  : await global.startTracking?.(projectId);
-                console.log('🎬 [STARTUP-MANAGER] AUTO_START_TRACKING result:', result?.success, 'timeLogId:', result?.timeLogId);
-              } catch (e) {
-                console.log('⚠️ [STARTUP-MANAGER] AUTO_START_TRACKING failed:', e.message);
+          if (!projectId) {
+            console.log('⚠️ [STARTUP-MANAGER] AUTO_START skipped — no project assigned');
+          } else {
+            setTimeout(async () => {
+              if (!global.isTracking) {
+                console.log('🎬 [STARTUP-MANAGER] AUTO_START_TRACKING enabled — starting tracking');
+                try {
+                  const result = global.trackingManager?.startTracking
+                    ? await global.trackingManager.startTracking(projectId)
+                    : await global.startTracking?.(projectId);
+                  console.log('🎬 [STARTUP-MANAGER] AUTO_START_TRACKING result:', result?.success, 'timeLogId:', result?.timeLogId);
+                } catch (e) {
+                  console.log('⚠️ [STARTUP-MANAGER] AUTO_START_TRACKING failed:', e.message);
+                }
               }
-            }
-          }, 1500);
+            }, 1500);
+          }
         }
       } catch {}
       
@@ -636,6 +645,14 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       if (this.sessionManager) {
         this.sessionManager.initialize({ supabaseService: this.supabaseService });
         await this.sessionManager.cleanupStaleActiveSessions();
+      }
+
+      try {
+        const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('../utils/workspace-settings');
+        await refreshWorkspaceSettings(global.configManager?.config || global.config, { restartCapture: false });
+        startWorkspaceSettingsRefresh(global.configManager?.config || global.config);
+      } catch (settingsErr) {
+        console.warn('⚠️ [STARTUP-MANAGER] Workspace settings load failed:', settingsErr?.message || settingsErr);
       }
       
       // Sync app detector tracking state after tray+cleanup

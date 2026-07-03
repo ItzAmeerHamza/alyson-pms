@@ -63,6 +63,14 @@ class EnhancedScreenshotManager {
   }
 
   getConfiguredScreenshotIntervalMs() {
+    const minutes =
+      this.config?.screenshot_interval_minutes ??
+      this.config?.appSettings?.screenshot_interval_minutes;
+    const minutesNum = Number(minutes);
+    if (Number.isFinite(minutesNum) && minutesNum > 0) {
+      return Math.max(60, Math.round(minutesNum * 60)) * 1000;
+    }
+
     const raw =
       this.config?.screenshot_interval_seconds ??
       this.config?.appSettings?.screenshot_interval_seconds ??
@@ -72,6 +80,13 @@ class EnhancedScreenshotManager {
     // `screenshot_interval` may be persisted in milliseconds in some paths.
     const seconds = num >= 1000 ? Math.round(num / 1000) : num;
     return Math.max(10, seconds) * 1000;
+  }
+
+  usesFixedScreenshotIntervalMode() {
+    if (this.config?.screenshot_interval_from_database) {
+      return true;
+    }
+    return this.getConfiguredScreenshotIntervalMs() <= 10 * 60 * 1000;
   }
 
   resolveActiveUserId() {
@@ -200,9 +215,12 @@ class EnhancedScreenshotManager {
     this.startDiagnosticsHeartbeat();
 
     // Initialize limiter with policy: 3 per 10 minutes, min 180s gap.
-    // Skip limiter for short fixed intervals to honor user screenshot settings.
+    // Skip limiter when interval comes from workspace_settings (fixed schedule).
     try {
-      if (this.getConfiguredScreenshotIntervalMs() >= 3 * 60 * 1000) {
+      if (
+        !this.config?.screenshot_interval_from_database &&
+        this.getConfiguredScreenshotIntervalMs() >= 3 * 60 * 1000
+      ) {
         const ScreenshotRateLimiter = require('../utils/screenshot-rate-limiter');
         this._rateLimiter = new ScreenshotRateLimiter({
           maxInWindow: 3,
@@ -294,7 +312,7 @@ class EnhancedScreenshotManager {
     }
 
     const configuredIntervalMs = this.getConfiguredScreenshotIntervalMs();
-    if (configuredIntervalMs <= 2 * 60 * 1000) {
+    if (this.usesFixedScreenshotIntervalMode()) {
       console.log(`🚀 [SCREENSHOT] Starting fixed-interval mode (${Math.round(configuredIntervalMs / 1000)}s)...`);
       // Use direct scheduler for short intervals (e.g. 60s) to honor settings.
       this.scheduleDirectScreenshot();
@@ -859,61 +877,7 @@ class EnhancedScreenshotManager {
                 let activityData = { clicks: 0, keys: 0, moves: 0 };
 
                 try {
-                  if (!global.betweenScreenshotsActivity) {
-                    global.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-                  }
-                  if (global.enhancedActivityManager && !global.enhancedActivityManager.betweenScreenshotsActivity) {
-                    global.enhancedActivityManager.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-                  }
-
-                  // Read from preferred source
-                  if (global.enhancedActivityManager?.betweenScreenshotsActivity) {
-                    const activity = global.enhancedActivityManager.betweenScreenshotsActivity;
-                    activityData.clicks = activity.clicks || 0;
-                    activityData.keys = activity.keys || 0;
-                    activityData.moves = activity.moves || 0;
-                  } else if (global.betweenScreenshotsActivity) {
-                    activityData.clicks = global.betweenScreenshotsActivity.clicks || 0;
-                    activityData.keys = global.betweenScreenshotsActivity.keys || 0;
-                    activityData.moves = global.betweenScreenshotsActivity.moves || 0;
-                  }
-
-                  // DELTA SAFETY NET: Detect cumulative counters that weren't reset.
-                  // Use displayActivityStats (session-cumulative) to compute deltas as a fallback.
-                  // Normal per-screenshot values for a 3-min interval shouldn't exceed ~2000 total events.
-                  const MAX_REASONABLE_PER_SCREENSHOT = 2000;
-                  const rawTotal = activityData.clicks + activityData.keys + activityData.moves;
-                  if (rawTotal > MAX_REASONABLE_PER_SCREENSHOT && global.displayActivityStats) {
-                    // Counters look cumulative — compute delta from last snapshot
-                    if (!global._lastScreenshotCumulativeSnapshot) {
-                      global._lastScreenshotCumulativeSnapshot = { clicks: 0, keys: 0, moves: 0 };
-                    }
-                    const snap = global._lastScreenshotCumulativeSnapshot;
-                    const ds = global.displayActivityStats;
-                    const deltaClicks = Math.max(0, (ds.clicks || 0) - (snap.clicks || 0));
-                    const deltaKeys = Math.max(0, (ds.keys || 0) - (snap.keys || 0));
-                    const deltaMoves = Math.max(0, (ds.moves || 0) - (snap.moves || 0));
-                    console.log(`⚠️ [SCREENSHOT-ACTIVITY] Cumulative detected (total=${rawTotal}), using delta: C:${deltaClicks} K:${deltaKeys} M:${deltaMoves}`);
-                    activityData = { clicks: deltaClicks, keys: deltaKeys, moves: deltaMoves };
-                  }
-
-                  // Snapshot cumulative counters for next delta calculation
-                  if (global.displayActivityStats) {
-                    global._lastScreenshotCumulativeSnapshot = {
-                      clicks: global.displayActivityStats.clicks || 0,
-                      keys: global.displayActivityStats.keys || 0,
-                      moves: global.displayActivityStats.moves || 0,
-                    };
-                  }
-
-                  // Fallback: if activity is still zero, try delta from displayActivityStats
-                  if (activityData.clicks === 0 && activityData.keys === 0 && activityData.moves === 0) {
-                    const snap = global._lastScreenshotCumulativeSnapshot;
-                    if (snap && (snap.clicks > 0 || snap.keys > 0 || snap.moves > 0)) {
-                      console.log(`⚠️ [SCREENSHOT-ACTIVITY] Zero counters but cumulative stats exist — user may have been active`);
-                    }
-                  }
-
+                  activityData = this._readBetweenScreenshotActivity();
                   console.log(`📸 [SCREENSHOT-ACTIVITY] C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves}`);
                 } catch (err) {
                   console.error(`❌ [SCREENSHOT-ACTIVITY] Failed to get activity data:`, err.message);
@@ -1123,54 +1087,7 @@ if (uploadResult?.id) {
                 let activityData = { clicks: 0, keys: 0, moves: 0 };
 
                 try {
-                  if (!global.betweenScreenshotsActivity) {
-                    global.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-                  }
-                  if (global.enhancedActivityManager && !global.enhancedActivityManager.betweenScreenshotsActivity) {
-                    global.enhancedActivityManager.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
-                  }
-
-                  if (global.enhancedActivityManager?.betweenScreenshotsActivity) {
-                    const activity = global.enhancedActivityManager.betweenScreenshotsActivity;
-                    activityData.clicks = activity.clicks || 0;
-                    activityData.keys = activity.keys || 0;
-                    activityData.moves = activity.moves || 0;
-                  } else if (global.betweenScreenshotsActivity) {
-                    activityData.clicks = global.betweenScreenshotsActivity.clicks || 0;
-                    activityData.keys = global.betweenScreenshotsActivity.keys || 0;
-                    activityData.moves = global.betweenScreenshotsActivity.moves || 0;
-                  }
-
-                  const MAX_REASONABLE_PER_SCREENSHOT = 2000;
-                  const rawTotal = activityData.clicks + activityData.keys + activityData.moves;
-                  if (rawTotal > MAX_REASONABLE_PER_SCREENSHOT && global.displayActivityStats) {
-                    if (!global._lastScreenshotCumulativeSnapshot) {
-                      global._lastScreenshotCumulativeSnapshot = { clicks: 0, keys: 0, moves: 0 };
-                    }
-                    const snap = global._lastScreenshotCumulativeSnapshot;
-                    const ds = global.displayActivityStats;
-                    const deltaClicks = Math.max(0, (ds.clicks || 0) - (snap.clicks || 0));
-                    const deltaKeys = Math.max(0, (ds.keys || 0) - (snap.keys || 0));
-                    const deltaMoves = Math.max(0, (ds.moves || 0) - (snap.moves || 0));
-                    console.log(`⚠️ [SCREENSHOT-ACTIVITY] Cumulative detected (total=${rawTotal}), using delta: C:${deltaClicks} K:${deltaKeys} M:${deltaMoves}`);
-                    activityData = { clicks: deltaClicks, keys: deltaKeys, moves: deltaMoves };
-                  }
-
-                  if (global.displayActivityStats) {
-                    global._lastScreenshotCumulativeSnapshot = {
-                      clicks: global.displayActivityStats.clicks || 0,
-                      keys: global.displayActivityStats.keys || 0,
-                      moves: global.displayActivityStats.moves || 0,
-                    };
-                  }
-
-                  if (activityData.clicks === 0 && activityData.keys === 0 && activityData.moves === 0) {
-                    const snap = global._lastScreenshotCumulativeSnapshot;
-                    if (snap && (snap.clicks > 0 || snap.keys > 0 || snap.moves > 0)) {
-                      console.log(`⚠️ [SCREENSHOT-ACTIVITY] Zero counters but cumulative stats exist`);
-                    }
-                  }
-
+                  activityData = this._readBetweenScreenshotActivity();
                   console.log(`📸 [SCREENSHOT-ACTIVITY] C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves}`);
                 } catch (err) {
                   console.error(`❌ [SCREENSHOT-ACTIVITY] Failed to get activity data:`, err.message);
@@ -1658,11 +1575,7 @@ if (uploadResult?.id) {
         
         // Get current activity data
         log.debug({ step: 'RAW GLOBAL ACTIVITY', ctx: global.betweenScreenshotsActivity });
-        let activityData = {
-          clicks: global.betweenScreenshotsActivity?.clicks || 0,
-          keys: global.betweenScreenshotsActivity?.keys || 0,
-          moves: global.betweenScreenshotsActivity?.moves || 0
-        };
+        let activityData = this._readBetweenScreenshotActivity();
 
         // CRITICAL FIX: When idle, always show zeros instead of cached/accumulated values
         // This ensures the Activity Monitor accurately reflects current state
@@ -2069,6 +1982,41 @@ if (uploadResult?.id) {
     } else {
       log.warn({ step: 'ALL SCREENSHOT RECOVERY METHODS FAILED' });
     }
+  }
+
+  /**
+   * Read per-screenshot activity counters and clamp to realistic per-interval maximums.
+   */
+  _readBetweenScreenshotActivity() {
+    if (!global.betweenScreenshotsActivity) {
+      global.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
+    }
+    if (global.enhancedActivityManager && !global.enhancedActivityManager.betweenScreenshotsActivity) {
+      global.enhancedActivityManager.betweenScreenshotsActivity = { clicks: 0, keys: 0, moves: 0, lastUpdate: Date.now() };
+    }
+
+    let activityData = { clicks: 0, keys: 0, moves: 0 };
+    if (global.enhancedActivityManager?.betweenScreenshotsActivity) {
+      const activity = global.enhancedActivityManager.betweenScreenshotsActivity;
+      activityData.clicks = activity.clicks || 0;
+      activityData.keys = activity.keys || 0;
+      activityData.moves = activity.moves || 0;
+    } else if (global.betweenScreenshotsActivity) {
+      activityData.clicks = global.betweenScreenshotsActivity.clicks || 0;
+      activityData.keys = global.betweenScreenshotsActivity.keys || 0;
+      activityData.moves = global.betweenScreenshotsActivity.moves || 0;
+    }
+
+    return this._normalizeScreenshotActivity(activityData);
+  }
+
+  _normalizeScreenshotActivity(activityData) {
+    const intervalSec = Math.max(30, Number(this.SCREENSHOT_INTERVAL) || 60);
+    return {
+      clicks: Math.min(Math.max(0, Math.round(activityData.clicks || 0)), Math.max(30, intervalSec * 2)),
+      keys: Math.min(Math.max(0, Math.round(activityData.keys || 0)), Math.max(60, intervalSec * 5)),
+      moves: Math.min(Math.max(0, Math.round(activityData.moves || 0)), Math.max(60, intervalSec * 2)),
+    };
   }
 
   /**

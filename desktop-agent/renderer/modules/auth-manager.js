@@ -1,6 +1,28 @@
 const cognitoAuth = require('./cognito-auth');
 const { fetchAuthMe, isCognitoAuthEnabled } = require('./auth-api');
 
+function normalizeCompanyInput(value) {
+  return value ? String(value).trim().toLowerCase() : '';
+}
+
+function companyMatchesWorkspace(companyInput, org) {
+  if (!companyInput || !org) return true;
+  const company = normalizeCompanyInput(companyInput);
+  return (
+    (org.name && org.name.toLowerCase() === company) ||
+    String(org.id) === company ||
+    (org.slug && org.slug.toLowerCase() === company)
+  );
+}
+
+function wrongCompanyMessage(org) {
+  const label = org?.name || 'your company';
+  return (
+    `That company name doesn't match your account. ` +
+    `Try "${label}" in the Company field, or leave Company blank if you're not sure.`
+  );
+}
+
 class AuthManager {
   constructor(supabaseClient, ipcRenderer, uiManager, notificationManager) {
     this.supabaseClient = supabaseClient;
@@ -172,30 +194,14 @@ class AuthManager {
           } catch (e) {
             console.warn('⚠️ [AUTH] Failed to forward session to main process (auto-login):', e?.message || e);
           }
-          // Get fresh user details from database
-          let userDetails = null;
-          try {
-            // Ensure we have auth headers for the request
-            const { data, error: userError } = await this.supabaseClient
-              .from('users')
-              .select('id, email, full_name, role')
-              .eq('id', sessionData.user.id)
-              .maybeSingle();
-            if (userError) {
-              console.warn('⚠️ [AUTH] Error fetching user details:', userError);
-            } else {
-              userDetails = data || null;
-            }
-          } catch (e) {
-            console.warn('⚠️ [AUTH] Could not fetch user details, using session data:', e.message);
-          }
-          
-          // Set current user from saved session
+          const savedUser = session.user || (() => {
+            try { return JSON.parse(localStorage.getItem('alyson_user') || 'null'); } catch { return null; }
+          })();
           this.currentUser = {
-            id: sessionData.user.id,
+            id: savedUser?.id || sessionData.user.id,
             email: sessionData.user.email,
-            name: userDetails ? userDetails.full_name : sessionData.user.email.split('@')[0],
-            role: userDetails ? userDetails.role : 'employee'
+            name: savedUser?.name || sessionData.user.email.split('@')[0],
+            role: savedUser?.role || 'employee',
           };
           
           console.log('👤 User restored from saved session:', this.currentUser);
@@ -271,12 +277,19 @@ class AuthManager {
         return false;
       }
 
-      const profile = await fetchAuthMe(idToken, this.authConfig);
+      const profile = await fetchAuthMe(idToken, this.authConfig, this.ipcRenderer);
       const details = profile.user;
       const org = profile.organization;
 
+      const normalizedId = String(details.id || '').trim();
+      if (!/^\d+$/.test(normalizedId)) {
+        await this.ipcRenderer.invoke('user-logged-out');
+        cognitoAuth.clearCognitoSession();
+        return false;
+      }
+
       this.currentUser = {
-        id: details.id,
+        id: normalizedId,
         email: details.email,
         name: details.full_name || details.email.split('@')[0],
         role: details.role || 'employee',
@@ -303,18 +316,26 @@ class AuthManager {
 
   async handleCognitoLogin(email, password, company, rememberMe) {
     const stored = await cognitoAuth.signInWithEmailPassword(email, password, this.authConfig);
-    const profile = await fetchAuthMe(stored.idToken, this.authConfig);
+    const profile = await fetchAuthMe(stored.idToken, this.authConfig, this.ipcRenderer);
     const details = profile.user;
     const org = profile.organization;
 
-    const companySlug = company ? company.trim().toLowerCase() : '';
-    if (companySlug && org?.slug && org.slug !== companySlug) {
+    const companySlug = normalizeCompanyInput(company);
+    if (companySlug && org && !companyMatchesWorkspace(company, org)) {
       cognitoAuth.signOutCognito(this.authConfig);
-      throw new Error('You are not a member of this organization. Please check the company name.');
+      throw new Error(wrongCompanyMessage(org));
+    }
+
+    const normalizedId = String(details.id || '').trim();
+    if (!/^\d+$/.test(normalizedId)) {
+      cognitoAuth.signOutCognito(this.authConfig);
+      throw new Error(
+        'Invalid employee profile id from server. Ask your admin to link your account in time_doctor.user_extensions.',
+      );
     }
 
     this.currentUser = {
-      id: details.id,
+      id: normalizedId,
       email: details.email,
       name: details.full_name || details.email.split('@')[0],
       role: details.role || 'employee',
@@ -324,7 +345,14 @@ class AuthManager {
       is_super_admin: details.is_super_admin,
     };
 
-    await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
+    const setResult = await this.ipcRenderer.invoke(
+      'set-current-user-id',
+      this.currentUser.id,
+      this.currentUser.role,
+    );
+    if (setResult && setResult.success === false) {
+      throw new Error(setResult.error || 'Failed to set user session in desktop agent');
+    }
     localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
 
     if (this.credentialManager) {
@@ -365,7 +393,7 @@ class AuthManager {
     }
 
     window.dispatchEvent(new Event('userLoggedIn'));
-    this.notificationManager.showNotification('Login successful! Welcome to Alyson PM.', 'success');
+    this.notificationManager.showNotification('Login successful! Welcome to Alyson Time Doctor.', 'success');
   }
 
   async handleLogin(e) {
@@ -461,63 +489,27 @@ class AuthManager {
           console.warn('⚠️ [AUTH] Failed to forward session to main process (login):', e?.message || e);
         }
         
-        // Get user details from database (including organization info)
-        let userDetails = null;
-        let userError = null;
-        try {
-          const result = await this.supabaseClient
-            .from('users')
-            .select('id, email, full_name, role, is_active, organization_id, is_org_admin, is_super_admin')
-            .eq('id', data.user.id)
-            .maybeSingle();
-          userDetails = result.data || null;
-          userError = result.error || null;
-        } catch (e) {
-          console.warn('⚠️ [AUTH] Could not fetch user details, using auth data:', e.message);
-          userError = e;
-        }
+        const userDetails = {
+          id: data.user.id,
+          email: data.user.email,
+          full_name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
+          role: data.user.user_metadata?.role || 'employee',
+          organization_id: data.user.user_metadata?.organization_id || null,
+          is_active: true,
+        };
 
-        // If user profile can't be read (often due to RLS), proceed with auth data fallback.
-        // Desktop agent must allow login for employees even when profile tables are restricted.
-        if (userError && userError.status && userError.status !== 406) {
-          console.warn('⚠️ [AUTH] Failed to get user details (non-406). Proceeding with auth fallback:', {
-            status: userError.status,
-            message: userError.message
-          });
-          userDetails = null;
-        }
-
-        if (userDetails && userDetails.is_active === false) {
-          throw new Error('Your account has been deactivated. Please contact your administrator.');
-        }
-
-        // Validate organization if company slug was provided
-        let organizationId = userDetails?.organization_id || null;
-        let organizationSlug = null;
-        
         if (company && userDetails?.organization_id) {
           try {
-            const { data: orgData, error: orgError } = await this.supabaseClient
-              .from('organizations')
-              .select('id, slug, name, is_active')
-              .eq('id', userDetails.organization_id)
-              .maybeSingle();
-            
-            if (orgError) {
-              console.warn('⚠️ [AUTH] Could not verify organization:', orgError.message);
-            } else if (orgData) {
-              // Verify the slug matches what user entered
-              if (orgData.slug !== company) {
-                await this.supabaseClient.auth.signOut();
-                throw new Error('You are not a member of this organization. Please check the company name.');
-              }
-              if (!orgData.is_active) {
-                await this.supabaseClient.auth.signOut();
-                throw new Error('This organization is not active. Please contact your administrator.');
-              }
-              organizationSlug = orgData.slug;
-              console.log('✅ [AUTH] Organization verified:', orgData.name);
+            const org = await fetchOrganizationBySlug(company, this.authConfig);
+            if (org && String(org.id) !== String(userDetails.organization_id)) {
+              await this.supabaseClient.auth.signOut();
+              throw new Error('You are not a member of this organization. Please check the company name.');
             }
+            if (org && org.is_active === false) {
+              await this.supabaseClient.auth.signOut();
+              throw new Error('This organization is not active. Please contact your administrator.');
+            }
+            console.log('✅ [AUTH] Organization verified via backend:', org?.name);
           } catch (orgCheckError) {
             if (orgCheckError.message.includes('not a member') || orgCheckError.message.includes('not active')) {
               throw orgCheckError;
@@ -530,12 +522,12 @@ class AuthManager {
         this.currentUser = {
           id: data.user.id,
           email: data.user.email,
-          name: (userDetails && userDetails.full_name) ? userDetails.full_name : data.user.email.split('@')[0],
-          role: (userDetails && userDetails.role) ? userDetails.role : 'employee',
-          organization_id: organizationId,
-          organization_slug: organizationSlug || company || null,
+          name: userDetails?.full_name || data.user.email.split('@')[0],
+          role: userDetails?.role || 'employee',
+          organization_id: userDetails?.organization_id || null,
+          organization_slug: company || null,
           is_org_admin: userDetails?.is_org_admin || false,
-          is_super_admin: userDetails?.is_super_admin || false
+          is_super_admin: userDetails?.is_super_admin || false,
         };
 
         console.log('👤 User details retrieved:', this.currentUser);
@@ -616,7 +608,7 @@ class AuthManager {
         // Trigger onboarding guide for first-time user experience
         // Note: The userLoggedIn event listener in renderer-modular.js will handle showing main app
         window.dispatchEvent(new Event('userLoggedIn'));
-        this.notificationManager.showNotification('Login successful! Welcome to Alyson PM.', 'success');
+        this.notificationManager.showNotification('Login successful! Welcome to Alyson Time Doctor.', 'success');
 
       } else {
         throw new Error('No user data returned from authentication');
@@ -666,7 +658,12 @@ class AuthManager {
           if (passwordInput) passwordInput.value = '';
           if (rememberCheckbox) rememberCheckbox.checked = false;
         }
-      } else if (error.message.includes('deactivated')) {
+      } else if (
+        error.message.includes("doesn't match your account") ||
+        error.message.includes('member of this organization')
+      ) {
+        errorMessage = error.message;
+      } else if (error.message.includes('Invalid employee profile id')) {
         errorMessage = error.message;
       } else if (error.message.includes('Email not confirmed')) {
         // Supabase email verification required. Attempt to resend the confirmation email (best-effort).
@@ -766,10 +763,17 @@ class AuthManager {
     const userName = document.getElementById('userName');
     const userRole = document.getElementById('userRole');
     const userAvatar = document.getElementById('userAvatar');
+    const displayName = this.currentUser.name || this.currentUser.email.split('@')[0];
+    const firstName = String(displayName).trim().split(/\s+/)[0] || displayName;
     
     if (userName) {
-      userName.textContent = this.currentUser.name || this.currentUser.email.split('@')[0];
+      userName.textContent = displayName;
     }
+
+    const welcomeName = document.getElementById('welcomeUserName');
+    if (welcomeName) welcomeName.textContent = firstName;
+    const trackerWelcomeName = document.getElementById('trackerWelcomeUserName');
+    if (trackerWelcomeName) trackerWelcomeName.textContent = firstName;
     
     if (userRole) {
       const roleMap = {

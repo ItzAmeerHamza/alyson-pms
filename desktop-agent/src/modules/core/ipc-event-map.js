@@ -187,8 +187,8 @@ class IPCEventMap {
     });
 
     // Permission checks (guarded, centralized fallback to system-monitor/permissions-check)
-    this.registerHandler('check-permissions', async (event) => {
-      console.log('🔐 [IPC] Permission check requested');
+    this.registerHandler('check-permissions', async (event, options = {}) => {
+      console.log('🔐 [IPC] Permission check requested', options);
       const normalize = (raw) => {
         if (!raw || typeof raw !== 'object') {
           return { success: false, screen: false, accessibility: false, error: 'empty' };
@@ -222,32 +222,18 @@ class IPCEventMap {
       // Avoid running comprehensive health checks from login/onboarding polling,
       // which can trigger heavyweight screenshot tests and stale false negatives.
       try {
-        const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
-        let screenStatus = getScreenStatus();
-        const accessibility = getAccessibilityAuthorized();
-        // Extra fallback for macOS false negatives:
-        // if status API is stale but real capture works, treat screen permission as granted.
-        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
-          try {
-            const screenshot = require('screenshot-desktop');
-            const probe = await screenshot({ format: 'png' });
-            if (probe && probe.length > 0) {
-              screenStatus = 'authorized';
-            }
-          } catch (_) {
-            // Keep original status if probe fails
-          }
-        }
-        // Input Monitoring no longer required — Accessibility covers input detection
-        const allGranted = (screenStatus === 'authorized') && !!accessibility;
+        const { resolveDisplayPermissions } = require('../../system/permissions-check');
+        const deepCheck = !!(options && options.deepCheck);
+        const resolved = await resolveDisplayPermissions({ deepCheck });
+        const allGranted = resolved.screen && resolved.accessibility;
         return normalize({
           success: true,
           status: allGranted ? 'pass' : 'fail',
           details: {
-            screenRecording: screenStatus === 'authorized',
-            accessibility,
-            inputMonitoring: accessibility // backward compat: report same as accessibility
-          }
+            screenRecording: resolved.screen,
+            accessibility: resolved.accessibility,
+            inputMonitoring: resolved.accessibility,
+          },
         });
       } catch (e) {
         return { success: false, screen: false, accessibility: false, error: e.message };
@@ -443,13 +429,7 @@ class IPCEventMap {
       return await this._getScreenshotActivity();
     });
 
-    this.registerHandler('fetch-screenshots', async (event, params) => {
-      return await this._fetchScreenshots(params);
-    });
-
-    this.registerHandler('fetch-screenshots-enhanced', async (event, params) => {
-      return await this._fetchScreenshotsEnhanced(params);
-    });
+    // fetch-screenshots* owned by DataStatsManager (RDS + S3) — do not register here
   }
 
   /**
@@ -690,11 +670,14 @@ class IPCEventMap {
               console.log('⚠️ [IPC-EVENT-MAP] Random project selection failed:', e?.message || e);
             }
           }
-          if (!projectId) projectId = '00000000-0000-0000-0000-000000000001';
+          if (!projectId) {
+            console.log('⚠️ [IPC-EVENT-MAP] AUTO_START skipped — no project assigned');
+          } else {
           const result = global.trackingManager?.startTracking
             ? await global.trackingManager.startTracking(projectId)
             : await global.startTracking?.(projectId);
           console.log('🎬 [IPC-EVENT-MAP] AUTO_START_TRACKING result:', result?.success);
+          }
         }
       } catch (e) {
         console.log('⚠️ [IPC-EVENT-MAP] AUTO_START_TRACKING failed:', e.message);
@@ -1087,6 +1070,34 @@ class IPCEventMap {
 
   async _getUserProjectAssignments(userId) {
     console.log('📋 [IPC-EVENT-MAP] Getting project assignments for user:', userId);
+
+    const backendTimeLogs = require('../utils/backend-time-logs');
+    const effectiveConfig = global.configManager?.getConfig?.() || global.config;
+    if (backendTimeLogs.isBackendTimeLogsEnabled(effectiveConfig)) {
+      try {
+        const projects = await backendTimeLogs.listUserProjects(userId, effectiveConfig);
+        if (Array.isArray(projects)) {
+          if (projects.length > 0) {
+            console.log(`✅ [IPC-EVENT-MAP] Found ${projects.length} projects from backend`);
+            return projects;
+          }
+          console.log(`⚠️ [IPC-EVENT-MAP] Backend returned no assignments for user ${userId}`);
+          return [];
+        }
+      } catch (error) {
+        console.error('❌ [IPC-EVENT-MAP] Backend project fetch failed:', error.message);
+      }
+    }
+
+    const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+    if (
+      (effectiveConfig?.auth_provider === 'cognito' || global.config?.auth_provider === 'cognito') &&
+      normalizeTenantUserId(userId)
+    ) {
+      console.log('⚠️ [IPC-EVENT-MAP] Cognito/RDS mode — skipping legacy Supabase project query');
+      return this._getFallbackProjects();
+    }
+
     console.log('🔍 [IPC-EVENT-MAP] Global state check:', {
       hasCurrentUserId: !!global.currentUserId,
       hasConfigUserId: !!global.config?.user_id,
@@ -1163,18 +1174,8 @@ class IPCEventMap {
   }
   
   _getFallbackProjects() {
-    console.log('🔄 [IPC-EVENT-MAP] Using fallback projects');
-    return [
-      {
-        project_id: '00000000-0000-0000-0000-000000000001',
-        name: 'Default Project',
-        description: 'Default project for time tracking',
-        projects: {
-          id: '00000000-0000-0000-0000-000000000001',
-          name: 'Default Project'
-        }
-      }
-    ];
+    console.log('🔄 [IPC-EVENT-MAP] No projects available — returning empty list');
+    return [];
   }
 
   // Test method implementations (simplified for now)

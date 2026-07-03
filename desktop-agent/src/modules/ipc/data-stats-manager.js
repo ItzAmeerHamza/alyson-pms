@@ -30,6 +30,82 @@ class DataStatsManager {
     console.log('✅ DataStatsManager initialized');
   }
 
+  /** RDS (time_doctor.* + tenant.user) via NestJS — not legacy Supabase public.* tables. */
+  _usesRdsBackend() {
+    try {
+      const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
+      return isBackendRdsEnabled(this.config);
+    } catch {
+      return false;
+    }
+  }
+
+  async _fetchTimeLogs(userId, opts = {}) {
+    const { isBackendRdsEnabled, getTimeLogsInRange } = require('../utils/backend-rds-reads');
+    if (isBackendRdsEnabled(this.config)) {
+      try {
+        const data = await getTimeLogsInRange(
+          userId,
+          { start: opts.start, end: opts.end, beforeEnd: opts.beforeEnd },
+          this.config,
+        );
+        return { data, error: null };
+      } catch (err) {
+        return { data: [], error: { message: err?.message || String(err) } };
+      }
+    }
+    if (!this.supabaseService) {
+      return { data: [], error: { message: 'Database service not available' } };
+    }
+    const select = opts.select || 'id, start_time, end_time';
+    let query = this.supabaseService.from('time_logs').select(select).eq('user_id', userId);
+    if (opts.start) query = query.gte('start_time', opts.start);
+    if (opts.end) query = query.lt('start_time', opts.end);
+    else if (opts.beforeEnd) query = query.lt('start_time', opts.beforeEnd);
+    query = query.order('start_time', { ascending: opts.ascending !== false });
+    return query;
+  }
+
+  async _fetchAppLogs(userId, { start, end, limit } = {}) {
+    const { isBackendRdsEnabled, listAppLogs } = require('../utils/backend-rds-reads');
+    if (isBackendRdsEnabled(this.config)) {
+      try {
+        const data = await listAppLogs(userId, { start, end, limit }, this.config);
+        return { data, error: null };
+      } catch (err) {
+        return { data: [], error: { message: err?.message || String(err) } };
+      }
+    }
+    if (!this.supabaseService) return { data: [], error: { message: 'Database service not available' } };
+    let query = this.supabaseService
+      .from('app_logs')
+      .select('app_name, timestamp, started_at, ended_at')
+      .eq('user_id', userId);
+    if (start) query = query.gte('timestamp', start);
+    if (end) query = query.lte('timestamp', end);
+    return query;
+  }
+
+  async _fetchUrlLogs(userId, { start, end, limit } = {}) {
+    const { isBackendRdsEnabled, listUrlLogs } = require('../utils/backend-rds-reads');
+    if (isBackendRdsEnabled(this.config)) {
+      try {
+        const data = await listUrlLogs(userId, { start, end, limit }, this.config);
+        return { data, error: null };
+      } catch (err) {
+        return { data: [], error: { message: err?.message || String(err) } };
+      }
+    }
+    if (!this.supabaseService) return { data: [], error: { message: 'Database service not available' } };
+    let query = this.supabaseService
+      .from('url_logs')
+      .select('url, timestamp')
+      .eq('user_id', userId);
+    if (start) query = query.gte('timestamp', start);
+    if (end) query = query.lte('timestamp', end);
+    return query;
+  }
+
   /**
    * Register all data/stats-related IPC handlers
    */
@@ -70,7 +146,7 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-weekly-time-stats'); } catch {}
     this.ipcMain.handle('get-weekly-time-stats', async () => {
       try {
-        if (!this.supabaseService) {
+        if (!this._usesRdsBackend() && !this.supabaseService) {
           return { totalTime: 0, dailyBreakdown: [], error: 'Database service not available' };
         }
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
@@ -87,12 +163,10 @@ class DataStatsManager {
         const weekEndExclusive = new Date(saturday.getFullYear(), saturday.getMonth(), saturday.getDate() + 1).toISOString();
 
         // Fetch logs starting before week end; clamp in JS
-        const { data: timeLogs, error } = await this.supabaseService
-          .from('time_logs')
-          .select('id, start_time, end_time')
-          .eq('user_id', userId)
-          .lt('start_time', weekEndExclusive)
-          .order('start_time', { ascending: true });
+        const { data: timeLogs, error } = await this._fetchTimeLogs(userId, {
+          beforeEnd: weekEndExclusive,
+          ascending: true,
+        });
         if (error) return { totalTime: 0, dailyBreakdown: [], error: error.message };
 
         const dailyBreakdown = [];
@@ -117,25 +191,20 @@ class DataStatsManager {
           new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
         );
         const mostRecentUnclosedId = sortedLogs.find(l => !l.end_time)?.id || null;
-        const currentTimeLogId = this.global.trackingManager?.currentTimeLogId;
+        const isTracking = !!(this.global.isTracking || this.global.trackingManager?.isTracking);
+        const currentTimeLogId = isTracking ? this.global.trackingManager?.currentTimeLogId : null;
         
         
         (timeLogs || []).forEach(log => {
           if (!log.start_time) return;
           const startMs = new Date(log.start_time).getTime();
           
-          // CRITICAL FIX: Handle unclosed sessions properly
           let endMs;
           if (log.end_time) {
             endMs = new Date(log.end_time).getTime();
-          } else if (log.id === currentTimeLogId) {
-            // This is the active session tracked by the app
-            endMs = Date.now();
-          } else if (!currentTimeLogId && mostRecentUnclosedId && log.id === mostRecentUnclosedId) {
-            // Fallback ONLY when no active tracking: use most recent unclosed as recovery
+          } else if (isTracking && log.id === currentTimeLogId) {
             endMs = Date.now();
           } else {
-            // Skip stale unclosed sessions (orphaned data)
             return;
           }
           
@@ -167,7 +236,7 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-monthly-time-stats'); } catch {}
     this.ipcMain.handle('get-monthly-time-stats', async () => {
       try {
-        if (!this.supabaseService) {
+        if (!this._usesRdsBackend() && !this.supabaseService) {
           return { totalTime: 0, weeklyBreakdown: [], error: 'Database service not available' };
         }
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
@@ -179,12 +248,10 @@ class DataStatsManager {
         const monthStartIso = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), 1).toISOString();
         const monthEndExclusive = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() + 1).toISOString();
 
-        const { data: timeLogs, error } = await this.supabaseService
-          .from('time_logs')
-          .select('id, start_time, end_time')
-          .eq('user_id', userId)
-          .lt('start_time', monthEndExclusive)
-          .order('start_time', { ascending: true });
+        const { data: timeLogs, error } = await this._fetchTimeLogs(userId, {
+          beforeEnd: monthEndExclusive,
+          ascending: true,
+        });
         if (error) return { totalTime: 0, weeklyBreakdown: [], error: error.message };
 
         const weeklyBreakdown = [];
@@ -216,25 +283,20 @@ class DataStatsManager {
           new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
         );
         const mostRecentUnclosedId = sortedLogs.find(l => !l.end_time)?.id || null;
-        const currentTimeLogId = this.global.trackingManager?.currentTimeLogId;
+        const isTracking = !!(this.global.isTracking || this.global.trackingManager?.isTracking);
+        const currentTimeLogId = isTracking ? this.global.trackingManager?.currentTimeLogId : null;
         
         
         (timeLogs || []).forEach(log => {
           if (!log.start_time) return;
           const startMs = new Date(log.start_time).getTime();
           
-          // CRITICAL FIX: Handle unclosed sessions properly
           let endMs;
           if (log.end_time) {
             endMs = new Date(log.end_time).getTime();
-          } else if (log.id === currentTimeLogId) {
-            // This is the active session tracked by the app
-            endMs = Date.now();
-          } else if (!currentTimeLogId && mostRecentUnclosedId && log.id === mostRecentUnclosedId) {
-            // Fallback ONLY when no active tracking: use most recent unclosed as recovery
+          } else if (isTracking && log.id === currentTimeLogId) {
             endMs = Date.now();
           } else {
-            // Skip stale unclosed sessions (orphaned data)
             return;
           }
           
@@ -261,18 +323,16 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-daily-time-breakdown'); } catch {}
     this.ipcMain.handle('get-daily-time-breakdown', async () => {
       try {
-        if (!this.supabaseService) return { totalTime: 0, hourlyBreakdown: [], error: 'Database service not available' };
+        if (!this._usesRdsBackend() && !this.supabaseService) return { totalTime: 0, hourlyBreakdown: [], error: 'Database service not available' };
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
         if (!userId) return { totalTime: 0, hourlyBreakdown: [], error: 'User not authenticated' };
 
         const start = new Date(); start.setHours(0,0,0,0);
         const endExclusive = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
-        const { data: timeLogs, error } = await this.supabaseService
-          .from('time_logs')
-          .select('start_time, end_time')
-          .eq('user_id', userId)
-          .lt('start_time', endExclusive.toISOString())
-          .order('start_time', { ascending: true });
+        const { data: timeLogs, error } = await this._fetchTimeLogs(userId, {
+          beforeEnd: endExclusive.toISOString(),
+          ascending: true,
+        });
         if (error) return { totalTime: 0, hourlyBreakdown: [], error: error.message };
 
         const clamp = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
@@ -280,10 +340,19 @@ class DataStatsManager {
         let totalSeconds = 0;
         const dayStartMs = start.getTime();
         const dayEndMs = endExclusive.getTime();
+        const isTracking = !!(this.global.isTracking || this.global.trackingManager?.isTracking);
+        const activeLogId = isTracking ? this.global.trackingManager?.currentTimeLogId : null;
         (timeLogs || []).forEach(log => {
           if (!log.start_time) return;
           const s = new Date(log.start_time).getTime();
-          const e = log.end_time ? new Date(log.end_time).getTime() : Date.now();
+          let e;
+          if (log.end_time) {
+            e = new Date(log.end_time).getTime();
+          } else if (isTracking && log.id === activeLogId) {
+            e = Date.now();
+          } else {
+            return;
+          }
           if (e <= dayStartMs || s >= dayEndMs) return;
           for (let h = 0; h < 24; h++) {
             const hStart = new Date(start.getFullYear(), start.getMonth(), start.getDate(), h).getTime();
@@ -304,192 +373,8 @@ class DataStatsManager {
    * Monthly report data: sessions, project breakdown, daily breakdown, avg activity
    */
   registerGetMonthlyReportData() {
-    console.log('📊 [DataStatsManager] Registering get-monthly-report-data handler');
-    try { this.ipcMain.removeHandler('get-monthly-report-data'); } catch {}
-    this.ipcMain.handle('get-monthly-report-data', async () => {
-      try {
-        if (!this.supabaseService) {
-          return { error: 'Database service not available' };
-        }
-        const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
-        if (!userId) return { error: 'User not authenticated' };
-
-        const today = new Date();
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        const monthStartIso = startOfMonth.toISOString();
-        const monthEndExclusive = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() + 1).toISOString();
-        const daysInMonth = endOfMonth.getDate();
-
-        // Fetch time_logs with project name join and screenshots avg activity in parallel
-        const [timeLogsResult, screenshotsResult] = await Promise.all([
-          this.supabaseService
-            .from('time_logs')
-            .select('id, start_time, end_time, project_id, status, projects(name)')
-            .eq('user_id', userId)
-            .gte('start_time', monthStartIso)
-            .lt('start_time', monthEndExclusive)
-            .order('start_time', { ascending: false }),
-          this.supabaseService
-            .from('screenshots')
-            .select('activity_percent')
-            .eq('user_id', userId)
-            .gte('captured_at', monthStartIso)
-            .lt('captured_at', monthEndExclusive)
-        ]);
-
-        if (timeLogsResult.error) return { error: timeLogsResult.error.message };
-
-        const timeLogs = timeLogsResult.data || [];
-        const screenshots = screenshotsResult.data || [];
-
-        // Resolve active session handling
-        const currentTimeLogId = this.global.trackingManager?.currentTimeLogId;
-        const sortedLogs = [...timeLogs].sort((a, b) =>
-          new Date(b.start_time).getTime() - new Date(a.start_time).getTime()
-        );
-        const mostRecentUnclosedId = sortedLogs.find(l => !l.end_time)?.id || null;
-
-        const mStartMs = startOfMonth.getTime();
-        const mEndMs = new Date(monthEndExclusive).getTime();
-        const clamp = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
-
-        // Helper: format a Date as YYYY-MM-DD in LOCAL timezone (avoids UTC shift from toISOString)
-        const localDateStr = (d) => {
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const day = String(d.getDate()).padStart(2, '0');
-          return `${y}-${m}-${day}`;
-        };
-
-        // Build daily breakdown (one entry per day of month)
-        const dailyBreakdown = [];
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dt = new Date(today.getFullYear(), today.getMonth(), d);
-          dailyBreakdown.push({
-            date: localDateStr(dt),
-            dayName: dt.toLocaleDateString('en-US', { weekday: 'short' }),
-            totalSeconds: 0,
-            sessions: 0
-          });
-        }
-
-        // Build per-project aggregation
-        const projectMap = {}; // projectId -> { name, totalSeconds, sessionCount }
-
-        // Build sessions list (last 10 most recent)
-        const sessions = [];
-
-        timeLogs.forEach(log => {
-          if (!log.start_time) return;
-          const startMs = new Date(log.start_time).getTime();
-
-          let endMs;
-          if (log.end_time) {
-            endMs = new Date(log.end_time).getTime();
-          } else if (log.id === currentTimeLogId) {
-            endMs = Date.now();
-          } else if (!currentTimeLogId && mostRecentUnclosedId && log.id === mostRecentUnclosedId) {
-            endMs = Date.now();
-          } else {
-            return; // skip stale unclosed
-          }
-
-          if (endMs <= mStartMs || startMs >= mEndMs) return;
-
-          const clampedSeconds = Math.floor(clamp(startMs, endMs, mStartMs, mEndMs) / 1000);
-          const projectName = log.projects?.name || 'No Project';
-          const projectId = log.project_id || 'none';
-
-          // Daily breakdown — distribute seconds across days the session spans.
-          // Session count is NOT incremented per-day to avoid inflation when a
-          // single session crosses midnight (total sessions is tracked separately).
-          for (let d = 0; d < daysInMonth; d++) {
-            const dayStartMs = new Date(today.getFullYear(), today.getMonth(), d + 1).getTime();
-            const dayEndMs = new Date(today.getFullYear(), today.getMonth(), d + 2).getTime();
-            const sec = Math.floor(clamp(startMs, endMs, dayStartMs, dayEndMs) / 1000);
-            if (sec > 0) {
-              dailyBreakdown[d].totalSeconds += sec;
-            }
-          }
-
-          // Project breakdown
-          if (!projectMap[projectId]) {
-            projectMap[projectId] = { projectId, projectName, totalSeconds: 0, sessionCount: 0 };
-          }
-          projectMap[projectId].totalSeconds += clampedSeconds;
-          projectMap[projectId].sessionCount += 1;
-
-          // Sessions list
-          sessions.push({
-            id: log.id,
-            projectName,
-            startTime: log.start_time,
-            endTime: log.end_time,
-            durationSeconds: clampedSeconds,
-            status: log.end_time ? 'completed' : 'active'
-          });
-        });
-
-        // Sort project breakdown by total time descending
-        const projectBreakdown = Object.values(projectMap)
-          .sort((a, b) => b.totalSeconds - a.totalSeconds);
-
-        // Compute grand total from daily breakdown (single source of truth)
-        const totalSeconds = dailyBreakdown.reduce((sum, d) => sum + d.totalSeconds, 0);
-
-        // Build weekly breakdown from daily data
-        const weeklyBreakdown = [];
-        const tempWeekStart = new Date(startOfMonth);
-        // Align to Sunday
-        tempWeekStart.setDate(tempWeekStart.getDate() - tempWeekStart.getDay());
-        while (tempWeekStart <= endOfMonth) {
-          const wStart = new Date(tempWeekStart);
-          const wEnd = new Date(tempWeekStart.getFullYear(), tempWeekStart.getMonth(), tempWeekStart.getDate() + 6);
-          const wStartStr = localDateStr(wStart);
-          const wEndStr = localDateStr(wEnd);
-          let weekTotal = 0;
-          // Sum daily seconds that fall within this week (compare local date strings)
-          dailyBreakdown.forEach(day => {
-            if (day.date >= wStartStr && day.date <= wEndStr) {
-              weekTotal += day.totalSeconds;
-            }
-          });
-          weeklyBreakdown.push({
-            weekStart: wStartStr,
-            weekEnd: wEndStr,
-            totalTime: weekTotal
-          });
-          tempWeekStart.setDate(tempWeekStart.getDate() + 7);
-        }
-
-        // Average activity from screenshots
-        let avgActivityPercent = 0;
-        if (screenshots.length > 0) {
-          const sum = screenshots.reduce((acc, s) => acc + (s.activity_percent || 0), 0);
-          avgActivityPercent = Math.round(sum / screenshots.length);
-        }
-
-        // Count days that actually have sessions
-        const activeDays = dailyBreakdown.filter(d => d.totalSeconds > 0).length;
-
-        return {
-          sessions: sessions.slice(0, 15), // last 15
-          projectBreakdown,
-          dailyBreakdown,
-          weeklyBreakdown,
-          totalSeconds,
-          avgActivityPercent,
-          totalSessions: sessions.length,
-          activeDays,
-          screenshotCount: screenshots.length,
-          monthLabel: startOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        };
-      } catch (e) {
-        console.error('❌ [DataStatsManager] get-monthly-report-data error:', e);
-        return { error: e.message };
-      }
-    });
+    // Registered early in main.js so the renderer can load before initialize() completes.
+    console.log('📊 [DataStatsManager] Skipping get-monthly-report-data — using early handler from main.js');
   }
 
   /**
@@ -944,7 +829,8 @@ class DataStatsManager {
         
         const effectiveSelf =
           this.global.currentUserId || this.config?.user_id || this.config?.userId;
-        if (effectiveSelf && user_id !== effectiveSelf) {
+        const { sameUserId } = require('../utils/backend-screenshots');
+        if (effectiveSelf && !sameUserId(user_id, effectiveSelf)) {
           console.warn('🔒 Access denied: user', user_id, '!=', effectiveSelf);
           return { success: false, error: 'Access denied: Can only view your own screenshots', screenshots: [], duplicates: [] };
         }
@@ -974,7 +860,15 @@ class DataStatsManager {
             }
             return buildEnhancedResponse(filtered);
           }
-          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Backend fetch failed, falling back to Supabase');
+          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Backend fetch failed');
+          const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+          if (
+            (this.config?.auth_provider === 'cognito' || process.env.VITE_AUTH_PROVIDER === 'cognito') &&
+            normalizeTenantUserId(user_id)
+          ) {
+            return { success: true, screenshots: [], duplicates: [] };
+          }
+          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Falling back to Supabase');
         }
         
         // Build query with activity filtering using service role client for admin access
@@ -1260,21 +1154,28 @@ class DataStatsManager {
     
     this.ipcMain.handle('set-current-user-id', async (event, userId, userRole) => {
       try {
-        console.log('👤 [IPC] Setting current user ID:', userId, 'Role:', userRole);
+        const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+        const normalizedUserId = normalizeTenantUserId(userId);
+        if (!normalizedUserId) {
+          console.warn('⚠️ [IPC] Refusing non-integer user id:', userId);
+          return { success: false, error: 'Invalid user id (expected integer)' };
+        }
+
+        console.log('👤 [IPC] Setting current user ID:', normalizedUserId, 'Role:', userRole);
         
         // Set user ID in global state (multiple formats for compatibility)
-        this.global.currentUserId = userId;
-        this.global.userId = userId;
+        this.global.currentUserId = normalizedUserId;
+        this.global.userId = normalizedUserId;
         this.global.currentUserRole = userRole || 'employee';
         
         // Update configuration if available
         if (this.global.config) {
-          this.global.config.user_id = userId;
-          this.global.config.userId = userId;
+          this.global.config.user_id = normalizedUserId;
+          this.global.config.userId = normalizedUserId;
         }
         if (this.config) {
-          this.config.user_id = userId;
-          this.config.userId = userId;
+          this.config.user_id = normalizedUserId;
+          this.config.userId = normalizedUserId;
         }
         
         // Update tracking controller if available
@@ -1297,7 +1198,7 @@ class DataStatsManager {
         }
         
         console.log('✅ [IPC] Current user ID and role set successfully in all locations');
-        return { success: true, userId: userId };
+        return { success: true, userId: normalizedUserId };
       } catch (error) {
         console.error('❌ Error setting current user ID:', error);
         return { success: false, error: error.message };
@@ -1868,8 +1769,7 @@ class DataStatsManager {
       try {
         console.log('📊 [TODAY-STATS] Fetching today\'s comprehensive statistics...');
         
-        if (!this.supabaseService) {
-          console.error('❌ [TODAY-STATS] Supabase service not available');
+        if (!this._usesRdsBackend() && !this.supabaseService) {
           return { success: false, error: 'Database service not available' };
         }
 
@@ -1889,47 +1789,48 @@ class DataStatsManager {
         console.log(`📊 [TODAY-STATS] Fetching stats for user ${effectiveUserId} from ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
 
         // Fetch all data in parallel
-        const [timeLogsResult, screenshotsResult, appLogsResult, urlLogsResult] = await Promise.all([
-          // Time logs for active/idle time calculation
-          this.supabaseService
-            .from('time_logs')
-            .select('start_time, end_time, is_idle, idle_seconds')
-            .eq('user_id', effectiveUserId)
-            .gte('start_time', todayStart.toISOString())
-            .lte('start_time', todayEnd.toISOString()),
-          
-          // Screenshot count and activity data
-          this.supabaseService
+        const timeLogsResult = await this._fetchTimeLogs(effectiveUserId, {
+          start: todayStart.toISOString(),
+          end: new Date(todayEnd.getTime() + 1).toISOString(),
+          select: 'start_time, end_time, idle_seconds',
+        });
+
+        let screenshots = [];
+        if (this._usesRdsBackend()) {
+          try {
+            const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+            screenshots = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
+              startIso: todayStart.toISOString(),
+              endIso: todayEnd.toISOString(),
+            }) || [];
+          } catch (err) {
+            console.warn('⚠️ [TODAY-STATS] Backend screenshots read failed:', err.message);
+          }
+        } else if (this.supabaseService) {
+          const screenshotsResult = await this.supabaseService
             .from('screenshots')
             .select('id, captured_at, activity_percent, keystrokes, mouse_clicks, mouse_movements')
             .eq('user_id', effectiveUserId)
             .gte('captured_at', todayStart.toISOString())
-            .lte('captured_at', todayEnd.toISOString()),
-          
-          // App count and activity data
-          this.supabaseService
-            .from('app_logs')
-            .select('app_name, timestamp, started_at, ended_at')
-            .eq('user_id', effectiveUserId)
-            .gte('timestamp', todayStart.toISOString())
-            .lte('timestamp', todayEnd.toISOString()),
-          
-          // URL logs for additional stats
-          this.supabaseService
-            .from('url_logs')
-            .select('url, timestamp')
-            .eq('user_id', effectiveUserId)
-            .gte('timestamp', todayStart.toISOString())
-            .lte('timestamp', todayEnd.toISOString())
-        ]);
+            .lte('captured_at', todayEnd.toISOString());
+          if (screenshotsResult.error) {
+            console.warn('⚠️ [TODAY-STATS] Screenshots query failed:', screenshotsResult.error.message);
+          }
+          screenshots = screenshotsResult.data || [];
+        }
 
-        // Process results
+        const appLogsResult = await this._fetchAppLogs(effectiveUserId, {
+          start: todayStart.toISOString(),
+          end: todayEnd.toISOString(),
+        });
+        const urlLogsResult = await this._fetchUrlLogs(effectiveUserId, {
+          start: todayStart.toISOString(),
+          end: todayEnd.toISOString(),
+        });
+
         const timeLogs = timeLogsResult.data || [];
-        const screenshots = screenshotsResult.data || [];
         const appLogs = appLogsResult.data || [];
         const urlLogs = urlLogsResult.data || [];
-
-        // Calculate statistics from actual database schema
         let activeTime = 0;
         let idleTime = 0;
         let totalTime = 0;

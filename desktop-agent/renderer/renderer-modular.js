@@ -16,6 +16,14 @@ window.electronAPI = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version')
 };
 
+/** Local calendar date as YYYY-MM-DD (not UTC). */
+function localDateIso(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /** HH:MM:SS from total seconds (for tracker / tray). */
 function formatSecondsAsHMS(totalSec) {
   const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
@@ -25,14 +33,123 @@ function formatSecondsAsHMS(totalSec) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+const TRAY_TICK_STALE_MS = 1500;
+window.__trayTimerActive = false;
+window.__lastTrayTimerTickAt = 0;
+window.__lastTrayCumulativeSeconds = 0;
+
+function getTrackerTimerElement() {
+  return document.getElementById('trackerTime');
+}
+
+function readTrackerDisplaySeconds() {
+  return parseHmsToSeconds(getTrackerTimerElement()?.textContent);
+}
+
+/** Never lower the tracker clock unless allowDecrease is true (e.g. new day). */
+function setTrackerDisplaySeconds(totalSec, { allowDecrease = false } = {}) {
+  const el = getTrackerTimerElement();
+  if (!el) return 0;
+  const next = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const current = readTrackerDisplaySeconds();
+  const resolved = allowDecrease ? next : Math.max(current, next);
+  el.textContent = formatSecondsAsHMS(resolved);
+  return resolved;
+}
+
+function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
+  const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
+  const floor = Math.max(
+    readTrackerDisplaySeconds(),
+    Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0)),
+    Math.max(0, Math.floor(Number(extraFloor) || 0)),
+  );
+  return Math.max(db, floor);
+}
+
+function readLocalTrackingCumulativeSeconds() {
+  const start = window.__lastTrackingStartTime;
+  if (!start) return 0;
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000));
+  const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  return base + elapsed;
+}
+
+/** Tray IPC is preferred when fresh, but local clock wins if it is ahead (e.g. during optimistic start). */
+function isTrayTimerDrivingDisplay() {
+  if (window.__localTrackingClockActive) return false;
+  if (!window.__trayTimerActive) return false;
+  if (Date.now() - (window.__lastTrayTimerTickAt || 0) >= TRAY_TICK_STALE_MS) return false;
+  const local = readLocalTrackingCumulativeSeconds();
+  const tray = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
+  if (local > 0 && local > tray + 1) return false;
+  return true;
+}
+window.isTrayTimerDrivingDisplay = isTrayTimerDrivingDisplay;
+
+function beginLocalTrackingClock(startTime) {
+  window.__lastTrackingStartTime = startTime;
+  window.__localTrackingClockActive = true;
+  window.__trayTimerActive = false;
+  window.__lastTrayTimerTickAt = 0;
+  ensureTrackingDisplayWatchdog();
+  updateRendererTrackingClock();
+}
+window.beginLocalTrackingClock = beginLocalTrackingClock;
+
+function updateRendererTrackingClock() {
+  const start = window.__lastTrackingStartTime;
+  if (!start) return;
+  const dashboardTimer = document.getElementById('sessionTime');
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000));
+  const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  const localCumulative = base + elapsed;
+  const trayCumulative = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
+  const cumulativeSec = Math.max(localCumulative, trayCumulative);
+  const sessionStr = formatSecondsAsHMS(elapsed);
+  const cumulativeStr = formatSecondsAsHMS(cumulativeSec);
+  if (dashboardTimer) dashboardTimer.textContent = sessionStr;
+  setTrackerDisplaySeconds(cumulativeSec);
+}
+
+function ensureTrackingDisplayWatchdog() {
+  if (window.__trackingDisplayWatchdog) return;
+  window.__trackingDisplayWatchdog = setInterval(() => {
+    if (!window.__lastTrackingStartTime) return;
+    updateRendererTrackingClock();
+  }, 1000);
+}
+
+function stopTrackingDisplayWatchdog() {
+  if (window.__trackingDisplayWatchdog) {
+    clearInterval(window.__trackingDisplayWatchdog);
+    window.__trackingDisplayWatchdog = null;
+  }
+  window.__localTrackingClockActive = false;
+}
+
 /** Closed time_logs today (local day), excluding the current open session — for cumulative "worked today" UI. */
 async function refreshTodayCompletedBaseSeconds() {
   try {
     const s = await ipcRenderer.invoke('get-today-time-stats');
-    window.__completedTodayBaseSeconds = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
+    const dbBase = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
+    const floor = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
+    window.__completedTodayBaseSeconds = Math.max(dbBase, floor);
+    if (dbBase >= floor) {
+      window.__todayBaseAtLastStop = null;
+    }
   } catch {
-    window.__completedTodayBaseSeconds = 0;
+    window.__completedTodayBaseSeconds = Math.max(
+      0,
+      Math.floor(Number(window.__todayBaseAtLastStop) || 0),
+    );
   }
+}
+
+function parseHmsToSeconds(text) {
+  const parts = String(text || '').trim().split(':').map((n) => Number(n));
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return 0;
+  return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
 }
 
 /** Next calendar-day boundary (local) — shown under the Time Tracker clock */
@@ -47,6 +164,10 @@ function updateTrackerDailyRefreshHint() {
 }
 
 window.updateTrackerDailyRefreshHint = updateTrackerDailyRefreshHint;
+window.refreshTodayCompletedBaseSeconds = refreshTodayCompletedBaseSeconds;
+window.readTrackerDisplaySeconds = readTrackerDisplaySeconds;
+window.setTrackerDisplaySeconds = setTrackerDisplaySeconds;
+window.resolveStoppedDisplaySeconds = resolveStoppedDisplaySeconds;
 
 // Import our focused modules
 let AuthManager, UIManager, NotificationManager, IPCManager, AppHistoryManager, ActivityMonitor;
@@ -450,27 +571,61 @@ function setupModuleCommunication() {
     return originalOn.call(this, event, wrappedListener);
   };
   
-  // Main-process tray timer pushes elapsed time every second (most reliable source).
-  // When active, this is the SINGLE source of truth for timer display — all other
-  // renderer-side timers (session-timer-update, manual setInterval) are suppressed to
-  // prevent race-condition flicker.
-  window.__trayTimerActive = false;
+  // Main-process tray timer pushes elapsed time every second when the event loop is healthy.
+  // Renderer-side watchdog takes over if tray ticks stall for >2.5s.
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
     window.__trayTimerActive = true;
-    const trackerTimer = document.getElementById('trackerTime');
+    window.__lastTrayTimerTickAt = Date.now();
+    const localAhead = readLocalTrackingCumulativeSeconds();
+    const incomingTray = Math.max(
+      0,
+      Math.floor(Number(data?.cumulativeSeconds) || 0),
+      parseHmsToSeconds(data?.cumulativeDisplay),
+    );
+    if (localAhead > incomingTray + 1) {
+      return;
+    }
+    window.__localTrackingClockActive = false;
     const dashboardTimer = document.getElementById('sessionTime');
     if (data && (data.display || data.cumulativeDisplay)) {
       const sessionStr = data.display || formatSecondsAsHMS(data.sessionElapsedSeconds ?? 0);
-      const cumulativeStr = data.cumulativeDisplay || sessionStr;
-      if (trackerTimer) trackerTimer.textContent = cumulativeStr;
+      const trayCumulative = Math.max(
+        0,
+        Math.floor(Number(data.cumulativeSeconds) || 0),
+        parseHmsToSeconds(data.cumulativeDisplay),
+      );
+      window.__lastTrayCumulativeSeconds = trayCumulative;
+      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+      const start = window.__lastTrackingStartTime;
+      const localCumulative = start
+        ? base + Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000))
+        : trayCumulative;
+      const cumulativeSec = Math.max(localCumulative, trayCumulative);
       if (dashboardTimer) dashboardTimer.textContent = sessionStr;
+      setTrackerDisplaySeconds(cumulativeSec);
+    }
+  });
+
+  ipcRenderer.on('tracking-stopped', (_event, data) => {
+    const displaySec = readTrackerDisplaySeconds();
+    const frozen = Math.max(
+      displaySec,
+      Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0)),
+    );
+    if (frozen > 0) {
+      window.__todayBaseAtLastStop = frozen;
+      setTrackerDisplaySeconds(frozen);
+      void ipcRenderer.invoke('set-frozen-total-at-stop', frozen).catch(() => {});
     }
   });
 
   // Session timer updates (renderer-side fallback — only used when tray timer is NOT active)
   ipcManager.on('session-timer-update', (timerData) => {
-    // Skip if main-process tray timer is already driving the display
-    if (window.__trayTimerActive) return;
+    if (isTrayTimerDrivingDisplay()) return;
+    if (typeof updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
+      updateRendererTrackingClock();
+      return;
+    }
 
     const dashboardTimer = document.getElementById('sessionTime');
     const trackerTimer = document.getElementById('trackerTime');
@@ -509,6 +664,7 @@ function setupModuleCommunication() {
       clearInterval(window.timerUpdateInterval);
       window.timerUpdateInterval = null;
     }
+    stopTrackingDisplayWatchdog();
     console.log('✅ [TIMER] All timer intervals cleared');
   };
   
@@ -525,26 +681,12 @@ function setupModuleCommunication() {
     if (state.optimistic) {
       console.log('⚡ [TIMER] Optimistic start — starting timer directly');
       const startTime = state.sessionStartTime || state.startTime || new Date();
-      window.__lastTrackingStartTime = startTime;
+      beginLocalTrackingClock(startTime);
       if (timerUpdateInterval) clearInterval(timerUpdateInterval);
       if (window.timerUpdateInterval) clearInterval(window.timerUpdateInterval);
-      await refreshTodayCompletedBaseSeconds();
-      const st = new Date(startTime);
-      const elapsed = Math.max(0, Math.floor((Date.now() - st.getTime()) / 1000));
-      const h = Math.floor(elapsed / 3600), m = Math.floor((elapsed % 3600) / 60), s = elapsed % 60;
-      const ts = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-      if (dashboardTimer) dashboardTimer.textContent = ts;
-      if (trackerTimer) trackerTimer.textContent = formatSecondsAsHMS(base + elapsed);
+      void refreshTodayCompletedBaseSeconds().then(() => updateRendererTrackingClock());
       timerUpdateInterval = setInterval(() => {
-        if (window.__trayTimerActive) return;
-        const st2 = new Date(window.__lastTrackingStartTime);
-        const el = Math.max(0, Math.floor((Date.now() - st2.getTime()) / 1000));
-        const hh = Math.floor(el / 3600), mm = Math.floor((el % 3600) / 60), ss = el % 60;
-        const t = `${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}:${ss.toString().padStart(2,'0')}`;
-        const b = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-        if (dashboardTimer) dashboardTimer.textContent = t;
-        if (trackerTimer) trackerTimer.textContent = formatSecondsAsHMS(b + el);
+        updateRendererTrackingClock();
       }, 1000);
       window.timerUpdateInterval = timerUpdateInterval;
       return;
@@ -556,6 +698,7 @@ function setupModuleCommunication() {
     if (state.synced && state.isTracking && state.startTime) {
       console.log('🔄 [TIMER] Synced event — updating start time without re-verification');
       window.__lastTrackingStartTime = state.startTime;
+      ensureTrackingDisplayWatchdog();
       void refreshTodayCompletedBaseSeconds();
       return;
     }
@@ -565,6 +708,11 @@ function setupModuleCommunication() {
     if (_trackingStateDebounceTimer) clearTimeout(_trackingStateDebounceTimer);
     _trackingStateDebounceTimer = setTimeout(async () => {
       _trackingStateDebounceTimer = null;
+
+      if (ipcManager.optimisticMode || ipcManager.startInProgress) {
+        console.log('⚡ [TIMER] Skipping verification — start still in progress');
+        return;
+      }
       
       // Verify tracking state with main process before updating UI
       try {
@@ -590,6 +738,7 @@ function setupModuleCommunication() {
         if (verifiedState.isTracking && verifiedState.startTime && mainState?.currentTimeLogId) {
           // Keep a resilient start time across events
           window.__lastTrackingStartTime = verifiedState.startTime;
+          ensureTrackingDisplayWatchdog();
           console.log('⏱️ [TIMER] Starting manual timer updates with verified start time:', window.__lastTrackingStartTime);
           
           // Clear any existing interval
@@ -614,25 +763,9 @@ function setupModuleCommunication() {
             trackerTimer.textContent = formatSecondsAsHMS(base0 + elapsed);
           }
           
-          // Update both timers every second (fallback — skipped when tray timer is active)
+          window.__localTrackingClockActive = true;
           timerUpdateInterval = setInterval(() => {
-            // Main-process tray timer is the authoritative source; skip local calc
-            if (window.__trayTimerActive) return;
-
-            const startTime2 = new Date(window.__lastTrackingStartTime);
-            const elapsed2 = Math.floor((Date.now() - startTime2.getTime()) / 1000);
-            const hours2 = Math.floor(elapsed2 / 3600);
-            const minutes2 = Math.floor((elapsed2 % 3600) / 60);
-            const seconds2 = elapsed2 % 60;
-            const timeString2 = `${hours2.toString().padStart(2, '0')}:${minutes2.toString().padStart(2, '0')}:${seconds2.toString().padStart(2, '0')}`;
-            const b2 = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-            
-            if (dashboardTimer) {
-              dashboardTimer.textContent = timeString2;
-            }
-            if (trackerTimer) {
-              trackerTimer.textContent = formatSecondsAsHMS(b2 + elapsed2);
-            }
+            updateRendererTrackingClock();
           }, 1000);
           // Store globally so IPC manager can clear it
           window.timerUpdateInterval = timerUpdateInterval;
@@ -640,12 +773,13 @@ function setupModuleCommunication() {
           // FIX-1: If the tray timer is actively sending ticks, it is the
           // authoritative timer source. Do NOT reset the display — the tray
           // timer will correct any stale state within 1 second.
-          if (window.__trayTimerActive) {
+          if (isTrayTimerDrivingDisplay()) {
             console.log('⏹️ [TIMER] Verification says not tracking, but tray timer is active — deferring to tray');
             return;
           }
           
           console.log('⏹️ [TIMER] Stopping timer updates - verified state shows not tracking');
+          stopTrackingDisplayWatchdog();
           // Clear interval when not tracking
           if (timerUpdateInterval) {
             clearInterval(timerUpdateInterval);
@@ -662,26 +796,34 @@ function setupModuleCommunication() {
           if (trackerTimer) {
             ipcRenderer.invoke('get-today-time-stats').then((s) => {
               if (trackerTimer && s && typeof s.totalTime === 'number') {
-                trackerTimer.textContent = formatSecondsAsHMS(s.totalTime);
+                const resolved = resolveStoppedDisplaySeconds(s.totalTime);
+                setTrackerDisplaySeconds(resolved);
               }
             }).catch(() => {
-              if (trackerTimer) trackerTimer.textContent = '00:00:00';
+              const current = readTrackerDisplaySeconds();
+              if (current <= 0 && trackerTimer) trackerTimer.textContent = '00:00:00';
             });
           }
           window.__lastTrackingStartTime = null;
-          // Reset tray timer flag so fallback timers can run on next start
           window.__trayTimerActive = false;
+          window.__lastTrayTimerTickAt = 0;
         }
       } catch (error) {
         console.error('❌ [TIMER] Failed to verify tracking state with main process:', error);
         // FIX-1: If tray timer is active, it's the authoritative source.
         // Don't reset the display on verification errors.
-        if (window.__trayTimerActive) {
+        if (isTrayTimerDrivingDisplay()) {
           console.log('⚠️ [TIMER] Verification error, but tray timer is active — preserving display');
           return;
         }
+        if (window.__lastTrackingStartTime) {
+          ensureTrackingDisplayWatchdog();
+          return;
+        }
         console.log('⏹️ [TIMER] Stopping timer updates - verification failed (no fallback start)');
+        stopTrackingDisplayWatchdog();
         window.__trayTimerActive = false;
+        window.__lastTrayTimerTickAt = 0;
         if (timerUpdateInterval) {
           clearInterval(timerUpdateInterval);
           timerUpdateInterval = null;
@@ -696,10 +838,12 @@ function setupModuleCommunication() {
         if (trackerTimer) {
           ipcRenderer.invoke('get-today-time-stats').then((s) => {
             if (trackerTimer && s && typeof s.totalTime === 'number') {
-              trackerTimer.textContent = formatSecondsAsHMS(s.totalTime);
+              const resolved = resolveStoppedDisplaySeconds(s.totalTime);
+              setTrackerDisplaySeconds(resolved);
             }
           }).catch(() => {
-            if (trackerTimer) trackerTimer.textContent = '00:00:00';
+            const current = readTrackerDisplaySeconds();
+            if (current <= 0 && trackerTimer) trackerTimer.textContent = '00:00:00';
           });
         }
         window.__lastTrackingStartTime = null;
@@ -753,7 +897,7 @@ function setupModuleCommunication() {
       
       // Update timer display if available
       // FIX-6: Skip if tray timer is the authoritative source to prevent overwrites
-      if (data.timer && data.timer.isTracking && !window.__trayTimerActive) {
+      if (data.timer && data.timer.isTracking && !isTrayTimerDrivingDisplay()) {
         const timerDisplay = document.getElementById('trackerTime');
         // Only update if we have valid elapsed time to avoid overwriting
         if (timerDisplay && data.timer.elapsed !== undefined && data.timer.elapsed !== null) {
@@ -1160,10 +1304,16 @@ if (!window.__rendererInitAttached) {
             
             if (moduleInstances && moduleInstances.uiManager && moduleInstances.uiManager.showMainApp) {
                 moduleInstances.uiManager.showMainApp();
+                if (moduleInstances.authManager?.updateUserInfo) {
+                  moduleInstances.authManager.updateUserInfo();
+                }
                 try {
                     // Ensure Time Tracker page is shown by default after login
                     if (moduleInstances.uiManager && typeof moduleInstances.uiManager.showPage === 'function') {
                         moduleInstances.uiManager.showPage('timetracker');
+                    }
+                    if (moduleInstances.uiManager?.loadMainAppProjects) {
+                        void moduleInstances.uiManager.loadMainAppProjects();
                     }
                 } catch {}
                 console.log('✅ [RENDERER] showMainApp() called successfully');
@@ -1463,7 +1613,18 @@ function setupLoginOsAccessPanel() {
   };
 
   refreshBtn?.addEventListener('click', () => {
-    void updateLoginPermUI();
+    void (async () => {
+      try {
+        const perm = await ipcRenderer.invoke('check-permissions', { deepCheck: true });
+        setRow(screenEl, !!perm.screen);
+        setRow(accessEl, !!perm.accessibility);
+        applyMacGate(perm);
+        syncLoginOsAccessChrome(perm, null);
+      } catch (e) {
+        console.warn('[LOGIN-PERM] deep check-permissions failed:', e?.message || e);
+        void updateLoginPermUI();
+      }
+    })();
   });
 
   requestBtn?.addEventListener('click', async () => {
@@ -1756,7 +1917,7 @@ async function loadRecentScreenshots() {
         limitSelect: !!limitSelect
     });
     
-    const selectedDate = screenshotDate ? screenshotDate.value : new Date().toISOString().split('T')[0];
+    const selectedDate = screenshotDate ? screenshotDate.value : localDateIso();
     const selectedActivity = activityFilter ? activityFilter.value : 'all';
     const selectedLimit = limitSelect ? parseInt(limitSelect.value) : 50;
     
@@ -1877,7 +2038,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
 
     // Preserve currently selected date or use today - make sure we don't lose user's selection
     const existingDateInput = document.getElementById('screenshotDate');
-    let currentDate = new Date().toISOString().split('T')[0]; // Default to today
+    let currentDate = localDateIso();
     
     // If user has already selected a date, preserve it
     if (existingDateInput && existingDateInput.value) {

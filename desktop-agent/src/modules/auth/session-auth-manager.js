@@ -131,33 +131,21 @@ class SessionAuthManager {
    */
   registerPermissionHandlers() {
     // Handle permission checking for onboarding guide
-    this.ipcMain.handle('check-permissions', async (event) => {
-      console.log('🚨 [PERMISSION-CHECK] Checking current permission status...');
+    this.ipcMain.handle('check-permissions', async (event, options = {}) => {
+      console.log('🚨 [PERMISSION-CHECK] Checking current permission status...', options);
 
       try {
-        const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
-        let screenStatus = getScreenStatus();
-        const accessibility = getAccessibilityAuthorized();
+        const { resolveDisplayPermissions } = require('../../system/permissions-check');
+        const deepCheck = !!(options && options.deepCheck);
+        const resolved = await resolveDisplayPermissions({ deepCheck });
 
-        // Fallback probe for stale macOS status APIs.
-        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
-          try {
-            const screenshot = require('screenshot-desktop');
-            const probe = await screenshot({ format: 'png' });
-            if (probe && probe.length > 0) {
-              screenStatus = 'authorized';
-            }
-          } catch (_) {
-            // keep original status
-          }
-        }
-
-        console.log('🚨 [PERMISSION-CHECK] Screen Recording:', screenStatus);
-        console.log('🚨 [PERMISSION-CHECK] Accessibility:', accessibility);
+        console.log('🚨 [PERMISSION-CHECK] Screen Recording:', resolved.screen);
+        console.log('🚨 [PERMISSION-CHECK] Accessibility:', resolved.accessibility);
 
         return {
-          screen: screenStatus === 'authorized',
-          accessibility: !!accessibility
+          screen: resolved.screen,
+          accessibility: resolved.accessibility,
+          deepCheck,
         };
       } catch (error) {
         console.error('❌ [PERMISSION-CHECK] Robust check failed:', error);
@@ -176,24 +164,15 @@ class SessionAuthManager {
         console.warn('⚠️ [PERMISSION-REQUEST] ensureMacPermissions failed:', error?.message || error);
       }
 
-      // Return fresh status after request flow.
+      // Return fresh status after request flow (always deep-check after prompts).
       try {
-        const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
-        let screenStatus = getScreenStatus();
-        const accessibility = getAccessibilityAuthorized();
-
-        if (process.platform === 'darwin' && screenStatus !== 'authorized') {
-          try {
-            const screenshot = require('screenshot-desktop');
-            const probe = await screenshot({ format: 'png' });
-            if (probe && probe.length > 0) screenStatus = 'authorized';
-          } catch (_) {}
-        }
+        const { resolveDisplayPermissions } = require('../../system/permissions-check');
+        const resolved = await resolveDisplayPermissions({ deepCheck: true });
 
         return {
-          screen: screenStatus === 'authorized',
-          accessibility: !!accessibility,
-          message: 'Permission request completed'
+          screen: resolved.screen,
+          accessibility: resolved.accessibility,
+          message: 'Permission request completed',
         };
       } catch (error) {
         console.error('❌ [PERMISSION-REQUEST] Final status check failed:', error);

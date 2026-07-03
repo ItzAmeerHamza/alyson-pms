@@ -130,7 +130,6 @@ async function uploadScreenshotViaS3Api({
     window_title: windowTitle || null,
     agent_version: agentVersion || null,
     perceptual_hash: perceptualHash,
-    needs_vision_validation: true,
   };
 
   let lastCompleteError = 'screenshot_upload_complete failed';
@@ -274,7 +273,6 @@ async function uploadScreenshotBuffer({
       window_title: windowTitle || null,
       agent_version: agentVersion || null,
       perceptual_hash: perceptualHash,
-      needs_vision_validation: true,
     };
 
     const { data, error } = await client.from('screenshots').insert(insertPayload).select('id').single();

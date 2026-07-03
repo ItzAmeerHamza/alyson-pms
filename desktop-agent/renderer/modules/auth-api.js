@@ -19,7 +19,11 @@ function getApiBase(authConfig) {
   return String(base).replace(/\/$/, '');
 }
 
-async function fetchAuthMe(idToken, authConfig) {
+async function fetchAuthMe(idToken, authConfig, ipcRenderer) {
+  if (ipcRenderer && typeof ipcRenderer.invoke === 'function') {
+    return ipcRenderer.invoke('auth:fetch-me', { idToken });
+  }
+
   const res = await fetch(`${getApiBase(authConfig)}/auth/me`, {
     headers: {
       Authorization: `Bearer ${idToken}`,

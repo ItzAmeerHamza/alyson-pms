@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alyson PM</title>
+    <title>Alyson Time Doctor</title>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
     <style>
@@ -243,26 +243,37 @@
             position: relative;
         }
 
-        .password-field .form-input {
+        .password-input-wrap {
+            position: relative;
+        }
+
+        .password-input-wrap .form-input {
             padding-right: 48px;
         }
 
         .password-toggle {
             position: absolute;
-            right: 10px;
+            right: 8px;
             top: 50%;
             transform: translateY(-50%);
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
+            padding: 0;
             border: none;
             background: transparent;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             color: #64748b;
             transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .password-toggle svg {
+            width: 18px;
+            height: 18px;
+            display: block;
         }
 
         .password-toggle:hover {
@@ -3710,7 +3721,7 @@
                 color: #0f172a;
                 margin-bottom: 16px;
                 text-shadow: none;
-            ">Alyson PM</h1>
+            ">Alyson Time Doctor</h1>
             <div style="
                 width: 40px;
                 height: 40px;
@@ -3963,8 +3974,30 @@
         .mr-week-label {
             font-size: 12px;
             color: #64748b;
-            min-width: 120px;
+            min-width: 140px;
             flex-shrink: 0;
+            line-height: 1.35;
+        }
+
+        .mr-week-label-title {
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .mr-week-label-range {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+
+        .mr-week-row.is-current .mr-week-label-title {
+            color: #667eea;
+        }
+
+        .mr-card-subtitle {
+            font-size: 12px;
+            color: #94a3b8;
+            margin: -4px 0 12px 0;
+            line-height: 1.45;
         }
 
         .mr-week-bar-track {
@@ -4112,9 +4145,25 @@
         .mr-session-duration {
             font-weight: 600;
             color: #334155;
-            min-width: 55px;
+            min-width: 72px;
             text-align: right;
             flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .mr-session-footer {
+            margin-top: 4px;
+            padding: 10px 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #64748b;
+            text-align: right;
+            background: #f8fafc;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .mr-session-footer strong {
+            color: #334155;
         }
 
         .mr-session-status {
@@ -4361,7 +4410,7 @@
         <div class="login-stack">
         <div class="login-card fade-in">
             <div class="login-header">
-                <h1 class="login-logo">Alyson PM</h1>
+                <h1 class="login-logo">Alyson Time Doctor</h1>
                 <p class="login-subtitle">Employee Desktop Portal</p>
             </div>
 
@@ -4379,11 +4428,13 @@
                 
                 <div class="form-group password-field">
                     <label class="form-label" for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required>
-                    <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password">
-                        <i data-lucide="eye" class="pw-eye"></i>
-                        <i data-lucide="eye-off" class="pw-eye-off" style="display:none"></i>
-                    </button>
+                    <div class="password-input-wrap">
+                        <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required>
+                        <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password">
+                            <i data-lucide="eye" class="pw-eye"></i>
+                            <i data-lucide="eye-off" class="pw-eye-off" style="display:none"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-group" style="margin-bottom: 16px;">
@@ -4486,7 +4537,7 @@
         <!-- SIDEBAR -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="app-logo">Alyson PM</div>
+                <div class="app-logo">Alyson Time Doctor</div>
                 <div class="app-subtitle">Core Monitoring</div>
             </div>
 
@@ -4900,6 +4951,7 @@
                                 <i data-lucide="calendar" style="width: 16px; height: 16px; color: #667eea;"></i>
                                 Weekly Breakdown
                             </div>
+                            <p class="mr-card-subtitle">How your tracked time is spread across each calendar week (Sunday–Saturday). A week can include days from the previous or next month.</p>
                             <div id="mrWeeklyBreakdown" class="mr-weekly-breakdown">
                                 <!-- Rows injected by JS -->
                             </div>
@@ -4980,7 +5032,7 @@
                 <div class="control-section">
                     <div class="control-header">
                         <div class="control-title">Frequently asked questions</div>
-                        <div class="control-subtitle">How Alyson PM tracks time, uses screenshots, and which permissions it needs</div>
+                        <div class="control-subtitle">How Alyson Time Doctor tracks time, uses screenshots, and which permissions it needs</div>
                     </div>
                     <div class="faq-list" style="max-width: 720px;">
                         <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -5023,7 +5075,7 @@
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">In the web portal, administrators may run AI-assisted reporting (for example AI Insights) on data that was already collected—such as summarizing patterns from screenshots and activity. It analyzes existing records; it is not a separate hidden recorder. Ask your admin for the official policy that applies to your organization.</p>
                         </details>
                         <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">macOS blocked Alyson PM (not from an identified developer)</summary>
+                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">macOS blocked Alyson Time Doctor (not from an identified developer)</summary>
                             <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
                                 <p style="margin: 0 0 10px;">The app may not be notarized yet. You can allow it manually.</p>
                                 <p style="margin: 0 0 8px; font-weight: 600; color: #0f172a;">Option 1: Allow the app manually in System Preferences</p>
@@ -5032,7 +5084,7 @@
                                     <li style="margin-bottom: 6px;">Click Done on the warning message.</li>
                                     <li style="margin-bottom: 6px;">Open System Preferences.</li>
                                     <li style="margin-bottom: 6px;">Go to Security &amp; Privacy.</li>
-                                    <li style="margin-bottom: 6px;">In the General tab, you should see a message saying &quot;Alyson PM was blocked from use because it is not from an identified developer&quot; with an option to Open Anyway.</li>
+                                    <li style="margin-bottom: 6px;">In the General tab, you should see a message saying &quot;Alyson Time Doctor was blocked from use because it is not from an identified developer&quot; with an option to Open Anyway.</li>
                                     <li>Click Open Anyway, then enter your password if prompted.</li>
                                 </ol>
                             </div>
@@ -6636,8 +6688,8 @@
                 const setState = (show) => {
                     input.type = show ? 'text' : 'password';
                     btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-                    if (eye) eye.style.display = show ? 'none' : 'inline-block';
-                    if (eyeOff) eyeOff.style.display = show ? 'inline-block' : 'none';
+                    if (eye) eye.style.display = show ? 'none' : 'block';
+                    if (eyeOff) eyeOff.style.display = show ? 'block' : 'none';
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                 };
 

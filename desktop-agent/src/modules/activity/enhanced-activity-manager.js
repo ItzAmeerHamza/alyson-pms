@@ -157,18 +157,29 @@ class EnhancedActivityManager {
     if (type === 'click') {
       this.betweenScreenshotsActivity.clicks++;
       global.displayActivityStats.clicks++;
+      global.displayActivityStats.totalClicks = (global.displayActivityStats.totalClicks || 0) + 1;
+      global.displayActivityStats.sessionClicks = (global.displayActivityStats.sessionClicks || 0) + 1;
       global.dailyActivity.clicks++;
       if (this.activityStats) this.activityStats.mouseClicks++;
       if (this.periodActivityStats) this.periodActivityStats.mouseClicks++;
     } else if (type === 'key') {
       this.betweenScreenshotsActivity.keys++;
       global.displayActivityStats.keys++;
+      global.displayActivityStats.totalKeys = (global.displayActivityStats.totalKeys || 0) + 1;
+      global.displayActivityStats.sessionKeys = (global.displayActivityStats.sessionKeys || 0) + 1;
       global.dailyActivity.keys++;
       if (this.activityStats) this.activityStats.keystrokes++;
       if (this.periodActivityStats) this.periodActivityStats.keystrokes++;
     } else if (type === 'move') {
+      const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+      if (now - (this._lastMoveCountAt || 0) < moveMinMs) {
+        return;
+      }
+      this._lastMoveCountAt = now;
       this.betweenScreenshotsActivity.moves++;
       global.displayActivityStats.moves++;
+      global.displayActivityStats.totalMoves = (global.displayActivityStats.totalMoves || 0) + 1;
+      global.displayActivityStats.sessionMoves = (global.displayActivityStats.sessionMoves || 0) + 1;
       global.dailyActivity.moves++;
       if (this.activityStats) this.activityStats.mouseMovements++;
       if (this.periodActivityStats) this.periodActivityStats.mouseMovements++;

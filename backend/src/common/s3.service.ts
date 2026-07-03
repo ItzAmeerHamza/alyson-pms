@@ -25,10 +25,16 @@ export class S3Service {
     if (region && bucket) {
       const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID');
       const secretAccessKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY');
+      const sessionToken = this.config.get<string>('AWS_SESSION_TOKEN');
+      // Local dev uses long-lived AKIA keys. Lambda injects ASIA* STS keys — those require
+      // AWS_SESSION_TOKEN in presigned URLs; use the default credential chain instead.
+      const useStaticDevCredentials =
+        Boolean(accessKeyId?.startsWith('AKIA') && secretAccessKey && !sessionToken);
+
       this.client = new S3Client({
         region,
-        ...(accessKeyId && secretAccessKey
-          ? { credentials: { accessKeyId, secretAccessKey } }
+        ...(useStaticDevCredentials
+          ? { credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! } }
           : {}),
       });
       this.bucket = bucket;

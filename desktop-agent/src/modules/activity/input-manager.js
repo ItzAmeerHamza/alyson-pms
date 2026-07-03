@@ -376,28 +376,33 @@ class UnifiedInputManager extends EventEmitter {
         // Avoid per-key console spam; rely on DEBUG_INPUT via debugLogger if needed
         break;
 
-      case 'move':
+      case 'move': {
+        const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+        if (now - (this._lastMoveEmitAt || 0) < moveMinMs) {
+          break;
+        }
+        this._lastMoveEmitAt = now;
         this.stats.mouseMovements++;
         this.stats.lastMoveTime = now;
-        
-        // [IN1] Mouse move (throttled logging)
-        const shouldLogMove = this.stats.mouseMovements % 50 === 0; // Throttle to every 50 moves
+
+        const shouldLogMove = this.stats.mouseMovements % 50 === 0;
         if (shouldLogMove) {
           debugLogger.in1('Mouse move detected', {
-            dx: 'unknown', // Platform-specific detector would provide this
+            dx: 'unknown',
             dy: 'unknown',
             method: method,
             total: this.stats.mouseMovements,
             throttled: true
           });
         }
-        
+
         this.emit('mouseMovement', {
           timestamp: now,
           total: this.stats.mouseMovements,
           method: method
         });
         break;
+      }
     }
   }
 
