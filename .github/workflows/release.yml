@@ -101,7 +101,7 @@ jobs:
 
       - name: Build Windows (unsigned NSIS installer)
         working-directory: desktop-agent
-        run: npx electron-builder --win --publish never -c.npmRebuild=false
+        run: npx electron-builder --win --publish never --config.npmRebuild=false
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
