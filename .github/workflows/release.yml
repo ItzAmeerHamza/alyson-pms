@@ -68,9 +68,53 @@ jobs:
             desktop-agent/dist/latest-mac.yml
           retention-days: 7
 
+  build-windows:
+    name: Build Windows (unsigned test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-agent/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop-agent
+        run: npm ci --ignore-scripts
+
+      - name: Prebuild Windows (env config, Python bundle)
+        working-directory: desktop-agent
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_AUTH_PROVIDER: ${{ secrets.VITE_AUTH_PROVIDER }}
+          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: npm run prebuild:win
+
+      - name: Build Windows (unsigned NSIS installer)
+        working-directory: desktop-agent
+        run: npx electron-builder --win --publish never
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            desktop-agent/dist/*.exe
+            desktop-agent/dist/latest.yml
+          retention-days: 7
+
   publish:
     name: Publish Release
-    needs: [build-mac]
+    needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -81,6 +125,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: mac-artifacts
+          path: release-assets
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
           path: release-assets
 
       - name: Get version
@@ -104,6 +154,9 @@ jobs:
             On first launch, right-click the app → **Open** (Gatekeeper will block a double-click).
 
             Grant **Screen Recording** and **Accessibility** to **Alyson PM** in System Settings.
+
+            **Windows install:** Download the `.exe` Setup installer and run it.
+            Windows SmartScreen may warn because the installer is unsigned — click **More info** → **Run anyway**.
           draft: false
           prerelease: true
           files: release-assets/**/*
