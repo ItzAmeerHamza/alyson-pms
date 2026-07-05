@@ -47,14 +47,20 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "temp-password" "$KEYCHAIN_PATH"
           rm -f "$CERT_FILE"
 
-      - name: Generate env config
+      - name: Prebuild macOS (env config, Swift helper, native modules)
         working-directory: desktop-agent
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: node generate-env-config.js --build
+          VITE_AUTH_PROVIDER: ${{ secrets.VITE_AUTH_PROVIDER }}
+          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: npm run prebuild:mac
 
       - name: Build macOS (DMG + ZIP)
         working-directory: desktop-agent
@@ -109,14 +115,20 @@ jobs:
         working-directory: desktop-agent
         run: npm ci --ignore-scripts
 
-      - name: Generate env config
+      - name: Prebuild Windows (env config, Python bundle)
         working-directory: desktop-agent
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: node generate-env-config.js --build
+          VITE_AUTH_PROVIDER: ${{ secrets.VITE_AUTH_PROVIDER }}
+          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        run: npm run prebuild:win
 
       - name: Build Windows (NSIS)
         working-directory: desktop-agent
