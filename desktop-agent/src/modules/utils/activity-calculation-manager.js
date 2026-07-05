@@ -29,7 +29,10 @@ class ActivityCalculationManager {
     const now = this.Date.now();
     const timeSinceLastActivity = now - (this.lastActivity || now);
     const currentIdleTime = this.calculateIdleTimeSeconds();
-    const idleThreshold = (this.appSettings && this.appSettings.idle_threshold_seconds) || 60; // 1 minute default
+    const idleThreshold =
+      (this.appSettings && this.appSettings.idle_detection_threshold_seconds) ||
+      (this.appSettings && this.appSettings.idle_threshold_seconds) ||
+      60;
     
     // ✅ IMMEDIATE 100% ON ACTIVITY - User requested this behavior
     // If user has been active within the last 10 seconds, immediately show 100%

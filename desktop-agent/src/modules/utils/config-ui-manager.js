@@ -45,6 +45,8 @@ class ConfigUIManager {
         this.appSettings = {
           screenshot_interval_seconds: settings.screenshot_interval || 30,
           idle_threshold_seconds: settings.idle_threshold || 60,
+          idle_detection_threshold_seconds: settings.idle_detection_threshold_seconds || 60,
+          idle_checkpoint_interval_seconds: settings.idle_checkpoint_interval_seconds || 60,
           blur_screenshots: settings.blur_screenshots || false,
           track_urls: settings.track_urls !== false,
           track_applications: settings.track_applications !== false,
@@ -362,6 +364,8 @@ class ConfigUIManager {
     return this.appSettings || {
       screenshot_interval_seconds: 30,
       idle_threshold_seconds: 60,
+      idle_detection_threshold_seconds: 60,
+      idle_checkpoint_interval_seconds: 60,
       blur_screenshots: false,
       track_urls: true,
       track_applications: true,

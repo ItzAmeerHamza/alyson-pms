@@ -859,6 +859,8 @@ class IPCHandlers {
     return {
       screenshot_interval_seconds: 30,
       idle_threshold_seconds: 60,
+      idle_detection_threshold_seconds: 60,
+      idle_checkpoint_interval_seconds: 60,
       blur_screenshots: false,
       track_urls: true,
       track_applications: true,

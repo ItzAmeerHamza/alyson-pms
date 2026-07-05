@@ -17,6 +17,8 @@ class EnhancedIdleMonitor {
     this.isTracking = false;
     this._idleSessionTimeout = null;
     this._consecutiveZeroActivityShots = 0;
+    /** End timestamp of the last idle chunk persisted to idle_logs (ms). */
+    this._lastIdleCheckpointTime = null;
     
     // Phantom-activity detection: tracks periods with mouse moves but zero
     // keystrokes/clicks — the signature of mouse jitter / desk vibration
@@ -31,9 +33,21 @@ class EnhancedIdleMonitor {
     this.PHANTOM_IDLE_THRESHOLD_MS =
       (this.config?.phantom_idle_minutes || global?.appSettings?.phantom_idle_minutes || defaultPhantomIdleMinutes) * 60 * 1000;
     
-    // Constants
-    this.IDLE_CHECK_INTERVAL = 30000; // 30 seconds
-    this.IDLE_THRESHOLD = this.config?.diagnostic_idle_threshold_seconds || 60;
+    // Constants — idle detection starts after 1 minute of no input (configurable).
+    const appSettings = this.config?.appSettings || global?.appSettings || {};
+    const detectionSeconds =
+      this.config?.idle_detection_threshold_seconds ??
+      appSettings.idle_detection_threshold_seconds ??
+      this.config?.diagnostic_idle_threshold_seconds ??
+      60;
+    const checkpointSeconds =
+      this.config?.idle_checkpoint_interval_seconds ??
+      appSettings.idle_checkpoint_interval_seconds ??
+      60;
+
+    this.IDLE_CHECK_INTERVAL = Math.max(15000, checkpointSeconds * 1000);
+    this.MIN_IDLE_CHUNK_MS = 5000; // ignore sub-5s slices (clock jitter)
+    this.IDLE_THRESHOLD = detectionSeconds;
     this.IDLE_SESSION_THRESHOLD = (this.config?.diagnostic_idle_session_ms || 1200000);
     
     // Auto-stop threshold in minutes.
@@ -77,6 +91,7 @@ class EnhancedIdleMonitor {
     }
     
     console.log('🧍 [IDLE-MONITOR] Starting idle monitoring...');
+    console.log(`🧍 [IDLE-MONITOR] Idle detection: ${this.IDLE_THRESHOLD}s, checkpoint every ${this.IDLE_CHECK_INTERVAL / 1000}s`);
     console.log(`🧍 [IDLE-MONITOR] Auto-stop: ${this.config.idle_threshold_minutes} min OS idle, ${Math.floor(this.PHANTOM_IDLE_THRESHOLD_MS / 60000)} min phantom idle`);
     
     this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
@@ -96,7 +111,9 @@ class EnhancedIdleMonitor {
         // Check if we've transitioned from active to idle
         if (isIdle && !this.wasIdleLastCheck) {
           console.log(`⏸️ [IDLE-MONITOR] User became idle (${idleSeconds}s)`);
-          this.currentIdleStartTime = Date.now();
+          // Backdate to when OS idle actually started so the first chunk is accurate.
+          this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
+          this._lastIdleCheckpointTime = null;
           this.wasIdleLastCheck = true;
 
           // NOTE: Do NOT reset betweenScreenshotsActivity here.
@@ -140,6 +157,14 @@ class EnhancedIdleMonitor {
               this.markSessionAsIdle();
             }
           }, this.IDLE_SESSION_THRESHOLD);
+
+          // Persist idle immediately — do not wait for user to move/click again.
+          await this._flushIdleCheckpoint();
+        }
+
+        // While still idle, flush a checkpoint every check interval.
+        if (isIdle && this.wasIdleLastCheck) {
+          await this._flushIdleCheckpoint();
         }
         
         // Check if we've transitioned from idle to active
@@ -151,12 +176,10 @@ class EnhancedIdleMonitor {
             this._idleSessionTimeout = null;
           }
           
-          if (this.currentIdleStartTime) {
-            const idleDuration = Date.now() - this.currentIdleStartTime;
-            await this.logIdlePeriod(this.currentIdleStartTime, Date.now(), idleDuration);
-          }
+          await this._flushIdleCheckpoint();
           
           this.currentIdleStartTime = null;
+          this._lastIdleCheckpointTime = null;
           this.wasIdleLastCheck = false;
           this.idleThresholdExceeded = false;
           this._phantomIdleStartTime = null;
@@ -195,7 +218,7 @@ class EnhancedIdleMonitor {
     }, this.IDLE_CHECK_INTERVAL);
     
     cleanupRegistry.registerInterval(this.idleMonitoringInterval, 'Idle Monitoring');
-    console.log('✅ [IDLE-MONITOR] Idle monitoring started (30s intervals)');
+    console.log('✅ [IDLE-MONITOR] Idle monitoring started');
   }
 
   async stopIdleMonitoring() {
@@ -212,17 +235,31 @@ class EnhancedIdleMonitor {
       clearInterval(this.idleMonitoringInterval);
       this.idleMonitoringInterval = null;
       
-      // 🔧 FIX: Log idle period if user was idle when tracking stopped
+      // Flush any unlogged idle time when tracking stops while user is still idle.
       if (this.currentIdleStartTime && this.wasIdleLastCheck) {
-        const idleDuration = Date.now() - this.currentIdleStartTime;
-        console.log(`📊 [IDLE-MONITOR] Logging idle period on stop (${Math.round(idleDuration/1000)}s)`);
-        await this.logIdlePeriod(this.currentIdleStartTime, Date.now(), idleDuration);
+        await this._flushIdleCheckpoint();
       }
       
       this.currentIdleStartTime = null;
+      this._lastIdleCheckpointTime = null;
       this.wasIdleLastCheck = false;
       console.log('🛑 [IDLE-MONITOR] Idle monitoring stopped');
     }
+  }
+
+  /**
+   * Persist idle time accumulated since the last checkpoint (or idle start).
+   * Called while the user is still idle so Pulse shows idle without requiring input.
+   */
+  async _flushIdleCheckpoint(endTime = Date.now()) {
+    if (!this.currentIdleStartTime || !this.wasIdleLastCheck) return;
+
+    const startTime = this._lastIdleCheckpointTime ?? this.currentIdleStartTime;
+    const duration = endTime - startTime;
+    if (duration < this.MIN_IDLE_CHUNK_MS) return;
+
+    await this.logIdlePeriod(startTime, endTime, duration);
+    this._lastIdleCheckpointTime = endTime;
   }
 
   async logIdlePeriod(startTime, endTime, duration) {
@@ -231,8 +268,9 @@ class EnhancedIdleMonitor {
       const durationMinutes = Math.floor(duration / 60000);
       console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
       
-      // Get user_id from multiple sources for reliability
-      const userId = this.config?.user_id || global.currentUserId || global.config?.user_id || null;
+      const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+      const rawUserId = this.config?.user_id || global.currentUserId || global.config?.user_id || null;
+      const userId = normalizeTenantUserId(rawUserId) || rawUserId;
       const timeLogId = global.currentTimeLogId || global.currentSession?.id || null;
       
       
@@ -417,6 +455,7 @@ class EnhancedIdleMonitor {
 
   resetIdleState() {
     this.currentIdleStartTime = null;
+    this._lastIdleCheckpointTime = null;
     this.wasIdleLastCheck = false;
     this.idleThresholdExceeded = false;
     this._phantomIdleStartTime = null;

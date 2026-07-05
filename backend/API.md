@@ -70,6 +70,8 @@ JWT required. Employees only see own data unless admin/manager.
 
 Actions: `create_time_log`, `upsert_time_log`, `update_time_log`, `close_active_sessions`, `get_active_time_log`, `get_today_time_logs`, `insert_app_logs`, `insert_url_logs`, `insert_idle_log`, `screenshot_upload_init`, `screenshot_upload_complete`, `list_screenshots`.
 
+**Idle logging (desktop agent):** idle is counted after **60 seconds** with no keyboard/mouse input. While the user remains idle, the agent writes **60-second checkpoints** to `time_doctor.idle_logs` via `insert_idle_log` (no click required to close a period). Daily totals are the sum of `duration_seconds` across rows for that user/day.
+
 ---
 
 ## Health

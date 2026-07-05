@@ -26,7 +26,9 @@ class ConfigurationDataManager {
     // App Settings
     this.appSettings = {
       screenshot_interval_seconds: 30, // 30 seconds for better monitoring
-      idle_threshold_seconds: 60, // 1 minute for faster detection  
+      idle_threshold_seconds: 60, // legacy alias; prefer idle_detection_threshold_seconds
+      idle_detection_threshold_seconds: 60, // start counting idle after 1 minute
+      idle_checkpoint_interval_seconds: 60, // persist idle while still idle every 1 minute
       blur_screenshots: false,
       track_urls: true,
       track_applications: true,

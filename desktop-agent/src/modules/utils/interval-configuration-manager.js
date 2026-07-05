@@ -59,7 +59,11 @@ class IntervalConfigurationManager {
       try {
         const idleTimeMs = this.getSystemIdleTime();
         const idleTimeSeconds = this.Math.floor(idleTimeMs / 1000);
-        const isIdle = idleTimeSeconds >= (this.appSettings?.idle_threshold_seconds || 60);
+        const idleDetectSeconds =
+          this.appSettings?.idle_detection_threshold_seconds ||
+          this.appSettings?.idle_threshold_seconds ||
+          60;
+        const isIdle = idleTimeSeconds >= idleDetectSeconds;
         
         // Handle idle state changes
         if (!isIdle && this.idleStart !== null) {

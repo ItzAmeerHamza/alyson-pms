@@ -18,7 +18,9 @@ class ConfigManager {
     // Default settings
     this.defaultSettings = {
       screenshot_interval_seconds: 30,
-      idle_threshold_seconds: 900, // 15 minutes
+      idle_threshold_seconds: 900, // auto-stop after 15 minutes (legacy key)
+      idle_detection_threshold_seconds: 60, // start counting idle after 1 minute
+      idle_checkpoint_interval_seconds: 60, // persist idle chunks every 1 minute
       blur_screenshots: false,
       enable_anti_cheat: true,
       notification_frequency_seconds: 300,

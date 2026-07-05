@@ -209,19 +209,69 @@ describe('EnhancedIdleMonitor', () => {
     });
   });
 
-  // ─── State reset ───
+  // ─── Continuous idle logging ───
 
-  describe('resetIdleState', () => {
-    test('resets all idle and phantom tracking state', () => {
+  describe('continuous idle logging', () => {
+    test('default idle detection threshold is 60 seconds (1 minute)', () => {
+      monitor = new EnhancedIdleMonitor({ user_id: 'test' });
+      expect(monitor.IDLE_THRESHOLD).toBe(60);
+      expect(monitor.IDLE_CHECK_INTERVAL).toBe(60000);
+    });
+
+    test('idle_detection_threshold_seconds config is respected', () => {
+      monitor = new EnhancedIdleMonitor({
+        user_id: 'test',
+        idle_detection_threshold_seconds: 90,
+        idle_checkpoint_interval_seconds: 120,
+      });
+      expect(monitor.IDLE_THRESHOLD).toBe(90);
+      expect(monitor.IDLE_CHECK_INTERVAL).toBe(120000);
+    });
+
+    test('flushIdleCheckpoint persists while user remains idle', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.logIdlePeriod = jest.fn().mockResolvedValue(undefined);
+
+      const idleStart = Date.now() - 45000;
+      monitor.currentIdleStartTime = idleStart;
+      monitor.wasIdleLastCheck = true;
+
+      await monitor._flushIdleCheckpoint(idleStart + 45000);
+
+      expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
+      expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(45000);
+      expect(monitor._lastIdleCheckpointTime).toBe(idleStart + 45000);
+    });
+
+    test('flushIdleCheckpoint skips duplicate slices on resume', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.logIdlePeriod = jest.fn().mockResolvedValue(undefined);
+
+      const t0 = Date.now() - 90000;
+      monitor.currentIdleStartTime = t0;
+      monitor.wasIdleLastCheck = true;
+      monitor._lastIdleCheckpointTime = t0 + 60000;
+
+      await monitor._flushIdleCheckpoint(t0 + 90000);
+
+      expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
+      expect(monitor.logIdlePeriod.mock.calls[0][0]).toBe(t0 + 60000);
+      expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(30000);
+    });
+
+    test('resetIdleState clears checkpoint tracking', () => {
       monitor = new EnhancedIdleMonitor(mockConfig);
       monitor.currentIdleStartTime = Date.now();
       monitor.wasIdleLastCheck = true;
       monitor.idleThresholdExceeded = true;
       monitor._phantomIdleStartTime = Date.now();
+      monitor._lastIdleCheckpointTime = Date.now();
 
       monitor.resetIdleState();
 
       expect(monitor.currentIdleStartTime).toBeNull();
+      expect(monitor._lastIdleCheckpointTime).toBeNull();
       expect(monitor.wasIdleLastCheck).toBe(false);
       expect(monitor.idleThresholdExceeded).toBe(false);
       expect(monitor._phantomIdleStartTime).toBeNull();

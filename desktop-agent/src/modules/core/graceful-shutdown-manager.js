@@ -494,7 +494,7 @@ class GracefulShutdownManager {
       if (global.enhancedIdleMonitor) {
         global.enhancedIdleMonitor.isTracking = false;
         if (global.enhancedIdleMonitor.stopIdleMonitoring) {
-          global.enhancedIdleMonitor.stopIdleMonitoring();
+          await global.enhancedIdleMonitor.stopIdleMonitoring();
         }
       }
 
