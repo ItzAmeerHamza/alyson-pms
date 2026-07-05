@@ -21,6 +21,11 @@ const isBuildProcess = process.env.npm_lifecycle_event === 'build' ||
 console.log(`ðŸ“¦ Build process: ${isBuildProcess ? 'YES' : 'NO'}`);
 
 // Get credentials from environment variables
+const backendApiUrlRaw = process.env.BACKEND_API_URL || '';
+const apiBaseFromBackend = backendApiUrlRaw
+  ? backendApiUrlRaw.replace(/\/sync\/desktop-action\/?$/, '').replace(/\/$/, '')
+  : '';
+
 const credentials = {
   VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
   VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
@@ -30,8 +35,12 @@ const credentials = {
   VITE_COGNITO_REGION: process.env.VITE_COGNITO_REGION || process.env.COGNITO_REGION || '',
   VITE_COGNITO_USER_POOL_ID: process.env.VITE_COGNITO_USER_POOL_ID || process.env.COGNITO_USER_POOL_ID || '',
   VITE_COGNITO_CLIENT_ID: process.env.VITE_COGNITO_CLIENT_ID || process.env.COGNITO_CLIENT_ID || '',
-  VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3000',
-  BACKEND_API_URL: process.env.BACKEND_API_URL || '',
+  VITE_API_BASE_URL:
+    process.env.VITE_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    apiBaseFromBackend ||
+    'http://localhost:3000',
+  BACKEND_API_URL: backendApiUrlRaw,
   INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || '',
   NODE_ENV: isBuildProcess ? 'production' : (process.env.NODE_ENV || 'development'),
 };

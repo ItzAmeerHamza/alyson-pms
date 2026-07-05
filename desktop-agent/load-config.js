@@ -106,14 +106,26 @@ function loadConfig() {
     embeddedConfig.VITE_API_BASE_URL ||
     embeddedConfig.API_BASE_URL ||
     jsonConfig.api_base_url ||
-    'http://localhost:3000';
+    '';
 
   const backendApiUrl =
     process.env.BACKEND_API_URL ||
     envConfig.BACKEND_API_URL ||
     embeddedConfig.BACKEND_API_URL ||
     jsonConfig.backend_api_url ||
-    `${apiBaseUrl.replace(/\/$/, '')}/sync/desktop-action`;
+    `${String(apiBaseUrl || '').replace(/\/$/, '')}/sync/desktop-action`;
+
+  const apiBaseFromBackend = backendApiUrl
+    ? backendApiUrl.replace(/\/sync\/desktop-action\/?$/, '').replace(/\/$/, '')
+    : '';
+
+  const resolvedApiBaseUrl = (() => {
+    const candidate = (apiBaseUrl || apiBaseFromBackend || 'http://localhost:3000').replace(/\/$/, '');
+    if (candidate === 'http://localhost:3000' && apiBaseFromBackend) {
+      return apiBaseFromBackend;
+    }
+    return candidate;
+  })();
 
   const internalApiKey =
     process.env.INTERNAL_API_KEY ||
@@ -139,7 +151,7 @@ function loadConfig() {
     cognito_region: cognitoRegion,
     cognito_user_pool_id: cognitoUserPoolId,
     cognito_client_id: cognitoClientId,
-    api_base_url: apiBaseUrl,
+    api_base_url: resolvedApiBaseUrl,
     backend_api_url: backendApiUrl,
     backend_api_key: internalApiKey,
   };
@@ -153,7 +165,7 @@ function loadConfig() {
   console.log(`   Auth provider: ${config.auth_provider}`);
   if (useCognito) {
     console.log(`   Cognito pool: ${cognitoUserPoolId}`);
-    console.log(`   API base: ${apiBaseUrl}`);
+    console.log(`   API base: ${resolvedApiBaseUrl}`);
     const backendReady = Boolean(backendApiUrl && internalApiKey);
     console.log(`   Backend sync: ${backendReady ? 'configured' : 'MISSING (projects/time logs need BACKEND_API_URL + INTERNAL_API_KEY)'}`);
   } else {
