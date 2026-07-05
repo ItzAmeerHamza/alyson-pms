@@ -66,6 +66,22 @@ if (isBuildProcess) {
     console.error('   OR create a .env file in desktop-agent/');
     process.exit(1);
   }
+
+  if (cognitoBuild) {
+    const apiBase = credentials.VITE_API_BASE_URL.replace(/\/$/, '');
+    const missingCognito = [];
+    if (!credentials.VITE_COGNITO_REGION) missingCognito.push('VITE_COGNITO_REGION');
+    if (!credentials.BACKEND_API_URL) missingCognito.push('BACKEND_API_URL');
+    if (!credentials.INTERNAL_API_KEY) missingCognito.push('INTERNAL_API_KEY');
+    if (apiBase.includes('localhost') || apiBase.includes('127.0.0.1')) {
+      missingCognito.push('VITE_API_BASE_URL (or BACKEND_API_URL to derive it)');
+    }
+    if (missingCognito.length) {
+      console.error('Missing Cognito release variables:');
+      missingCognito.forEach((key) => console.error(`   ${key}`));
+      process.exit(1);
+    }
+  }
   
   console.log('âœ… Build credentials validated');
 } else {

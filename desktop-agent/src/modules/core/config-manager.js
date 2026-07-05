@@ -154,11 +154,20 @@ class ConfigManager {
       cognito_user_pool_id:
         prior.cognito_user_pool_id || this.envConfig.VITE_COGNITO_USER_POOL_ID || '',
       cognito_client_id: prior.cognito_client_id || this.envConfig.VITE_COGNITO_CLIENT_ID || '',
-      api_base_url:
-        prior.api_base_url ||
-        this.envConfig.VITE_API_BASE_URL ||
-        this.envConfig.API_BASE_URL ||
-        '',
+      api_base_url: (() => {
+        const fromPrior = prior.api_base_url || this.envConfig.VITE_API_BASE_URL || this.envConfig.API_BASE_URL || '';
+        const fromBackend = (backendUrl || '')
+          .replace(/\/sync\/desktop-action\/?$/, '')
+          .replace(/\/$/, '');
+        const candidate = String(fromPrior || fromBackend).replace(/\/$/, '');
+        if (
+          (candidate === 'http://localhost:3000' || candidate === '') &&
+          fromBackend
+        ) {
+          return fromBackend;
+        }
+        return candidate;
+      })(),
       backend_api_url: backendUrl,
       backend_api_key: backendKey,
       ...this.userConfig,

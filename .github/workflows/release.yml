@@ -51,6 +51,10 @@ jobs:
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: npm run prebuild:mac
 
+      - name: Verify embedded config (macOS)
+        working-directory: desktop-agent
+        run: node scripts/verify-embedded-config.js
+
       - name: Build macOS (unsigned DMG + ZIP)
         working-directory: desktop-agent
         run: >
@@ -100,6 +104,10 @@ jobs:
           BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
           INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         run: npm run prebuild:win
+
+      - name: Verify embedded config (Windows)
+        working-directory: desktop-agent
+        run: node scripts/verify-embedded-config.js
 
       - name: Build Windows (unsigned NSIS installer)
         working-directory: desktop-agent
