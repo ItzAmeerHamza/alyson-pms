@@ -168,7 +168,12 @@ async function insertUrlLogsBatch(logs, config = global.config) {
 }
 
 async function insertIdleLog(log, config = global.config) {
-  return callDesktopAction('insert_idle_log', { log }, config);
+  const userId = requireTenantUserId(log.user_id);
+  return callDesktopAction(
+    'insert_idle_log',
+    { log: { ...log, user_id: userId } },
+    config,
+  );
 }
 
 module.exports = {

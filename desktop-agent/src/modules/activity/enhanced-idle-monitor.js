@@ -19,6 +19,10 @@ class EnhancedIdleMonitor {
     this._consecutiveZeroActivityShots = 0;
     /** End timestamp of the last idle chunk persisted to idle_logs (ms). */
     this._lastIdleCheckpointTime = null;
+    /** Last time we saw a real keystroke or click (ms). Used when OS idle is unreliable. */
+    this._lastInputActivityAt = null;
+    this._lastSeenKeystrokesForIdle = 0;
+    this._lastSeenClicksForIdle = 0;
     
     // Phantom-activity detection: tracks periods with mouse moves but zero
     // keystrokes/clicks — the signature of mouse jitter / desk vibration
@@ -97,21 +101,28 @@ class EnhancedIdleMonitor {
     this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
     this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
     this._phantomIdleStartTime = null;
+    const stats = global.unifiedInputManager?.stats;
+    this._lastSeenKeystrokesForIdle = stats?.keystrokes || 0;
+    this._lastSeenClicksForIdle = stats?.mouseClicks || 0;
+    this._lastInputActivityAt = stats?.lastActivity || Date.now();
     
-    // Check idle state every 30 seconds
+    // Check idle state on a fixed interval
     this.idleMonitoringInterval = setInterval(async () => {
       // CRITICAL FIX: Check both local and global tracking state
       if (!this.isTracking || !global.isTracking) return;
       
       try {
-        const idleSeconds = global.unifiedInputManager?.getIdleTime() || 0;
+        const { effective: idleSeconds, os: osIdleSeconds, input: inputIdleSeconds } =
+          this._getEffectiveIdleSeconds();
         const isIdle = idleSeconds > this.IDLE_THRESHOLD;
         
         
         // Check if we've transitioned from active to idle
         if (isIdle && !this.wasIdleLastCheck) {
-          console.log(`⏸️ [IDLE-MONITOR] User became idle (${idleSeconds}s)`);
-          // Backdate to when OS idle actually started so the first chunk is accurate.
+          console.log(
+            `⏸️ [IDLE-MONITOR] User became idle (effective=${idleSeconds}s, os=${osIdleSeconds}s, input=${inputIdleSeconds}s)`,
+          );
+          // Backdate to when idle actually started so the first chunk is accurate.
           this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
           this._lastIdleCheckpointTime = null;
           this.wasIdleLastCheck = true;
@@ -185,6 +196,10 @@ class EnhancedIdleMonitor {
           this._phantomIdleStartTime = null;
           this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
           this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
+          const resumeStats = global.unifiedInputManager?.stats;
+          this._lastSeenKeystrokesForIdle = resumeStats?.keystrokes || 0;
+          this._lastSeenClicksForIdle = resumeStats?.mouseClicks || 0;
+          this._lastInputActivityAt = resumeStats?.lastActivity || Date.now();
           
           // Attempt to recover screenshot permissions after idle
           if (global.enhancedPermissionManager?.recoverScreenshotPermissions) {
@@ -248,6 +263,44 @@ class EnhancedIdleMonitor {
   }
 
   /**
+   * Seconds since the last real keystroke or mouse click.
+   * Matches screenshot "0 keys / 0 clicks" better than OS idle on Mac/Windows.
+   */
+  _getInputIdleSeconds() {
+    const stats = global.unifiedInputManager?.stats;
+    if (!stats) return 0;
+
+    const currentKeys = stats.keystrokes || 0;
+    const currentClicks = stats.mouseClicks || 0;
+    const now = Date.now();
+
+    if (
+      currentKeys > this._lastSeenKeystrokesForIdle ||
+      currentClicks > this._lastSeenClicksForIdle
+    ) {
+      this._lastInputActivityAt = now;
+      this._lastSeenKeystrokesForIdle = currentKeys;
+      this._lastSeenClicksForIdle = currentClicks;
+    }
+
+    if (!this._lastInputActivityAt) {
+      this._lastInputActivityAt = stats.lastActivity || now;
+    }
+
+    return Math.max(0, Math.floor((now - this._lastInputActivityAt) / 1000));
+  }
+
+  /**
+   * Use the higher of OS idle and input idle so we still log when the user is
+   * away but mouse jitter keeps resetting getSystemIdleTime().
+   */
+  _getEffectiveIdleSeconds() {
+    const os = global.unifiedInputManager?.getIdleTime?.() || 0;
+    const input = this._getInputIdleSeconds();
+    return { effective: Math.max(os, input), os, input };
+  }
+
+  /**
    * Persist idle time accumulated since the last checkpoint (or idle start).
    * Called while the user is still idle so Pulse shows idle without requiring input.
    */
@@ -269,20 +322,36 @@ class EnhancedIdleMonitor {
       console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
       
       const { normalizeTenantUserId } = require('../utils/tenant-user-id');
-      const rawUserId = this.config?.user_id || global.currentUserId || global.config?.user_id || null;
-      const userId = normalizeTenantUserId(rawUserId) || rawUserId;
+      const rawUserId =
+        global.sessionManager?.getUserId?.() ||
+        global.currentUserId ||
+        this.config?.user_id ||
+        global.config?.user_id ||
+        null;
+      const userId = normalizeTenantUserId(rawUserId);
       const timeLogId = global.currentTimeLogId || global.currentSession?.id || null;
       
       
       if (!userId) {
-        console.warn('⚠️ [IDLE-LOG] No user_id available, skipping idle log');
+        console.warn(
+          '⚠️ [IDLE-LOG] No valid tenant user_id, skipping idle log (raw=',
+          String(rawUserId || '').slice(0, 64),
+          ')',
+        );
         return;
       }
       
+      const organizationId =
+        global.currentOrganizationId ||
+        this.config?.organization_id ||
+        global.config?.organization_id ||
+        null;
+
       // Use correct table name (idle_logs) and column names
       const idleData = {
         user_id: userId,
         time_log_id: timeLogId,
+        organization_id: organizationId,
         idle_start: new Date(startTime).toISOString(),
         idle_end: new Date(endTime).toISOString(),
         duration_seconds: durationSeconds,
@@ -311,7 +380,7 @@ class EnhancedIdleMonitor {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.log('❌ [IDLE-LOG] Error logging idle period:', error.message);
+      console.error('❌ [IDLE-LOG] Error logging idle period:', error?.message || error);
     }
   }
 
@@ -357,11 +426,6 @@ class EnhancedIdleMonitor {
    * unifiedInputManager is unavailable.
    */
   onScreenshotActivity(activityPercent) {
-    if (global.unifiedInputManager) {
-      // Primary path working — reset fallback counter
-      this._consecutiveZeroActivityShots = 0;
-      return;
-    }
     if (activityPercent === 0) {
       this._consecutiveZeroActivityShots++;
     } else {
@@ -442,11 +506,13 @@ class EnhancedIdleMonitor {
   // === UTILITY FUNCTIONS ===
   
   getIdleStatus() {
-    const idleSeconds = global.unifiedInputManager?.getIdleTime() || 0;
+    const { effective: idleSeconds, os, input } = this._getEffectiveIdleSeconds();
     const isIdle = idleSeconds > this.IDLE_THRESHOLD;
     return {
       isIdle,
       idleSeconds,
+      osIdleSeconds: os,
+      inputIdleSeconds: input,
       idleMinutes: Math.floor(idleSeconds / 60),
       currentIdleStartTime: this.currentIdleStartTime,
       wasIdleLastCheck: this.wasIdleLastCheck
@@ -456,6 +522,9 @@ class EnhancedIdleMonitor {
   resetIdleState() {
     this.currentIdleStartTime = null;
     this._lastIdleCheckpointTime = null;
+    this._lastInputActivityAt = null;
+    this._lastSeenKeystrokesForIdle = global.unifiedInputManager?.stats?.keystrokes || 0;
+    this._lastSeenClicksForIdle = global.unifiedInputManager?.stats?.mouseClicks || 0;
     this.wasIdleLastCheck = false;
     this.idleThresholdExceeded = false;
     this._phantomIdleStartTime = null;

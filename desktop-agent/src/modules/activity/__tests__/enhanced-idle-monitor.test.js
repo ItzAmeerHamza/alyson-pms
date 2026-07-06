@@ -260,6 +260,21 @@ describe('EnhancedIdleMonitor', () => {
       expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(30000);
     });
 
+    test('effective idle uses input idle when OS idle is low but no keys/clicks', () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor._lastInputActivityAt = Date.now() - 120000;
+      monitor._lastSeenKeystrokesForIdle = 5;
+      monitor._lastSeenClicksForIdle = 2;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(5);
+      global.unifiedInputManager.stats = { keystrokes: 5, mouseClicks: 2, lastActivity: Date.now() - 120000 };
+
+      const result = monitor._getEffectiveIdleSeconds();
+      expect(result.os).toBe(5);
+      expect(result.input).toBeGreaterThanOrEqual(119);
+      expect(result.effective).toBeGreaterThanOrEqual(119);
+    });
+
     test('resetIdleState clears checkpoint tracking', () => {
       monitor = new EnhancedIdleMonitor(mockConfig);
       monitor.currentIdleStartTime = Date.now();
