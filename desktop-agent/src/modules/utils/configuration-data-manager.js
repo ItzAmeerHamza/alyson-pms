@@ -28,7 +28,8 @@ class ConfigurationDataManager {
       screenshot_interval_seconds: 30, // 30 seconds for better monitoring
       idle_threshold_seconds: 60, // legacy alias; prefer idle_detection_threshold_seconds
       idle_detection_threshold_seconds: 60, // start counting idle after 1 minute
-      idle_checkpoint_interval_seconds: 60, // persist idle while still idle every 1 minute
+      idle_checkpoint_interval_seconds: 30, // persist idle while still idle every 30 seconds
+      idle_low_activity_percent: 30,
       blur_screenshots: false,
       track_urls: true,
       track_applications: true,

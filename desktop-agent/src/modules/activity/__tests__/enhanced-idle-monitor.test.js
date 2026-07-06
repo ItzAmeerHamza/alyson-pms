@@ -215,7 +215,8 @@ describe('EnhancedIdleMonitor', () => {
     test('default idle detection threshold is 60 seconds (1 minute)', () => {
       monitor = new EnhancedIdleMonitor({ user_id: 'test' });
       expect(monitor.IDLE_THRESHOLD).toBe(60);
-      expect(monitor.IDLE_CHECK_INTERVAL).toBe(60000);
+      expect(monitor.IDLE_CHECK_INTERVAL).toBe(30000);
+      expect(monitor.LOW_ACTIVITY_PERCENT).toBe(30);
     });
 
     test('idle_detection_threshold_seconds config is respected', () => {
@@ -258,6 +259,32 @@ describe('EnhancedIdleMonitor', () => {
       expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
       expect(monitor.logIdlePeriod.mock.calls[0][0]).toBe(t0 + 60000);
       expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(30000);
+    });
+
+    test('low activity idle starts after 60s without high activity', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      monitor.logIdlePeriod = jest.fn().mockResolvedValue(undefined);
+      monitor._lastHighActivityAt = Date.now() - 65000;
+      monitor._lastInputActivityAt = Date.now() - 65000;
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor.wasIdleLastCheck).toBe(true);
+      expect(monitor.logIdlePeriod).toHaveBeenCalled();
+    });
+
+    test('screenshot low activity triggers idle evaluation', () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor._evaluateIdleState = jest.fn().mockResolvedValue(undefined);
+      monitor.isTracking = true;
+      global.isTracking = true;
+
+      monitor.onScreenshotActivity(0);
+
+      expect(monitor._evaluateIdleState).toHaveBeenCalled();
     });
 
     test('effective idle uses input idle when OS idle is low but no keys/clicks', () => {

@@ -23,6 +23,8 @@ class EnhancedIdleMonitor {
     this._lastInputActivityAt = null;
     this._lastSeenKeystrokesForIdle = 0;
     this._lastSeenClicksForIdle = 0;
+    /** Last time activity was above low threshold (keys, clicks, or screenshot %). */
+    this._lastHighActivityAt = null;
     
     // Phantom-activity detection: tracks periods with mouse moves but zero
     // keystrokes/clicks — the signature of mouse jitter / desk vibration
@@ -47,11 +49,16 @@ class EnhancedIdleMonitor {
     const checkpointSeconds =
       this.config?.idle_checkpoint_interval_seconds ??
       appSettings.idle_checkpoint_interval_seconds ??
-      60;
+      30;
 
     this.IDLE_CHECK_INTERVAL = Math.max(15000, checkpointSeconds * 1000);
     this.MIN_IDLE_CHUNK_MS = 5000; // ignore sub-5s slices (clock jitter)
     this.IDLE_THRESHOLD = detectionSeconds;
+    this.LOW_ACTIVITY_PERCENT =
+      this.config?.idle_low_activity_percent ??
+      appSettings.idle_low_activity_percent ??
+      appSettings.low_activity_threshold ??
+      30;
     this.IDLE_SESSION_THRESHOLD = (this.config?.diagnostic_idle_session_ms || 1200000);
     
     // Auto-stop threshold in minutes.
@@ -95,7 +102,9 @@ class EnhancedIdleMonitor {
     }
     
     console.log('🧍 [IDLE-MONITOR] Starting idle monitoring...');
-    console.log(`🧍 [IDLE-MONITOR] Idle detection: ${this.IDLE_THRESHOLD}s, checkpoint every ${this.IDLE_CHECK_INTERVAL / 1000}s`);
+    console.log(
+      `🧍 [IDLE-MONITOR] Idle detection: ${this.IDLE_THRESHOLD}s low activity (<${this.LOW_ACTIVITY_PERCENT}%), checkpoint every ${this.IDLE_CHECK_INTERVAL / 1000}s`,
+    );
     console.log(`🧍 [IDLE-MONITOR] Auto-stop: ${this.config.idle_threshold_minutes} min OS idle, ${Math.floor(this.PHANTOM_IDLE_THRESHOLD_MS / 60000)} min phantom idle`);
     
     this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
@@ -104,129 +113,15 @@ class EnhancedIdleMonitor {
     const stats = global.unifiedInputManager?.stats;
     this._lastSeenKeystrokesForIdle = stats?.keystrokes || 0;
     this._lastSeenClicksForIdle = stats?.mouseClicks || 0;
-    this._lastInputActivityAt = stats?.lastActivity || Date.now();
+    const now = Date.now();
+    this._lastInputActivityAt = now;
+    this._lastHighActivityAt = now;
     
     // Check idle state on a fixed interval
     this.idleMonitoringInterval = setInterval(async () => {
-      // CRITICAL FIX: Check both local and global tracking state
       if (!this.isTracking || !global.isTracking) return;
-      
       try {
-        const { effective: idleSeconds, os: osIdleSeconds, input: inputIdleSeconds } =
-          this._getEffectiveIdleSeconds();
-        const isIdle = idleSeconds > this.IDLE_THRESHOLD;
-        
-        
-        // Check if we've transitioned from active to idle
-        if (isIdle && !this.wasIdleLastCheck) {
-          console.log(
-            `⏸️ [IDLE-MONITOR] User became idle (effective=${idleSeconds}s, os=${osIdleSeconds}s, input=${inputIdleSeconds}s)`,
-          );
-          // Backdate to when idle actually started so the first chunk is accurate.
-          this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
-          this._lastIdleCheckpointTime = null;
-          this.wasIdleLastCheck = true;
-
-          // NOTE: Do NOT reset betweenScreenshotsActivity here.
-          // Those counters represent real accumulated input since the last screenshot.
-          // If the user was active for 8 min then idle for 1 min, the screenshot should
-          // still reflect the 8 min of real activity. The counters are only reset AFTER
-          // a screenshot successfully captures and uploads them (onScreenshotSuccess).
-          // Wiping them here caused active screenshots to show 0 activity ("Low").
-          console.log('🧍 [IDLE-MONITOR] User went idle - activity counters preserved for next screenshot');
-          
-          // Emit a close-only URL event (idle) with a short debounce; offline-safe
-          (async () => {
-            try {
-              await new Promise((r) => setTimeout(r, 300));
-              try { console.log(JSON.stringify({ category: 'URL', event: 'CLOSE_ONLY', reason: 'idle', ts: new Date().toISOString() })); } catch {}
-              // Track close reason in telemetry
-              if (global.urlCaptureManager?.trackCloseOnly) {
-                global.urlCaptureManager.trackCloseOnly('idle');
-              }
-              const supabase = global.supabaseService;
-              const userId = global?.sessionManager?.getUserId?.();
-              if (supabase && userId) {
-                const { error } = await supabase
-                  .from('url_logs')
-                  .insert([{ user_id: userId, url: null, site_url: null, title: '', browser: 'unknown', timestamp: new Date().toISOString() }], { returning: 'minimal' });
-                if (error) {
-                  if (!global.offlineQueue) global.offlineQueue = { urlLogs: [] };
-                  global.offlineQueue.urlLogs.push({ user_id: userId, url: null, site_url: null, title: '', browser: 'unknown', timestamp: new Date().toISOString() });
-                }
-              }
-            } catch {}
-          })();
-
-          // Mark session as idle after threshold (store ref so it can be cleared)
-          if (this._idleSessionTimeout) {
-            clearTimeout(this._idleSessionTimeout);
-          }
-          this._idleSessionTimeout = setTimeout(() => {
-            this._idleSessionTimeout = null;
-            if (this.wasIdleLastCheck && this.currentIdleStartTime) {
-              this.markSessionAsIdle();
-            }
-          }, this.IDLE_SESSION_THRESHOLD);
-
-          // Persist idle immediately — do not wait for user to move/click again.
-          await this._flushIdleCheckpoint();
-        }
-
-        // While still idle, flush a checkpoint every check interval.
-        if (isIdle && this.wasIdleLastCheck) {
-          await this._flushIdleCheckpoint();
-        }
-        
-        // Check if we've transitioned from idle to active
-        if (!isIdle && this.wasIdleLastCheck) {
-          console.log('▶️ [IDLE-MONITOR] User became active');
-          
-          if (this._idleSessionTimeout) {
-            clearTimeout(this._idleSessionTimeout);
-            this._idleSessionTimeout = null;
-          }
-          
-          await this._flushIdleCheckpoint();
-          
-          this.currentIdleStartTime = null;
-          this._lastIdleCheckpointTime = null;
-          this.wasIdleLastCheck = false;
-          this.idleThresholdExceeded = false;
-          this._phantomIdleStartTime = null;
-          this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
-          this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
-          const resumeStats = global.unifiedInputManager?.stats;
-          this._lastSeenKeystrokesForIdle = resumeStats?.keystrokes || 0;
-          this._lastSeenClicksForIdle = resumeStats?.mouseClicks || 0;
-          this._lastInputActivityAt = resumeStats?.lastActivity || Date.now();
-          
-          // Attempt to recover screenshot permissions after idle
-          if (global.enhancedPermissionManager?.recoverScreenshotPermissions) {
-            console.log('🔄 [IDLE-MONITOR] Attempting permission recovery after idle...');
-            await global.enhancedPermissionManager.recoverScreenshotPermissions();
-          }
-        }
-
-        // Enforce auto-stop threshold while tracking
-        try {
-          const phantomStart = this._phantomIdleStartTime;
-          const autoStop = this.checkAutoStopConditions();
-          if (autoStop && autoStop.shouldStop) {
-            const idleStartTime = autoStop.reason === 'phantom_idle'
-              ? phantomStart || this.currentIdleStartTime
-              : this.currentIdleStartTime;
-            const endTimeOverride = idleStartTime
-              ? new Date(idleStartTime).toISOString()
-              : null;
-            global.stopTracking?.(autoStop.reason, null, { endTimeOverride });
-            return;
-          }
-        } catch (_) {}
-        
-        // Update activity status
-        global.enhancedActivityManager?.updateIdleStatus(isIdle, idleSeconds);
-        
+        await this._evaluateIdleState();
       } catch (error) {
         console.log('❌ [IDLE-MONITOR] Error checking idle state:', error.message);
       }
@@ -278,26 +173,126 @@ class EnhancedIdleMonitor {
       currentKeys > this._lastSeenKeystrokesForIdle ||
       currentClicks > this._lastSeenClicksForIdle
     ) {
-      this._lastInputActivityAt = now;
+      this._markHighActivity(now);
       this._lastSeenKeystrokesForIdle = currentKeys;
       this._lastSeenClicksForIdle = currentClicks;
     }
 
     if (!this._lastInputActivityAt) {
-      this._lastInputActivityAt = stats.lastActivity || now;
+      this._lastInputActivityAt = now;
     }
 
     return Math.max(0, Math.floor((now - this._lastInputActivityAt) / 1000));
   }
 
+  _getLowActivityIdleSeconds() {
+    if (!this._lastHighActivityAt) return 0;
+    return Math.max(0, Math.floor((Date.now() - this._lastHighActivityAt) / 1000));
+  }
+
+  _markHighActivity(at = Date.now()) {
+    this._lastHighActivityAt = at;
+    this._lastInputActivityAt = at;
+  }
+
   /**
-   * Use the higher of OS idle and input idle so we still log when the user is
-   * away but mouse jitter keeps resetting getSystemIdleTime().
+   * Use the highest signal: OS idle, no keys/clicks, or sustained low activity %.
    */
   _getEffectiveIdleSeconds() {
     const os = global.unifiedInputManager?.getIdleTime?.() || 0;
     const input = this._getInputIdleSeconds();
-    return { effective: Math.max(os, input), os, input };
+    const lowActivity = this._getLowActivityIdleSeconds();
+    return {
+      effective: Math.max(os, input, lowActivity),
+      os,
+      input,
+      lowActivity,
+    };
+  }
+
+  /**
+   * Core idle loop — logs checkpoints while idle; never waits for user input.
+   */
+  async _evaluateIdleState() {
+    const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
+    const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
+
+    if (isIdle && !this.wasIdleLastCheck) {
+      console.log(
+        `⏸️ [IDLE-MONITOR] Low activity idle started (effective=${idleSeconds}s, os=${os}s, input=${input}s, low=${lowActivity}s)`,
+      );
+      this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
+      this._lastIdleCheckpointTime = null;
+      this.wasIdleLastCheck = true;
+
+      console.log('🧍 [IDLE-MONITOR] User went idle - activity counters preserved for next screenshot');
+
+      (async () => {
+        try {
+          await new Promise((r) => setTimeout(r, 300));
+          if (global.urlCaptureManager?.trackCloseOnly) {
+            global.urlCaptureManager.trackCloseOnly('idle');
+          }
+        } catch {}
+      })();
+
+      if (this._idleSessionTimeout) {
+        clearTimeout(this._idleSessionTimeout);
+      }
+      this._idleSessionTimeout = setTimeout(() => {
+        this._idleSessionTimeout = null;
+        if (this.wasIdleLastCheck && this.currentIdleStartTime) {
+          this.markSessionAsIdle();
+        }
+      }, this.IDLE_SESSION_THRESHOLD);
+
+      await this._flushIdleCheckpoint();
+    }
+
+    if (isIdle && this.wasIdleLastCheck) {
+      await this._flushIdleCheckpoint();
+    }
+
+    if (!isIdle && this.wasIdleLastCheck) {
+      console.log('▶️ [IDLE-MONITOR] User became active');
+      if (this._idleSessionTimeout) {
+        clearTimeout(this._idleSessionTimeout);
+        this._idleSessionTimeout = null;
+      }
+      await this._flushIdleCheckpoint();
+      this.currentIdleStartTime = null;
+      this._lastIdleCheckpointTime = null;
+      this.wasIdleLastCheck = false;
+      this.idleThresholdExceeded = false;
+      this._phantomIdleStartTime = null;
+      this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
+      this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
+      const resumeStats = global.unifiedInputManager?.stats;
+      this._lastSeenKeystrokesForIdle = resumeStats?.keystrokes || 0;
+      this._lastSeenClicksForIdle = resumeStats?.mouseClicks || 0;
+      this._markHighActivity();
+      if (global.enhancedPermissionManager?.recoverScreenshotPermissions) {
+        await global.enhancedPermissionManager.recoverScreenshotPermissions();
+      }
+    }
+
+    try {
+      const phantomStart = this._phantomIdleStartTime;
+      const autoStop = this.checkAutoStopConditions();
+      if (autoStop?.shouldStop) {
+        const idleStartTime =
+          autoStop.reason === 'phantom_idle'
+            ? phantomStart || this.currentIdleStartTime
+            : this.currentIdleStartTime;
+        const endTimeOverride = idleStartTime
+          ? new Date(idleStartTime).toISOString()
+          : null;
+        global.stopTracking?.(autoStop.reason, null, { endTimeOverride });
+        return;
+      }
+    } catch (_) {}
+
+    global.enhancedActivityManager?.updateIdleStatus(isIdle, idleSeconds);
   }
 
   /**
@@ -426,10 +421,24 @@ class EnhancedIdleMonitor {
    * unifiedInputManager is unavailable.
    */
   onScreenshotActivity(activityPercent) {
-    if (activityPercent === 0) {
-      this._consecutiveZeroActivityShots++;
-    } else {
+    const pct = Number(activityPercent);
+    if (!Number.isFinite(pct)) return;
+
+    if (pct >= this.LOW_ACTIVITY_PERCENT) {
       this._consecutiveZeroActivityShots = 0;
+      this._markHighActivity();
+    } else {
+      if (pct === 0) {
+        this._consecutiveZeroActivityShots++;
+      } else {
+        this._consecutiveZeroActivityShots = 0;
+      }
+    }
+
+    if (this.isTracking && global.isTracking) {
+      this._evaluateIdleState().catch((err) => {
+        console.log('❌ [IDLE-MONITOR] Screenshot idle evaluate error:', err.message);
+      });
     }
   }
 
@@ -506,13 +515,14 @@ class EnhancedIdleMonitor {
   // === UTILITY FUNCTIONS ===
   
   getIdleStatus() {
-    const { effective: idleSeconds, os, input } = this._getEffectiveIdleSeconds();
-    const isIdle = idleSeconds > this.IDLE_THRESHOLD;
+    const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
+    const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
     return {
       isIdle,
       idleSeconds,
       osIdleSeconds: os,
       inputIdleSeconds: input,
+      lowActivityIdleSeconds: lowActivity,
       idleMinutes: Math.floor(idleSeconds / 60),
       currentIdleStartTime: this.currentIdleStartTime,
       wasIdleLastCheck: this.wasIdleLastCheck
@@ -523,6 +533,7 @@ class EnhancedIdleMonitor {
     this.currentIdleStartTime = null;
     this._lastIdleCheckpointTime = null;
     this._lastInputActivityAt = null;
+    this._lastHighActivityAt = null;
     this._lastSeenKeystrokesForIdle = global.unifiedInputManager?.stats?.keystrokes || 0;
     this._lastSeenClicksForIdle = global.unifiedInputManager?.stats?.mouseClicks || 0;
     this.wasIdleLastCheck = false;

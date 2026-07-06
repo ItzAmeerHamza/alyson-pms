@@ -20,7 +20,8 @@ class ConfigManager {
       screenshot_interval_seconds: 30,
       idle_threshold_seconds: 900, // auto-stop after 15 minutes (legacy key)
       idle_detection_threshold_seconds: 60, // start counting idle after 1 minute
-      idle_checkpoint_interval_seconds: 60, // persist idle chunks every 1 minute
+      idle_checkpoint_interval_seconds: 30, // persist idle chunks every 30 seconds
+      idle_low_activity_percent: 30, // match screenshot "Low" label (<30%)
       blur_screenshots: false,
       enable_anti_cheat: true,
       notification_frequency_seconds: 300,
