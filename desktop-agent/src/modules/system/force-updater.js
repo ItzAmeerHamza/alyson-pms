@@ -857,10 +857,20 @@ class ForceUpdater {
     
     console.log('⏰ [FORCE-UPDATER] Starting periodic update checks (every 6 hours)');
     
-    // Check after 30 seconds
+    // Check soon after launch so login screen can show mandatory update (not only after sign-in).
     setTimeout(() => {
-      this.checkForUpdates();
-    }, 30000);
+      this.checkForUpdates().then((result) => {
+        if (result?.updateAvailable) {
+          this.sendToRenderer('update-available', {
+            version: result.newVersion,
+            currentVersion: result.currentVersion,
+            releaseNotes: result.releaseNotes || '',
+          });
+        }
+      }).catch((err) => {
+        console.warn('⚠️ [FORCE-UPDATER] Startup update check failed:', err?.message || err);
+      });
+    }, 3000);
     
     // Then check every 6 hours
     setInterval(() => {

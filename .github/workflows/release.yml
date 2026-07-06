@@ -143,6 +143,18 @@ jobs:
           name: windows-artifacts
           path: release-assets
 
+      # electron-builder writes Alyson-PM in yml but ships Alyson.PM files — patch before publish.
+      - name: Fix updater metadata filenames
+        run: |
+          for f in release-assets/latest-mac.yml release-assets/latest.yml; do
+            if [ -f "$f" ]; then
+              sed -i.bak 's/Alyson-PM/Alyson.PM/g' "$f"
+              rm -f "$f.bak"
+              echo "Patched $f"
+              head -5 "$f"
+            fi
+          done
+
       - name: Get version
         id: version
         run: |
