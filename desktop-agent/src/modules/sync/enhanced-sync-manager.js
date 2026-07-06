@@ -9,6 +9,7 @@ const {
   isBackendTimeLogsEnabled,
   insertAppLogsBatch,
   insertUrlLogsBatch,
+  insertIdleLog,
 } = require('../utils/backend-time-logs');
 
 class EnhancedSyncManager {
@@ -339,6 +340,7 @@ class EnhancedSyncManager {
     // Process URL queue every 15 seconds
     this.urlSyncInterval = setInterval(() => {
       this.processUrlQueue();
+      this.processIdleQueue();
     }, 15000);
     
     cleanupRegistry.registerInterval(this.urlSyncInterval, 'URL Sync');
@@ -780,6 +782,32 @@ class EnhancedSyncManager {
     }
   }
   
+  async processIdleQueue() {
+    if (!global.offlineQueue?.idleLogs?.length) return;
+
+    const pending = [...global.offlineQueue.idleLogs];
+    global.offlineQueue.idleLogs = [];
+
+    for (const item of pending) {
+      const { attempts, queuedAt, duration_minutes, ...log } = item;
+      try {
+        if (isBackendTimeLogsEnabled(this.config)) {
+          await insertIdleLog(log, this.config);
+        } else if (global.supabaseService) {
+          const { error } = await global.supabaseService.from('idle_logs').insert(log);
+          if (error) throw new Error(error.message);
+        }
+        console.log('✅ [IDLE-SYNC] Flushed queued idle log');
+      } catch (error) {
+        console.warn('⚠️ [IDLE-SYNC] Queued idle log failed, will retry:', error?.message || error);
+        global.offlineQueue.idleLogs.push({
+          ...item,
+          attempts: (attempts || 0) + 1,
+        });
+      }
+    }
+  }
+
   /**
    * Process single queue item
    */
@@ -800,6 +828,9 @@ class EnhancedSyncManager {
         }
         case 'appLogs':
           await this._insertAppBatch(data);
+          break;
+        case 'idleLogs':
+          await this.processIdleQueue();
           break;
         default:
           console.log(`📦 [QUEUE] Processing ${type} not implemented yet`);

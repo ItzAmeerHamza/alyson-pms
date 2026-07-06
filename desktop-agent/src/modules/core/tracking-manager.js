@@ -584,6 +584,13 @@ try {
         
         global.enhancedSyncManager?.setTrackingState(true);
         global.liveMonitoringManager?.setTrackingState(true);
+
+        if (global.enhancedIdleMonitor) {
+          global.enhancedIdleMonitor.setTrackingState(true);
+          if (!global.enhancedIdleMonitor.idleMonitoringInterval) {
+            global.enhancedIdleMonitor.startIdleMonitoring();
+          }
+        }
       } catch {}
 
       // Inform screenshot manager and consolidated systems

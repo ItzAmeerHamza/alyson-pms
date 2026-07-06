@@ -94,12 +94,93 @@ class EnhancedIdleMonitor {
     this.isTracking = tracking;
   }
 
+  _isValidUuid(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      String(value || '').trim(),
+    );
+  }
+
+  _resolveTimeLogId() {
+    const candidates = [
+      global.currentTimeLogId,
+      global.trackingManager?.currentTimeLogId,
+      global.currentSession?.time_log_id,
+      global.currentSession?.id,
+    ];
+    for (const candidate of candidates) {
+      if (this._isValidUuid(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  _resolveUserId() {
+    const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+    const raw =
+      global.currentUserId ||
+      global.sessionManager?.getUserId?.() ||
+      global.currentSession?.user_id ||
+      this.config?.user_id ||
+      global.config?.user_id ||
+      global.config?.USER_ID ||
+      null;
+    return normalizeTenantUserId(raw);
+  }
+
+  /**
+   * Screenshot-driven idle flush — runs on every low-activity screenshot so idle
+   * is persisted even if the 30s interval misses a window.
+   */
+  async _ensureIdleLoggedFromScreenshot() {
+    const lowSec = this._getLowActivityIdleSeconds();
+    if (lowSec < this.IDLE_THRESHOLD) return;
+
+    if (!this.wasIdleLastCheck) {
+      console.log(
+        `⏸️ [IDLE-MONITOR] Screenshot idle detected (${lowSec}s low activity) — starting idle log`,
+      );
+      this.currentIdleStartTime = Date.now() - lowSec * 1000;
+      this._lastIdleCheckpointTime = null;
+      this.wasIdleLastCheck = true;
+    }
+
+    await this._flushIdleCheckpoint();
+  }
+
+  recordActivity(_source) {
+    this._markHighActivity();
+  }
+
+  _queueIdleLog(idleData) {
+    if (!global.offlineQueue) {
+      global.offlineQueue = {
+        screenshots: [],
+        activities: [],
+        timeLogs: [],
+        appLogs: [],
+        urlLogs: [],
+        idleLogs: [],
+        fraudAlerts: [],
+      };
+    }
+    if (!global.offlineQueue.idleLogs) {
+      global.offlineQueue.idleLogs = [];
+    }
+    global.offlineQueue.idleLogs.push({
+      ...idleData,
+      queuedAt: new Date().toISOString(),
+      attempts: 0,
+    });
+    global.enhancedSyncManager?.processQueueItem?.('idleLogs', idleData).catch(() => {});
+  }
+
   // === IDLE MONITORING FUNCTIONS ===
   
   startIdleMonitoring() {
     if (this.idleMonitoringInterval) {
       clearInterval(this.idleMonitoringInterval);
     }
+
+    this.isTracking = true;
     
     console.log('🧍 [IDLE-MONITOR] Starting idle monitoring...');
     console.log(
@@ -114,8 +195,10 @@ class EnhancedIdleMonitor {
     this._lastSeenKeystrokesForIdle = stats?.keystrokes || 0;
     this._lastSeenClicksForIdle = stats?.mouseClicks || 0;
     const now = Date.now();
-    this._lastInputActivityAt = now;
-    this._lastHighActivityAt = now;
+    if (!this._lastInputActivityAt || !this._lastHighActivityAt) {
+      this._lastInputActivityAt = now;
+      this._lastHighActivityAt = now;
+    }
     
     // Check idle state on a fixed interval
     this.idleMonitoringInterval = setInterval(async () => {
@@ -316,23 +399,11 @@ class EnhancedIdleMonitor {
       const durationMinutes = Math.floor(duration / 60000);
       console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
       
-      const { normalizeTenantUserId } = require('../utils/tenant-user-id');
-      const rawUserId =
-        global.sessionManager?.getUserId?.() ||
-        global.currentUserId ||
-        this.config?.user_id ||
-        global.config?.user_id ||
-        null;
-      const userId = normalizeTenantUserId(rawUserId);
-      const timeLogId = global.currentTimeLogId || global.currentSession?.id || null;
-      
-      
+      const userId = this._resolveUserId();
+      const timeLogId = this._resolveTimeLogId();
+
       if (!userId) {
-        console.warn(
-          '⚠️ [IDLE-LOG] No valid tenant user_id, skipping idle log (raw=',
-          String(rawUserId || '').slice(0, 64),
-          ')',
-        );
+        console.warn('⚠️ [IDLE-LOG] No valid tenant user_id, skipping idle log');
         return;
       }
       
@@ -342,7 +413,6 @@ class EnhancedIdleMonitor {
         global.config?.organization_id ||
         null;
 
-      // Use correct table name (idle_logs) and column names
       const idleData = {
         user_id: userId,
         time_log_id: timeLogId,
@@ -350,24 +420,40 @@ class EnhancedIdleMonitor {
         idle_start: new Date(startTime).toISOString(),
         idle_end: new Date(endTime).toISOString(),
         duration_seconds: durationSeconds,
-        duration_minutes: durationMinutes
+        duration_minutes: durationMinutes,
       };
-      
-      // Save to database using correct table name
-      const { isBackendTimeLogsEnabled, insertIdleLog } = require('../utils/backend-time-logs');
-      if (isBackendTimeLogsEnabled(this.config || global.config)) {
-        await insertIdleLog(idleData, this.config || global.config);
-        console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
-      } else {
-        const { error } = await global.supabaseService
-          .from('idle_logs')
-          .insert(idleData);
 
-        if (error) {
-          console.error('❌ [IDLE-LOG] Database error:', error.message);
+      const { isBackendTimeLogsEnabled, insertIdleLog } = require('../utils/backend-time-logs');
+      const cfg = this.config || global.config;
+
+      const persistIdleLog = async (payload) => {
+        if (isBackendTimeLogsEnabled(cfg)) {
+          await insertIdleLog(payload, cfg);
+          console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
           return;
         }
+
+        const row = { ...payload };
+        delete row.duration_minutes;
+        delete row.organization_id;
+        const { error } = await global.supabaseService.from('idle_logs').insert(row);
+        if (error) throw new Error(error.message);
         console.log('✅ [IDLE-LOG] Idle period saved to idle_logs table');
+      };
+
+      try {
+        await persistIdleLog(idleData);
+      } catch (firstError) {
+        const message = firstError?.message || String(firstError);
+        if (idleData.time_log_id) {
+          console.warn(
+            '⚠️ [IDLE-LOG] Insert with time_log_id failed, retrying without FK:',
+            message,
+          );
+          await persistIdleLog({ ...idleData, time_log_id: null });
+        } else {
+          throw firstError;
+        }
       }
       
       global.safeSendToRenderer?.('idle-period-logged', {
@@ -376,6 +462,25 @@ class EnhancedIdleMonitor {
       });
     } catch (error) {
       console.error('❌ [IDLE-LOG] Error logging idle period:', error?.message || error);
+      try {
+        const userId = this._resolveUserId();
+        if (userId) {
+          this._queueIdleLog({
+            user_id: userId,
+            time_log_id: this._resolveTimeLogId(),
+            organization_id:
+              global.currentOrganizationId ||
+              this.config?.organization_id ||
+              global.config?.organization_id ||
+              null,
+            idle_start: new Date(startTime).toISOString(),
+            idle_end: new Date(endTime).toISOString(),
+            duration_seconds: Math.round(duration / 1000),
+          });
+        }
+      } catch (queueError) {
+        console.error('❌ [IDLE-LOG] Failed to queue idle log:', queueError?.message || queueError);
+      }
     }
   }
 
@@ -424,6 +529,9 @@ class EnhancedIdleMonitor {
     const pct = Number(activityPercent);
     if (!Number.isFinite(pct)) return;
 
+    if (!global.isTracking) return;
+    this.isTracking = true;
+
     if (pct >= this.LOW_ACTIVITY_PERCENT) {
       this._consecutiveZeroActivityShots = 0;
       this._markHighActivity();
@@ -435,11 +543,16 @@ class EnhancedIdleMonitor {
       }
     }
 
-    if (this.isTracking && global.isTracking) {
-      this._evaluateIdleState().catch((err) => {
+    this._evaluateIdleState()
+      .then(() => {
+        if (pct < this.LOW_ACTIVITY_PERCENT) {
+          return this._ensureIdleLoggedFromScreenshot();
+        }
+        return undefined;
+      })
+      .catch((err) => {
         console.log('❌ [IDLE-MONITOR] Screenshot idle evaluate error:', err.message);
       });
-    }
   }
 
   checkAutoStopConditions() {

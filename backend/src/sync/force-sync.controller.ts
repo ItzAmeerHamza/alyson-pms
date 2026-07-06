@@ -86,17 +86,26 @@ export class ForceSyncController {
   /** Desktop may send a session id before upsert_time_log has landed in RDS. */
   private async resolveTimeLogId(timeLogId: unknown): Promise<string | null> {
     if (!timeLogId || typeof timeLogId !== 'string') return null;
+    const trimmed = timeLogId.trim();
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        trimmed,
+      )
+    ) {
+      this.logger.warn(`Ignoring non-UUID time_log_id: ${trimmed.slice(0, 64)}`);
+      return null;
+    }
     const result = await this.db.query<{ id: string }>(
       'SELECT id FROM time_doctor.time_logs WHERE id = $1 LIMIT 1',
-      [timeLogId],
+      [trimmed],
     );
     if (!result.rows[0]) {
       this.logger.warn(
-        `screenshot_upload_complete: time_log_id ${timeLogId} not in RDS — saving screenshot without session link`,
+        `time_log_id ${trimmed} not in RDS — continuing without session link`,
       );
       return null;
     }
-    return timeLogId;
+    return trimmed;
   }
 
   @Post('force-url-insert')
@@ -310,18 +319,22 @@ export class ForceSyncController {
         const log = data?.log;
         const userId = parseUserIdParam(log.user_id);
         const workspaceId = await this.resolveWorkspaceId(log.user_id, log.organization_id);
+        const timeLogId = await this.resolveTimeLogId(log.time_log_id);
         await this.db.query(
           `INSERT INTO time_doctor.idle_logs
             (user_id, time_log_id, idle_start, idle_end, duration_seconds, workspace_id)
            VALUES ($1,$2,$3,$4,$5,$6)`,
           [
             userId,
-            log.time_log_id || null,
+            timeLogId,
             log.idle_start || log.start_time || new Date().toISOString(),
             log.idle_end || log.end_time || new Date().toISOString(),
             log.idle_duration_seconds || log.idle_seconds || log.duration_seconds || 0,
             workspaceId,
           ],
+        );
+        this.logger.log(
+          `insert_idle_log: user=${userId} duration=${log.duration_seconds ?? 0}s workspace=${workspaceId ?? 'null'}`,
         );
         return { success: true };
       }
