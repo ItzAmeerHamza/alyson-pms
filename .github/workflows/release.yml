@@ -152,6 +152,20 @@ jobs:
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      # Retagging the same version leaves a published shell + draft with assets.
+      # Remove all existing releases for this tag so publish is a single clean release.
+      - name: Remove duplicate releases for tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          gh release list --limit 100 --json databaseId,tagName,isDraft \
+            | jq -r --arg t "$TAG" '.[] | select(.tagName == $t) | .databaseId' \
+            | while read -r id; do
+              echo "Deleting existing release id=$id for tag $TAG"
+              gh api -X DELETE "repos/${{ github.repository }}/releases/${id}" || true
+            done
+
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
