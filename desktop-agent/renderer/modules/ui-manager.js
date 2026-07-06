@@ -2171,6 +2171,10 @@ class UIManager {
 
 
   showLogin() {
+    if (window.__updateGateActive) {
+      console.log('🛑 [UI-MANAGER] Login blocked — mandatory update gate active');
+      return;
+    }
     // Use correct element IDs matching index.html (loginContainer / appContainer)
     const loginContainer = document.getElementById('loginContainer');
     const appContainer = document.getElementById('appContainer');
@@ -2813,6 +2817,10 @@ class UIManager {
   }
 
   showMainApp() {
+    if (window.__updateGateActive) {
+      console.log('🛑 [UI-MANAGER] Main app blocked — mandatory update gate active');
+      return;
+    }
     console.log('🔧 [UI-MANAGER] showMainApp() called - starting UI initialization...');
     
     try {
@@ -3510,6 +3518,59 @@ class UIManager {
 
   // ===== FORCE UPDATE MODAL METHODS =====
 
+  hideAllAppShellsForUpdate() {
+    ['loginContainer', 'appContainer', 'startupOverlay'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
+
+  /**
+   * Block login/app at startup until the user installs the pending update.
+   * @returns {Promise<boolean>} true when login must stay blocked
+   */
+  async enforceMandatoryUpdateGateAtStartup() {
+    try {
+      const status = await this.ipcRenderer.invoke('check-for-update');
+      if (status?.updateAvailable) {
+        window.__updateGateActive = true;
+        this.showMandatoryUpdateGate({
+          newVersion: status.newVersion,
+          currentVersion: status.currentVersion,
+          updateDownloaded: status.updateDownloaded,
+        });
+        return true;
+      }
+    } catch (error) {
+      console.warn('⚠️ [UI-MANAGER] Startup update check failed:', error?.message || error);
+    }
+    window.__updateGateActive = false;
+    return false;
+  }
+
+  /**
+   * Show update-only screen (no login, no app) until install completes.
+   */
+  showMandatoryUpdateGate(updateInfo = {}) {
+    console.log('🛑 [UI-MANAGER] Mandatory update gate:', updateInfo);
+    this.hideAllAppShellsForUpdate();
+    this.showUpdateModal(updateInfo);
+
+    if (updateInfo.updateDownloaded) {
+      this.showInstallReady();
+      return;
+    }
+
+    // Begin download immediately so the user only needs to tap Install & Restart.
+    setTimeout(() => {
+      if (window.__updateGateActive) {
+        this.handleUpdateButtonClick().catch((err) => {
+          console.warn('⚠️ [UI-MANAGER] Auto-download failed:', err?.message || err);
+        });
+      }
+    }, 400);
+  }
+
   /**
    * Show the mandatory update modal
    * @param {Object} updateInfo - Update information
@@ -3543,6 +3604,7 @@ class UIManager {
     }
     
     // Show modal (cannot be dismissed)
+    this.hideAllAppShellsForUpdate();
     modal.classList.add('visible');
     
     // Setup update button click handler
@@ -3761,13 +3823,35 @@ class UIManager {
   setupUpdateEventListeners() {
     if (!this.ipcRenderer) return;
     
+    this.ipcRenderer.on('mandatory-update-required', (event, data) => {
+      window.__updateGateActive = true;
+      this.showMandatoryUpdateGate({
+        newVersion: data.version,
+        currentVersion: data.currentVersion,
+        updateDownloaded: data.updateDownloaded,
+      });
+    });
+
     // Listen for update available
     this.ipcRenderer.on('update-available', (event, data) => {
       console.log('🆕 [UI-MANAGER] Update available:', data);
-      this.showUpdateModal({
+      window.__updateGateActive = true;
+      this.showMandatoryUpdateGate({
         newVersion: data.version,
-        currentVersion: data.currentVersion
+        currentVersion: data.currentVersion,
       });
+    });
+
+    this.ipcRenderer.on('update-not-available', () => {
+      if (!window.__updateGateActive) return;
+      window.__updateGateActive = false;
+      this.hideUpdateModal();
+      const loginContainer = document.getElementById('loginContainer');
+      const appContainer = document.getElementById('appContainer');
+      if (appContainer && appContainer.style.display !== 'none') {
+        return;
+      }
+      if (loginContainer) loginContainer.style.display = 'flex';
     });
     
     // Listen for download progress

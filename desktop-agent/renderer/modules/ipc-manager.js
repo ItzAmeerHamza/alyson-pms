@@ -942,12 +942,17 @@ class IPCManager {
         // SPECIAL HANDLING: Check if update is required
         if (result.error === 'update_required') {
           console.log('🔄 [IPC-MANAGER] Update required - showing update modal');
-          // Show update modal via UIManager (try multiple access methods)
+          window.__updateGateActive = true;
           const uiMgr = window.uiManager || (typeof moduleInstances !== 'undefined' && moduleInstances.uiManager);
-          if (uiMgr && uiMgr.showUpdateModal) {
+          if (uiMgr?.showMandatoryUpdateGate) {
+            uiMgr.showMandatoryUpdateGate({
+              newVersion: result.updateVersion,
+              currentVersion: result.currentVersion,
+            });
+          } else if (uiMgr?.showUpdateModal) {
             uiMgr.showUpdateModal({
               newVersion: result.updateVersion,
-              currentVersion: result.currentVersion
+              currentVersion: result.currentVersion,
             });
           }
           this.notificationManager.showNotification('Please update the app before starting the timer', 'warning');

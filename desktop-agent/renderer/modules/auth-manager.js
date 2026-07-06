@@ -35,11 +35,16 @@ class AuthManager {
     this.isAuthenticated = false;
     this.authConfig = null;
     this.useCognito = false;
-    this.init();
+    // Initialization deferred until renderer completes mandatory update check
   }
 
-  async init() {
+  async initialize() {
     console.log('🔐 AuthManager initializing...');
+
+    if (window.__updateGateActive) {
+      console.log('🛑 [AUTH] Update gate active — skipping auth initialization');
+      return;
+    }
 
     try {
       this.authConfig = await this.ipcRenderer.invoke('get-config');
@@ -221,11 +226,13 @@ class AuthManager {
             const updateStatus = await this.ipcRenderer.invoke('check-for-update');
             console.log('📊 [AUTH] Auto-login update check result:', updateStatus);            
             if (updateStatus && updateStatus.updateAvailable) {
-              console.log('🆕 [AUTH] Update required, showing update modal');              // Show update modal instead of proceeding to main app
-              if (this.uiManager && this.uiManager.showUpdateModal) {
-                this.uiManager.showUpdateModal({
+              console.log('🆕 [AUTH] Update required, showing update modal');
+              window.__updateGateActive = true;
+              if (this.uiManager?.showMandatoryUpdateGate) {
+                this.uiManager.showMandatoryUpdateGate({
                   newVersion: updateStatus.newVersion,
-                  currentVersion: updateStatus.currentVersion
+                  currentVersion: updateStatus.currentVersion,
+                  updateDownloaded: updateStatus.updateDownloaded,
                 });
               }
               this.notificationManager.showNotification('Update required before continuing.', 'warning');
@@ -301,6 +308,25 @@ class AuthManager {
 
       await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
       localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+
+      if (window.__updateGateActive) {
+        return false;
+      }
+
+      try {
+        const updateStatus = await this.ipcRenderer.invoke('check-for-update');
+        if (updateStatus?.updateAvailable) {
+          window.__updateGateActive = true;
+          this.uiManager?.showMandatoryUpdateGate?.({
+            newVersion: updateStatus.newVersion,
+            currentVersion: updateStatus.currentVersion,
+            updateDownloaded: updateStatus.updateDownloaded,
+          });
+          return true;
+        }
+      } catch (updateError) {
+        console.warn('⚠️ [AUTH] Cognito auto-login update check failed:', updateError?.message || updateError);
+      }
 
       this.uiManager.showMainApp();
       this.notificationManager.showNotification('Welcome back! Automatically signed in.', 'success');
@@ -380,10 +406,12 @@ class AuthManager {
 
     try {
       const updateStatus = await this.ipcRenderer.invoke('check-for-update');
-      if (updateStatus?.updateAvailable && this.uiManager?.showUpdateModal) {
-        this.uiManager.showUpdateModal({
+      if (updateStatus?.updateAvailable) {
+        window.__updateGateActive = true;
+        this.uiManager?.showMandatoryUpdateGate?.({
           newVersion: updateStatus.newVersion,
           currentVersion: updateStatus.currentVersion,
+          updateDownloaded: updateStatus.updateDownloaded,
         });
         this.notificationManager.showNotification('Update required before continuing.', 'warning');
         return;
@@ -398,6 +426,29 @@ class AuthManager {
 
   async handleLogin(e) {
     e.preventDefault();
+
+    if (window.__updateGateActive) {
+      this.notificationManager?.showNotification?.(
+        'Please install the available update before signing in.',
+        'warning',
+      );
+      return;
+    }
+
+    try {
+      const preLoginUpdate = await this.ipcRenderer.invoke('check-for-update');
+      if (preLoginUpdate?.updateAvailable) {
+        window.__updateGateActive = true;
+        this.uiManager?.showMandatoryUpdateGate?.({
+          newVersion: preLoginUpdate.newVersion,
+          currentVersion: preLoginUpdate.currentVersion,
+          updateDownloaded: preLoginUpdate.updateDownloaded,
+        });
+        return;
+      }
+    } catch (updateErr) {
+      console.warn('⚠️ [AUTH] Pre-login update check failed:', updateErr?.message || updateErr);
+    }
     
     const companyInput = document.getElementById('loginCompany');
     const company = companyInput ? companyInput.value.trim().toLowerCase() : '';
@@ -589,11 +640,12 @@ class AuthManager {
           
           if (updateStatus && updateStatus.updateAvailable) {
             console.log('🆕 [AUTH] Update required, showing update modal');
-            // Show update modal instead of proceeding to main app
-            if (this.uiManager && this.uiManager.showUpdateModal) {
-              this.uiManager.showUpdateModal({
+            window.__updateGateActive = true;
+            if (this.uiManager?.showMandatoryUpdateGate) {
+              this.uiManager.showMandatoryUpdateGate({
                 newVersion: updateStatus.newVersion,
-                currentVersion: updateStatus.currentVersion
+                currentVersion: updateStatus.currentVersion,
+                updateDownloaded: updateStatus.updateDownloaded,
               });
             }
             this.notificationManager.showNotification('Update required before continuing.', 'warning');

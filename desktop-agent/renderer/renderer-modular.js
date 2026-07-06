@@ -1234,6 +1234,19 @@ if (!window.__rendererInitAttached) {
     
     // Initialize all modules
     await initializeModules();
+
+    if (moduleInstances.uiManager?.setupUpdateEventListeners) {
+      moduleInstances.uiManager.setupUpdateEventListeners();
+    }
+
+    const updateGateActive = await moduleInstances.uiManager.enforceMandatoryUpdateGateAtStartup();
+    if (updateGateActive) {
+      console.log('🛑 [RENDERER] Mandatory update required — login blocked until install');
+      moduleInstances.uiManager.enableHardwareAcceleration?.();
+      return;
+    }
+
+    await moduleInstances.authManager.initialize();
     
     // ALWAYS HIDE Monitoring Tools and Developer Tools sections on startup
     const monitoringSection = document.getElementById('monitoringSection');
@@ -1289,6 +1302,10 @@ if (!window.__rendererInitAttached) {
     
     // After successful login, go directly to main app (once only)
     window.addEventListener('userLoggedIn', () => {
+        if (window.__updateGateActive) {
+          console.log('🛑 [RENDERER] userLoggedIn ignored — update gate active');
+          return;
+        }
         console.log('🎯 [RENDERER] User logged in event triggered, showing main app...');
         
         // Force immediate transition to main app
@@ -1405,11 +1422,6 @@ if (!window.__rendererInitAttached) {
     
     // Start tracking state synchronization
     moduleInstances.ipcManager.startTrackingSync();
-    
-    // Setup update event listeners for force update modal
-    if (moduleInstances.uiManager && moduleInstances.uiManager.setupUpdateEventListeners) {
-      moduleInstances.uiManager.setupUpdateEventListeners();
-    }
     
     // Enable hardware acceleration for better performance
     moduleInstances.uiManager.enableHardwareAcceleration();

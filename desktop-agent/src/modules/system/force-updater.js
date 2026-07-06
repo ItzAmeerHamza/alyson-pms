@@ -801,12 +801,18 @@ class ForceUpdater {
     const result = await this.checkForUpdates();
     
     if (result.updateAvailable) {
-      console.log('🆕 [FORCE-UPDATER] Update available, app will show update modal after login');
-      // Don't block here - let the app start, the update modal will show after login
+      console.log('🆕 [FORCE-UPDATER] Update available — app start blocked until install');
+      this.sendToRenderer('mandatory-update-required', {
+        version: result.newVersion,
+        currentVersion: result.currentVersion,
+        updateDownloaded: result.updateDownloaded || false,
+      });
+      return result;
     }
     
-    // Start the app
+    // Start the app only when no update is pending
     this.startMainApp();
+    return result;
   }
 
   /**
