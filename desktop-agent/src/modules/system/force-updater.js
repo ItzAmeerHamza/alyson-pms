@@ -304,7 +304,8 @@ class ForceUpdater {
       provider: 'github',
       owner: gh.owner,
       repo: gh.repo,
-      releaseType: 'release'
+      // GitHub releases are published as pre-releases (unsigned test builds).
+      releaseType: 'prerelease',
     });
     
     // Auto-download updates when detected
