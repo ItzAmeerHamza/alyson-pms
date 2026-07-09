@@ -8,6 +8,20 @@ if (typeof window !== 'undefined') {
 }
 
 const { ipcRenderer } = require('electron');
+const {
+  initWorkTimezone,
+  workDateKey,
+  elapsedSecondsSinceWorkMidnight,
+  nextWorkDayMidnight,
+  formatWorkTimezoneLabel,
+  getWorkTimezone,
+} = require('../src/modules/utils/work-timezone');
+
+try {
+  initWorkTimezone(typeof global !== 'undefined' ? global.config : undefined);
+} catch {
+  /* config may load later */
+}
 
 // Expose ipcRenderer to window for version loading and other UI code
 window.ipc = { invoke: ipcRenderer.invoke.bind(ipcRenderer) };
@@ -16,12 +30,9 @@ window.electronAPI = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version')
 };
 
-/** Local calendar date as YYYY-MM-DD (not UTC). */
+/** Work-calendar date as YYYY-MM-DD (Pacific Time by default). */
 function localDateIso(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return workDateKey(d);
 }
 
 /** HH:MM:SS from total seconds (for tracker / tray). */
@@ -46,12 +57,17 @@ function readTrackerDisplaySeconds() {
   return parseHmsToSeconds(getTrackerTimerElement()?.textContent);
 }
 
-/** Never lower the tracker clock unless allowDecrease is true (e.g. new day). */
+/** Never lower the tracker clock unless allowDecrease is true (e.g. new local day at midnight). */
 function setTrackerDisplaySeconds(totalSec, { allowDecrease = false } = {}) {
   const el = getTrackerTimerElement();
   if (!el) return 0;
   const next = Math.max(0, Math.floor(Number(totalSec) || 0));
   const current = readTrackerDisplaySeconds();
+  const todayKey = localDateIso();
+  if (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey) {
+    allowDecrease = true;
+  }
+  window.__trackerDisplayDayKey = todayKey;
   const resolved = allowDecrease ? next : Math.max(current, next);
   el.textContent = formatSecondsAsHMS(resolved);
   return resolved;
@@ -59,18 +75,26 @@ function setTrackerDisplaySeconds(totalSec, { allowDecrease = false } = {}) {
 
 function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
+  const todayKey = localDateIso();
+  const floorFromStop = window.__trackerDisplayDayKey === todayKey
+    ? Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0))
+    : 0;
   const floor = Math.max(
-    readTrackerDisplaySeconds(),
-    Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0)),
+    window.__trackerDisplayDayKey === todayKey ? readTrackerDisplaySeconds() : 0,
+    floorFromStop,
     Math.max(0, Math.floor(Number(extraFloor) || 0)),
   );
   return Math.max(db, floor);
 }
 
+function getTodayElapsedSeconds(sessionStart) {
+  return elapsedSecondsSinceWorkMidnight(sessionStart);
+}
+
 function readLocalTrackingCumulativeSeconds() {
   const start = window.__lastTrackingStartTime;
   if (!start) return 0;
-  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000));
+  const elapsed = getTodayElapsedSeconds(start);
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
   return base + elapsed;
 }
@@ -101,7 +125,7 @@ function updateRendererTrackingClock() {
   const start = window.__lastTrackingStartTime;
   if (!start) return;
   const dashboardTimer = document.getElementById('sessionTime');
-  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000));
+  const elapsed = getTodayElapsedSeconds(start);
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
   const localCumulative = base + elapsed;
   const trayCumulative = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
@@ -152,15 +176,67 @@ function parseHmsToSeconds(text) {
   return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
 }
 
-/** Next calendar-day boundary (local) — shown under the Time Tracker clock */
+function handleLocalDayRollover(isTracking) {
+  console.log('🌙 [RENDERER] Work-day rollover — resetting daily clock to 00:00:00');
+  window.__todayBaseAtLastStop = null;
+  window.__completedTodayBaseSeconds = 0;
+  window.__lastTrayCumulativeSeconds = 0;
+  window.__trackerDisplayDayKey = localDateIso();
+  void ipcRenderer.invoke('clear-frozen-total-at-stop').catch(() => {});
+
+  // Snap to zero at local midnight (e.g. 10h 20m → 00:00:00)
+  setTrackerDisplaySeconds(0, { allowDecrease: true });
+  const todayTimeElement = document.getElementById('todayTime');
+  if (todayTimeElement) todayTimeElement.textContent = '0h 0m';
+
+  if (isTracking) {
+    const dashboardTimer = document.getElementById('sessionTime');
+    if (dashboardTimer) dashboardTimer.textContent = '00:00:00';
+    void refreshTodayCompletedBaseSeconds().then(() => updateRendererTrackingClock());
+  } else {
+    const dashboardTimer = document.getElementById('sessionTime');
+    if (dashboardTimer) dashboardTimer.textContent = '--:--:--';
+    void refreshTodayCompletedBaseSeconds();
+    if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
+      void moduleInstances.uiManager.loadTodaysTotalTime();
+    }
+  }
+  updateTrackerDailyRefreshHint();
+}
+
+function ensureLocalDayRolloverWatch() {
+  if (window.__localDayRolloverWatch) return;
+  window.__localDayKey = localDateIso();
+  window.__localDayRolloverWatch = setInterval(() => {
+    const todayKey = localDateIso();
+    if (window.__localDayKey && window.__localDayKey !== todayKey) {
+      const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
+      handleLocalDayRollover(isTracking);
+      window.__localDayKey = todayKey;
+    }
+  }, 1000);
+}
+
+/** Next work-day boundary (Pacific midnight by default) — shown under the Time Tracker clock */
 function updateTrackerDailyRefreshHint() {
   const el = document.getElementById('trackerTodayHint');
   if (!el) return;
-  const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
-  const datePart = next.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  const timePart = next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  el.textContent = `Daily total refreshes on ${datePart} at ${timePart} (your local time).`;
+  const next = nextWorkDayMidnight();
+  const tz = getWorkTimezone();
+  const datePart = next.toLocaleDateString('en-US', {
+    timeZone: tz,
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+  const timePart = next.toLocaleTimeString('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const tzLabel = formatWorkTimezoneLabel(tz);
+  el.textContent = `Daily total resets at midnight ${tzLabel} (${datePart} at ${timePart}).`;
 }
 
 window.updateTrackerDailyRefreshHint = updateTrackerDailyRefreshHint;
@@ -168,6 +244,8 @@ window.refreshTodayCompletedBaseSeconds = refreshTodayCompletedBaseSeconds;
 window.readTrackerDisplaySeconds = readTrackerDisplaySeconds;
 window.setTrackerDisplaySeconds = setTrackerDisplaySeconds;
 window.resolveStoppedDisplaySeconds = resolveStoppedDisplaySeconds;
+window.ensureLocalDayRolloverWatch = ensureLocalDayRolloverWatch;
+window.getTodayElapsedSeconds = getTodayElapsedSeconds;
 
 // Import our focused modules
 let AuthManager, UIManager, NotificationManager, IPCManager, AppHistoryManager, ActivityMonitor;
@@ -573,6 +651,11 @@ function setupModuleCommunication() {
   
   // Main-process tray timer pushes elapsed time every second when the event loop is healthy.
   // Renderer-side watchdog takes over if tray ticks stall for >2.5s.
+  ensureLocalDayRolloverWatch();
+  ipcRenderer.on('local-day-rollover', (_event, data) => {
+    window.__localDayKey = data?.date || localDateIso();
+    handleLocalDayRollover(!!data?.isTracking);
+  });
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
     window.__trayTimerActive = true;
     window.__lastTrayTimerTickAt = Date.now();
@@ -598,11 +681,12 @@ function setupModuleCommunication() {
       const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
       const start = window.__lastTrackingStartTime;
       const localCumulative = start
-        ? base + Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000))
+        ? base + getTodayElapsedSeconds(start)
         : trayCumulative;
       const cumulativeSec = Math.max(localCumulative, trayCumulative);
       if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-      setTrackerDisplaySeconds(cumulativeSec);
+      const currentDisplay = readTrackerDisplaySeconds();
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: cumulativeSec < currentDisplay });
     }
   });
 
@@ -631,7 +715,7 @@ function setupModuleCommunication() {
     const trackerTimer = document.getElementById('trackerTime');
     
     if (timerData.startTime) {
-      const elapsed = Math.floor((timerData.currentTime - new Date(timerData.startTime)) / 1000);
+      const elapsed = getTodayElapsedSeconds(timerData.startTime);
       const hours = Math.floor(elapsed / 3600);
       const minutes = Math.floor((elapsed % 3600) / 60);
       const seconds = elapsed % 60;
@@ -749,7 +833,7 @@ function setupModuleCommunication() {
           
           // Immediate update to avoid 1s delay
           const startTime = new Date(window.__lastTrackingStartTime);
-          const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+          const elapsed = getTodayElapsedSeconds(startTime);
           const hours = Math.floor(elapsed / 3600);
           const minutes = Math.floor((elapsed % 3600) / 60);
           const seconds = elapsed % 60;

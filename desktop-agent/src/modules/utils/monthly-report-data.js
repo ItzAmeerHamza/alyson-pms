@@ -51,20 +51,29 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     return { error: 'Database service not available' };
   }
 
+  const {
+    initWorkTimezone,
+    workMonthBounds,
+    workDayBoundsForYmd,
+    getWorkTimezone,
+  } = require('./work-timezone');
+  initWorkTimezone(config);
+
   const rawUserId = global.currentUserId || config?.user_id || config?.userId;
   const userId = normalizeTenantUserId(rawUserId);
   if (!userId) return { error: 'User not authenticated' };
 
   const today = new Date();
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  const monthStartIso = startOfMonth.toISOString();
-  const monthEndExclusive = new Date(
-    endOfMonth.getFullYear(),
-    endOfMonth.getMonth(),
-    endOfMonth.getDate() + 1,
-  ).toISOString();
-  const daysInMonth = endOfMonth.getDate();
+  const {
+    year: workYear,
+    month: workMonth,
+    startMs: mStartMs,
+    endExclusiveMs: mEndMs,
+    daysInMonth,
+  } = workMonthBounds(today);
+  const monthStartIso = new Date(mStartMs).toISOString();
+  const monthEndExclusive = new Date(mEndMs).toISOString();
+  const workTz = getWorkTimezone();
 
   let timeLogs = [];
   let screenshots = [];
@@ -123,23 +132,16 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
   const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
   const currentTimeLogId = isTracking ? global.trackingManager?.currentTimeLogId : null;
 
-  const mStartMs = startOfMonth.getTime();
-  const mEndMs = new Date(monthEndExclusive).getTime();
+  const mEndExclusiveMs = mEndMs;
   const clamp = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
-
-  const localDateStr = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
 
   const dailyBreakdown = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    const dt = new Date(today.getFullYear(), today.getMonth(), d);
+    const dateKey = `${workYear}-${String(workMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const { startMs: dayStartMs } = workDayBoundsForYmd(workYear, workMonth, d);
     dailyBreakdown.push({
-      date: localDateStr(dt),
-      dayName: dt.toLocaleDateString('en-US', { weekday: 'short' }),
+      date: dateKey,
+      dayName: new Date(dayStartMs).toLocaleDateString('en-US', { timeZone: workTz, weekday: 'short' }),
       totalSeconds: 0,
       sessions: 0,
     });
@@ -161,19 +163,18 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
       return;
     }
 
-    if (endMs <= mStartMs || startMs >= mEndMs) return;
+    if (endMs <= mStartMs || startMs >= mEndExclusiveMs) return;
 
-    const clampedSeconds = Math.floor(clamp(startMs, endMs, mStartMs, mEndMs) / 1000);
+    const clampedSeconds = Math.floor(clamp(startMs, endMs, mStartMs, mEndExclusiveMs) / 1000);
     const projectName =
       log.projects?.name || projectNameById[log.project_id] || 'No Project';
     const projectId = log.project_id || 'none';
 
-    for (let d = 0; d < daysInMonth; d++) {
-      const dayStartMs = new Date(today.getFullYear(), today.getMonth(), d + 1).getTime();
-      const dayEndMs = new Date(today.getFullYear(), today.getMonth(), d + 2).getTime();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
       const sec = Math.floor(clamp(startMs, endMs, dayStartMs, dayEndMs) / 1000);
       if (sec > 0) {
-        dailyBreakdown[d].totalSeconds += sec;
+        dailyBreakdown[d - 1].totalSeconds += sec;
       }
     }
 
@@ -199,29 +200,25 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
   const totalSeconds = dailyBreakdown.reduce((sum, d) => sum + d.totalSeconds, 0);
 
   const weeklyBreakdown = [];
-  const tempWeekStart = new Date(startOfMonth);
-  tempWeekStart.setDate(tempWeekStart.getDate() - tempWeekStart.getDay());
-  while (tempWeekStart <= endOfMonth) {
-    const wStart = new Date(tempWeekStart);
-    const wEnd = new Date(
-      tempWeekStart.getFullYear(),
-      tempWeekStart.getMonth(),
-      tempWeekStart.getDate() + 6,
-    );
-    const wStartStr = localDateStr(wStart);
-    const wEndStr = localDateStr(wEnd);
+  if (dailyBreakdown.length > 0) {
+    let weekStart = dailyBreakdown[0].date;
     let weekTotal = 0;
-    dailyBreakdown.forEach((day) => {
-      if (day.date >= wStartStr && day.date <= wEndStr) {
-        weekTotal += day.totalSeconds;
+    dailyBreakdown.forEach((day, idx) => {
+      weekTotal += day.totalSeconds;
+      const isSunday = day.dayName === 'Sun';
+      const isLast = idx === dailyBreakdown.length - 1;
+      if (isSunday || isLast) {
+        weeklyBreakdown.push({
+          weekStart,
+          weekEnd: day.date,
+          totalTime: weekTotal,
+        });
+        if (!isLast) {
+          weekStart = dailyBreakdown[idx + 1].date;
+          weekTotal = 0;
+        }
       }
     });
-    weeklyBreakdown.push({
-      weekStart: wStartStr,
-      weekEnd: wEndStr,
-      totalTime: weekTotal,
-    });
-    tempWeekStart.setDate(tempWeekStart.getDate() + 7);
   }
 
   let avgActivityPercent = 0;

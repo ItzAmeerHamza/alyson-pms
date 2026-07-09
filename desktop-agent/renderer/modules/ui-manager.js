@@ -1387,7 +1387,9 @@ class UIManager {
           const timerElement = document.getElementById('trackerTime');
           if (timerElement && trackingState.sessionStartTime) {
             const startTime = new Date(trackingState.sessionStartTime);
-            const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+            const elapsed = typeof window.getTodayElapsedSeconds === 'function'
+              ? window.getTodayElapsedSeconds(startTime)
+              : Math.floor((Date.now() - startTime.getTime()) / 1000);
             const hours = Math.floor(elapsed / 3600);
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;
@@ -1408,14 +1410,28 @@ class UIManager {
         } else {
           this.setTrackingStatus('stopped');
           try {
-            const today = await this.ipcRenderer.invoke('get-today-time-stats');
+            this._todayStatsCacheTime = 0;
+            const today = await this._getCachedTodayTimeStats();
             const te = document.getElementById('trackerTime');
             if (te && today && typeof today.totalTime === 'number') {
-              const t = Math.max(0, Math.floor(today.totalTime));
-              const th = Math.floor(t / 3600);
-              const tm = Math.floor((t % 3600) / 60);
-              const ts = t % 60;
-              te.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+              const displaySec =
+                typeof window.resolveStoppedDisplaySeconds === 'function'
+                  ? window.resolveStoppedDisplaySeconds(today.totalTime)
+                  : Math.max(0, Math.floor(today.totalTime));
+              if (typeof window.setTrackerDisplaySeconds === 'function') {
+                window.setTrackerDisplaySeconds(displaySec, { allowDecrease: true });
+              } else {
+                const th = Math.floor(displaySec / 3600);
+                const tm = Math.floor((displaySec % 3600) / 60);
+                const ts = displaySec % 60;
+                te.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+              }
+              if (typeof today.completedTodayBeforeCurrentSessionSeconds === 'number') {
+                window.__completedTodayBaseSeconds = Math.max(
+                  0,
+                  Math.floor(today.completedTodayBeforeCurrentSessionSeconds),
+                );
+              }
             }
           } catch { /* keep default */ }
         }
@@ -2861,6 +2877,15 @@ class UIManager {
       // Show default page (Time Tracker)
       console.log('🔧 [UI-MANAGER] Showing Time Tracker page...');
       this.showPage('timetracker');
+
+      // Restore today's cumulative clock from DB when reopening the app same day.
+      setTimeout(() => {
+        if (typeof window.refreshTodayCompletedBaseSeconds === 'function') {
+          void window.refreshTodayCompletedBaseSeconds();
+        }
+        void this.refreshTimerState();
+        void this.loadTodaysTotalTime();
+      }, 200);
       
       // Load user profile for welcome banner
       console.log('🔧 [UI-MANAGER] Loading user profile...');
@@ -3123,12 +3148,27 @@ class UIManager {
       
       if (todayStats && todayStats.totalTime !== undefined) {
         const todayTimeElement = document.getElementById('todayTime');
+        const trackerTimeElement = document.getElementById('trackerTime');
+        const totalSec = Math.max(0, Math.floor(Number(todayStats.totalTime) || 0));
+        const completedBase = Math.max(
+          0,
+          Math.floor(Number(todayStats.completedTodayBeforeCurrentSessionSeconds) || 0),
+        );
+        const formattedTime = this.formatDuration(totalSec);
         if (todayTimeElement) {
-          const formattedTime = this.formatDuration(todayStats.totalTime);
           todayTimeElement.textContent = formattedTime;
           console.log('✅ [TODAY-TIME] Updated display:', formattedTime);
-        } else {
-          console.error('❌ [TODAY-TIME] todayTime element not found');
+        }
+        if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+          window.__completedTodayBaseSeconds = completedBase;
+        }
+        if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
+          const displaySec =
+            typeof window.resolveStoppedDisplaySeconds === 'function'
+              ? window.resolveStoppedDisplaySeconds(totalSec)
+              : totalSec;
+          window.setTrackerDisplaySeconds(displaySec, { allowDecrease: true });
+          console.log('✅ [TODAY-TIME] Restored tracker clock:', displaySec, 's');
         }
       } else {
         console.log('⚠️ [TODAY-TIME] No valid data, trying fallback...');
@@ -3182,7 +3222,9 @@ class UIManager {
     
     const sessionTimeElement = document.getElementById('sessionTime');
     if (sessionTimeElement) {
-      const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+      const elapsed = typeof window.getTodayElapsedSeconds === 'function'
+        ? window.getTodayElapsedSeconds(startTime)
+        : Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
       const hours = Math.floor(elapsed / 3600);
       const minutes = Math.floor((elapsed % 3600) / 60);
       const seconds = elapsed % 60;
@@ -3434,7 +3476,9 @@ class UIManager {
           const timerElement = document.getElementById('trackerTime');
           if (timerElement) {
             const startTime = new Date(trackingState.sessionStartTime);
-            const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+            const elapsed = typeof window.getTodayElapsedSeconds === 'function'
+              ? window.getTodayElapsedSeconds(startTime)
+              : Math.floor((Date.now() - startTime.getTime()) / 1000);
             const hours = Math.floor(elapsed / 3600);
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;
@@ -3458,7 +3502,9 @@ class UIManager {
           const dashboardTimer = document.getElementById('sessionTime');
           if (dashboardTimer) {
             const startTime = new Date(trackingState.sessionStartTime);
-            const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+            const elapsed = typeof window.getTodayElapsedSeconds === 'function'
+              ? window.getTodayElapsedSeconds(startTime)
+              : Math.floor((Date.now() - startTime.getTime()) / 1000);
             const hours = Math.floor(elapsed / 3600);
             const minutes = Math.floor((elapsed % 3600) / 60);
             const seconds = elapsed % 60;

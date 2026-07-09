@@ -511,8 +511,9 @@ try {
         const projectName = this.currentSession?.projectName || null;
         let completedTodayBeforeSessionSeconds = 0;
         try {
+          const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
           const supabase = global.supabaseClient || this.supabaseService || global.supabaseService || global.supabase;
-          if (supabase && effectiveUserId && timeLog?.id) {
+          if (effectiveUserId && timeLog?.id && (supabase || isBackendTimeLogsEnabled())) {
             const agg = await computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id, true);
             completedTodayBeforeSessionSeconds = this._resolveTodayBaseSeconds(agg.completedClosedSeconds);
           }
@@ -1450,11 +1451,12 @@ try {
 
   _captureStopTodayTotalSnapshot() {
     try {
+      const { elapsedSecondsSinceLocalMidnight } = require('../utils/today-time-log-stats');
       const tray = global.trayManager;
       const base = Math.max(0, Math.floor(Number(tray?._cumulativeBaseSeconds) || 0));
       const start = this.sessionStartTime || global.sessionStartTime;
       const elapsed = start
-        ? Math.max(0, Math.floor((Date.now() - new Date(start).getTime()) / 1000))
+        ? elapsedSecondsSinceLocalMidnight(start)
         : 0;
       const freshTotal = base + elapsed;
       const trayCumulative =
@@ -1470,6 +1472,13 @@ try {
   }
 
   _resolveTodayBaseSeconds(dbCompletedSeconds) {
+    const { localDateKey } = require('../utils/today-time-log-stats');
+    const todayKey = localDateKey();
+    if (global._frozenTotalDate !== todayKey) {
+      global._lastTodayTotalAtStop = null;
+      global._rendererFrozenTotalAtStop = null;
+      global._frozenTotalDate = todayKey;
+    }
     const db = Math.max(0, Math.floor(Number(dbCompletedSeconds) || 0));
     const floor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
     const resolved = Math.max(db, floor);

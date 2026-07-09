@@ -97,9 +97,16 @@ async function reconcileInflatedTimeLogs(userId, deviceId = null, config = globa
 }
 
 async function getTodayTimeLogs(userId, config = global.config) {
+  const { startOfLocalDay, endOfLocalDayExclusive } = require('./today-time-log-stats');
+  const startOfDay = startOfLocalDay();
+  const endOfDay = endOfLocalDayExclusive();
   const result = await callDesktopAction(
     'get_today_time_logs',
-    { user_id: requireTenantUserId(userId) },
+    {
+      user_id: requireTenantUserId(userId),
+      start_of_day: startOfDay.toISOString(),
+      end_of_day: endOfDay.toISOString(),
+    },
     config,
   );
   return result.time_logs || [];

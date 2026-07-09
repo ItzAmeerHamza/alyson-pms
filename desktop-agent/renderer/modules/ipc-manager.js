@@ -840,6 +840,15 @@ class IPCManager {
     try {
       console.log('🚀 [IPC-MANAGER] Starting tracking with project ID:', projectId);
       this.startInProgress = true;
+
+      // Load today's completed sessions before optimistic clock starts at 00:00:00.
+      if (typeof window.refreshTodayCompletedBaseSeconds === 'function') {
+        try {
+          await window.refreshTodayCompletedBaseSeconds();
+        } catch (baseErr) {
+          console.warn('⚠️ [IPC-MANAGER] Could not preload today base seconds:', baseErr?.message || baseErr);
+        }
+      }
       
       // OPTIMISTIC START: Start timer immediately
       const optimisticStartTime = new Date();

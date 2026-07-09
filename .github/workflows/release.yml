@@ -151,9 +151,37 @@ jobs:
               sed -i.bak 's/Alyson-PM/Alyson.PM/g' "$f"
               rm -f "$f.bak"
               echo "Patched $f"
-              head -5 "$f"
             fi
           done
+          # Auto-updater requires ZIP entries only (DMGs break silent updates).
+          if [ -f release-assets/latest-mac.yml ]; then
+            python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path("release-assets/latest-mac.yml")
+          text = p.read_text()
+          lines = text.splitlines()
+          out, in_files, kept_any = [], False, False
+          for line in lines:
+            if line.startswith("files:"):
+              in_files = True
+              out.append(line)
+              continue
+            if in_files:
+              if re.match(r"^  - url: ", line):
+                if ".zip" in line.lower():
+                  out.append(line)
+                  kept_any = True
+                continue
+              if line and not line.startswith("  "):
+                in_files = False
+            if not in_files:
+              out.append(line)
+          if kept_any:
+            p.write_text("\n".join(out) + "\n")
+            print("Stripped non-ZIP entries from latest-mac.yml")
+          print(p.read_text())
+          PY
+          fi
 
       - name: Get version
         id: version

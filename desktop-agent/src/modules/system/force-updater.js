@@ -427,9 +427,83 @@ class ForceUpdater {
   }
 
   /**
-   * Check for updates (returns promise)
-   * This is the main method called after login
+   * Notify renderer to show mandatory update UI
    */
+  notifyUpdateAvailable(result = {}) {
+    if (!result.updateAvailable && !result.newVersion) return;
+    this.sendToRenderer('mandatory-update-required', {
+      version: result.newVersion || this.pendingVersion,
+      currentVersion: result.currentVersion || this.currentVersion,
+      updateDownloaded: !!(result.updateDownloaded || this.isUpdateDownloaded),
+      releaseNotes: result.releaseNotes || '',
+    });
+    this.sendToRenderer('update-available', {
+      version: result.newVersion || this.pendingVersion,
+      currentVersion: result.currentVersion || this.currentVersion,
+      releaseNotes: result.releaseNotes || '',
+    });
+  }
+
+  /**
+   * Fallback: query GitHub API for newest pre-release with updater metadata.
+   * Used when electron-updater returns no_info/error but a newer build exists.
+   */
+  async fetchLatestPrereleaseViaGithubApi() {
+    const gh = this.getGithubReleaseTarget();
+    const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/releases?per_page=30`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'alyson-pm-desktop-agent-updater',
+      },
+    });
+    if (!res.ok) {
+      throw new Error(`GitHub releases API returned ${res.status}`);
+    }
+    const releases = await res.json();
+    if (!Array.isArray(releases)) return null;
+
+    const platformAsset = process.platform === 'win32' ? 'latest.yml' : 'latest-mac.yml';
+    const candidate = releases.find(
+      (r) => r.prerelease && (r.assets || []).some((a) => a.name === platformAsset),
+    );
+    if (!candidate) return null;
+
+    const version = String(candidate.tag_name || '').replace(/^v/i, '');
+    return { version, tagName: candidate.tag_name, publishedAt: candidate.published_at };
+  }
+
+  async checkGithubFallbackForUpdate() {
+    try {
+      const latest = await this.fetchLatestPrereleaseViaGithubApi();
+      if (!latest?.version) return null;
+      const current = String(this.currentVersion || '').replace(/^v/i, '');
+      if (this.compareVersions(latest.version, current) > 0) {
+        console.log(`🆕 [FORCE-UPDATER] GitHub API fallback found newer version: ${current} → ${latest.version}`);
+        return latest;
+      }
+    } catch (err) {
+      console.warn('⚠️ [FORCE-UPDATER] GitHub API fallback failed:', err?.message || err);
+    }
+    return null;
+  }
+
+  markUpdateAvailable(remoteVersion, releaseNotes = '') {
+    const normalized = String(remoteVersion || '').replace(/^v/i, '');
+    this.isUpdateAvailable = true;
+    this.isUpdateRequired = true;
+    this.pendingVersion = normalized;
+    this.updateError = null;
+    this.saveUpdateState();
+    return {
+      updateAvailable: true,
+      updateDownloaded: this.isUpdateDownloaded,
+      currentVersion: this.currentVersion,
+      newVersion: normalized,
+      releaseNotes,
+    };
+  }
+
   async checkForUpdates() {
     // CRITICAL: Always get fresh version from app, never use cached
     if (app) {
@@ -519,8 +593,13 @@ class ForceUpdater {
         }
       }
       
-      // No update info returned
-      console.log('⚠️ [FORCE-UPDATER] No update info returned from check');
+      // No update info returned — try GitHub API fallback (pre-releases)
+      console.log('⚠️ [FORCE-UPDATER] No update info from electron-updater — trying GitHub API fallback');
+      const fallback = await this.checkGithubFallbackForUpdate();
+      if (fallback) {
+        const payload = this.markUpdateAvailable(fallback.version);
+        return payload;
+      }
       return {
         updateAvailable: false,
         reason: 'no_info',
@@ -529,6 +608,11 @@ class ForceUpdater {
       
     } catch (error) {
       console.error('❌ [FORCE-UPDATER] Update check error:', error.message);
+      const fallback = await this.checkGithubFallbackForUpdate();
+      if (fallback) {
+        const payload = this.markUpdateAvailable(fallback.version);
+        return payload;
+      }
       return {
         updateAvailable: false,
         reason: 'error',
@@ -543,8 +627,9 @@ class ForceUpdater {
    * Returns: 1 if a > b, -1 if a < b, 0 if equal
    */
   compareVersions(a, b) {
-    const partsA = a.split('.').map(Number);
-    const partsB = b.split('.').map(Number);
+    const clean = (v) => String(v || '').replace(/^v/i, '').trim();
+    const partsA = clean(a).split('.').map(Number);
+    const partsB = clean(b).split('.').map(Number);
     
     for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
       const numA = partsA[i] || 0;
@@ -856,21 +941,20 @@ class ForceUpdater {
     }
     
     console.log('⏰ [FORCE-UPDATER] Starting periodic update checks (every 6 hours)');
-    
-    // Check soon after launch so login screen can show mandatory update (not only after sign-in).
-    setTimeout(() => {
+
+    const runStartupCheck = () => {
       this.checkForUpdates().then((result) => {
         if (result?.updateAvailable) {
-          this.sendToRenderer('update-available', {
-            version: result.newVersion,
-            currentVersion: result.currentVersion,
-            releaseNotes: result.releaseNotes || '',
-          });
+          this.notifyUpdateAvailable(result);
         }
       }).catch((err) => {
         console.warn('⚠️ [FORCE-UPDATER] Startup update check failed:', err?.message || err);
       });
-    }, 3000);
+    };
+
+    // Check immediately and again after 3s (login screen should block before sign-in).
+    runStartupCheck();
+    setTimeout(runStartupCheck, 3000);
     
     // Then check every 6 hours
     setInterval(() => {

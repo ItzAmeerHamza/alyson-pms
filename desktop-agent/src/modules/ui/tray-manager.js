@@ -27,6 +27,7 @@ class TrayManager {
     this._trackingStartTime = null;  // Date object for when current session started
     /** Seconds from closed time_logs today before the current open session (for "total worked today" display). */
     this._cumulativeBaseSeconds = 0;
+    this._localDayKey = null;
     this._currentProjectName = null;
     this._projectList = [];          // Cached project list [{project_id, name}]
     this._selectedProjectId = null;
@@ -225,6 +226,7 @@ class TrayManager {
     });
     
     console.log(`✅ System tray created (${isMac ? 'macOS template icon' : 'standard icon'})`);
+    this._startLocalDayWatch();
   }
 
   // ─── Timer helpers ─────────────────────────────────────────────
@@ -358,6 +360,65 @@ class TrayManager {
     }
   }
 
+  _maybeRolloverLocalDay() {
+    const { localDateKey } = require('../utils/today-time-log-stats');
+    const todayKey = localDateKey();
+    if (!this._localDayKey) {
+      this._localDayKey = todayKey;
+      return false;
+    }
+    if (this._localDayKey === todayKey) return false;
+
+    console.log(`🌙 [TRAY] Work-day rollover (${require('../utils/work-timezone').getWorkTimezone()}): ${this._localDayKey} → ${todayKey}`);
+    this._localDayKey = todayKey;
+    this._cumulativeBaseSeconds = 0;
+    this._lastCumulativeSeconds = 0;
+    if (typeof global !== 'undefined') {
+      global._lastTodayTotalAtStop = null;
+      global._rendererFrozenTotalAtStop = null;
+      global._frozenTotalDate = todayKey;
+    }
+
+    if (this.isTracking && this.tray && !this.tray.isDestroyed()) {
+      const zeroDisplay = this._formatElapsed(0);
+      if (process.platform === 'darwin') {
+        this.tray.setTitle(zeroDisplay, { fontType: 'monospacedDigit' });
+      }
+      const projectLabel = this._currentProjectName || 'No Project';
+      this.tray.setToolTip(`▶ Today: ${zeroDisplay} (session ${zeroDisplay}) — ${projectLabel}`);
+    }
+
+    try {
+      const { BrowserWindow } = require('electron');
+      const windows = BrowserWindow.getAllWindows();
+      if (windows.length > 0 && !windows[0].isDestroyed()) {
+        windows[0].webContents.send('local-day-rollover', {
+          date: todayKey,
+          isTracking: this.isTracking,
+        });
+      }
+    } catch (_) { /* ignore send failures */ }
+
+    return true;
+  }
+
+  _startLocalDayWatch() {
+    if (this._dayWatchInterval) return;
+    const { localDateKey } = require('../utils/today-time-log-stats');
+    this._localDayKey = localDateKey();
+    this._dayWatchInterval = setInterval(() => {
+      this._maybeRolloverLocalDay();
+    }, 1000);
+    if (typeof this._dayWatchInterval.unref === 'function') {
+      this._dayWatchInterval.unref();
+    }
+  }
+
+  _getSessionElapsedSeconds() {
+    const { elapsedSecondsSinceLocalMidnight } = require('../utils/today-time-log-stats');
+    return elapsedSecondsSinceLocalMidnight(this._trackingStartTime);
+  }
+
   /**
    * Start the 1-second tray timer that updates the status bar title (macOS)
    * or tooltip (Windows/Linux)
@@ -378,8 +439,10 @@ class TrayManager {
       console.log('⏱️ [TRAY] Using session start time:', this._trackingStartTime.toISOString());
     }
 
+    this._maybeRolloverLocalDay();
+
     // Set initial display based on actual elapsed time (not always 00:00:00)
-    const initialElapsed = Math.max(0, Math.floor((Date.now() - this._trackingStartTime.getTime()) / 1000));
+    const initialElapsed = this._getSessionElapsedSeconds();
     const base = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
     const initialCumulative = base + initialElapsed;
     const initialDisplay = this._formatElapsed(initialElapsed);
@@ -401,7 +464,8 @@ class TrayManager {
       try {
         if (!this.tray || this.tray.isDestroyed()) return;
 
-        const elapsed = Math.floor((Date.now() - this._trackingStartTime.getTime()) / 1000);
+        this._maybeRolloverLocalDay();
+        const elapsed = this._getSessionElapsedSeconds();
         const display = this._formatElapsed(elapsed);
         const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
         const cumulativeSeconds = Math.max(0, baseSec + elapsed);
@@ -485,10 +549,12 @@ class TrayManager {
 
       // ── Header: elapsed time or idle label ──
       if (this.isTracking && this._trackingStartTime) {
-        const elapsed = Math.floor((Date.now() - this._trackingStartTime.getTime()) / 1000);
+        const elapsed = this._getSessionElapsedSeconds();
+        const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+        const todayTotal = this._formatElapsed(baseSec + elapsed);
         const projectLabel = this._currentProjectName || 'No Project';
         menuItems.push({
-          label: `${projectLabel}  ${this._formatElapsed(elapsed)}`,
+          label: `${projectLabel}  ${todayTotal}`,
           enabled: false
         });
       } else {
@@ -869,6 +935,10 @@ class TrayManager {
    */
   destroy() {
     this.stopTrayTimer();
+    if (this._dayWatchInterval) {
+      clearInterval(this._dayWatchInterval);
+      this._dayWatchInterval = null;
+    }
     if (this.tray) {
       this.tray.destroy();
       this.tray = null;

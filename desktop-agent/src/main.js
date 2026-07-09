@@ -1055,6 +1055,13 @@ let configDataManager;
 try {
   config = loadConfig();
   global.config = config;
+  try {
+    const { initWorkTimezone } = require('./modules/utils/work-timezone');
+    initWorkTimezone(config);
+    console.log('🌎 [TIMEZONE] Work-day boundaries:', require('./modules/utils/work-timezone').getWorkTimezone());
+  } catch (tzErr) {
+    console.warn('⚠️ [TIMEZONE] Could not init work timezone:', tzErr?.message || tzErr);
+  }
 
   // Initialize Supabase client with proper error handling
   if (!config.supabase_url || !config.supabase_key) {
@@ -5935,13 +5942,21 @@ if (isElectronContext && ipcMain) {
       || global.trackingManager?.sessionStartTime
       || null;
     const sessionStartTime = isTracking ? startTimeRaw : null;
+    let trackingDuration = 0;
+    if (isTracking && sessionStartTime) {
+      try {
+        const { elapsedSecondsSinceLocalMidnight } = require('./modules/utils/today-time-log-stats');
+        trackingDuration = elapsedSecondsSinceLocalMidnight(sessionStartTime) * 1000;
+      } catch {
+        trackingDuration = Date.now() - new Date(sessionStartTime).getTime();
+      }
+    }
     const state = {
       isTracking,
       isPaused: global.isPaused || false,
       sessionStartTime,
       currentTimeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
-      trackingDuration: (isTracking && sessionStartTime) ?
-        Date.now() - new Date(sessionStartTime).getTime() : 0
+      trackingDuration
     };
 
     return state;
@@ -5950,9 +5965,35 @@ if (isElectronContext && ipcMain) {
   // Today's time_logs aggregate (always register — DataStatsManager does not own this channel)
   try { ipcMain.removeHandler('get-today-time-stats'); } catch {}
   try { ipcMain.removeHandler('set-frozen-total-at-stop'); } catch {}
+  try { ipcMain.removeHandler('clear-frozen-total-at-stop'); } catch {}
+  const getLocalDateKey = () => {
+    const { workDateKey } = require('./modules/utils/work-timezone');
+    return workDateKey();
+  };
+  const getFrozenTotalFloor = () => {
+    const todayKey = getLocalDateKey();
+    if (global._frozenTotalDate !== todayKey) {
+      global._lastTodayTotalAtStop = null;
+      global._rendererFrozenTotalAtStop = null;
+      global._frozenTotalDate = todayKey;
+      return 0;
+    }
+    return Math.max(
+      0,
+      Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+      Math.floor(Number(global._rendererFrozenTotalAtStop) || 0),
+    );
+  };
+  ipcMain.handle('clear-frozen-total-at-stop', async () => {
+    global._lastTodayTotalAtStop = null;
+    global._rendererFrozenTotalAtStop = null;
+    global._frozenTotalDate = getLocalDateKey();
+    return { success: true };
+  });
   ipcMain.handle('set-frozen-total-at-stop', async (_event, totalSeconds) => {
     const sec = Math.max(0, Math.floor(Number(totalSeconds) || 0));
     if (sec > 0) {
+      global._frozenTotalDate = getLocalDateKey();
       global._rendererFrozenTotalAtStop = sec;
       global._lastTodayTotalAtStop = Math.max(
         global._lastTodayTotalAtStop || 0,
@@ -5988,11 +6029,7 @@ if (isElectronContext && ipcMain) {
 
       let completedClosedSeconds = agg.completedClosedSeconds;
       if (!isTracking) {
-        const floor = Math.max(
-          0,
-          Math.floor(Number(global._lastTodayTotalAtStop) || 0),
-          Math.floor(Number(global._rendererFrozenTotalAtStop) || 0),
-        );
+        const floor = getFrozenTotalFloor();
         if (floor > completedClosedSeconds) {
           completedClosedSeconds = floor;
         } else if (completedClosedSeconds >= floor) {

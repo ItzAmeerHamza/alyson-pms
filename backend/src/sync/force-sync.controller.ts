@@ -4,11 +4,13 @@ import { randomUUID } from 'crypto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
+import { ScreenshotAiBackfillService } from '../screenshot-ai/screenshot-ai-backfill.service';
 import { buildScreenshotS3Key } from '../lib/screenshot-s3-key';
 import {
   parseTenantUserId as parseTenantUserIdStrict,
   parseWorkspaceId,
 } from '../database/time-doctor-sql';
+import { endOfWorkDayExclusiveIso, startOfWorkDayIso } from '../lib/work-timezone';
 
 function parseUserIdParam(raw: unknown): number {
   try {
@@ -27,6 +29,7 @@ export class ForceSyncController {
   constructor(
     private readonly db: DatabaseService,
     private readonly s3: S3Service,
+    private readonly screenshotAi: ScreenshotAiBackfillService,
   ) {}
 
   private async resolveWorkspaceId(userId: unknown, provided?: unknown): Promise<number | null> {
@@ -627,19 +630,8 @@ export class ForceSyncController {
         const uid = parseUserIdParam(userId);
         const start = data?.start_of_day;
         const end = data?.end_of_day;
-        const startOfDay =
-          start ||
-          (() => {
-            const d = new Date();
-            return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-          })();
-        const endOfDay =
-          end ||
-          (() => {
-            const d = new Date();
-            const s = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            return new Date(s.getTime() + 24 * 60 * 60 * 1000).toISOString();
-          })();
+        const startOfDay = start || startOfWorkDayIso();
+        const endOfDay = end || endOfWorkDayExclusiveIso();
         const result = await this.db.query<{
           id: string;
           start_time: string;
@@ -649,8 +641,8 @@ export class ForceSyncController {
           `SELECT id, start_time, end_time, status
            FROM time_doctor.time_logs
            WHERE user_id = $1
-             AND start_time >= $2
-             AND start_time < $3
+             AND start_time < $3::timestamptz
+             AND COALESCE(end_time, NOW()) > $2::timestamptz
            ORDER BY start_time DESC`,
           [uid, startOfDay, endOfDay],
         );
@@ -811,8 +803,8 @@ export class ForceSyncController {
           `INSERT INTO time_doctor.screenshots
             (id, user_id, time_log_id, image_url, file_path, file_size, s3_key, captured_at,
              activity_percent, focus_percent, mouse_clicks, keystrokes, mouse_movements,
-             app_name, window_title, agent_version, workspace_id)
-           VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+             app_name, window_title, agent_version, workspace_id, ai_analysis_status)
+           VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending')
            ON CONFLICT (id) DO UPDATE SET
              s3_key = EXCLUDED.s3_key,
              file_path = EXCLUDED.file_path,
@@ -839,6 +831,24 @@ export class ForceSyncController {
             workspaceId,
           ],
         );
+        const capturedAt = meta.captured_at || new Date().toISOString();
+        void this.screenshotAi
+          .enqueueAfterUpload({
+            id: insert.rows[0].id,
+            user_id: parseUserIdParam(userId),
+            workspace_id: workspaceId,
+            s3_key: s3Key,
+            captured_at: capturedAt,
+            app_name: meta.app_name || null,
+            window_title: meta.window_title || null,
+          })
+          .catch((err) => {
+            this.logger.warn(
+              `Failed to enqueue AI analysis for screenshot ${insert.rows[0].id}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          });
         return { success: true, id: insert.rows[0].id, s3_key: s3Key };
       }
       case 'upload_screenshot': {
