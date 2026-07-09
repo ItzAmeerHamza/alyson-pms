@@ -160,22 +160,36 @@ jobs:
           p = pathlib.Path("release-assets/latest-mac.yml")
           text = p.read_text()
           lines = text.splitlines()
-          out, in_files, kept_any = [], False, False
+          out, in_files, kept_any, skip_block = [], False, False, False
           for line in lines:
             if line.startswith("files:"):
               in_files = True
+              skip_block = False
               out.append(line)
               continue
             if in_files:
               if re.match(r"^  - url: ", line):
-                if ".zip" in line.lower():
+                skip_block = ".zip" not in line.lower()
+                if not skip_block:
                   out.append(line)
                   kept_any = True
                 continue
+              if skip_block:
+                if line and not line.startswith("  "):
+                  in_files = False
+                  skip_block = False
+                  out.append(line)
+                continue
+              if re.match(r"^    (sha512|size): ", line):
+                out.append(line)
+                continue
               if line and not line.startswith("  "):
                 in_files = False
-            if not in_files:
-              out.append(line)
+                skip_block = False
+                out.append(line)
+                continue
+              continue
+            out.append(line)
           if kept_any:
             p.write_text("\n".join(out) + "\n")
             print("Stripped non-ZIP entries from latest-mac.yml")
