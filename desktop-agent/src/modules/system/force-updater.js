@@ -336,6 +336,18 @@ class ForceUpdater {
 
     autoUpdater.on('update-not-available', (info) => {
       console.log('✅ [FORCE-UPDATER] App is up to date:', info.version);
+      const current = String(this.currentVersion || '').replace(/^v/i, '');
+      const remote = String(info?.version || '').replace(/^v/i, '');
+      if (this.compareVersions(remote, current) < 0) {
+        console.log('⚠️ [FORCE-UPDATER] update-not-available remote is stale — checking GitHub API');
+        void this.checkGithubFallbackForUpdate().then((fallback) => {
+          if (fallback) {
+            const payload = this.markUpdateAvailable(fallback.version);
+            this.notifyUpdateAvailable(payload);
+          }
+        });
+        return;
+      }
       this.isUpdateAvailable = false;
       this.isUpdateRequired = false;
       this.pendingVersion = null;
@@ -465,7 +477,7 @@ class ForceUpdater {
 
     const platformAsset = process.platform === 'win32' ? 'latest.yml' : 'latest-mac.yml';
     const candidate = releases.find(
-      (r) => r.prerelease && (r.assets || []).some((a) => a.name === platformAsset),
+      (r) => !r.draft && (r.assets || []).some((a) => a.name === platformAsset),
     );
     if (!candidate) return null;
 
@@ -584,7 +596,15 @@ class ForceUpdater {
             releaseNotes: result.updateInfo.releaseNotes || ''
           };
         } else {
-          console.log(`✅ [FORCE-UPDATER] App is up to date (${currentVersion})`);
+          console.log(`✅ [FORCE-UPDATER] electron-updater reports up to date (${currentVersion}), remote=${remoteVersion}`);
+          // Stale feed: electron-updater may return an older "latest" (e.g. 1.0.182) while a newer build exists.
+          if (this.compareVersions(remoteVersion, currentVersion) < 0) {
+            console.log('⚠️ [FORCE-UPDATER] Remote version older than installed — trying GitHub API fallback');
+            const fallback = await this.checkGithubFallbackForUpdate();
+            if (fallback) {
+              return this.markUpdateAvailable(fallback.version);
+            }
+          }
           return {
             updateAvailable: false,
             currentVersion: currentVersion,
