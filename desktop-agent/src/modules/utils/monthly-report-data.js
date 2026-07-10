@@ -241,7 +241,11 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     totalSessions: sessions.length,
     activeDays,
     screenshotCount: screenshots.length,
-    monthLabel: startOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    monthLabel: new Date(mStartMs).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: workTz,
+    }),
   };
 }
 

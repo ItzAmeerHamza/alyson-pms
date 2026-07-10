@@ -6020,6 +6020,8 @@ if (isElectronContext && ipcMain) {
 
       const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
       const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
+      const { initWorkTimezone, workDateKey } = require('./modules/utils/work-timezone');
+      initWorkTimezone(config);
       const supabase = global.supabaseService || global.supabase;
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);
@@ -6056,7 +6058,8 @@ if (isElectronContext && ipcMain) {
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,
         userId,
-        date: today.toISOString().split('T')[0]
+        workDate: workDateKey(today),
+        date: workDateKey(today),
       };
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
