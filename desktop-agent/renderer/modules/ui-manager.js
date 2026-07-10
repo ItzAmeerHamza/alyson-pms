@@ -3773,20 +3773,29 @@ class UIManager {
         this.showUpdateError('Update files are being prepared. Please try again in a few minutes or restart the app.');
         return;
       }
-      
+
+      // macOS in-place download failed — offer DMG installer fallback.
+      if (result.fallbackToDmg || result.error === 'in_place_failed') {
+        console.log('🔧 [UI-MANAGER] In-place update failed, showing DMG fallback');
+        this.showManualInstallFallback({
+          dmgInstallReady: true,
+          newVersion: result.version,
+          manualDownloadUrl: result.manualDownloadUrl,
+        });
+        return;
+      }
+
       if (!result.success && result.error) {
         throw new Error(result.error);
       }
-      
-      // Download started or already downloaded
-      if (result.alreadyDownloaded || result.dmgInstall) {
-        if (result.dmgInstall) {
-          this.showManualInstallFallback({ dmgInstallReady: true });
-        } else {
-          this.showInstallReady();
-        }
+
+      // Download complete / staged — ready to install
+      if (result.inPlaceReady || result.alreadyDownloaded) {
+        this.showInstallReady();
+      } else if (result.dmgInstall) {
+        this.showManualInstallFallback({ dmgInstallReady: true });
       }
-      // Otherwise, wait for download progress events
+      // Otherwise, wait for download progress + update-downloaded events
       
     } catch (error) {
       console.error('❌ [UI-MANAGER] Download failed:', error);

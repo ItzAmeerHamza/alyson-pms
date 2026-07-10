@@ -52,6 +52,8 @@ class ForceUpdater {
     this.updateError = null;
     this.installAttempts = 0;
     this.manualInstallRequired = false;
+    this.macStagedAppPath = null;
+    this.macUpdateWorkDir = null;
     this.isDevMode = !!(app && app.isPackaged === false);
     
     // Window references
@@ -269,11 +271,47 @@ class ForceUpdater {
   }
 
   /**
-   * macOS CI builds are unsigned — Squirrel quitAndInstall fails reliably.
-   * Use one-click DMG download instead of ZIP + quitAndInstall.
+   * macOS packaged build. Unsigned builds can't use Squirrel quitAndInstall,
+   * so we run a custom in-place bundle swap instead (with DMG fallback).
+   */
+  isMacPackaged() {
+    return process.platform === 'darwin' && !!(app && app.isPackaged);
+  }
+
+  /**
+   * Legacy flag kept for older UI branches. The in-place updater is now the
+   * primary macOS path; DMG is only a fallback after a failed swap, so this
+   * returns false to keep the normal download → install UI flow.
    */
   shouldUseMacDmgInstall() {
-    return process.platform === 'darwin' && !!(app && app.isPackaged);
+    return false;
+  }
+
+  /**
+   * Arch-appropriate ZIP asset URL used by the macOS in-place updater.
+   * electron-builder names them Alyson.PM-<ver>-arm64-mac.zip / -mac.zip.
+   */
+  getMacZipUrl(version) {
+    const gh = this.getGithubReleaseTarget();
+    const ver = String(version || this.pendingVersion || '').replace(/^v/i, '');
+    const tag = `v${ver}`;
+    const archSuffix = process.arch === 'arm64' ? 'arm64-mac' : 'mac';
+    return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM-${ver}-${archSuffix}.zip`;
+  }
+
+  /**
+   * Resolve the installed .app bundle path from the running executable.
+   */
+  getInstalledAppBundlePath() {
+    try {
+      const exe = app.getPath('exe');
+      const marker = '/Contents/MacOS/';
+      const idx = exe.indexOf(marker);
+      if (idx !== -1) return exe.slice(0, idx);
+      return path.resolve(path.dirname(exe), '..', '..');
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -435,13 +473,13 @@ class ForceUpdater {
       releaseType: 'release',
     });
     
-    const useMacDmg = this.shouldUseMacDmgInstall();
-    if (useMacDmg) {
-      console.log('🍎 [FORCE-UPDATER] macOS packaged build — using DMG installer path (unsigned builds)');
+    const macInPlace = this.isMacPackaged();
+    if (macInPlace) {
+      console.log('🍎 [FORCE-UPDATER] macOS packaged build — using custom in-place updater (unsigned builds)');
     }
-    // Unsigned macOS builds cannot apply Squirrel updates; skip background ZIP download there.
-    autoUpdater.autoDownload = !useMacDmg;
-    autoUpdater.autoInstallOnAppQuit = !useMacDmg;
+    // On macOS we download/install manually (Squirrel cannot apply unsigned updates).
+    autoUpdater.autoDownload = !macInPlace;
+    autoUpdater.autoInstallOnAppQuit = !macInPlace;
     
     // Event handlers
     autoUpdater.on('checking-for-update', () => {
@@ -867,14 +905,8 @@ class ForceUpdater {
       return { success: false, error: 'No update available' };
     }
 
-    if (this.shouldUseMacDmgInstall()) {
-      console.log('🍎 [FORCE-UPDATER] macOS DMG path — skipping ZIP download');
-      return {
-        success: true,
-        alreadyDownloaded: true,
-        dmgInstall: true,
-        manualDownloadUrl: this.getManualDownloadUrl(),
-      };
+    if (this.isMacPackaged()) {
+      return await this.downloadMacInPlaceUpdate();
     }
 
     console.log('📥 [FORCE-UPDATER] Starting download...');
@@ -906,6 +938,217 @@ class ForceUpdater {
   }
 
   /**
+   * Download a file over HTTPS following redirects, reporting progress.
+   */
+  downloadFile(url, destPath, onProgress) {
+    const https = require('https');
+    return new Promise((resolve, reject) => {
+      const request = (currentUrl, redirects = 0) => {
+        if (redirects > 6) return reject(new Error('Too many redirects'));
+        const req = https.get(currentUrl, { headers: { 'User-Agent': 'alyson-pm-desktop-agent-updater' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            res.resume();
+            return request(res.headers.location, redirects + 1);
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+          }
+          const total = parseInt(res.headers['content-length'] || '0', 10);
+          let received = 0;
+          const out = fs.createWriteStream(destPath);
+          res.on('data', (chunk) => {
+            received += chunk.length;
+            if (total && typeof onProgress === 'function') {
+              onProgress(Math.round((received / total) * 100), received, total);
+            }
+          });
+          res.pipe(out);
+          out.on('finish', () => out.close(() => resolve({ received, total })));
+          out.on('error', reject);
+        });
+        req.on('error', reject);
+        req.setTimeout(120000, () => req.destroy(new Error('Download timed out')));
+      };
+      request(url);
+    });
+  }
+
+  /**
+   * macOS custom updater: download the release ZIP, extract, strip quarantine,
+   * ad-hoc sign, and stage the new .app for an in-place swap on install.
+   * Falls back to DMG download if any step fails.
+   */
+  async downloadMacInPlaceUpdate() {
+    const os = require('os');
+    const { execFileSync } = require('child_process');
+
+    if (this.isDownloading) {
+      return { success: true, inProgress: true };
+    }
+
+    this.isDownloading = true;
+    this.downloadProgress = 0;
+    this.macStagedAppPath = null;
+
+    const version = String(this.pendingVersion || '').replace(/^v/i, '');
+    const workDir = path.join(os.tmpdir(), `alyson-pm-update-${version}-${Date.now()}`);
+    const zipPath = path.join(workDir, 'update.zip');
+    const extractDir = path.join(workDir, 'extracted');
+
+    try {
+      // Verify we can write to the installed bundle location before downloading.
+      const bundlePath = this.getInstalledAppBundlePath();
+      if (!bundlePath) throw new Error('Could not resolve installed app path');
+      const parentDir = path.dirname(bundlePath);
+      try {
+        fs.accessSync(parentDir, fs.constants.W_OK);
+      } catch {
+        throw new Error(`No write access to ${parentDir} (app likely needs manual install)`);
+      }
+
+      fs.mkdirSync(extractDir, { recursive: true });
+
+      const url = this.getMacZipUrl(version);
+      console.log('📥 [FORCE-UPDATER] macOS in-place download:', url);
+
+      await this.downloadFile(url, zipPath, (percent) => {
+        this.downloadProgress = percent;
+        this.sendToRenderer('update-download-progress', { percent });
+      });
+
+      console.log('📦 [FORCE-UPDATER] Extracting update ZIP...');
+      execFileSync('ditto', ['-x', '-k', zipPath, extractDir], { timeout: 120000 });
+
+      const appName = fs.readdirSync(extractDir).find((n) => n.endsWith('.app'));
+      if (!appName) throw new Error('No .app found in update ZIP');
+      const stagedApp = path.join(extractDir, appName);
+
+      // Remove quarantine so Gatekeeper does not block the swapped bundle.
+      try { execFileSync('xattr', ['-cr', stagedApp], { timeout: 60000 }); } catch (e) {
+        console.warn('⚠️ [FORCE-UPDATER] xattr strip warning:', e.message);
+      }
+      // Ad-hoc sign so arm64 unsigned bundle is runnable after swap.
+      try {
+        execFileSync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
+      } catch (e) {
+        console.warn('⚠️ [FORCE-UPDATER] ad-hoc codesign warning:', e.message);
+      }
+
+      this.macStagedAppPath = stagedApp;
+      this.macUpdateWorkDir = workDir;
+      this.isDownloading = false;
+      this.isUpdateDownloaded = true;
+      this.downloadProgress = 100;
+      this.manualInstallRequired = false;
+      this.saveUpdateState();
+
+      this.sendToRenderer('update-downloaded', { version });
+      console.log('✅ [FORCE-UPDATER] macOS update staged for in-place install:', stagedApp);
+      return { success: true, inPlaceReady: true };
+    } catch (error) {
+      console.error('❌ [FORCE-UPDATER] macOS in-place download failed:', error.message);
+      this.isDownloading = false;
+      this.updateError = error.message;
+      try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
+
+      // Fall back to manual DMG install so the user is never stuck.
+      this.manualInstallRequired = true;
+      this.saveUpdateState();
+      return {
+        success: false,
+        error: 'in_place_failed',
+        fallbackToDmg: true,
+        manualInstallRequired: true,
+        manualDownloadUrl: this.getManualDownloadUrl(version),
+        message: 'Automatic update could not complete. Use Download Installer to finish updating.',
+      };
+    }
+  }
+
+  /**
+   * Swap the staged .app over the installed bundle via a detached script,
+   * then quit so the script can replace files and relaunch the app.
+   */
+  installMacInPlace() {
+    const os = require('os');
+    const { spawn } = require('child_process');
+
+    const stagedApp = this.macStagedAppPath;
+    const bundlePath = this.getInstalledAppBundlePath();
+
+    if (!stagedApp || !fs.existsSync(stagedApp) || !bundlePath) {
+      console.warn('⚠️ [FORCE-UPDATER] No staged app for in-place install — falling back to DMG');
+      this.manualInstallRequired = true;
+      this.openManualDownload();
+      return {
+        success: true,
+        installing: false,
+        dmgOpened: true,
+        manualInstallRequired: true,
+        manualDownloadUrl: this.getManualDownloadUrl(),
+        message: 'Installer opened in your browser. Drag Alyson PM to Applications, then reopen the app.',
+      };
+    }
+
+    const pid = process.pid;
+    const scriptPath = path.join(os.tmpdir(), `alyson-pm-swap-${Date.now()}.sh`);
+    const workDir = this.macUpdateWorkDir || path.dirname(path.dirname(stagedApp));
+    const script = `#!/bin/bash
+set -e
+PID=${pid}
+STAGED="${stagedApp.replace(/"/g, '\\"')}"
+TARGET="${bundlePath.replace(/"/g, '\\"')}"
+WORKDIR="${workDir.replace(/"/g, '\\"')}"
+# Wait for the running app to fully quit
+for i in $(seq 1 60); do
+  if ! kill -0 "$PID" 2>/dev/null; then break; fi
+  sleep 0.5
+done
+sleep 1
+rm -rf "$TARGET"
+ditto "$STAGED" "$TARGET"
+xattr -cr "$TARGET" 2>/dev/null || true
+rm -rf "$WORKDIR" 2>/dev/null || true
+open "$TARGET"
+`;
+
+    try {
+      fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+      global.isInstallingUpdate = true;
+      this.recordInstallAttempt();
+
+      const child = spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' });
+      child.unref();
+
+      console.log('🚀 [FORCE-UPDATER] macOS in-place swap script launched, quitting app...');
+      setTimeout(() => {
+        try {
+          if (app) app.quit();
+        } catch (e) {
+          console.error('❌ [FORCE-UPDATER] app.quit() error:', e.message);
+        }
+      }, 400);
+
+      return { success: true, installing: true };
+    } catch (error) {
+      console.error('❌ [FORCE-UPDATER] macOS in-place install failed:', error.message);
+      global.isInstallingUpdate = false;
+      this.manualInstallRequired = true;
+      this.openManualDownload();
+      return {
+        success: false,
+        installing: false,
+        dmgOpened: true,
+        manualInstallRequired: true,
+        manualDownloadUrl: this.getManualDownloadUrl(),
+        error: error.message,
+        message: 'Automatic install failed. Installer opened in your browser — drag Alyson PM to Applications, then reopen.',
+      };
+    }
+  }
+
+  /**
    * Install the update (quit and install)
    */
   installUpdate() {
@@ -919,7 +1162,11 @@ class ForceUpdater {
       manualInstallRequired: this.manualInstallRequired,
     });
 
-    if (this.shouldUseMacDmgInstall() || this.manualInstallRequired) {
+    if (this.isMacPackaged()) {
+      if (this.macStagedAppPath && !this.manualInstallRequired) {
+        return this.installMacInPlace();
+      }
+      // No staged bundle (download failed) — fall back to DMG.
       const url = this.getManualDownloadUrl();
       this.openManualDownload();
       return {
@@ -929,6 +1176,19 @@ class ForceUpdater {
         manualInstallRequired: true,
         manualDownloadUrl: url,
         message: 'Installer opened in your browser. Drag Alyson PM to Applications to replace the old version, then reopen the app.',
+      };
+    }
+
+    if (this.manualInstallRequired) {
+      const url = this.getManualDownloadUrl();
+      this.openManualDownload();
+      return {
+        success: true,
+        installing: false,
+        dmgOpened: true,
+        manualInstallRequired: true,
+        manualDownloadUrl: url,
+        message: 'Installer opened in your browser. Install it, then reopen the app.',
       };
     }
 
