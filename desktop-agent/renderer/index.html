@@ -3666,6 +3666,18 @@
             transform: none;
         }
 
+        .update-btn-secondary {
+            background: #ffffff;
+            color: #4f46e5;
+            border: 2px solid #c7d2fe;
+            font-size: 15px;
+            padding: 14px 24px;
+        }
+
+        .update-btn-secondary:hover:not(:disabled) {
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.15);
+        }
+
         .update-btn .spinner {
             width: 20px;
             height: 20px;
@@ -4513,6 +4525,10 @@
             <button id="updateNowBtn" class="update-btn">
                 <span id="updateBtnText">Update Now</span>
                 <span id="updateBtnSpinner" class="spinner" style="display: none;"></span>
+            </button>
+
+            <button id="manualUpdateBtn" class="update-btn update-btn-secondary" style="display: none; margin-top: 10px;">
+                Download Installer Manually
             </button>
             
             <div id="updateError" class="update-error"></div>

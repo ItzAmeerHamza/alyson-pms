@@ -3584,6 +3584,8 @@ class UIManager {
           newVersion: status.newVersion,
           currentVersion: status.currentVersion,
           updateDownloaded: status.updateDownloaded,
+          manualInstallRequired: status.manualInstallRequired,
+          manualDownloadUrl: status.manualDownloadUrl,
         });
         return true;
       }
@@ -3602,6 +3604,11 @@ class UIManager {
     this.hideAllAppShellsForUpdate();
     this.showUpdateModal(updateInfo);
 
+    if (updateInfo.manualInstallRequired) {
+      this.showManualInstallFallback(updateInfo);
+      return;
+    }
+
     if (updateInfo.updateDownloaded) {
       this.showInstallReady();
       return;
@@ -3615,6 +3622,40 @@ class UIManager {
         });
       }
     }, 400);
+  }
+
+  showManualInstallFallback(updateInfo = {}) {
+    const updateBtn = document.getElementById('updateNowBtn');
+    const btnText = document.getElementById('updateBtnText');
+    const manualBtn = document.getElementById('manualUpdateBtn');
+    const progressContainer = document.getElementById('updateProgressContainer');
+
+    if (progressContainer) progressContainer.classList.remove('visible');
+    if (updateBtn) updateBtn.style.display = 'none';
+    if (btnText) btnText.textContent = 'Install Manually';
+    if (manualBtn) {
+      manualBtn.style.display = 'flex';
+      if (!manualBtn._manualHandlerAttached) {
+        manualBtn._manualHandlerAttached = true;
+        manualBtn.addEventListener('click', () => this.handleManualDownloadClick());
+      }
+    }
+
+    this.showUpdateError(
+      'Automatic install could not complete. Download the installer, drag Alyson PM to Applications to replace the old version, then reopen the app.'
+    );
+  }
+
+  async handleManualDownloadClick() {
+    try {
+      const result = await this.ipcRenderer.invoke('open-manual-update-download');
+      if (!result?.success) {
+        this.showUpdateError('Could not open the download page. Visit GitHub Releases for Alyson PM.');
+      }
+    } catch (error) {
+      console.error('❌ [UI-MANAGER] Manual download failed:', error);
+      this.showUpdateError('Could not open the download page. Visit GitHub Releases for Alyson PM.');
+    }
   }
 
   /**
@@ -3821,6 +3862,11 @@ class UIManager {
         // Update is installing, app will quit - show success state
         if (btnText) btnText.textContent = 'Restarting...';
         console.log('✅ [UI-MANAGER] Update installing, app will restart...');
+      } else if (result && result.manualInstallRequired) {
+        this.isInstallingUpdate = false;
+        this.showManualInstallFallback({
+          manualDownloadUrl: result.manualDownloadUrl,
+        });
       } else if (result && result.error) {
         // Install failed with specific error
         console.error('❌ [UI-MANAGER] Install returned error:', result.error);
@@ -3875,6 +3921,18 @@ class UIManager {
         newVersion: data.version,
         currentVersion: data.currentVersion,
         updateDownloaded: data.updateDownloaded,
+        manualInstallRequired: data.manualInstallRequired,
+        manualDownloadUrl: data.manualDownloadUrl,
+      });
+    });
+
+    this.ipcRenderer.on('manual-update-required', (event, data) => {
+      window.__updateGateActive = true;
+      this.showMandatoryUpdateGate({
+        newVersion: data.version,
+        currentVersion: data.currentVersion,
+        manualInstallRequired: true,
+        manualDownloadUrl: data.manualDownloadUrl,
       });
     });
 

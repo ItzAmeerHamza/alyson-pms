@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.198",
+  "version": "1.0.199",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",
@@ -187,7 +187,7 @@
       "provider": "github",
       "owner": "ItzAmeerHamza",
       "repo": "alyson-pms",
-      "releaseType": "prerelease"
+      "releaseType": "release"
     }
   }
 }

@@ -64,6 +64,7 @@ class EventManager {
 
     // Close any open URL slice on shutdown to avoid inflated durations (debounced; offline-safe)
     app.on('before-quit', async () => {
+      if (global.isInstallingUpdate) return;
       try {
         const supabase = global.supabaseService;
         const userId = global?.sessionManager?.getUserId?.();
@@ -174,6 +175,12 @@ class EventManager {
    */
   onBeforeQuit(event) {
     console.log('🛑 [EVENTS] App before quit');
+
+    if (global.isInstallingUpdate) {
+      console.log('✅ [EVENTS] Update install - allowing immediate quit');
+      global.isQuitting = true;
+      return;
+    }
     
     // Set global flag so window close handler allows quit
     global.isQuitting = true;

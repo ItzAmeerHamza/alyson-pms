@@ -5748,6 +5748,12 @@ if (isElectronContext && ipcMain) {
     let isCleanupComplete = false;
     
     app.on('before-quit', async (event) => {
+      if (global.isInstallingUpdate) {
+        console.log('🔄 [LIFECYCLE] Update install in progress - skipping shutdown cleanup');
+        isCleanupComplete = true;
+        return;
+      }
+
       // CRITICAL FIX: Prevent quit until async cleanup completes
       // Electron's before-quit doesn't wait for async operations, so we must:
       // 1. Prevent the default quit on first call

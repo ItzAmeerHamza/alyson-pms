@@ -16,7 +16,7 @@ const isElectronMain =
 // Back-compat: older code used isElectronContext
 const isElectronContext = isElectronMain;
 
-let autoUpdater, app, BrowserWindow, dialog, ipcMain;
+let autoUpdater, app, BrowserWindow, dialog, ipcMain, shell;
 
 if (isElectronMain) {
   const electronUpdater = require('electron-updater');
@@ -26,6 +26,7 @@ if (isElectronMain) {
   BrowserWindow = electron.BrowserWindow;
   dialog = electron.dialog;
   ipcMain = electron.ipcMain;
+  shell = electron.shell;
 } else {
   console.log('🔧 [FORCE-UPDATER] Running in Node.js mode - updater disabled');
   autoUpdater = null;
@@ -49,6 +50,8 @@ class ForceUpdater {
     this.currentVersion = null;
     this.downloadProgress = 0;
     this.updateError = null;
+    this.installAttempts = 0;
+    this.manualInstallRequired = false;
     this.isDevMode = !!(app && app.isPackaged === false);
     
     // Window references
@@ -73,6 +76,9 @@ class ForceUpdater {
     
     // Configure auto-updater
     this.setupAutoUpdater();
+
+    // Detect install loops from prior sessions (download OK, install never applied)
+    this.recoverFromInstallLoop();
     
     // Register IPC handlers
     this.registerIPCHandlers();
@@ -165,6 +171,8 @@ class ForceUpdater {
         isUpdateDownloaded: this.isUpdateDownloaded,
         pendingVersion: this.pendingVersion,
         currentVersion: this.currentVersion,
+        installAttempts: this.installAttempts,
+        manualInstallRequired: this.manualInstallRequired,
         savedAt: new Date().toISOString()
       };
       fs.writeFileSync(this.updateStatePath, JSON.stringify(state, null, 2));
@@ -199,6 +207,9 @@ class ForceUpdater {
           this.clearUpdateState();
           return null;
         }
+
+        this.installAttempts = Number(state.installAttempts) || 0;
+        this.manualInstallRequired = !!state.manualInstallRequired;
         
         return state;
       }
@@ -217,9 +228,88 @@ class ForceUpdater {
         fs.unlinkSync(this.updateStatePath);
         console.log('🗑️ [FORCE-UPDATER] Update state cleared');
       }
+      this.installAttempts = 0;
+      this.manualInstallRequired = false;
     } catch (error) {
       console.error('⚠️ [FORCE-UPDATER] Could not clear update state:', error.message);
     }
+  }
+
+  /**
+   * Detect a prior failed install (downloaded update but app version unchanged).
+   */
+  recoverFromInstallLoop() {
+    const saved = this.loadUpdateState();
+    if (!saved?.pendingVersion || !this.currentVersion) return;
+
+    const pending = String(saved.pendingVersion).replace(/^v/i, '');
+    const current = String(this.currentVersion).replace(/^v/i, '');
+    if (this.compareVersions(pending, current) <= 0) return;
+
+    this.installAttempts = Number(saved.installAttempts) || 0;
+    this.pendingVersion = pending;
+    this.isUpdateAvailable = true;
+    this.isUpdateRequired = true;
+    this.isUpdateDownloaded = !!saved.isUpdateDownloaded;
+
+    if (this.installAttempts >= 1) {
+      console.log(`⚠️ [FORCE-UPDATER] Install loop detected (${this.installAttempts} attempts, still on ${current})`);
+      this.manualInstallRequired = true;
+      this.clearPendingUpdateCache();
+      this.isUpdateDownloaded = false;
+      this.saveUpdateState();
+    }
+  }
+
+  recordInstallAttempt() {
+    this.installAttempts = (this.installAttempts || 0) + 1;
+    this.saveUpdateState();
+    console.log(`📝 [FORCE-UPDATER] Install attempt #${this.installAttempts}`);
+  }
+
+  /**
+   * Remove Squirrel/electron-updater cached payloads so a broken download can be retried.
+   */
+  clearPendingUpdateCache() {
+    const os = require('os');
+    const candidates = [
+      path.join(os.homedir(), 'Library', 'Caches', 'com.alyson.work-time-agent.ShipIt'),
+      path.join(os.homedir(), 'Library', 'Caches', 'alyson-pm-desktop-agent-updater'),
+      path.join(this.appDataPath, 'pending'),
+    ];
+
+    for (const dir of candidates) {
+      try {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          console.log('🗑️ [FORCE-UPDATER] Cleared update cache:', dir);
+        }
+      } catch (error) {
+        console.warn('⚠️ [FORCE-UPDATER] Could not clear cache dir:', dir, error.message);
+      }
+    }
+  }
+
+  getManualDownloadUrl(version) {
+    const gh = this.getGithubReleaseTarget();
+    const tag = `v${String(version || this.pendingVersion || '').replace(/^v/i, '')}`;
+    if (process.platform === 'win32') {
+      const ver = tag.replace(/^v/i, '');
+      return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM.Setup.${ver}.exe`;
+    }
+    const arch = process.arch === 'arm64' ? 'arm64' : 'mac';
+    const suffix = arch === 'arm64' ? '-arm64.dmg' : '.dmg';
+    const ver = tag.replace(/^v/i, '');
+    return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM-${ver}${suffix}`;
+  }
+
+  openManualDownload() {
+    const url = this.getManualDownloadUrl();
+    if (shell?.openExternal) {
+      shell.openExternal(url);
+      return { success: true, url };
+    }
+    return { success: false, url, error: 'Cannot open browser' };
   }
 
   /**
@@ -268,6 +358,17 @@ class ForceUpdater {
       return this.installUpdate();
     });
 
+    safeHandle('open-manual-update-download', () => {
+      return this.openManualDownload();
+    });
+
+    safeHandle('reset-update-cache', () => {
+      this.clearPendingUpdateCache();
+      this.isUpdateDownloaded = false;
+      this.saveUpdateState();
+      return { success: true };
+    });
+
     // Get app version
     safeHandle('get-app-version', () => {
       return this.currentVersion || (app ? app.getVersion() : '1.0.0');
@@ -304,8 +405,7 @@ class ForceUpdater {
       provider: 'github',
       owner: gh.owner,
       repo: gh.repo,
-      // GitHub releases are published as pre-releases (unsigned test builds).
-      releaseType: 'prerelease',
+      releaseType: 'release',
     });
     
     // Auto-download updates when detected
@@ -447,6 +547,8 @@ class ForceUpdater {
       version: result.newVersion || this.pendingVersion,
       currentVersion: result.currentVersion || this.currentVersion,
       updateDownloaded: !!(result.updateDownloaded || this.isUpdateDownloaded),
+      manualInstallRequired: !!(result.manualInstallRequired || this.manualInstallRequired),
+      manualDownloadUrl: this.getManualDownloadUrl(result.newVersion || this.pendingVersion),
       releaseNotes: result.releaseNotes || '',
     });
     this.sendToRenderer('update-available', {
@@ -549,13 +651,26 @@ class ForceUpdater {
     }
 
     // Check if we already have a downloaded update
-    if (this.isUpdateDownloaded && this.pendingVersion) {
+    if (this.isUpdateDownloaded && this.pendingVersion && !this.manualInstallRequired) {
       console.log('📦 [FORCE-UPDATER] Already have downloaded update:', this.pendingVersion);
       return {
         updateAvailable: true,
         updateDownloaded: true,
         currentVersion: this.currentVersion,
-        newVersion: this.pendingVersion
+        newVersion: this.pendingVersion,
+        manualInstallRequired: false,
+      };
+    }
+
+    if (this.manualInstallRequired && this.pendingVersion) {
+      console.log('📦 [FORCE-UPDATER] Manual install required for:', this.pendingVersion);
+      return {
+        updateAvailable: true,
+        updateDownloaded: false,
+        manualInstallRequired: true,
+        manualDownloadUrl: this.getManualDownloadUrl(this.pendingVersion),
+        currentVersion: this.currentVersion,
+        newVersion: this.pendingVersion,
       };
     }
 
@@ -565,6 +680,8 @@ class ForceUpdater {
       return {
         updateAvailable: true,
         updateDownloaded: this.isUpdateDownloaded,
+        manualInstallRequired: this.manualInstallRequired,
+        manualDownloadUrl: this.manualInstallRequired ? this.getManualDownloadUrl(this.pendingVersion) : undefined,
         currentVersion: this.currentVersion,
         newVersion: this.pendingVersion
       };
@@ -724,8 +841,22 @@ class ForceUpdater {
       hasAutoUpdater: !!autoUpdater,
       isElectronContext,
       isUpdateDownloaded: this.isUpdateDownloaded,
-      pendingVersion: this.pendingVersion
+      pendingVersion: this.pendingVersion,
+      installAttempts: this.installAttempts,
+      manualInstallRequired: this.manualInstallRequired,
     });
+
+    if (this.manualInstallRequired) {
+      const url = this.getManualDownloadUrl();
+      this.openManualDownload();
+      return {
+        success: false,
+        installing: false,
+        manualInstallRequired: true,
+        manualDownloadUrl: url,
+        error: 'Automatic install failed. Download the installer manually, install it, then reopen the app.',
+      };
+    }
 
     if (this.isDevMode) {
       console.log('🔧 [FORCE-UPDATER] Dev mode - refusing to quit/install update');
@@ -744,8 +875,6 @@ class ForceUpdater {
 
     if (!this.isUpdateDownloaded) {
       console.log('⚠️ [FORCE-UPDATER] No update downloaded to install');
-      // CRITICAL FIX: Try to force install anyway if we have a pending version
-      // This handles race conditions where isUpdateDownloaded flag wasn't set
       if (this.pendingVersion && this.downloadProgress >= 100) {
         console.log('🔧 [FORCE-UPDATER] Download progress 100% but flag not set - trying install anyway');
         this.isUpdateDownloaded = true;
@@ -755,111 +884,38 @@ class ForceUpdater {
     }
 
     console.log('🔄 [FORCE-UPDATER] Installing update and restarting...');
-    console.log('✅ [FORCE-UPDATER] autoInstallOnAppQuit is enabled - update will install when app quits');
-    
-    // Clear update state before restart
-    this.clearUpdateState();
-    
-    // Schedule quit with a small delay to allow IPC response to complete
-    setTimeout(async () => {
+    global.isInstallingUpdate = true;
+    this.recordInstallAttempt();
+
+    setTimeout(() => {
       try {
-        console.log('🔧 [FORCE-UPDATER] Stopping all services and closing windows...');
-        const { BrowserWindow } = require('electron');
-        
-        // Step 1: Stop all tracking and services
-        try {
-          if (typeof global.stopTracking === 'function') {
-            console.log('🔧 [FORCE-UPDATER] Stopping tracking via global.stopTracking...');
-            await global.stopTracking('force_update', 'Force update in progress');
-          }
-          if (global.enhancedScreenshotManager) {
-            console.log('🔧 [FORCE-UPDATER] Confirming screenshot manager stopped...');
-            global.enhancedScreenshotManager.stopScreenshotCapture?.();
-          }
-        } catch (e) {
-          console.warn('⚠️ [FORCE-UPDATER] Error stopping services:', e.message);
+        console.log(`🚀 [FORCE-UPDATER] quitAndInstall on ${process.platform}`);
+        if (process.platform === 'win32') {
+          autoUpdater.quitAndInstall(true, true);
+        } else {
+          autoUpdater.quitAndInstall(false, true);
         }
-        
-        // Step 2: Force close all windows
-        const allWindows = BrowserWindow.getAllWindows();
-        console.log(`🔧 [FORCE-UPDATER] Closing ${allWindows.length} window(s)...`);
-        allWindows.forEach(win => {
-          try {
-            win.removeAllListeners('close');
-            win.removeAllListeners('closed');
-            win.webContents?.removeAllListeners?.();
-            win.destroy();
-          } catch (e) {
-            console.warn('⚠️ [FORCE-UPDATER] Could not destroy window:', e.message);
-          }
-        });
-        
-        // Step 3: Give time for cleanup, then install and restart
-        // CRITICAL FIX v1.0.139: Windows-specific restart handling
-        setTimeout(() => {
-          console.log('🚀 [FORCE-UPDATER] Installing update and restarting...');
-          console.log(`🔧 [FORCE-UPDATER] Platform: ${process.platform}`);
-          
-          try {
-            if (process.platform === 'win32') {
-              // WINDOWS FIX v1.0.139: quitAndInstall on Windows NSIS has issues with restart
-              // Solution: Use SILENT install (isSilent=true) + forceRunAfter=true
-              // Silent install runs the NSIS installer without UI, then restarts the app
-              console.log('🪟 [FORCE-UPDATER] Windows: Using silent install method');
-              
-              // quitAndInstall(isSilent, isForceRunAfter)
-              // isSilent=TRUE: Run NSIS installer silently (no GUI)
-              // isForceRunAfter=TRUE: Restart app after install completes
-              try {
-                console.log('🔧 [FORCE-UPDATER] Windows: Calling quitAndInstall(true, true) for silent update...');
-                autoUpdater.quitAndInstall(true, true);
-                console.log('✅ [FORCE-UPDATER] Windows: quitAndInstall() called - app will restart');
-              } catch (winErr) {
-                console.error('❌ [FORCE-UPDATER] Windows: quitAndInstall failed:', winErr.message);
-                // Fallback: Try non-silent install
-                console.log('🔧 [FORCE-UPDATER] Windows: Fallback - trying non-silent install...');
-                try {
-                  autoUpdater.quitAndInstall(false, true);
-                } catch (fallbackErr) {
-                  console.error('❌ [FORCE-UPDATER] Windows: Non-silent also failed:', fallbackErr.message);
-                  // Last resort: Force quit and let installer handle restart
-                  if (app) {
-                    console.log('🔧 [FORCE-UPDATER] Windows: Last resort - app.exit(0)');
-                    app.exit(0);
-                  }
-                }
-              }
-            } else if (process.platform === 'darwin') {
-              // macOS: quitAndInstall works well
-              console.log('🍎 [FORCE-UPDATER] macOS: Using quitAndInstall()');
-              autoUpdater.quitAndInstall(false, true);
-              console.log('✅ [FORCE-UPDATER] macOS: quitAndInstall() called');
-            } else {
-              // Linux: Standard approach
-              console.log('🐧 [FORCE-UPDATER] Linux: Using quitAndInstall()');
-              autoUpdater.quitAndInstall(false, true);
-              console.log('✅ [FORCE-UPDATER] Linux: quitAndInstall() called');
-            }
-          } catch (quitErr) {
-            console.error('❌ [FORCE-UPDATER] quitAndInstall() error:', quitErr.message);
-            // Last resort fallback for all platforms
-            if (app) {
-              console.log('🔧 [FORCE-UPDATER] Last resort: app.relaunch() + app.exit()');
-              app.relaunch();
-              app.exit(0);
-            }
-          }
-        }, 1000);
-        
-      } catch (err) {
-        console.error('⚠️ [FORCE-UPDATER] Error during cleanup:', err.message);
-        // Still try to quit - the update should still apply
+      } catch (quitErr) {
+        console.error('❌ [FORCE-UPDATER] quitAndInstall() error:', quitErr.message);
+        global.isInstallingUpdate = false;
+        if (this.installAttempts >= 1) {
+          this.manualInstallRequired = true;
+          this.clearPendingUpdateCache();
+          this.isUpdateDownloaded = false;
+          this.saveUpdateState();
+          this.sendToRenderer('manual-update-required', {
+            version: this.pendingVersion,
+            currentVersion: this.currentVersion,
+            manualDownloadUrl: this.getManualDownloadUrl(),
+            error: quitErr.message,
+          });
+        }
         if (app) {
-          console.log('🔧 [FORCE-UPDATER] Forcing app.quit() despite error...');
-          app.quit();
+          app.relaunch();
+          app.exit(0);
         }
       }
-    }, 500);
+    }, 250);
 
     return { success: true, installing: true };
   }
@@ -876,7 +932,10 @@ class ForceUpdater {
       currentVersion: this.currentVersion,
       pendingVersion: this.pendingVersion,
       downloadProgress: this.downloadProgress,
-      updateError: this.updateError
+      updateError: this.updateError,
+      installAttempts: this.installAttempts,
+      manualInstallRequired: this.manualInstallRequired,
+      manualDownloadUrl: this.manualInstallRequired ? this.getManualDownloadUrl() : undefined,
     };
   }
 
