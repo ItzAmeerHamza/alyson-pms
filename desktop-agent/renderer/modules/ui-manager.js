@@ -3646,9 +3646,10 @@ class UIManager {
       }
     }
 
-    const versionLabel = updateInfo.newVersion || updateInfo.version || 'the new version';
+    const rawVersion = updateInfo.newVersion || updateInfo.version || '';
+    const versionPrefix = rawVersion ? `Version ${rawVersion} is ready. ` : 'The new version is ready. ';
     const message = updateInfo.dmgInstallReady
-      ? `Version ${versionLabel} is ready. Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`
+      ? `${versionPrefix}Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`
       : 'Automatic install could not complete. Download the installer, drag Alyson PM to Applications to replace the old version, then reopen the app.';
     this.showUpdateError(message);
   }
