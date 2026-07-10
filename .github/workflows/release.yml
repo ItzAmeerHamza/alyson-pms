@@ -243,6 +243,7 @@ jobs:
             **Windows install:** Download the `.exe` Setup installer and run it.
             Windows SmartScreen may warn because the installer is unsigned — click **More info** → **Run anyway**.
           draft: false
-          prerelease: true
+          prerelease: false
+          make_latest: true
           files: release-assets/**/*
           token: ${{ secrets.GITHUB_TOKEN }}
