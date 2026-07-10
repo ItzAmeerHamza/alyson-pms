@@ -233,6 +233,9 @@ class AuthManager {
                   newVersion: updateStatus.newVersion,
                   currentVersion: updateStatus.currentVersion,
                   updateDownloaded: updateStatus.updateDownloaded,
+                  manualInstallRequired: updateStatus.manualInstallRequired,
+                  dmgInstallReady: updateStatus.dmgInstallReady,
+                  manualDownloadUrl: updateStatus.manualDownloadUrl,
                 });
               }
               this.notificationManager.showNotification('Update required before continuing.', 'warning');
@@ -321,6 +324,9 @@ class AuthManager {
             newVersion: updateStatus.newVersion,
             currentVersion: updateStatus.currentVersion,
             updateDownloaded: updateStatus.updateDownloaded,
+            manualInstallRequired: updateStatus.manualInstallRequired,
+            dmgInstallReady: updateStatus.dmgInstallReady,
+            manualDownloadUrl: updateStatus.manualDownloadUrl,
           });
           return true;
         }
@@ -412,6 +418,9 @@ class AuthManager {
           newVersion: updateStatus.newVersion,
           currentVersion: updateStatus.currentVersion,
           updateDownloaded: updateStatus.updateDownloaded,
+          manualInstallRequired: updateStatus.manualInstallRequired,
+          dmgInstallReady: updateStatus.dmgInstallReady,
+          manualDownloadUrl: updateStatus.manualDownloadUrl,
         });
         this.notificationManager.showNotification('Update required before continuing.', 'warning');
         return;
@@ -443,6 +452,9 @@ class AuthManager {
           newVersion: preLoginUpdate.newVersion,
           currentVersion: preLoginUpdate.currentVersion,
           updateDownloaded: preLoginUpdate.updateDownloaded,
+          manualInstallRequired: preLoginUpdate.manualInstallRequired,
+          dmgInstallReady: preLoginUpdate.dmgInstallReady,
+          manualDownloadUrl: preLoginUpdate.manualDownloadUrl,
         });
         return;
       }
@@ -646,6 +658,9 @@ class AuthManager {
                 newVersion: updateStatus.newVersion,
                 currentVersion: updateStatus.currentVersion,
                 updateDownloaded: updateStatus.updateDownloaded,
+                manualInstallRequired: updateStatus.manualInstallRequired,
+                dmgInstallReady: updateStatus.dmgInstallReady,
+                manualDownloadUrl: updateStatus.manualDownloadUrl,
               });
             }
             this.notificationManager.showNotification('Update required before continuing.', 'warning');

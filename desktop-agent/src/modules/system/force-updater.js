@@ -79,6 +79,7 @@ class ForceUpdater {
 
     // Detect install loops from prior sessions (download OK, install never applied)
     this.recoverFromInstallLoop();
+    this.recoverFromStaleState();
     
     // Register IPC handlers
     this.registerIPCHandlers();
@@ -268,6 +269,32 @@ class ForceUpdater {
   }
 
   /**
+   * macOS CI builds are unsigned — Squirrel quitAndInstall fails reliably.
+   * Use one-click DMG download instead of ZIP + quitAndInstall.
+   */
+  shouldUseMacDmgInstall() {
+    return process.platform === 'darwin' && !!(app && app.isPackaged);
+  }
+
+  /**
+   * Clear saved update state when the installed build is already at/above pending.
+   */
+  recoverFromStaleState() {
+    if (!this.pendingVersion || !this.currentVersion) return;
+
+    const pending = String(this.pendingVersion).replace(/^v/i, '');
+    const current = String(this.currentVersion).replace(/^v/i, '');
+    if (this.compareVersions(current, pending) >= 0) {
+      console.log(`✅ [FORCE-UPDATER] On ${current} (pending was ${pending}) — clearing stale update state`);
+      this.isUpdateAvailable = false;
+      this.isUpdateRequired = false;
+      this.isUpdateDownloaded = false;
+      this.pendingVersion = null;
+      this.clearUpdateState();
+    }
+  }
+
+  /**
    * Remove Squirrel/electron-updater cached payloads so a broken download can be retried.
    */
   clearPendingUpdateCache() {
@@ -408,10 +435,13 @@ class ForceUpdater {
       releaseType: 'release',
     });
     
-    // Auto-download updates when detected
-    autoUpdater.autoDownload = true;
-    // CRITICAL FIX v1.0.135: Enable auto-install on quit so update applies when app quits
-    autoUpdater.autoInstallOnAppQuit = true;
+    const useMacDmg = this.shouldUseMacDmgInstall();
+    if (useMacDmg) {
+      console.log('🍎 [FORCE-UPDATER] macOS packaged build — using DMG installer path (unsigned builds)');
+    }
+    // Unsigned macOS builds cannot apply Squirrel updates; skip background ZIP download there.
+    autoUpdater.autoDownload = !useMacDmg;
+    autoUpdater.autoInstallOnAppQuit = !useMacDmg;
     
     // Event handlers
     autoUpdater.on('checking-for-update', () => {
@@ -438,8 +468,8 @@ class ForceUpdater {
       console.log('✅ [FORCE-UPDATER] App is up to date:', info.version);
       const current = String(this.currentVersion || '').replace(/^v/i, '');
       const remote = String(info?.version || '').replace(/^v/i, '');
-      if (this.compareVersions(remote, current) < 0) {
-        console.log('⚠️ [FORCE-UPDATER] update-not-available remote is stale — checking GitHub API');
+      if (this.compareVersions(remote, current) <= 0) {
+        console.log('⚠️ [FORCE-UPDATER] update-not-available — verifying newest release via GitHub API');
         void this.checkGithubFallbackForUpdate().then((fallback) => {
           if (fallback) {
             const payload = this.markUpdateAvailable(fallback.version);
@@ -543,11 +573,13 @@ class ForceUpdater {
    */
   notifyUpdateAvailable(result = {}) {
     if (!result.updateAvailable && !result.newVersion) return;
+    const dmgInstallReady = !!(result.dmgInstallReady || (this.shouldUseMacDmgInstall() && (result.newVersion || this.pendingVersion)));
     this.sendToRenderer('mandatory-update-required', {
       version: result.newVersion || this.pendingVersion,
       currentVersion: result.currentVersion || this.currentVersion,
       updateDownloaded: !!(result.updateDownloaded || this.isUpdateDownloaded),
-      manualInstallRequired: !!(result.manualInstallRequired || this.manualInstallRequired),
+      manualInstallRequired: !!(result.manualInstallRequired || this.manualInstallRequired || dmgInstallReady),
+      dmgInstallReady,
       manualDownloadUrl: this.getManualDownloadUrl(result.newVersion || this.pendingVersion),
       releaseNotes: result.releaseNotes || '',
     });
@@ -578,9 +610,15 @@ class ForceUpdater {
     if (!Array.isArray(releases)) return null;
 
     const platformAsset = process.platform === 'win32' ? 'latest.yml' : 'latest-mac.yml';
-    const candidate = releases.find(
-      (r) => !r.draft && (r.assets || []).some((a) => a.name === platformAsset),
-    );
+    const candidate = releases.find((r) => {
+      if (r.draft) return false;
+      const assets = r.assets || [];
+      if (assets.some((a) => a.name === platformAsset)) return true;
+      if (process.platform === 'darwin') {
+        return assets.some((a) => /\.dmg$/i.test(a.name));
+      }
+      return false;
+    });
     if (!candidate) return null;
 
     const version = String(candidate.tag_name || '').replace(/^v/i, '');
@@ -604,17 +642,25 @@ class ForceUpdater {
 
   markUpdateAvailable(remoteVersion, releaseNotes = '') {
     const normalized = String(remoteVersion || '').replace(/^v/i, '');
+    const dmgInstallReady = this.shouldUseMacDmgInstall();
     this.isUpdateAvailable = true;
     this.isUpdateRequired = true;
     this.pendingVersion = normalized;
     this.updateError = null;
+    if (dmgInstallReady) {
+      this.manualInstallRequired = true;
+      this.isUpdateDownloaded = false;
+    }
     this.saveUpdateState();
     return {
       updateAvailable: true,
-      updateDownloaded: this.isUpdateDownloaded,
+      updateDownloaded: dmgInstallReady ? false : this.isUpdateDownloaded,
       currentVersion: this.currentVersion,
       newVersion: normalized,
       releaseNotes,
+      dmgInstallReady,
+      manualInstallRequired: this.manualInstallRequired || dmgInstallReady,
+      manualDownloadUrl: dmgInstallReady ? this.getManualDownloadUrl(normalized) : undefined,
     };
   }
 
@@ -651,7 +697,7 @@ class ForceUpdater {
     }
 
     // Check if we already have a downloaded update
-    if (this.isUpdateDownloaded && this.pendingVersion && !this.manualInstallRequired) {
+    if (this.isUpdateDownloaded && this.pendingVersion && !this.manualInstallRequired && !this.shouldUseMacDmgInstall()) {
       console.log('📦 [FORCE-UPDATER] Already have downloaded update:', this.pendingVersion);
       return {
         updateAvailable: true,
@@ -662,12 +708,13 @@ class ForceUpdater {
       };
     }
 
-    if (this.manualInstallRequired && this.pendingVersion) {
-      console.log('📦 [FORCE-UPDATER] Manual install required for:', this.pendingVersion);
+    if ((this.manualInstallRequired || this.shouldUseMacDmgInstall()) && this.pendingVersion) {
+      console.log('📦 [FORCE-UPDATER] DMG/manual install required for:', this.pendingVersion);
       return {
         updateAvailable: true,
         updateDownloaded: false,
         manualInstallRequired: true,
+        dmgInstallReady: this.shouldUseMacDmgInstall(),
         manualDownloadUrl: this.getManualDownloadUrl(this.pendingVersion),
         currentVersion: this.currentVersion,
         newVersion: this.pendingVersion,
@@ -677,86 +724,102 @@ class ForceUpdater {
     // Check if we already know about an available update
     if (this.isUpdateAvailable && this.pendingVersion) {
       console.log('📦 [FORCE-UPDATER] Already know about update:', this.pendingVersion);
+      const dmgInstallReady = this.shouldUseMacDmgInstall();
       return {
         updateAvailable: true,
-        updateDownloaded: this.isUpdateDownloaded,
-        manualInstallRequired: this.manualInstallRequired,
-        manualDownloadUrl: this.manualInstallRequired ? this.getManualDownloadUrl(this.pendingVersion) : undefined,
+        updateDownloaded: dmgInstallReady ? false : this.isUpdateDownloaded,
+        manualInstallRequired: this.manualInstallRequired || dmgInstallReady,
+        dmgInstallReady,
+        manualDownloadUrl: (this.manualInstallRequired || dmgInstallReady) ? this.getManualDownloadUrl(this.pendingVersion) : undefined,
         currentVersion: this.currentVersion,
         newVersion: this.pendingVersion
       };
     }
 
     console.log('🔍 [FORCE-UPDATER] Checking for updates...');
+    this.recoverFromStaleState();
+
+    const currentVersion = String(this.currentVersion || '').replace(/^v/i, '');
+    let apiLatest = null;
+    let electronRemote = null;
+    let electronReleaseNotes = '';
+
     try {
-      // Use promise result directly (more reliable than events in dev mode)
+      apiLatest = await this.checkGithubFallbackForUpdate();
+    } catch (apiErr) {
+      console.warn('⚠️ [FORCE-UPDATER] GitHub API pre-check failed:', apiErr?.message || apiErr);
+    }
+
+    try {
       const result = await autoUpdater.checkForUpdates();
-      if (result && result.updateInfo) {
-        const remoteVersion = result.updateInfo.version;
-        const currentVersion = this.currentVersion;
-        
-        // Compare versions to determine if update is available
-        const isNewer = this.compareVersions(remoteVersion, currentVersion) > 0;
-        
-        if (isNewer) {
-          console.log(`🆕 [FORCE-UPDATER] Update available: ${currentVersion} → ${remoteVersion}`);
-          this.isUpdateAvailable = true;
-          this.isUpdateRequired = true;
-          this.pendingVersion = remoteVersion;
-          this.saveUpdateState();
-          
-          return {
-            updateAvailable: true,
-            updateDownloaded: false,
-            currentVersion: currentVersion,
-            newVersion: remoteVersion,
-            releaseNotes: result.updateInfo.releaseNotes || ''
-          };
-        } else {
-          console.log(`✅ [FORCE-UPDATER] electron-updater reports up to date (${currentVersion}), remote=${remoteVersion}`);
-          // Stale feed: electron-updater may return an older "latest" (e.g. 1.0.182) while a newer build exists.
-          if (this.compareVersions(remoteVersion, currentVersion) < 0) {
-            console.log('⚠️ [FORCE-UPDATER] Remote version older than installed — trying GitHub API fallback');
-            const fallback = await this.checkGithubFallbackForUpdate();
-            if (fallback) {
-              return this.markUpdateAvailable(fallback.version);
-            }
-          }
-          return {
-            updateAvailable: false,
-            currentVersion: currentVersion,
-            checkedVersion: remoteVersion
-          };
-        }
+      if (result?.updateInfo?.version) {
+        electronRemote = String(result.updateInfo.version).replace(/^v/i, '');
+        electronReleaseNotes = result.updateInfo.releaseNotes || '';
+        console.log(`📡 [FORCE-UPDATER] electron-updater remote: ${electronRemote}`);
       }
-      
-      // No update info returned — try GitHub API fallback (pre-releases)
-      console.log('⚠️ [FORCE-UPDATER] No update info from electron-updater — trying GitHub API fallback');
-      const fallback = await this.checkGithubFallbackForUpdate();
-      if (fallback) {
-        const payload = this.markUpdateAvailable(fallback.version);
-        return payload;
-      }
-      return {
-        updateAvailable: false,
-        reason: 'no_info',
-        currentVersion: this.currentVersion
-      };
-      
     } catch (error) {
-      console.error('❌ [FORCE-UPDATER] Update check error:', error.message);
-      const fallback = await this.checkGithubFallbackForUpdate();
-      if (fallback) {
-        const payload = this.markUpdateAvailable(fallback.version);
-        return payload;
+      console.error('❌ [FORCE-UPDATER] electron-updater check error:', error.message);
+      if (!apiLatest) {
+        const fallback = await this.checkGithubFallbackForUpdate();
+        if (fallback) {
+          return this.markUpdateAvailable(fallback.version);
+        }
       }
       return {
         updateAvailable: false,
         reason: 'error',
         error: error.message,
-        currentVersion: this.currentVersion
+        currentVersion: this.currentVersion,
       };
     }
+
+    let newestRemote = null;
+    let releaseNotes = '';
+    let updateSource = null;
+
+    if (apiLatest?.version && this.compareVersions(apiLatest.version, currentVersion) > 0) {
+      newestRemote = apiLatest.version;
+      releaseNotes = '';
+      updateSource = 'github-api';
+    }
+
+    if (electronRemote && this.compareVersions(electronRemote, currentVersion) > 0) {
+      if (!newestRemote || this.compareVersions(electronRemote, newestRemote) > 0) {
+        newestRemote = electronRemote;
+        releaseNotes = electronReleaseNotes;
+        updateSource = 'electron-updater';
+      }
+    }
+
+    if (newestRemote) {
+      console.log(`🆕 [FORCE-UPDATER] Update available (${updateSource}): ${currentVersion} → ${newestRemote}`);
+      const payload = this.markUpdateAvailable(newestRemote, releaseNotes);
+      payload.updateSource = updateSource;
+      return payload;
+    }
+
+    const checkedVersion = electronRemote || apiLatest?.version || currentVersion;
+    console.log(`✅ [FORCE-UPDATER] Up to date (${currentVersion}), newest seen: ${checkedVersion}`);
+    return {
+      updateAvailable: false,
+      currentVersion: this.currentVersion,
+      checkedVersion,
+    };
+  }
+
+  /**
+   * Manual update check (settings / IPC) — always hits remote and notifies UI.
+   */
+  async manualUpdateCheck() {
+    const result = await this.checkForUpdates();
+    if (result?.updateAvailable) {
+      this.notifyUpdateAvailable(result);
+    } else {
+      this.sendToRenderer('update-not-available', {
+        currentVersion: this.currentVersion,
+      });
+    }
+    return result;
   }
 
   /**
@@ -804,6 +867,16 @@ class ForceUpdater {
       return { success: false, error: 'No update available' };
     }
 
+    if (this.shouldUseMacDmgInstall()) {
+      console.log('🍎 [FORCE-UPDATER] macOS DMG path — skipping ZIP download');
+      return {
+        success: true,
+        alreadyDownloaded: true,
+        dmgInstall: true,
+        manualDownloadUrl: this.getManualDownloadUrl(),
+      };
+    }
+
     console.log('📥 [FORCE-UPDATER] Starting download...');
     this.isDownloading = true;
     this.downloadProgress = 0;
@@ -846,15 +919,16 @@ class ForceUpdater {
       manualInstallRequired: this.manualInstallRequired,
     });
 
-    if (this.manualInstallRequired) {
+    if (this.shouldUseMacDmgInstall() || this.manualInstallRequired) {
       const url = this.getManualDownloadUrl();
       this.openManualDownload();
       return {
-        success: false,
+        success: true,
         installing: false,
+        dmgOpened: true,
         manualInstallRequired: true,
         manualDownloadUrl: url,
-        error: 'Automatic install failed. Download the installer manually, install it, then reopen the app.',
+        message: 'Installer opened in your browser. Drag Alyson PM to Applications to replace the old version, then reopen the app.',
       };
     }
 
@@ -924,6 +998,7 @@ class ForceUpdater {
    * Get current update status
    */
   getUpdateStatus() {
+    const dmgInstallReady = this.shouldUseMacDmgInstall() && !!(this.isUpdateAvailable && this.pendingVersion);
     return {
       isUpdateAvailable: this.isUpdateAvailable,
       isUpdateRequired: this.isUpdateRequired,
@@ -934,8 +1009,9 @@ class ForceUpdater {
       downloadProgress: this.downloadProgress,
       updateError: this.updateError,
       installAttempts: this.installAttempts,
-      manualInstallRequired: this.manualInstallRequired,
-      manualDownloadUrl: this.manualInstallRequired ? this.getManualDownloadUrl() : undefined,
+      manualInstallRequired: this.manualInstallRequired || dmgInstallReady,
+      dmgInstallReady,
+      manualDownloadUrl: (this.manualInstallRequired || dmgInstallReady) ? this.getManualDownloadUrl() : undefined,
     };
   }
 

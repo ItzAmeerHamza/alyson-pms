@@ -153,6 +153,13 @@ jobs:
               echo "Patched $f"
             fi
           done
+          # Windows NSIS ships Alyson.PM.Setup.{version}.exe but yml says Alyson.PM-Setup-{version}.exe
+          if [ -f release-assets/latest.yml ]; then
+            sed -i.bak 's/Alyson\.PM-Setup-/Alyson.PM.Setup./g' release-assets/latest.yml
+            rm -f release-assets/latest.yml.bak
+            echo "Aligned Windows exe path in latest.yml"
+            cat release-assets/latest.yml
+          fi
           # Auto-updater requires ZIP entries only (DMGs break silent updates).
           if [ -f release-assets/latest-mac.yml ]; then
             python3 - <<'PY'

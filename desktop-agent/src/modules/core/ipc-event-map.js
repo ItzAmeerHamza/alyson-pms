@@ -985,7 +985,10 @@ class IPCEventMap {
   }
 
   async _checkForUpdates() {
-    return { success: true, message: 'Update check completed' };
+    if (global.forceUpdater && typeof global.forceUpdater.checkForUpdates === 'function') {
+      return await global.forceUpdater.checkForUpdates();
+    }
+    return { updateAvailable: false, reason: 'updater_unavailable' };
   }
 
   _getUpdateStatus() {

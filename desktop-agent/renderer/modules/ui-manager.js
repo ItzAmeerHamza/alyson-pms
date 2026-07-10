@@ -3585,6 +3585,7 @@ class UIManager {
           currentVersion: status.currentVersion,
           updateDownloaded: status.updateDownloaded,
           manualInstallRequired: status.manualInstallRequired,
+          dmgInstallReady: status.dmgInstallReady,
           manualDownloadUrl: status.manualDownloadUrl,
         });
         return true;
@@ -3604,7 +3605,7 @@ class UIManager {
     this.hideAllAppShellsForUpdate();
     this.showUpdateModal(updateInfo);
 
-    if (updateInfo.manualInstallRequired) {
+    if (updateInfo.manualInstallRequired || updateInfo.dmgInstallReady) {
       this.showManualInstallFallback(updateInfo);
       return;
     }
@@ -3632,18 +3633,24 @@ class UIManager {
 
     if (progressContainer) progressContainer.classList.remove('visible');
     if (updateBtn) updateBtn.style.display = 'none';
-    if (btnText) btnText.textContent = 'Install Manually';
+    if (btnText) btnText.textContent = updateInfo.dmgInstallReady ? 'Download Update' : 'Install Manually';
     if (manualBtn) {
       manualBtn.style.display = 'flex';
+      const manualLabel = manualBtn.querySelector('span');
+      if (manualLabel) {
+        manualLabel.textContent = updateInfo.dmgInstallReady ? 'Download Installer' : 'Download Manually';
+      }
       if (!manualBtn._manualHandlerAttached) {
         manualBtn._manualHandlerAttached = true;
         manualBtn.addEventListener('click', () => this.handleManualDownloadClick());
       }
     }
 
-    this.showUpdateError(
-      'Automatic install could not complete. Download the installer, drag Alyson PM to Applications to replace the old version, then reopen the app.'
-    );
+    const versionLabel = updateInfo.newVersion || updateInfo.version || 'the new version';
+    const message = updateInfo.dmgInstallReady
+      ? `Version ${versionLabel} is ready. Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`
+      : 'Automatic install could not complete. Download the installer, drag Alyson PM to Applications to replace the old version, then reopen the app.';
+    this.showUpdateError(message);
   }
 
   async handleManualDownloadClick() {
@@ -3772,9 +3779,12 @@ class UIManager {
       }
       
       // Download started or already downloaded
-      if (result.alreadyDownloaded) {
-        // Ready to install
-        this.showInstallReady();
+      if (result.alreadyDownloaded || result.dmgInstall) {
+        if (result.dmgInstall) {
+          this.showManualInstallFallback({ dmgInstallReady: true });
+        } else {
+          this.showInstallReady();
+        }
       }
       // Otherwise, wait for download progress events
       
@@ -3858,7 +3868,12 @@ class UIManager {
       const result = await this.ipcRenderer.invoke('install-update');
       console.log('🔧 [UI-MANAGER] Install result:', result);
       
-      if (result && result.installing) {
+      if (result && result.dmgOpened) {
+        this.isInstallingUpdate = false;
+        if (btnText) btnText.textContent = 'Installer Opened';
+        if (btnSpinner) btnSpinner.style.display = 'none';
+        this.showUpdateError(result.message || 'Installer opened. Drag Alyson PM to Applications, then reopen the app.');
+      } else if (result && result.installing) {
         // Update is installing, app will quit - show success state
         if (btnText) btnText.textContent = 'Restarting...';
         console.log('✅ [UI-MANAGER] Update installing, app will restart...');
@@ -3922,6 +3937,7 @@ class UIManager {
         currentVersion: data.currentVersion,
         updateDownloaded: data.updateDownloaded,
         manualInstallRequired: data.manualInstallRequired,
+        dmgInstallReady: data.dmgInstallReady,
         manualDownloadUrl: data.manualDownloadUrl,
       });
     });
