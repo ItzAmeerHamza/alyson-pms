@@ -1992,12 +1992,18 @@ function showBasicErrorInterface(error) {
 }
 
 // === ENHANCED SCREENSHOT FUNCTIONALITY ===
-async function loadRecentScreenshots() {
-    console.log('📸 [DEBUG] loadRecentScreenshots() called');
-    // Debounce rapid calls (UI change storms)
+function isPageSectionActive(pageEl) {
+    return !!(pageEl && pageEl.classList.contains('active'));
+}
+
+async function loadRecentScreenshots(options = {}) {
+    const notify = options.notify === true;
+    const debounceMs = notify ? 300 : 5000;
+    console.log('📸 [DEBUG] loadRecentScreenshots() called', { notify });
+    // Debounce rapid calls (e.g. screenshot every 1 min should not spam reloads/toasts)
     window.__lastLoadRecentScreenshots = window.__lastLoadRecentScreenshots || 0;
     const now = Date.now();
-    if (now - window.__lastLoadRecentScreenshots < 300) {
+    if (now - window.__lastLoadRecentScreenshots < debounceMs) {
         console.log('🕒 [DEBUG] loadRecentScreenshots debounced');
         return;
     }
@@ -2025,11 +2031,15 @@ async function loadRecentScreenshots() {
     });
     
     try {
-        moduleInstances.notificationManager?.showNotification('Loading screenshots...', 'info', 2000);
-        
+        if (notify) {
+            moduleInstances.notificationManager?.showNotification('Loading screenshots...', 'info', 2000);
+        }
+
         if (!moduleInstances.authManager?.currentUser) {
             console.error('❌ [DEBUG] No current user found');
-            moduleInstances.notificationManager?.showNotification('Please log in to view screenshots', 'error');
+            if (notify) {
+                moduleInstances.notificationManager?.showNotification('Please log in to view screenshots', 'error');
+            }
             return;
         }
         
@@ -2064,22 +2074,26 @@ async function loadRecentScreenshots() {
         
         displayEnhancedScreenshots(screenshots, duplicates);
         
-        if (screenshots && screenshots.length > 0) {
-            let message = `Loaded ${screenshots.length} screenshots`;
-            if (duplicates.length > 0) {
-                message += ` (${duplicates.length} duplicates detected)`;
+        if (notify) {
+            if (screenshots && screenshots.length > 0) {
+                let message = `Loaded ${screenshots.length} screenshots`;
+                if (duplicates.length > 0) {
+                    message += ` (${duplicates.length} duplicates detected)`;
+                }
+                moduleInstances.notificationManager?.showNotification(message, 'success');
+            } else {
+                moduleInstances.notificationManager?.showNotification('No screenshots found for selected date and filters', 'info');
             }
-            moduleInstances.notificationManager?.showNotification(message, 'success');
-        } else {
-            moduleInstances.notificationManager?.showNotification('No screenshots found for selected date and filters', 'info');
         }
-        
+
     } catch (error) {
         console.error('❌ Error loading screenshots:', error);
-        
+
         // Handle specific error types
         if (error.message?.includes('permission') || error.message?.includes('screen recording')) {
-            moduleInstances.notificationManager?.showNotification('Screenshot permission required. Please enable screen recording in System Preferences.', 'warning');
+            if (notify) {
+                moduleInstances.notificationManager?.showNotification('Screenshot permission required. Please enable screen recording in System Preferences.', 'warning');
+            }
             
             // Show permission help in the grid
             const screenshotsGrid = document.getElementById('screenshotsGrid');
@@ -2103,11 +2117,15 @@ async function loadRecentScreenshots() {
                 if (typeof lucide !== 'undefined') lucide.createIcons();
             }
         } else if (error.message?.includes('not authenticated')) {
-            moduleInstances.notificationManager?.showNotification('Please log in to view screenshots', 'error');
+            if (notify) {
+                moduleInstances.notificationManager?.showNotification('Please log in to view screenshots', 'error');
+            }
             displayEnhancedScreenshots([], []);
         } else {
             // Generic error handling
-            moduleInstances.notificationManager?.showNotification('Failed to load screenshots. Please try again.', 'error');
+            if (notify) {
+                moduleInstances.notificationManager?.showNotification('Failed to load screenshots. Please try again.', 'error');
+            }
             displayEnhancedScreenshots([], []);
         }
     }
@@ -2189,7 +2207,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                     
                     <div>
                         <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Quick Actions</label>
-                        <button onclick="loadRecentScreenshots()" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
+                        <button onclick="loadRecentScreenshots({ notify: true })" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
                             <i data-lucide="refresh-cw" style="width: 16px; height: 16px; margin-right: 6px;"></i>
                             Refresh
                         </button>
@@ -2425,35 +2443,43 @@ function navigateDate(direction) {
 // Make loadRecentScreenshots available globally for ui-manager
 window.loadRecentScreenshots = loadRecentScreenshots;
 
-// Listen for screenshot save events to bypass cache
+// Listen for screenshot save events to bypass cache (debounced — 1 min interval must not toast-spam)
+let screenshotSavedRefreshTimer = null;
 ipcRenderer.on('screenshot-saved', (event, data) => {
     console.log('📡 [CACHE_BYPASS] Screenshot saved event received:', data);
     window.screenshotCacheBypass = true;
 
-    const refreshDelay = 1500;
-
-    const screenshotsPage = document.getElementById('screenshotsPage');
-    if (screenshotsPage && screenshotsPage.style.display !== 'none') {
-        console.log('🔄 [AUTO_REFRESH] Auto-refreshing screenshots page');
-        setTimeout(loadRecentScreenshots, refreshDelay);
+    if (screenshotSavedRefreshTimer) {
+        clearTimeout(screenshotSavedRefreshTimer);
     }
 
-    const timetrackerPage = document.getElementById('timetrackerPage');
-    if (timetrackerPage && timetrackerPage.style.display !== 'none') {
-        console.log('🔄 [AUTO_REFRESH] Auto-refreshing tracker screenshots');
-        setTimeout(() => {
-            moduleInstances.uiManager?.loadTrackerScreenshots?.(true);
-        }, refreshDelay);
-    }
+    screenshotSavedRefreshTimer = setTimeout(() => {
+        screenshotSavedRefreshTimer = null;
+        const refreshDelay = 1500;
 
-    const activityPage = document.getElementById('activity-between-screenshotsPage');
-    if (activityPage && activityPage.style.display !== 'none') {
-        console.log('🔄 [AUTO_REFRESH] Auto-refreshing activity monitor screenshots');
-        setTimeout(() => {
-            moduleInstances.uiManager?.loadScreenshotActivity?.();
-            window.moduleInstances?.activityMonitor?.loadRecentScreenshots?.();
-        }, refreshDelay);
-    }
+        const screenshotsPage = document.getElementById('screenshotsPage');
+        if (isPageSectionActive(screenshotsPage)) {
+            console.log('🔄 [AUTO_REFRESH] Auto-refreshing screenshots page');
+            setTimeout(() => loadRecentScreenshots({ notify: false }), refreshDelay);
+        }
+
+        const timetrackerPage = document.getElementById('timetrackerPage');
+        if (isPageSectionActive(timetrackerPage)) {
+            console.log('🔄 [AUTO_REFRESH] Auto-refreshing tracker screenshots');
+            setTimeout(() => {
+                moduleInstances.uiManager?.loadTrackerScreenshots?.(true);
+            }, refreshDelay);
+        }
+
+        const activityPage = document.getElementById('activity-between-screenshotsPage');
+        if (isPageSectionActive(activityPage)) {
+            console.log('🔄 [AUTO_REFRESH] Auto-refreshing activity monitor screenshots');
+            setTimeout(() => {
+                moduleInstances.uiManager?.loadScreenshotActivity?.();
+                window.moduleInstances?.activityMonitor?.loadRecentScreenshots?.();
+            }, refreshDelay);
+        }
+    }, 2000);
 });
 
 // NOTE: Toggle monitoring tools listener moved to ipc-manager.js module (lines 393-473)

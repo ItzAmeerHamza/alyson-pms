@@ -107,6 +107,9 @@ class ActivityMonitor {
         };
 
         this._ipcHandlers['screenshot-saved'] = () => {
+          if (!this._ipcHandlers || !document.getElementById('activity-between-screenshotsPage')?.classList.contains('active')) {
+            return;
+          }
           this.loadRecentScreenshots().catch(() => {});
         };
 
