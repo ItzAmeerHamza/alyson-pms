@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
@@ -119,5 +124,50 @@ export class S3Service {
         }
       }),
     );
+  }
+
+  /** Best-effort delete of a screenshot object. Returns false if S3 is off or key is invalid. */
+  async deleteObject(key: string | null | undefined): Promise<boolean> {
+    if (!this.client || !this.bucket) return false;
+    if (!this.isValidScreenshotObjectKey(key)) return false;
+    try {
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key!.trim() }));
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        `S3 delete failed for key ${key}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
+    }
+  }
+
+  async getObjectBuffer(key: string, maxBytes = 4 * 1024 * 1024): Promise<{ buffer: Buffer; contentType: string }> {
+    if (!this.client || !this.bucket) {
+      throw new Error('S3 is not configured');
+    }
+    if (!this.isValidScreenshotObjectKey(key)) {
+      throw new Error('Invalid screenshot S3 key');
+    }
+
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    const response = await this.client.send(command);
+    const stream = response.Body;
+    if (!stream) {
+      throw new Error('Empty S3 object body');
+    }
+
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of stream as AsyncIterable<Uint8Array>) {
+      total += chunk.length;
+      if (total > maxBytes) {
+        throw new Error('Screenshot exceeds maximum size for AI analysis');
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+
+    const buffer = Buffer.concat(chunks);
+    const contentType = response.ContentType || 'image/jpeg';
+    return { buffer, contentType };
   }
 }

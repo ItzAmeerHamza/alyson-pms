@@ -73,6 +73,100 @@ export class ForceSyncController {
     return `GREATEST(${alias}.start_time + interval '30 seconds', ${grace})`;
   }
 
+  /** Cap on time deducted per deleted screenshot — mirrors the desktop agent. */
+  private static readonly MAX_SCREENSHOT_DEDUCTION_SECONDS = 240;
+
+  /**
+   * Midpoint deduction: a screenshot "owns" the interval from midpoint(prev, this) to
+   * midpoint(this, next), clamped to the session window and capped. Mirrors the desktop
+   * agent's screenshot-deletion util so estimates match on both platforms.
+   */
+  private async computeScreenshotDeductionSeconds(screenshot: {
+    id: string;
+    time_log_id: string | null;
+    captured_at: string;
+  }): Promise<number> {
+    const MAX = ForceSyncController.MAX_SCREENSHOT_DEDUCTION_SECONDS;
+    if (!screenshot.time_log_id) return Math.min(200, MAX);
+
+    const tl = await this.db.query<{ start_time: string; end_time: string | null }>(
+      'SELECT start_time, end_time FROM time_doctor.time_logs WHERE id = $1 LIMIT 1',
+      [screenshot.time_log_id],
+    );
+    const timeLog = tl.rows[0];
+    if (!timeLog) return Math.min(200, MAX);
+
+    const neighbors = await this.db.query<{ captured_at: string }>(
+      `SELECT captured_at FROM time_doctor.screenshots
+       WHERE time_log_id = $1 AND id <> $2
+       ORDER BY captured_at ASC`,
+      [screenshot.time_log_id, screenshot.id],
+    );
+
+    const target = new Date(screenshot.captured_at).getTime();
+    let prev: number | null = null;
+    let next: number | null = null;
+    for (const row of neighbors.rows) {
+      const t = new Date(row.captured_at).getTime();
+      if (t < target) prev = t;
+      else if (t > target && next === null) next = t;
+    }
+
+    const start = new Date(timeLog.start_time).getTime();
+    const end = timeLog.end_time ? new Date(timeLog.end_time).getTime() : Date.now();
+    let intervalStart = prev !== null ? (prev + target) / 2 : start;
+    let intervalEnd = next !== null ? (target + next) / 2 : end;
+    intervalStart = Math.max(intervalStart, start);
+    intervalEnd = Math.min(intervalEnd, Math.max(end, target + 60000));
+    if (intervalEnd <= intervalStart) return Math.min(200, MAX);
+
+    const rawSeconds = Math.max(0, Math.round((intervalEnd - intervalStart) / 1000));
+    return Math.min(rawSeconds, MAX);
+  }
+
+  /** Fetch a screenshot for deletion/estimation and verify ownership when a user is provided. */
+  private async loadOwnedScreenshot(
+    screenshotId: unknown,
+    userId: unknown,
+  ): Promise<{
+    id: string;
+    user_id: number;
+    time_log_id: string | null;
+    s3_key: string | null;
+    file_path: string | null;
+    captured_at: string;
+  }> {
+    if (!screenshotId || typeof screenshotId !== 'string') {
+      throw new HttpException('Missing screenshot_id', HttpStatus.BAD_REQUEST);
+    }
+    const result = await this.db.query<{
+      id: string;
+      user_id: number;
+      time_log_id: string | null;
+      s3_key: string | null;
+      file_path: string | null;
+      captured_at: string;
+    }>(
+      `SELECT id, user_id, time_log_id, s3_key, file_path, captured_at
+       FROM time_doctor.screenshots WHERE id = $1 LIMIT 1`,
+      [screenshotId],
+    );
+    const screenshot = result.rows[0];
+    if (!screenshot) {
+      throw new HttpException('Screenshot not found', HttpStatus.NOT_FOUND);
+    }
+    if (userId != null && String(userId).trim() !== '') {
+      const requester = parseUserIdParam(userId);
+      if (screenshot.user_id !== requester) {
+        throw new HttpException(
+          'Access denied: can only modify your own screenshots',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+    return screenshot;
+  }
+
   private async resolveProjectId(projectId: unknown): Promise<string | null> {
     if (!projectId || typeof projectId !== 'string') return null;
     const result = await this.db.query<{ id: string }>(
@@ -850,6 +944,41 @@ export class ForceSyncController {
             );
           });
         return { success: true, id: insert.rows[0].id, s3_key: s3Key };
+      }
+      case 'estimate_screenshot_deduction': {
+        const screenshot = await this.loadOwnedScreenshot(
+          data?.screenshot_id ?? data?.screenshotId,
+          data?.user_id,
+        );
+        const deductedSeconds = await this.computeScreenshotDeductionSeconds(screenshot);
+        return { success: true, deductedSeconds, capturedAt: screenshot.captured_at };
+      }
+      case 'delete_screenshot': {
+        const screenshot = await this.loadOwnedScreenshot(
+          data?.screenshot_id ?? data?.screenshotId,
+          data?.user_id,
+        );
+        const deductedSeconds = await this.computeScreenshotDeductionSeconds(screenshot);
+
+        // Remove the S3 object (best-effort; row deletion is the source of truth).
+        await this.s3.deleteObject(screenshot.s3_key || screenshot.file_path);
+
+        // Deduct the owned interval from the parent session's tracked time.
+        if (screenshot.time_log_id && deductedSeconds > 0) {
+          await this.db.query(
+            `UPDATE time_doctor.time_logs
+             SET deducted_seconds = COALESCE(deducted_seconds, 0) + $1, updated_at = NOW()
+             WHERE id = $2`,
+            [deductedSeconds, screenshot.time_log_id],
+          );
+        }
+
+        await this.db.query('DELETE FROM time_doctor.screenshots WHERE id = $1', [screenshot.id]);
+
+        this.logger.log(
+          `delete_screenshot: id=${screenshot.id} user=${screenshot.user_id} deducted=${deductedSeconds}s`,
+        );
+        return { success: true, deductedSeconds, timeLogId: screenshot.time_log_id };
       }
       case 'upload_screenshot': {
         throw new HttpException(

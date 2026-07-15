@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { calculateMergedHoursByUser, mergeTimeIntervals } from '../lib/time-merge';
@@ -10,6 +10,7 @@ import {
   parseWorkspaceId,
   workspaceScope,
 } from '../database/time-doctor-sql';
+import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
 
 export interface OrgSettings {
   hours_threshold: number;
@@ -21,16 +22,45 @@ export interface OrgSettings {
 const DEFAULT_SETTINGS: OrgSettings = {
   hours_threshold: 7,
   high_activity_threshold: 60,
-  low_activity_threshold: 30,
+  low_activity_threshold: 20,
   screenshot_interval_minutes: 10,
 };
 
-/** node-pg returns TIMESTAMPTZ as Date; some callers pass ISO strings. */
 function toDateKey(value: string | Date): string {
   if (value instanceof Date) {
     return value.toISOString().slice(0, 10);
   }
   return String(value).slice(0, 10);
+}
+
+function parsedVisionFields(visionAnalysis: unknown, summary: string | null) {
+  let raw = visionAnalysis;
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      raw = null;
+    }
+  }
+  const parsed =
+    raw && typeof raw === 'object' && 'parsed' in (raw as Record<string, unknown>)
+      ? ((raw as Record<string, unknown>).parsed as Record<string, unknown>)
+      : (raw as Record<string, unknown> | null);
+
+  const description =
+    (parsed?.description as string | undefined) || summary || null;
+  const feedback = (parsed?.feedback_for_employee as string | undefined) || null;
+
+  return {
+    description,
+    feedback: feedback && feedback !== description ? feedback : null,
+    productivity_flag: (parsed?.productivity_flag as string | undefined) || null,
+    vision_analysis: raw,
+    vision_used:
+      raw && typeof raw === 'object' && 'vision_used' in raw
+        ? Boolean((raw as Record<string, unknown>).vision_used)
+        : undefined,
+  };
 }
 
 @Injectable()
@@ -147,6 +177,223 @@ export class PulseService {
     return byUserDay;
   }
 
+  private dailyIdleSecondsFromTimeLogs(
+    logs: Array<{
+      user_id: string;
+      start_time: string | Date;
+      idle_seconds: number | null;
+    }>,
+  ): Map<string, Map<string, number>> {
+    const byUserDay = new Map<string, Map<string, number>>();
+
+    for (const log of logs) {
+      const seconds = log.idle_seconds ?? 0;
+      if (seconds <= 0) continue;
+
+      const day = toDateKey(log.start_time);
+      const hours = Math.round((seconds / 3600) * 10) / 10;
+      if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
+      const dayMap = byUserDay.get(log.user_id)!;
+      dayMap.set(day, (dayMap.get(day) ?? 0) + hours);
+    }
+
+    return byUserDay;
+  }
+
+  private async fetchIdleLogsInRange(
+    user: ScopedAuthUser,
+    start: string,
+    end: string,
+    userId?: string,
+  ) {
+    const scope = workspaceScope(user, 'ext');
+    const params: unknown[] = [...scope.params, start, end];
+    let userFilter = '';
+    if (userId) {
+      params.push(parseTenantUserId(userId));
+      userFilter = `AND i.user_id = $${params.length}`;
+    }
+    const result = await this.db.query<{
+      user_id: string;
+      idle_start: string;
+      idle_end: string | null;
+      duration_seconds: number | null;
+    }>(
+      `SELECT i.user_id::text AS user_id, i.idle_start, i.idle_end, i.duration_seconds
+       FROM time_doctor.idle_logs i
+       JOIN tenant."user" u ON u.id = i.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND i.idle_start >= $${scope.params.length + 1}::timestamptz
+         AND i.idle_start < $${scope.params.length + 2}::timestamptz
+         AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         ${userFilter}
+       ORDER BY i.idle_start`,
+      params,
+    );
+    return result.rows;
+  }
+
+  private dailyLowActivityFromIdleLogs(
+    logs: Array<{
+      user_id: string;
+      idle_start: string | Date;
+      idle_end: string | Date | null;
+      duration_seconds: number | null;
+    }>,
+  ): Map<string, Map<string, number>> {
+    const byUserDay = new Map<string, Map<string, number>>();
+
+    for (const log of logs) {
+      const day = toDateKey(log.idle_start);
+      let seconds = log.duration_seconds ?? 0;
+      if (seconds <= 0 && log.idle_end) {
+        const startMs = new Date(log.idle_start).getTime();
+        const endMs = new Date(log.idle_end).getTime();
+        if (endMs > startMs) seconds = Math.round((endMs - startMs) / 1000);
+      }
+      if (seconds <= 0) continue;
+
+      const hours = Math.round((seconds / 3600) * 10) / 10;
+      if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
+      const dayMap = byUserDay.get(log.user_id)!;
+      dayMap.set(day, (dayMap.get(day) ?? 0) + hours);
+    }
+
+    return byUserDay;
+  }
+
+  /** Idle hours per user/day — prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows. */
+  private dailyIdleHoursByUserDay(
+    idleLogHours: Map<string, Map<string, number>>,
+    idleSecondsHours: Map<string, Map<string, number>>,
+  ): Map<string, Map<string, number>> {
+    const merged = new Map<string, Map<string, number>>();
+    const userIds = new Set<string>([
+      ...idleLogHours.keys(),
+      ...idleSecondsHours.keys(),
+    ]);
+
+    for (const userId of userIds) {
+      const fromLogs = idleLogHours.get(userId) ?? new Map();
+      const fromSessions = idleSecondsHours.get(userId) ?? new Map();
+      const days = new Set<string>([...fromLogs.keys(), ...fromSessions.keys()]);
+      const dayMap = new Map<string, number>();
+
+      for (const day of days) {
+        const logHours = fromLogs.get(day) ?? 0;
+        const sessionHours = fromSessions.get(day) ?? 0;
+        const hours = logHours > 0 ? logHours : sessionHours;
+        if (hours > 0) dayMap.set(day, Math.round(hours * 10) / 10);
+      }
+
+      if (dayMap.size > 0) merged.set(userId, dayMap);
+    }
+
+    return merged;
+  }
+
+  /** Low-activity duration — only screenshots strictly below low_activity_threshold (excludes medium/high). */
+  private async fetchLowActivityHoursFromScreenshots(
+    user: ScopedAuthUser,
+    start: string,
+    end: string,
+    lowActivityThreshold: number,
+    intervalMinutes: number,
+    userId?: string,
+  ): Promise<Map<string, Map<string, number>>> {
+    const scope = workspaceScope(user, 'ext');
+    const params: unknown[] = [...scope.params, lowActivityThreshold, start, end];
+    const thresholdIdx = scope.params.length + 1;
+    const startIdx = scope.params.length + 2;
+    const endIdx = scope.params.length + 3;
+    let userFilter = '';
+    if (userId) {
+      params.push(parseTenantUserId(userId));
+      userFilter = `AND s.user_id = $${params.length}`;
+    }
+    const intervalHours = intervalMinutes / 60;
+
+    const result = await this.db.query<{
+      user_id: string;
+      activity_date: string;
+      low_count: string;
+    }>(
+      `SELECT
+         s.user_id::text AS user_id,
+         DATE(s.captured_at AT TIME ZONE 'UTC')::text AS activity_date,
+         COUNT(*) FILTER (
+           WHERE s.activity_percent IS NOT NULL
+             AND s.activity_percent < $${thresholdIdx}
+             AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
+         )::text AS low_count
+       FROM time_doctor.screenshots s
+       JOIN tenant."user" u ON u.id = s.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND s.captured_at >= $${startIdx}::timestamptz
+         AND s.captured_at < $${endIdx}::timestamptz
+         AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         ${userFilter}
+       GROUP BY s.user_id, DATE(s.captured_at AT TIME ZONE 'UTC')`,
+      params,
+    );
+
+    const byUserDay = new Map<string, Map<string, number>>();
+    for (const row of result.rows) {
+      const count = Number(row.low_count) || 0;
+      if (count <= 0) continue;
+
+      const hours = Math.round(count * intervalHours * 10) / 10;
+      if (!byUserDay.has(row.user_id)) byUserDay.set(row.user_id, new Map());
+      byUserDay.get(row.user_id)!.set(row.activity_date, hours);
+    }
+
+    return byUserDay;
+  }
+
+  private mergeLowActivityByUserDay(
+    screenshotHours: Map<string, Map<string, number>>,
+    idleSecondsHours: Map<string, Map<string, number>>,
+    idleLogHours: Map<string, Map<string, number>>,
+  ): Map<string, Map<string, number>> {
+    const merged = new Map<string, Map<string, number>>();
+    const userIds = new Set<string>([
+      ...screenshotHours.keys(),
+      ...idleSecondsHours.keys(),
+      ...idleLogHours.keys(),
+    ]);
+
+    for (const userId of userIds) {
+      const screenshotDays = screenshotHours.get(userId) ?? new Map();
+      const idleSecondsDays = idleSecondsHours.get(userId) ?? new Map();
+      const idleLogDays = idleLogHours.get(userId) ?? new Map();
+      const days = new Set<string>([
+        ...screenshotDays.keys(),
+        ...idleSecondsDays.keys(),
+        ...idleLogDays.keys(),
+      ]);
+
+      const dayMap = new Map<string, number>();
+      for (const day of days) {
+        const fromScreenshots = screenshotDays.get(day) ?? 0;
+        const fromIdleSeconds = idleSecondsDays.get(day) ?? 0;
+        const fromIdleLogs = idleLogDays.get(day) ?? 0;
+        const hours =
+          fromScreenshots > 0
+            ? fromScreenshots
+            : Math.max(fromIdleSeconds, fromIdleLogs);
+        if (hours > 0) {
+          dayMap.set(day, Math.round(hours * 10) / 10);
+        }
+      }
+
+      if (dayMap.size > 0) merged.set(userId, dayMap);
+    }
+
+    return merged;
+  }
+
   async getDashboard(user: ScopedAuthUser, days: number) {
     const end = new Date();
     const start = new Date(end);
@@ -223,9 +470,20 @@ export class PulseService {
     };
   }
 
-  async getDailyHours(user: ScopedAuthUser, start: string, end: string) {
+  async getDailyHours(user: ScopedAuthUser, start: string, end: string, restrictToUserId?: string) {
     const settings = await this.getOrgSettings(user);
     const scope = workspaceScope(user, 'ext');
+    const userParams: unknown[] = [...scope.params];
+    const userFilters = [
+      scope.clause,
+      TRACKABLE_PULSE_ROLES_SQL,
+      `u.email NOT ILIKE '%@example.com%'`,
+    ];
+    if (restrictToUserId) {
+      userParams.push(parseTenantUserId(restrictToUserId));
+      userFilters.push(`u.id = $${userParams.length}`);
+    }
+
     const usersResult = await this.db.query<{
       id: string;
       full_name: string | null;
@@ -233,17 +491,31 @@ export class PulseService {
       manager_id: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
-       WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
-         AND u.email NOT ILIKE '%@example.com%'
+       WHERE ${userFilters.join(' AND ')}
        ORDER BY full_name ASC NULLS LAST`,
-      scope.params,
+      userParams,
     );
 
     const endExclusive = new Date(end);
     endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
-    const logs = await this.fetchTimeLogsInRange(user, start, endExclusive.toISOString());
+    const rangeEndIso = endExclusive.toISOString();
+    const logs = await this.fetchTimeLogsInRange(user, start, rangeEndIso, restrictToUserId);
+    const idleLogs = await this.fetchIdleLogsInRange(user, start, rangeEndIso, restrictToUserId);
     const dailyByUser = this.dailyHoursFromLogs(logs);
+    const lowActivityCutoff = Math.min(settings.low_activity_threshold, 20);
+    const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
+      user,
+      start,
+      rangeEndIso,
+      lowActivityCutoff,
+      settings.screenshot_interval_minutes,
+      restrictToUserId,
+    );
+    // Idle: no keyboard/mouse for 60s+ — from idle_logs checkpoints, else time_logs.idle_seconds.
+    const idleByUser = this.dailyIdleHoursByUserDay(
+      this.dailyLowActivityFromIdleLogs(idleLogs),
+      this.dailyIdleSecondsFromTimeLogs(logs),
+    );
 
     const managerIds = [
       ...new Set(usersResult.rows.map((u) => u.manager_id).filter(Boolean)),
@@ -270,20 +542,37 @@ export class PulseService {
 
     return {
       hours_threshold: settings.hours_threshold,
+      low_activity_threshold: settings.low_activity_threshold,
+      low_activity_cutoff: Math.min(settings.low_activity_threshold, 20),
+      high_activity_threshold: settings.high_activity_threshold,
+      screenshot_interval_minutes: settings.screenshot_interval_minutes,
       start,
       end,
       employees: usersResult.rows.map((emp) => {
         const dayMap = dailyByUser.get(emp.id) ?? new Map();
+        const lowActivityMap = lowActivityByUser.get(emp.id) ?? new Map();
+        const idleMap = idleByUser.get(emp.id) ?? new Map();
         return {
           employee_id: emp.id,
           full_name: emp.full_name,
           email: emp.email,
           manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
-          days: days.map((date) => ({
-            date,
-            hours_worked: dayMap.get(date) ?? 0,
-            below_threshold: (dayMap.get(date) ?? 0) < settings.hours_threshold,
-          })),
+          days: days.map((date) => {
+            const hoursWorked = dayMap.get(date) ?? 0;
+            const lowRaw = lowActivityMap.get(date) ?? 0;
+            const idleRaw = idleMap.get(date) ?? 0;
+            const lowActivityHours =
+              hoursWorked > 0 ? Math.min(lowRaw, hoursWorked) : lowRaw;
+            const idleHours = hoursWorked > 0 ? Math.min(idleRaw, hoursWorked) : idleRaw;
+
+            return {
+              date,
+              hours_worked: hoursWorked,
+              low_activity_hours: Math.round(lowActivityHours * 10) / 10,
+              idle_hours: Math.round(idleHours * 10) / 10,
+              below_threshold: hoursWorked < settings.hours_threshold,
+            };
+          }),
         };
       }),
     };
@@ -367,6 +656,466 @@ export class PulseService {
       high_activity_threshold: settings.high_activity_threshold,
       low_activity_threshold: settings.low_activity_threshold,
       employees: [...byUser.values()],
+    };
+  }
+
+  async getActivitySummary(user: ScopedAuthUser, start: string, end: string) {
+    const scope = workspaceScope(user, 'ext');
+    const usersResult = await this.db.query<{
+      id: string;
+      full_name: string | null;
+      email: string;
+      manager_id: string | null;
+    }>(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE ${scope.clause}
+         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND u.email NOT ILIKE '%@example.com%'
+       ORDER BY full_name ASC NULLS LAST`,
+      scope.params,
+    );
+
+    const activityResult = await this.db.query<{
+      user_id: string;
+      screenshot_count: string;
+      mouse_clicks: string;
+      keystrokes: string;
+      mouse_movements: string;
+      avg_activity_percent: string;
+      avg_focus_percent: string;
+    }>(
+      `SELECT
+         s.user_id::text AS user_id,
+         COUNT(*)::text AS screenshot_count,
+         COALESCE(SUM(s.mouse_clicks), 0)::text AS mouse_clicks,
+         COALESCE(SUM(s.keystrokes), 0)::text AS keystrokes,
+         COALESCE(SUM(s.mouse_movements), 0)::text AS mouse_movements,
+         COALESCE(AVG(s.activity_percent), 0)::text AS avg_activity_percent,
+         COALESCE(AVG(s.focus_percent), 0)::text AS avg_focus_percent
+       FROM time_doctor.screenshots s
+       JOIN tenant."user" u ON u.id = s.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND s.captured_at >= $${scope.params.length + 1}::timestamptz
+         AND s.captured_at < ($${scope.params.length + 2}::date + INTERVAL '1 day')
+         AND u.email NOT ILIKE '%@example.com%'
+       GROUP BY s.user_id`,
+      [...scope.params, start, end],
+    );
+
+    const activityByUser = new Map<
+      string,
+      {
+        screenshot_count: number;
+        mouse_clicks: number;
+        keystrokes: number;
+        mouse_movements: number;
+        avg_activity_percent: number;
+        avg_focus_percent: number;
+      }
+    >(
+      activityResult.rows.map((row) => [
+        row.user_id,
+        {
+          screenshot_count: Number(row.screenshot_count),
+          mouse_clicks: Number(row.mouse_clicks),
+          keystrokes: Number(row.keystrokes),
+          mouse_movements: Number(row.mouse_movements),
+          avg_activity_percent: Math.round(Number(row.avg_activity_percent)),
+          avg_focus_percent: Math.round(Number(row.avg_focus_percent)),
+        },
+      ]),
+    );
+
+    const managerIds = [
+      ...new Set(usersResult.rows.map((u) => u.manager_id).filter(Boolean)),
+    ] as string[];
+    const managerEmails = new Map<string, string>();
+    if (managerIds.length) {
+      const mgrIds = managerIds.map((id) => parseTenantUserId(id));
+      const mgr = await this.db.query<{ id: string; email: string }>(
+        `SELECT u.id::text AS id, u.email
+         FROM tenant."user" u
+         WHERE u.id = ANY($1::int[])`,
+        [mgrIds],
+      );
+      for (const m of mgr.rows) managerEmails.set(m.id, m.email);
+    }
+
+    return {
+      start,
+      end,
+      employees: usersResult.rows.map((emp) => {
+        const activity = activityByUser.get(emp.id) ?? {
+          screenshot_count: 0,
+          mouse_clicks: 0,
+          keystrokes: 0,
+          mouse_movements: 0,
+          avg_activity_percent: 0,
+          avg_focus_percent: 0,
+        };
+        const totalInputs =
+          activity.mouse_clicks + activity.keystrokes + activity.mouse_movements;
+
+        return {
+          employee_id: emp.id,
+          full_name: emp.full_name,
+          email: emp.email,
+          manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
+          screenshot_count: activity.screenshot_count,
+          mouse_clicks: activity.mouse_clicks,
+          keystrokes: activity.keystrokes,
+          mouse_movements: activity.mouse_movements,
+          total_inputs: totalInputs,
+          avg_activity_percent: activity.avg_activity_percent,
+          avg_focus_percent: activity.avg_focus_percent,
+        };
+      }),
+    };
+  }
+
+  /** Per-employee AI screenshot insights with activity breakdown and recent descriptions. */
+  async getAiInsights(user: ScopedAuthUser, start: string, end: string) {
+    const scope = workspaceScope(user, 'ext');
+    const rangeParams = [...scope.params, start, end];
+
+    const usersResult = await this.db.query<{
+      id: string;
+      full_name: string | null;
+      email: string;
+    }>(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE ${scope.clause}
+         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND u.email NOT ILIKE '%@example.com%'
+       ORDER BY full_name ASC NULLS LAST`,
+      scope.params,
+    );
+
+    const analyzedResult = await this.db.query<{
+      user_id: string;
+      activity_type: string | null;
+      category: string | null;
+      confidence_score: number | null;
+      distraction_score: number | null;
+      id: string;
+      captured_at: string;
+      description: string | null;
+      vision_analysis: Record<string, unknown> | null;
+    }>(
+      `SELECT
+         s.user_id::text AS user_id,
+         s.activity_type,
+         s.category,
+         s.confidence_score,
+         s.distraction_score,
+         s.id::text AS id,
+         s.captured_at,
+         s.vision_summary AS description,
+         s.vision_analysis
+       FROM time_doctor.screenshots s
+       JOIN tenant."user" u ON u.id = s.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND s.captured_at >= $${scope.params.length + 1}::timestamptz
+         AND s.captured_at <= $${scope.params.length + 2}::timestamptz
+         AND s.ai_analysis_status = 'completed'
+       ORDER BY s.user_id, s.captured_at DESC`,
+      rangeParams,
+    );
+
+    const pipelineResult = await this.db.query<{ status: string; count: string }>(
+      `SELECT s.ai_analysis_status AS status, COUNT(*)::text AS count
+       FROM time_doctor.screenshots s
+       JOIN tenant."user" u ON u.id = s.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND s.captured_at >= $${scope.params.length + 1}::timestamptz
+         AND s.captured_at <= $${scope.params.length + 2}::timestamptz
+       GROUP BY s.ai_analysis_status`,
+      rangeParams,
+    );
+
+    const pipeline: Record<string, number> = {};
+    for (const row of pipelineResult.rows) {
+      pipeline[row.status] = parseInt(row.count, 10) || 0;
+    }
+
+    const byUser = new Map<
+      string,
+      {
+        analyzed_count: number;
+        productive_count: number;
+        distraction_count: number;
+        confidence_total: number;
+        activity_counts: Map<string, number>;
+        recent_insights: Array<{
+          screenshot_id: string;
+          captured_at: string;
+          description: string;
+          feedback: string | null;
+          activity_type: string | null;
+          category: string | null;
+          confidence_score: number | null;
+          distraction_score: number | null;
+          productivity_flag: string | null;
+          vision_analysis: Record<string, unknown> | null;
+          vision_used?: boolean;
+        }>;
+      }
+    >();
+
+    for (const row of analyzedResult.rows) {
+      if (!byUser.has(row.user_id)) {
+        byUser.set(row.user_id, {
+          analyzed_count: 0,
+          productive_count: 0,
+          distraction_count: 0,
+          confidence_total: 0,
+          activity_counts: new Map(),
+          recent_insights: [],
+        });
+      }
+      const entry = byUser.get(row.user_id)!;
+      entry.analyzed_count += 1;
+      if (row.category === 'productive') entry.productive_count += 1;
+      if (row.category === 'distraction') entry.distraction_count += 1;
+      entry.confidence_total += row.confidence_score ?? 0;
+      if (row.activity_type) {
+        entry.activity_counts.set(
+          row.activity_type,
+          (entry.activity_counts.get(row.activity_type) ?? 0) + 1,
+        );
+      }
+      if (entry.recent_insights.length < 3) {
+        const fields = parsedVisionFields(row.vision_analysis, row.description);
+        if (fields.description || fields.feedback) {
+          entry.recent_insights.push({
+            screenshot_id: row.id,
+            captured_at: row.captured_at,
+            description: fields.description || fields.feedback || '',
+            feedback: fields.feedback,
+            activity_type: row.activity_type,
+            category: row.category,
+            confidence_score: row.confidence_score,
+            distraction_score: row.distraction_score,
+            productivity_flag: fields.productivity_flag,
+            vision_analysis: fields.vision_analysis as Record<string, unknown> | null,
+            vision_used: fields.vision_used,
+          });
+        }
+      }
+    }
+
+    return {
+      start,
+      end,
+      pipeline,
+      employees: usersResult.rows.map((emp) => {
+        const stats = byUser.get(emp.id);
+        let top_activity_type: string | null = null;
+        if (stats?.activity_counts.size) {
+          top_activity_type = [...stats.activity_counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        }
+        return {
+          employee_id: emp.id,
+          full_name: emp.full_name,
+          email: emp.email,
+          analyzed_count: stats?.analyzed_count ?? 0,
+          productive_count: stats?.productive_count ?? 0,
+          distraction_count: stats?.distraction_count ?? 0,
+          avg_confidence: stats?.analyzed_count
+            ? Math.round(stats.confidence_total / stats.analyzed_count)
+            : 0,
+          top_activity_type,
+          recent_insights: stats?.recent_insights ?? [],
+        };
+      }),
+    };
+  }
+
+  async getNotTracking(user: ScopedAuthUser, anchorDate?: string) {
+    const settings = await this.getOrgSettings(user);
+    const lowActivityCutoff = Math.min(settings.low_activity_threshold, 20);
+
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    const todayKey = todayUtc.toISOString().slice(0, 10);
+
+    const checkDate = anchorDate?.trim().slice(0, 10) || todayKey;
+    const checkDay = new Date(`${checkDate}T00:00:00Z`);
+    if (Number.isNaN(checkDay.getTime())) {
+      throw new BadRequestException('Invalid date');
+    }
+    if (checkDate > todayKey) {
+      throw new BadRequestException('date cannot be in the future');
+    }
+
+    const previousDay = new Date(checkDay);
+    previousDay.setUTCDate(previousDay.getUTCDate() - 1);
+    const previousKey = previousDay.toISOString().slice(0, 10);
+
+    const endExclusive = new Date(checkDay);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+
+    const scope = workspaceScope(user, 'ext');
+    const usersResult = await this.db.query<{
+      id: string;
+      full_name: string | null;
+      email: string;
+      manager_id: string | null;
+      last_activity: string | null;
+      paused_at: string | null;
+      pause_reason: string | null;
+    }>(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE ${scope.clause}
+         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
+       ORDER BY full_name ASC NULLS LAST`,
+      scope.params,
+    );
+
+    const logs = await this.fetchTimeLogsInRange(
+      user,
+      previousKey,
+      endExclusive.toISOString(),
+    );
+    const idleLogs = await this.fetchIdleLogsInRange(
+      user,
+      previousKey,
+      endExclusive.toISOString(),
+    );
+    const dailyByUser = this.dailyHoursFromLogs(logs);
+    const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
+      user,
+      previousKey,
+      endExclusive.toISOString(),
+      lowActivityCutoff,
+      settings.screenshot_interval_minutes,
+    );
+    const idleByUser = this.dailyIdleHoursByUserDay(
+      this.dailyLowActivityFromIdleLogs(idleLogs),
+      this.dailyIdleSecondsFromTimeLogs(logs),
+    );
+
+    const timeScope = workspaceScope(user, 't');
+    const openSessions = await this.db.query<{ user_id: string }>(
+      `SELECT DISTINCT t.user_id::text AS user_id
+       FROM time_doctor.time_logs t
+       WHERE ${timeScope.clause}
+         AND t.end_time IS NULL
+         AND t.start_time > NOW() - INTERVAL '12 hours'`,
+      timeScope.params,
+    );
+    const openSessionIds = new Set(openSessions.rows.map((r) => r.user_id));
+
+    const managerIds = [
+      ...new Set(usersResult.rows.map((u) => u.manager_id).filter(Boolean)),
+    ] as string[];
+    const managerEmails = new Map<string, string>();
+    if (managerIds.length) {
+      const mgrIds = managerIds.map((id) => parseTenantUserId(id));
+      const mgr = await this.db.query<{ id: string; email: string }>(
+        `SELECT u.id::text AS id, u.email
+         FROM tenant."user" u
+         WHERE u.id = ANY($1::int[])`,
+        [mgrIds],
+      );
+      for (const m of mgr.rows) managerEmails.set(m.id, m.email);
+    }
+
+    const isWeekend = (dateKey: string) => {
+      const dow = new Date(`${dateKey}T12:00:00Z`).getUTCDay();
+      return dow === 0 || dow === 6;
+    };
+
+    const dayMetrics = (
+      empId: string,
+      dateKey: string,
+    ): {
+      hours: number;
+      low_activity_hours: number;
+      idle_hours: number;
+      below_threshold: boolean;
+    } => {
+      const hours = dailyByUser.get(empId)?.get(dateKey) ?? 0;
+      const lowRaw = lowActivityByUser.get(empId)?.get(dateKey) ?? 0;
+      const idleRaw = idleByUser.get(empId)?.get(dateKey) ?? 0;
+      const lowActivityHours =
+        hours > 0 ? Math.min(lowRaw, hours) : lowRaw;
+      const idleHours = hours > 0 ? Math.min(idleRaw, hours) : idleRaw;
+      return {
+        hours,
+        low_activity_hours: Math.round(lowActivityHours * 10) / 10,
+        idle_hours: Math.round(idleHours * 10) / 10,
+        below_threshold: !isWeekend(dateKey) && hours < settings.hours_threshold,
+      };
+    };
+
+    const employees = usersResult.rows.map((emp) => {
+      const previous = dayMetrics(emp.id, previousKey);
+      const check = dayMetrics(emp.id, checkDate);
+      const previousWeekend = isWeekend(previousKey);
+      const checkWeekend = isWeekend(checkDate);
+
+      const notTrackingPrevious =
+        !previousWeekend && previous.hours <= 0;
+      const notTrackingCheck = !checkWeekend && check.hours <= 0;
+
+      return {
+        employee_id: emp.id,
+        full_name: emp.full_name,
+        email: emp.email,
+        manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
+        // New canonical keys
+        check_date: checkDate,
+        previous_date: previousKey,
+        previous_hours: previous.hours,
+        check_hours: check.hours,
+        previous_low_activity_hours: previous.low_activity_hours,
+        check_low_activity_hours: check.low_activity_hours,
+        previous_idle_hours: previous.idle_hours,
+        check_idle_hours: check.idle_hours,
+        previous_below_threshold: previous.below_threshold,
+        check_below_threshold: check.below_threshold,
+        previous_is_weekend: previousWeekend,
+        check_is_weekend: checkWeekend,
+        not_tracking_previous: notTrackingPrevious,
+        not_tracking_check: notTrackingCheck,
+        not_tracking_either: notTrackingPrevious || notTrackingCheck,
+        not_tracking_both: notTrackingPrevious && notTrackingCheck,
+        has_open_session: checkDate === todayKey && openSessionIds.has(emp.id),
+        last_activity: emp.last_activity,
+        paused_at: emp.paused_at,
+        pause_reason: emp.pause_reason,
+        // Backward-compatible aliases (yesterday = previous, today = check)
+        yesterday: previousKey,
+        today: checkDate,
+        yesterday_hours: previous.hours,
+        today_hours: check.hours,
+        not_tracking_yesterday: notTrackingPrevious,
+        not_tracking_today: notTrackingCheck,
+      };
+    });
+
+    const needsFollowUp = employees.filter((emp) => emp.not_tracking_either);
+
+    return {
+      date: checkDate,
+      previous_date: previousKey,
+      check_date: checkDate,
+      yesterday: previousKey,
+      today: checkDate,
+      hours_threshold: settings.hours_threshold,
+      low_activity_cutoff: lowActivityCutoff,
+      employees,
+      not_tracking_count: needsFollowUp.length,
+      logged_check_count: employees.filter(
+        (emp) => emp.check_hours > 0 || emp.has_open_session,
+      ).length,
+      logged_previous_count: employees.filter((emp) => emp.previous_hours > 0).length,
     };
   }
 

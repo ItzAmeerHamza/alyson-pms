@@ -1,14 +1,110 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
+import {
+  SCREENSHOT_IS_VIDEO_MEETING_SQL,
+  applyMeetingActivityFloor,
+} from '../pulse/meeting-context';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
   WORKSPACE_AS_ORG_SELECT,
+  isPulseAdmin,
+  isPulseOrgAdmin,
+  isPulseTeamManager,
   parseTenantUserId,
   parseWorkspaceId,
+  scopedPulseUserId,
   workspaceScope,
 } from '../database/time-doctor-sql';
+
+export type ScreenshotProductivityFilter = 'all' | 'distraction' | 'low_productivity' | 'idle';
+export type ScreenshotSort = 'newest' | 'least_productive' | 'low_activity';
+
+const SCREENSHOT_PRODUCTIVITY_FILTERS: ScreenshotProductivityFilter[] = [
+  'all',
+  'distraction',
+  'low_productivity',
+  'idle',
+];
+const SCREENSHOT_SORTS: ScreenshotSort[] = ['newest', 'least_productive', 'low_activity'];
+
+/** productivity_flag lives in vision_analysis JSONB (parsed or top-level). */
+const PRODUCTIVITY_FLAG_SQL = `COALESCE(s.vision_analysis #>> '{parsed,productivity_flag}', s.vision_analysis->>'productivity_flag', '')`;
+
+export function normalizeScreenshotProductivityFilter(
+  value?: string,
+): ScreenshotProductivityFilter {
+  if (value && SCREENSHOT_PRODUCTIVITY_FILTERS.includes(value as ScreenshotProductivityFilter)) {
+    return value as ScreenshotProductivityFilter;
+  }
+  return 'all';
+}
+
+export function normalizeScreenshotSort(value?: string): ScreenshotSort {
+  if (value && SCREENSHOT_SORTS.includes(value as ScreenshotSort)) {
+    return value as ScreenshotSort;
+  }
+  return 'newest';
+}
+
+function applyScreenshotProductivityFilter(
+  filters: string[],
+  productivityFilter: ScreenshotProductivityFilter,
+): void {
+  switch (productivityFilter) {
+    case 'distraction':
+      filters.push(`s.ai_analysis_status = 'completed' AND s.category = 'distraction'`);
+      break;
+    case 'low_productivity':
+      filters.push(`(
+        s.ai_analysis_status = 'completed'
+        AND (
+          s.category = 'distraction'
+          OR ${PRODUCTIVITY_FLAG_SQL} IN ('off_task', 'mixed')
+        )
+      )`);
+      break;
+    case 'idle':
+      // Meetings expect low keyboard/mouse input, so never treat them as idle.
+      filters.push(`(
+        NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
+        AND (
+          (s.activity_percent IS NOT NULL AND s.activity_percent <= 30)
+          OR (
+            s.ai_analysis_status = 'completed'
+            AND (
+              ${PRODUCTIVITY_FLAG_SQL} = 'unclear'
+              OR (s.category = 'neutral' AND COALESCE(s.distraction_score, 0) <= 20)
+            )
+          )
+        )
+      )`);
+      break;
+    default:
+      break;
+  }
+}
+
+function screenshotOrderByClause(sort: ScreenshotSort): string {
+  switch (sort) {
+    case 'least_productive':
+      return `CASE
+        WHEN s.category = 'distraction' THEN 0
+        WHEN ${PRODUCTIVITY_FLAG_SQL} = 'off_task' THEN 1
+        WHEN ${PRODUCTIVITY_FLAG_SQL} = 'mixed' THEN 2
+        WHEN s.category = 'neutral' THEN 3
+        ELSE 4
+      END ASC,
+      s.distraction_score DESC NULLS LAST,
+      s.activity_percent ASC NULLS LAST,
+      s.captured_at DESC`;
+    case 'low_activity':
+      return `s.activity_percent ASC NULLS LAST, s.captured_at DESC`;
+    default:
+      return `s.captured_at DESC`;
+  }
+}
 
 @Injectable()
 export class DataService {
@@ -18,7 +114,51 @@ export class DataService {
   ) {}
 
   private isAdmin(user: ScopedAuthUser): boolean {
-    return Boolean(user.is_super_admin || user.role === 'admin' || user.role === 'manager');
+    return isPulseAdmin(user);
+  }
+
+  /** User ids whose screenshots the caller may view. null = all workspace users. */
+  async getAllowedScreenshotUserIds(user: ScopedAuthUser): Promise<string[] | null> {
+    if (isPulseOrgAdmin(user)) {
+      return null;
+    }
+
+    if (isPulseTeamManager(user)) {
+      const scope = workspaceScope(user, 'ext');
+      const managerId = parseTenantUserId(user.id);
+      const result = await this.database.query<{ id: string }>(
+        `${EMPLOYEE_USER_SELECT}
+         WHERE ${scope.clause}
+           AND u.email NOT ILIKE '%@example.com%'
+           AND (ext.manager_id = $${scope.params.length + 1} OR u.id = $${scope.params.length + 1})`,
+        [...scope.params, managerId],
+      );
+      return result.rows.map((row) => row.id);
+    }
+
+    return [user.id];
+  }
+
+  async listScreenshotUsers(user: ScopedAuthUser) {
+    const allowedIds = await this.getAllowedScreenshotUserIds(user);
+    const scope = workspaceScope(user, 'ext');
+    const params: unknown[] = [...scope.params];
+    let userFilter = '';
+
+    if (allowedIds) {
+      params.push(allowedIds.map((id) => parseTenantUserId(id)));
+      userFilter = ` AND u.id = ANY($${params.length}::int[])`;
+    }
+
+    const result = await this.database.query(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE ${scope.clause}
+         AND u.email NOT ILIKE '%@example.com%'
+         ${userFilter}
+       ORDER BY full_name ASC NULLS LAST`,
+      params,
+    );
+    return result.rows;
   }
 
   async listUsers(user: ScopedAuthUser) {
@@ -210,7 +350,10 @@ export class DataService {
       filters.push(`t.start_time <= $${params.length}`);
     }
     if (userId) {
-      params.push(parseTenantUserId(userId));
+      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
+      filters.push(`t.user_id = $${params.length}`);
+    } else if (!this.isAdmin(user)) {
+      params.push(parseTenantUserId(user.id));
       filters.push(`t.user_id = $${params.length}`);
     }
 
@@ -261,8 +404,8 @@ export class DataService {
       params.push(end);
       filters.push(`COALESCE(a.started_at, a.timestamp) <= $${params.length}`);
     }
-    if (userId) {
-      params.push(parseTenantUserId(userId));
+    if (userId || !this.isAdmin(user)) {
+      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
       filters.push(`a.user_id = $${params.length}`);
     }
 
@@ -312,8 +455,8 @@ export class DataService {
       params.push(end);
       filters.push(`u.started_at <= $${params.length}`);
     }
-    if (userId) {
-      params.push(parseTenantUserId(userId));
+    if (userId || !this.isAdmin(user)) {
+      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
       filters.push(`u.user_id = $${params.length}`);
     }
 
@@ -366,8 +509,8 @@ export class DataService {
       params.push(end);
       filters.push(`i.idle_start <= $${params.length}`);
     }
-    if (userId) {
-      params.push(parseTenantUserId(userId));
+    if (userId || !this.isAdmin(user)) {
+      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
       filters.push(`i.user_id = $${params.length}`);
     }
 
@@ -404,13 +547,58 @@ export class DataService {
     return result.rows;
   }
 
-  async listScreenshots(
+  private resolveScreenshotUserFilter(
+    user: ScopedAuthUser,
+    userId: string | undefined,
+    userIds: string[] | undefined,
+    allowedUserIds: string[] | null,
+    params: unknown[],
+    filters: string[],
+  ): void {
+    const assertAllowed = (id: string) => {
+      if (allowedUserIds && !allowedUserIds.includes(id)) {
+        throw new ForbiddenException('Insufficient permissions to view screenshots for this user');
+      }
+    };
+
+    if (userId) {
+      const scopedId = scopedPulseUserId(user, userId);
+      assertAllowed(scopedId);
+      params.push(parseTenantUserId(scopedId));
+      filters.push(`s.user_id = $${params.length}`);
+      return;
+    }
+
+    if (userIds?.length) {
+      const scopedIds = userIds.map((id) => scopedPulseUserId(user, id));
+      const filteredIds = allowedUserIds
+        ? scopedIds.filter((id) => allowedUserIds.includes(id))
+        : scopedIds;
+      if (!filteredIds.length) {
+        params.push([-1]);
+        filters.push(`s.user_id = ANY($${params.length}::int[])`);
+        return;
+      }
+      params.push(filteredIds.map((id) => parseTenantUserId(id)));
+      filters.push(`s.user_id = ANY($${params.length}::int[])`);
+      return;
+    }
+
+    if (allowedUserIds) {
+      params.push(allowedUserIds.map((id) => parseTenantUserId(id)));
+      filters.push(`s.user_id = ANY($${params.length}::int[])`);
+    }
+  }
+
+  private buildScreenshotFilters(
     user: ScopedAuthUser,
     start?: string,
     end?: string,
     userId?: string,
-    limit?: number,
-  ) {
+    userIds?: string[],
+    productivityFilter: ScreenshotProductivityFilter = 'all',
+    allowedUserIds: string[] | null = null,
+  ): { filters: string[]; params: unknown[] } {
     const scope = workspaceScope(user, 's');
     const params: unknown[] = [...scope.params];
     const filters: string[] = [scope.clause];
@@ -423,23 +611,206 @@ export class DataService {
       params.push(end);
       filters.push(`s.captured_at <= $${params.length}`);
     }
-    if (userId) {
-      params.push(parseTenantUserId(userId));
-      filters.push(`s.user_id = $${params.length}`);
-    }
 
-    const limitClause = limit
-      ? `LIMIT ${Math.max(1, Math.min(limit, 10000))}`
-      : 'LIMIT 10000';
+    this.resolveScreenshotUserFilter(user, userId, userIds, allowedUserIds, params, filters);
+
+    applyScreenshotProductivityFilter(filters, productivityFilter);
+
+    return { filters, params };
+  }
+
+  async countScreenshots(
+    user: ScopedAuthUser,
+    start?: string,
+    end?: string,
+    userId?: string,
+    userIds?: string[],
+    productivityFilter: ScreenshotProductivityFilter = 'all',
+  ): Promise<number> {
+    const allowedUserIds = await this.getAllowedScreenshotUserIds(user);
+    const { filters, params } = this.buildScreenshotFilters(
+      user,
+      start,
+      end,
+      userId,
+      userIds,
+      productivityFilter,
+      allowedUserIds,
+    );
+    const result = await this.database.query<{ total: string }>(
+      `SELECT COUNT(*)::text AS total
+       FROM time_doctor.screenshots s
+       WHERE ${filters.join(' AND ')}`,
+      params,
+    );
+    return Number(result.rows[0]?.total || 0);
+  }
+
+  async listScreenshots(
+    user: ScopedAuthUser,
+    start?: string,
+    end?: string,
+    userId?: string,
+    limit?: number,
+    offset?: number,
+    userIds?: string[],
+    productivityFilter: ScreenshotProductivityFilter = 'all',
+    sort: ScreenshotSort = 'newest',
+  ) {
+    const allowedUserIds = await this.getAllowedScreenshotUserIds(user);
+    const { filters, params } = this.buildScreenshotFilters(
+      user,
+      start,
+      end,
+      userId,
+      userIds,
+      productivityFilter,
+      allowedUserIds,
+    );
+    const pageLimit = limit ? Math.max(1, Math.min(limit, 10000)) : 10000;
+    const pageOffset = offset ? Math.max(0, offset) : 0;
+    const dataParams = [...params, pageLimit, pageOffset];
+    const orderBy = screenshotOrderByClause(sort);
 
     const result = await this.database.query(
       `SELECT s.*, s.user_id::text AS user_id
        FROM time_doctor.screenshots s
        WHERE ${filters.join(' AND ')}
-       ORDER BY s.captured_at DESC
-       ${limitClause}`,
+       ORDER BY ${orderBy}
+       LIMIT $${dataParams.length - 1}
+       OFFSET $${dataParams.length}`,
+      dataParams,
+    );
+    return this.s3.attachPresignedUrls(
+      result.rows.map((row) => {
+        // Meetings expect low input; floor activity so they are not labelled low activity.
+        const activityPercent = applyMeetingActivityFloor(
+          row.activity_percent,
+          row.app_name,
+          row.window_title,
+        );
+        return {
+          ...row,
+          activity_percent: activityPercent,
+          focus_percent: applyMeetingActivityFloor(
+            row.focus_percent,
+            row.app_name,
+            row.window_title,
+          ),
+          description: row.vision_summary ?? null,
+          ai_status: row.ai_analysis_status ?? 'pending',
+        };
+      }),
+    );
+  }
+
+  /**
+   * Midpoint deduction: a screenshot "owns" the interval from midpoint(prev, this) to
+   * midpoint(this, next), clamped to the session window and capped. Mirrors the desktop
+   * agent + sync controller so estimates match across surfaces.
+   */
+  private async computeScreenshotDeductionSeconds(screenshot: {
+    id: string;
+    time_log_id: string | null;
+    captured_at: string;
+  }): Promise<number> {
+    const MAX = 240;
+    if (!screenshot.time_log_id) return Math.min(200, MAX);
+
+    const tl = await this.database.query<{ start_time: string; end_time: string | null }>(
+      'SELECT start_time, end_time FROM time_doctor.time_logs WHERE id = $1 LIMIT 1',
+      [screenshot.time_log_id],
+    );
+    const timeLog = tl.rows[0];
+    if (!timeLog) return Math.min(200, MAX);
+
+    const neighbors = await this.database.query<{ captured_at: string }>(
+      `SELECT captured_at FROM time_doctor.screenshots
+       WHERE time_log_id = $1 AND id <> $2
+       ORDER BY captured_at ASC`,
+      [screenshot.time_log_id, screenshot.id],
+    );
+
+    const target = new Date(screenshot.captured_at).getTime();
+    let prev: number | null = null;
+    let next: number | null = null;
+    for (const row of neighbors.rows) {
+      const t = new Date(row.captured_at).getTime();
+      if (t < target) prev = t;
+      else if (t > target && next === null) next = t;
+    }
+
+    const start = new Date(timeLog.start_time).getTime();
+    const end = timeLog.end_time ? new Date(timeLog.end_time).getTime() : Date.now();
+    let intervalStart = prev !== null ? (prev + target) / 2 : start;
+    let intervalEnd = next !== null ? (target + next) / 2 : end;
+    intervalStart = Math.max(intervalStart, start);
+    intervalEnd = Math.min(intervalEnd, Math.max(end, target + 60000));
+    if (intervalEnd <= intervalStart) return Math.min(200, MAX);
+
+    const rawSeconds = Math.max(0, Math.round((intervalEnd - intervalStart) / 1000));
+    return Math.min(rawSeconds, MAX);
+  }
+
+  /**
+   * Delete a screenshot the caller is allowed to see (self/team/org, same workspace):
+   * removes the S3 object, deducts the owned interval from the parent session, and
+   * deletes the RDS row. Returns deleted=false when no accessible screenshot matches.
+   */
+  async deleteScreenshot(
+    user: ScopedAuthUser,
+    id: string,
+  ): Promise<{ deleted: boolean; deductedSeconds: number; timeLogId: string | null }> {
+    if (!id || typeof id !== 'string') {
+      return { deleted: false, deductedSeconds: 0, timeLogId: null };
+    }
+
+    const allowedUserIds = await this.getAllowedScreenshotUserIds(user);
+    const scope = workspaceScope(user, 's');
+    const params: unknown[] = [...scope.params];
+    const filters: string[] = [scope.clause];
+    params.push(id);
+    filters.push(`s.id = $${params.length}`);
+    if (allowedUserIds) {
+      params.push(allowedUserIds.map((uid) => parseTenantUserId(uid)));
+      filters.push(`s.user_id = ANY($${params.length}::int[])`);
+    }
+
+    const result = await this.database.query<{
+      id: string;
+      user_id: number;
+      time_log_id: string | null;
+      s3_key: string | null;
+      file_path: string | null;
+      captured_at: string;
+    }>(
+      `SELECT s.id, s.user_id, s.time_log_id, s.s3_key, s.file_path, s.captured_at
+       FROM time_doctor.screenshots s
+       WHERE ${filters.join(' AND ')}
+       LIMIT 1`,
       params,
     );
-    return this.s3.attachPresignedUrls(result.rows);
+    const screenshot = result.rows[0];
+    if (!screenshot) {
+      return { deleted: false, deductedSeconds: 0, timeLogId: null };
+    }
+
+    const deductedSeconds = await this.computeScreenshotDeductionSeconds(screenshot);
+
+    // Best-effort S3 removal; the RDS row is the source of truth.
+    await this.s3.deleteObject(screenshot.s3_key || screenshot.file_path);
+
+    if (screenshot.time_log_id && deductedSeconds > 0) {
+      await this.database.query(
+        `UPDATE time_doctor.time_logs
+         SET deducted_seconds = COALESCE(deducted_seconds, 0) + $1, updated_at = NOW()
+         WHERE id = $2`,
+        [deductedSeconds, screenshot.time_log_id],
+      );
+    }
+
+    await this.database.query('DELETE FROM time_doctor.screenshots WHERE id = $1', [screenshot.id]);
+
+    return { deleted: true, deductedSeconds, timeLogId: screenshot.time_log_id };
   }
 }

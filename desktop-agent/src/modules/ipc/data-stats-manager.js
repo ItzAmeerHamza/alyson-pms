@@ -110,31 +110,44 @@ class DataStatsManager {
    * Register all data/stats-related IPC handlers
    */
   registerHandlers() {
-    this.registerGetConfig();
-    this.registerGetStats();
-    // Enable enhanced screenshots handler – renderer calls 'fetch-screenshots-enhanced'
-    this.registerFetchScreenshotsEnhanced();
-    this.registerGetScreenshotActivity();
-    this.registerFetchScreenshots();
-    this.registerSetCurrentUserId();
-    this.registerGetUrlActivity();
-    this.registerGetUrlHistory();
-    this.registerGetAppHistory();
-    this.registerGetAppActivity();
-    this.registerGetTodayStats();
-    this.registerGetTodayScreenshots();
-    this.registerGetTodayActivityLog();
-    // Time analytics
-    this.registerGetWeeklyTimeStats();
-    this.registerGetMonthlyTimeStats();
-    this.registerGetDailyTimeBreakdown();
-    this.registerGetMonthlyReportData();
-    // Screenshot deletion with time deduction
-    this.registerEstimateScreenshotDeduction();
-    this.registerDeleteScreenshot();
-    // Test helpers
-    this.registerTestOpenAppDetection();
-    
+    // Register each handler independently: a failure in one must not prevent the
+    // rest (e.g. 'delete-screenshot') from being registered, otherwise the renderer
+    // gets "No handler registered for '<channel>'".
+    const registrations = [
+      ['get-config', () => this.registerGetConfig()],
+      ['get-stats', () => this.registerGetStats()],
+      // Enable enhanced screenshots handler – renderer calls 'fetch-screenshots-enhanced'
+      ['fetch-screenshots-enhanced', () => this.registerFetchScreenshotsEnhanced()],
+      ['get-screenshot-activity', () => this.registerGetScreenshotActivity()],
+      ['fetch-screenshots', () => this.registerFetchScreenshots()],
+      ['set-current-user-id', () => this.registerSetCurrentUserId()],
+      ['get-url-activity', () => this.registerGetUrlActivity()],
+      ['get-url-history', () => this.registerGetUrlHistory()],
+      ['get-app-history', () => this.registerGetAppHistory()],
+      ['get-app-activity', () => this.registerGetAppActivity()],
+      ['get-today-stats', () => this.registerGetTodayStats()],
+      ['get-today-screenshots', () => this.registerGetTodayScreenshots()],
+      ['get-today-activity-log', () => this.registerGetTodayActivityLog()],
+      // Time analytics
+      ['get-weekly-time-stats', () => this.registerGetWeeklyTimeStats()],
+      ['get-monthly-time-stats', () => this.registerGetMonthlyTimeStats()],
+      ['get-daily-time-breakdown', () => this.registerGetDailyTimeBreakdown()],
+      ['get-monthly-report-data', () => this.registerGetMonthlyReportData()],
+      // Screenshot deletion with time deduction
+      ['estimate-screenshot-deduction', () => this.registerEstimateScreenshotDeduction()],
+      ['delete-screenshot', () => this.registerDeleteScreenshot()],
+      // Test helpers
+      ['test-open-app-detection', () => this.registerTestOpenAppDetection()],
+    ];
+
+    for (const [channel, register] of registrations) {
+      try {
+        register();
+      } catch (err) {
+        console.error(`❌ [DataStatsManager] Failed to register '${channel}' handler:`, err?.message || err);
+      }
+    }
+
     console.log('✅ All data/stats IPC handlers registered');
   }
 
@@ -459,6 +472,18 @@ class DataStatsManager {
 
         console.log('[DELETE-EST] Estimating deduction for screenshot:', screenshotId);
 
+        // RDS + S3 deployment: estimate via the NestJS backend, not legacy Supabase.
+        const { usesBackendScreenshots, estimateDeductionViaBackend } = require('../utils/backend-screenshots');
+        if (usesBackendScreenshots(this.config)) {
+          const effectiveUserId =
+            this.global.currentUserId || this.config?.user_id || this.config?.userId;
+          const res = await estimateDeductionViaBackend(effectiveUserId, screenshotId, this.config);
+          if (res && res.success) {
+            return { success: true, deductedSeconds: res.deductedSeconds, capturedAt: res.capturedAt };
+          }
+          return { success: false, error: res?.error || 'Failed to estimate deduction' };
+        }
+
         const { estimateDeduction } = require('../utils/screenshot-deletion');
         const { deductedSeconds, screenshot } = await estimateDeduction({
           screenshotId,
@@ -495,6 +520,23 @@ class DataStatsManager {
       try {
         if (!screenshotId) {
           return { success: false, error: 'Missing screenshotId' };
+        }
+
+        const effectiveUserId =
+          this.global.currentUserId || this.config?.user_id || this.config?.userId;
+        if (!effectiveUserId) {
+          return { success: false, error: 'User not authenticated' };
+        }
+
+        // RDS + S3 deployment: delete via the NestJS backend (ownership enforced there),
+        // not legacy Supabase. The backend also deducts time and removes the S3 object.
+        const { usesBackendScreenshots, deleteScreenshotViaBackend } = require('../utils/backend-screenshots');
+        if (usesBackendScreenshots(this.config)) {
+          const res = await deleteScreenshotViaBackend(effectiveUserId, screenshotId, this.config);
+          if (res && res.success) {
+            return { success: true, deductedSeconds: res.deductedSeconds, timeLogId: res.timeLogId };
+          }
+          return { success: false, error: res?.error || 'Failed to delete screenshot' };
         }
 
         if (!this.config.user_id) {

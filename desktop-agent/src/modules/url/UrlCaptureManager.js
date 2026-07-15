@@ -4,6 +4,7 @@
  */
 
 const EventEmitter = require('events');
+const { noteMeetingContext } = require('../../lib/meeting-context');
 
 class UrlCaptureManager extends EventEmitter {
   constructor(config = {}) {
@@ -458,6 +459,19 @@ if (!this.config.enabled) {
         }
       }
       this.lastResult = result; // Store for adaptive polling
+
+      // Track video-meeting presence from the live (unfiltered) poll result so the
+      // screenshot activity floor still applies when the meeting is backgrounded.
+      // Meeting URLs are dropped from URL *logging* downstream, but must still count here.
+      if (result && (result.url || result.title)) {
+        try {
+          noteMeetingContext({
+            appName: result.browser || result.source || null,
+            windowTitle: result.title || null,
+            url: result.url || null,
+          });
+        } catch (_) {}
+      }
 
       if (result && result.url) {
         if (process.platform === 'win32' && process.env.LOG_URL_VERBOSE === 'true') {

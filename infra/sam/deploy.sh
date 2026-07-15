@@ -41,7 +41,7 @@ aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGI
   || aws ecr create-repository \
     --repository-name "$ECR_REPO" \
     --region "$AWS_REGION" \
-    --tags Key=team,Value="alyson PM"
+    --tags Key=team,Value="Alyson PM"
 
 echo "==> Docker login + build + push"
 aws ecr get-login-password --region "$AWS_REGION" \
@@ -58,6 +58,20 @@ echo "==> Pushed image tags: ${IMAGE_TAG}, latest"
 
 echo "==> SAM deploy (s3://${SAM_DEPLOY_BUCKET}/${SAM_DEPLOY_PREFIX}/)"
 cd "$SCRIPT_DIR"
+
+SQS_VPC_ENDPOINT_DNS="${SQS_VPC_ENDPOINT_DNS:-$(aws ec2 describe-vpc-endpoints \
+  --region "$AWS_REGION" \
+  --filters "Name=tag:aws:cloudformation:stack-name,Values=${STACK_NAME}" "Name=service-name,Values=com.amazonaws.${AWS_REGION}.sqs" \
+  --query 'VpcEndpoints[0].DnsEntries[?starts_with(DnsName, `vpce-`) == `true` && contains(DnsName, `.sqs.`) == `true`].DnsName | [0]' \
+  --output text 2>/dev/null || true)}"
+SQS_VPC_ENDPOINT_DNS="${SQS_VPC_ENDPOINT_DNS//None/}"
+if [[ -z "$SQS_VPC_ENDPOINT_DNS" ]]; then
+  echo "ERROR: Could not resolve SQS VPC endpoint DNS for stack ${STACK_NAME}."
+  echo "Set SQS_VPC_ENDPOINT_DNS in deploy.env or ensure the stack SQS endpoint exists."
+  exit 1
+fi
+echo "==> SQS VPC endpoint DNS: ${SQS_VPC_ENDPOINT_DNS} (Private DNS disabled; SDK-only)"
+
 sam deploy \
   --stack-name "$STACK_NAME" \
   --template-file template.yaml \
@@ -65,13 +79,12 @@ sam deploy \
   --s3-bucket "$SAM_DEPLOY_BUCKET" \
   --s3-prefix "$SAM_DEPLOY_PREFIX" \
   --resolve-image-repos \
-  --tags team="alyson PM" \
+  --tags team="Alyson PM" \
   --parameter-overrides \
     "ImageUri=${IMAGE_URI}" \
     "VpcSubnetIds=${VPC_SUBNET_IDS}" \
     "VpcSecurityGroupIds=${VPC_SECURITY_GROUP_IDS}" \
     "VpcId=${VPC_ID:-vpc-0b6659ffcf9d60888}" \
-    "CognitoEndpointSubnetIds=${COGNITO_ENDPOINT_SUBNET_IDS:-subnet-0ddb23264a678e2dc}" \
     "DatabaseHost=${DATABASE_HOST}" \
     "DatabaseName=${DATABASE_NAME}" \
     "DatabaseUser=${DATABASE_USER}" \
@@ -80,7 +93,12 @@ sam deploy \
     "AllowedOrigins=${ALLOWED_ORIGINS}" \
     "InternalApiKey=${INTERNAL_API_KEY}" \
     "CognitoUserPoolId=${COGNITO_USER_POOL_ID}" \
-    "CognitoClientId=${COGNITO_CLIENT_ID}"
+    "CognitoClientId=${COGNITO_CLIENT_ID}" \
+    "DeepseekApiKey=${DEEPSEEK_API_KEY:-}" \
+    "ScreenshotAiEnabled=${SCREENSHOT_AI_ENABLED:-false}" \
+    "ScreenshotAiBackfillBatchSize=${SCREENSHOT_AI_BACKFILL_BATCH_SIZE:-100}" \
+    "EnvironmentName=${ENVIRONMENT_NAME:-dev}" \
+    "SqsVpcEndpointDnsName=${SQS_VPC_ENDPOINT_DNS}"
 
 echo "==> Stack outputs"
 aws cloudformation describe-stacks \
@@ -88,5 +106,8 @@ aws cloudformation describe-stacks \
   --region "$AWS_REGION" \
   --query 'Stacks[0].Outputs' \
   --output table
+
+echo "==> Tag external resources (S3, ECR, RDS Proxy, security group)"
+bash "$SCRIPT_DIR/tag-resources.sh"
 
 echo "Test: curl https://<ApiEndpoint-from-output>/health"

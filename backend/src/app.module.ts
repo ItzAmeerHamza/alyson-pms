@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
 import { DataModule } from './data/data.module';
 import { PulseModule } from './pulse/pulse.module';
+import { ScreenshotAiModule } from './screenshot-ai/screenshot-ai.module';
+import { TimeDoctorModule } from './timedoctor/timedoctor.module';
 import { ForceSyncController } from './sync/force-sync.controller';
 import { HealthController } from './health/health.controller';
 
@@ -29,6 +31,8 @@ import { HealthController } from './health/health.controller';
     AuthModule,
     DataModule,
     PulseModule,
+    ScreenshotAiModule,
+    TimeDoctorModule,
   ],
   controllers: [ForceSyncController, HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

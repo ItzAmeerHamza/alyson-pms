@@ -1,6 +1,8 @@
-# SAM — Alyson Time Doctor API
+# SAM — Alyson Time Doctor API + Screenshot AI
 
-Deploys **API Gateway HTTP API → Lambda (container)** for the NestJS backend. Workers and EventBridge rules are phase 2 (add nested stacks or separate templates).
+Deploys **API Gateway HTTP API → Lambda (container)** for the NestJS backend, plus **SQS + AI worker/backfill Lambdas** for screenshot analysis.
+
+See **`SCREENSHOT_AI_SERVICES.md`** for the full list of AWS services used by the AI pipeline.
 
 ## Approved AWS names
 
@@ -11,7 +13,15 @@ Deploys **API Gateway HTTP API → Lambda (container)** for the NestJS backend. 
 | ECR repository | `alyson-time-doctor-api` |
 | Lambda logical ID (in template) | `AlysonTimeDoctorApiFunction` |
 | HTTP API logical ID (in template) | `AlysonTimeDoctorHttpApi` |
-| Resource tag | `team` = `alyson PM` |
+| Lambda logical ID (worker) | `ScreenshotAiWorkerFunction` |
+| Lambda logical ID (backfill) | `ScreenshotAiBackfillFunction` |
+| SQS main queue | `alyson-time-doctor-screenshot-ai-queue-{env}` |
+| SQS dead-letter queue | `alyson-time-doctor-screenshot-ai-dlq-{env}` |
+| Worker Lambda | `alyson-time-doctor-screenshot-ai-worker-{env}` |
+| Backfill Lambda | `alyson-time-doctor-screenshot-ai-backfill-{env}` |
+| Backfill schedule rule | `alyson-time-doctor-screenshot-ai-backfill-schedule-{env}` |
+| Environment suffix param | `EnvironmentName` = `dev` \| `staging` \| `prod` |
+| Resource tag | `team` = `Alyson PM` (all stack resources; Cognito + RDS instance excluded) |
 
 Do not use TimeFlow, Pulse, or timeflow names for new infra resources.
 
@@ -44,7 +54,7 @@ cd ../infra/sam
 sam deploy \
   --guided \
   --stack-name $STACK_NAME \
-  --tags team="alyson PM" \
+  --tags team="Alyson PM" \
   --parameter-overrides \
     ImageUri=ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/alyson-time-doctor-api:latest \
     VpcSubnetIds=subnet-aaa,subnet-bbb \
@@ -56,7 +66,18 @@ sam deploy \
     AllowedOrigins=https://your-web-app.example.com,http://localhost:8080
 ```
 
-`--tags team="alyson PM"` tags the CloudFormation stack; Lambda and HTTP API also get the tag from `template.yaml`.
+`--tags team="Alyson PM"` tags the CloudFormation stack; Lambda and HTTP API also get the tag from `template.yaml`.
+
+## Tag resources (without full deploy)
+
+```bash
+cd infra/sam
+source deploy.env   # AWS_ACCOUNT_ID, region, bucket, etc.
+bash tag-resources.sh
+```
+
+Tags: ECR, S3, RDS Proxy, Lambda security group, Lambda, API Gateway, CloudFormation stack.  
+Skips: Cognito User Pool, RDS PostgreSQL, Cognito VPC endpoint.
 
 ## Outputs
 

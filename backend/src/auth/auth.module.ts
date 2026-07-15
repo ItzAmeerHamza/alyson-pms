@@ -3,9 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './auth.guard';
+import { TdAuthGuard } from './td-auth.guard';
+import { ApiKeyGuard } from './api-key.guard';
 import { RolesGuard } from './roles.guard';
 import { CognitoService } from './cognito.service';
 import { AuthController } from './auth.controller';
+import { OAuthController } from './oauth.controller';
 import { CommonModule } from '../common/common.module';
 import { DatabaseModule } from '../database/database.module';
 
@@ -23,8 +26,8 @@ import { DatabaseModule } from '../database/database.module';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, AuthGuard, RolesGuard, CognitoService],
-  exports: [AuthService, AuthGuard, RolesGuard, CognitoService],
+  controllers: [AuthController, OAuthController],
+  providers: [AuthService, AuthGuard, TdAuthGuard, ApiKeyGuard, RolesGuard, CognitoService],
+  exports: [AuthService, AuthGuard, TdAuthGuard, RolesGuard, CognitoService, ApiKeyGuard],
 })
 export class AuthModule {} 

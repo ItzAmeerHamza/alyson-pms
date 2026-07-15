@@ -1,29 +1,25 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Alyson Time Doctor NestJS API — API Gateway HTTP API + Lambda (container image)
+Description: Alyson Time Doctor NestJS API + Screenshot AI pipeline (SQS worker)
 
 # Deploy stack name (you choose at sam deploy): alyson-time-doctor-api-dev
 # ECR repository name: alyson-time-doctor-api
-# Required resource tag on all supported services: team = alyson PM
+# Cost allocation tag on all pipeline resources: team = Alyson PM
 
 Parameters:
   ImageUri:
     Type: String
-    Description: ECR image URI for the API Lambda (Nest serverless-express handler)
+    Description: ECR image URI for Lambda functions (shared API + AI workers)
   VpcSubnetIds:
     Type: CommaDelimitedList
     Description: Private subnet IDs for Lambda (RDS Proxy access)
   VpcSecurityGroupIds:
     Type: CommaDelimitedList
-    Description: Security group(s) for Lambda — must allow egress to RDS Proxy
+    Description: Security group(s) for VPC Lambdas — RDS Proxy + SQS VPC endpoint access
   VpcId:
     Type: String
     Default: vpc-0b6659ffcf9d60888
-    Description: VPC for Lambda and interface endpoints (Cognito JWKS)
-  CognitoEndpointSubnetIds:
-    Type: CommaDelimitedList
-    Default: subnet-0ddb23264a678e2dc
-    Description: Subnet(s) for Cognito IDP VPC endpoint (must be AZs that support cognito-idp, e.g. us-west-2c not 2d)
+    Description: VPC for SQS interface endpoint (API + backfill Lambdas)
   DatabaseHost:
     Type: String
     Description: RDS Proxy hostname
@@ -39,7 +35,7 @@ Parameters:
     Description: Prefer Secrets Manager in production; parameter for dev only
   S3BucketName:
     Type: String
-    Description: Private screenshots bucket
+    Description: Private screenshots bucket (existing — not created by this stack)
   S3Prefix:
     Type: String
     Default: alyson-td-screenshots
@@ -60,6 +56,31 @@ Parameters:
   CognitoClientId:
     Type: String
     Description: Cognito app client id
+  DeepseekApiKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: DeepSeek API key for screenshot vision analysis (worker Lambda only)
+  ScreenshotAiEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Enable SQS enqueue on upload and scheduled backfill
+  ScreenshotAiBackfillBatchSize:
+    Type: String
+    Default: '100'
+    Description: Max pending screenshots enqueued per backfill run
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment suffix for alyson-time-doctor resource names (dev, staging, prod)
+  SqsVpcEndpointDnsName:
+    Type: String
+    Description: Regional VPC endpoint DNS hostname (vpce-*.sqs.REGION.vpce.amazonaws.com). Required for VPC Lambdas when PrivateDnsEnabled is false.
+
+Conditions:
+  ScreenshotAiEnabled: !Equals [!Ref ScreenshotAiEnabled, 'true']
 
 Globals:
   Function:
@@ -68,36 +89,154 @@ Globals:
     Architectures:
       - arm64
     Tags:
-      team: alyson PM
+      team: Alyson PM
 
 Resources:
-  CognitoIdpEndpointSecurityGroup:
+  # --- Screenshot AI pipeline (SQS + worker + backfill cron) ---
+  # No NAT: worker Lambda runs outside VPC (DeepSeek + S3). API/backfill use SQS VPC endpoint + RDS in VPC.
+  # Private DNS disabled — do not hijack sqs.REGION.amazonaws.com for the shared VPC; SDK uses SQS_VPC_ENDPOINT_URL.
+  # No Cognito VPC endpoint — breaks Palisade EC2 login (ManagedLogin + PrivateLink).
+
+  SqsEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Alyson Time Doctor API - Cognito IDP VPC endpoint ingress
+      GroupDescription: Alyson Time Doctor - SQS VPC endpoint ingress from VPC Lambdas
       VpcId: !Ref VpcId
       Tags:
         - Key: team
-          Value: alyson PM
+          Value: Alyson PM
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Select [0, !Ref VpcSecurityGroupIds]
 
-  CognitoIdpVpcEndpoint:
+  SqsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcEndpointType: Interface
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.cognito-idp
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.sqs
       VpcId: !Ref VpcId
-      SubnetIds: !Ref CognitoEndpointSubnetIds
+      SubnetIds: !Ref VpcSubnetIds
       SecurityGroupIds:
-        - !Ref CognitoIdpEndpointSecurityGroup
-      PrivateDnsEnabled: true
+        - !Ref SqsEndpointSecurityGroup
+      PrivateDnsEnabled: false
       Tags:
         - Key: team
-          Value: alyson PM
+          Value: Alyson PM
+
+  ScreenshotAiDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'alyson-time-doctor-screenshot-ai-dlq-${EnvironmentName}'
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: team
+          Value: Alyson PM
+
+  ScreenshotAiQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'alyson-time-doctor-screenshot-ai-queue-${EnvironmentName}'
+      VisibilityTimeout: 360
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ScreenshotAiDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: team
+          Value: Alyson PM
+
+  ScreenshotAiWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-screenshot-ai-worker-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/screenshot-ai-worker-handler.handler
+      Timeout: 300
+      MemorySize: 1024
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          AWS_S3_SCREENSHOTS_BUCKET: !Ref S3BucketName
+          AWS_S3_SCREENSHOTS_PREFIX: !Ref S3Prefix
+          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
+          SCREENSHOT_AI_API_BASE_URL: !Sub 'https://${AlysonTimeDoctorHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+          INTERNAL_API_KEY: !Ref InternalApiKey
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref S3BucketName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - rekognition:DetectText
+                - rekognition:DetectLabels
+              Resource: '*'
+      Events:
+        ScreenshotAiQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ScreenshotAiQueue.Arn
+            BatchSize: 1
+            Enabled: true
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  ScreenshotAiBackfillFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-screenshot-ai-backfill-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/screenshot-ai-backfill-handler.handler
+      Timeout: 120
+      MemorySize: 512
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DATABASE_HOST: !Ref DatabaseHost
+          DATABASE_NAME: !Ref DatabaseName
+          DATABASE_USER: !Ref DatabaseUser
+          DATABASE_PASSWORD: !Ref DatabasePassword
+          DATABASE_SSL: 'true'
+          DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+          DATABASE_POOL_MAX: '2'
+          SCREENSHOT_AI_QUEUE_URL: !Ref ScreenshotAiQueue
+          SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
+          SCREENSHOT_AI_BACKFILL_BATCH_SIZE: !Ref ScreenshotAiBackfillBatchSize
+          SQS_VPC_ENDPOINT_URL: !Sub 'https://${SqsVpcEndpointDnsName}'
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ScreenshotAiQueue.QueueName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: '*'
+      Events:
+        BackfillSchedule:
+          Type: Schedule
+          Properties:
+            Name: !Sub 'alyson-time-doctor-screenshot-ai-backfill-schedule-${EnvironmentName}'
+            Schedule: rate(5 minutes)
+            Enabled: !If [ScreenshotAiEnabled, true, false]
+            Description: Alyson Time Doctor - enqueue pending screenshots for AI analysis
 
   AlysonTimeDoctorApiFunction:
     Type: AWS::Serverless::Function
@@ -105,7 +244,7 @@ Resources:
       PackageType: Image
       ImageUri: !Ref ImageUri
       Tags:
-        team: alyson PM
+        team: Alyson PM
       Environment:
         Variables:
           NODE_ENV: production
@@ -125,12 +264,17 @@ Resources:
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
           COGNITO_CLIENT_ID: !Ref CognitoClientId
           DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+          SCREENSHOT_AI_QUEUE_URL: !Ref ScreenshotAiQueue
+          SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
+          SQS_VPC_ENDPOINT_URL: !Sub 'https://${SqsVpcEndpointDnsName}'
       VpcConfig:
         SubnetIds: !Ref VpcSubnetIds
         SecurityGroupIds: !Ref VpcSecurityGroupIds
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref S3BucketName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ScreenshotAiQueue.QueueName
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -182,3 +326,15 @@ Outputs:
   ApiFunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt AlysonTimeDoctorApiFunction.Arn
+  ScreenshotAiQueueUrl:
+    Description: SQS queue URL for screenshot AI jobs
+    Value: !Ref ScreenshotAiQueue
+  ScreenshotAiWorkerFunctionArn:
+    Description: Screenshot AI worker Lambda ARN
+    Value: !GetAtt ScreenshotAiWorkerFunction.Arn
+  ScreenshotAiBackfillFunctionArn:
+    Description: Screenshot AI backfill Lambda ARN
+    Value: !GetAtt ScreenshotAiBackfillFunction.Arn
+  SqsVpcEndpointDnsName:
+    Description: Regional SQS VPC endpoint DNS (Private DNS disabled — app SDK only)
+    Value: !Ref SqsVpcEndpointDnsName

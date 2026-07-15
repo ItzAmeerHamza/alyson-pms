@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthService } from './auth.service';
+import { AuthService, User } from './auth.service';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
@@ -16,33 +16,51 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Check if route is marked as public
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-
     if (isPublic) {
       return true;
     }
 
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
-
-    if (!authHeader) {
-      throw new UnauthorizedException('Authorization header missing');
-    }
-
     try {
-      const token = this.authService.extractTokenFromHeader(authHeader);
-      const user = await this.authService.getUserFromToken(token);
-      
-      // Attach user to request for use in controllers
-      request.user = user;
-      
+      request.user = await this.resolveUser(request);
       return true;
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       throw new UnauthorizedException('Invalid authentication');
     }
   }
-} 
+
+  private async resolveUser(request: {
+    headers: Record<string, unknown>;
+    query?: Record<string, unknown>;
+  }): Promise<User> {
+    const xAuth = request.headers['x-auth-token'];
+    if (typeof xAuth === 'string' && xAuth.trim()) {
+      return this.authService.getUserFromAppToken(xAuth.trim());
+    }
+
+    const queryToken = request.query?.access_token;
+    if (typeof queryToken === 'string' && queryToken.trim()) {
+      return this.authService.getUserFromAppToken(queryToken.trim());
+    }
+
+    const authHeader = request.headers.authorization;
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      try {
+        return await this.authService.getUserFromToken(token);
+      } catch {
+        // Not a valid Cognito id token — try a Palisade app token in the Bearer slot.
+        return this.authService.getUserFromAppToken(token);
+      }
+    }
+
+    throw new UnauthorizedException('Authentication token missing');
+  }
+}

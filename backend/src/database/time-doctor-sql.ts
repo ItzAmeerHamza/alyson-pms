@@ -19,6 +19,33 @@ export const TRACKABLE_PULSE_ROLES = [
 
 export const TRACKABLE_PULSE_ROLES_SQL = `ext.pulse_role IN ('employee', 'team_leader', 'admin', 'manager')`;
 
+export function isPulseAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>): boolean {
+  return Boolean(
+    user.is_super_admin || user.role === 'admin' || user.role === 'manager',
+  );
+}
+
+/** Admin or super-admin — org-wide Pulse access (all employees). */
+export function isPulseOrgAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>): boolean {
+  return Boolean(user.is_super_admin || user.role === 'admin');
+}
+
+/** Manager or team lead — may view direct reports. */
+export function isPulseTeamManager(user: Pick<ScopedAuthUser, 'role'>): boolean {
+  return user.role === 'manager' || user.role === 'team_leader';
+}
+
+/** Non-admins may only access their own tenant.user id. */
+export function scopedPulseUserId(
+  user: ScopedAuthUser,
+  requestedUserId?: string,
+): string {
+  if (isPulseAdmin(user)) {
+    return requestedUserId ?? user.id;
+  }
+  return user.id;
+}
+
 /** Scope queries to a workspace (organization_id in JWT = tenant.workspace.id). */
 export function workspaceScope(
   user: ScopedAuthUser,

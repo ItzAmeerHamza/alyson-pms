@@ -1,9 +1,12 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
+  HttpCode,
   NotFoundException,
   Param,
+  Post,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -22,6 +25,27 @@ export class AuthController {
     }
     const token = this.authService.extractTokenFromHeader(authorization);
     return this.authService.getAuthProfile(token);
+  }
+
+  /**
+   * Palisade-style login. Send the Cognito id token (Authorization: Bearer <idToken>
+   * or body { idToken }); receive an app token to use as x-auth-token / access_token.
+   */
+  @Public()
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
+  @Post('token')
+  @HttpCode(200)
+  async issueToken(
+    @Headers('authorization') authorization?: string,
+    @Body() body?: { idToken?: string },
+  ) {
+    const cognitoToken = authorization
+      ? this.authService.extractTokenFromHeader(authorization)
+      : body?.idToken?.trim();
+    if (!cognitoToken) {
+      throw new UnauthorizedException('Cognito id token is required');
+    }
+    return this.authService.issueAppToken(cognitoToken);
   }
 
   @Public()

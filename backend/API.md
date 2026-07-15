@@ -26,6 +26,15 @@ All require `admin` or `manager` role.
 | GET | `/pulse/dashboard?days=7` | Dashboard | Total hours, active/offline users, avg activity %, daily breakdown |
 | GET | `/pulse/daily-hours?start=YYYY-MM-DD&end=YYYY-MM-DD` | Daily Hours | Employee × day grid with `below_threshold` flags |
 | GET | `/pulse/activity-levels?start=YYYY-MM-DD&end=YYYY-MM-DD` | Activity Levels | Per-employee daily scores (`high` / `medium` / `low`) |
+| GET | `/pulse/activity-summary?start=YYYY-MM-DD&end=YYYY-MM-DD` | Activity Summary | Per-employee screenshots, clicks, keystrokes, cursor movements |
+| GET | `/pulse/not-tracking` | Not Tracking | Employees with zero hours yesterday and/or today |
+| GET | `/pulse/ai-insights?start=YYYY-MM-DD&end=YYYY-MM-DD` | Activity Report (AI tab) | Per-employee AI descriptions and activity types from screenshots |
+| GET | `/pulse/ai-analysis/status` | — | Screenshot AI pipeline counts by status |
+| POST | `/pulse/ai-analysis/backfill` | — | Enqueue pending historical screenshots |
+| POST | `/pulse/ai-analysis/retry-failed` | — | Reset failed jobs and re-enqueue |
+| POST | `/sync/screenshot-ai/claim` | x-api-key | Worker: mark screenshot processing |
+| POST | `/sync/screenshot-ai/complete` | x-api-key | Worker: persist AI analysis result |
+| POST | `/sync/screenshot-ai/fail` | x-api-key | Worker: record failure + retry hint |
 | GET | `/pulse/team` | Team Management | Leads + direct reports + weekly hours |
 | GET | `/pulse/settings` | — | Org thresholds (`hours_threshold` default 7h) |
 | GET | `/pulse/low-hours?date=YYYY-MM-DD` | Email Reporting | Employees below threshold |

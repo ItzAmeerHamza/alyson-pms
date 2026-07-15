@@ -10,6 +10,11 @@ const { debounce } = require('../utils/debounce');
 const { createFeatureLogger } = require('../utils/logger');
 const { resolveSupabaseClient } = require('../utils/session-recovery');
 const { uploadScreenshotBuffer } = require('../utils/screenshot-storage');
+const {
+  MEETING_ACTIVITY_FLOOR_PERCENT,
+  noteMeetingContext,
+  getRecentMeetingLabel,
+} = require('../../lib/meeting-context');
 
 const log = createFeatureLogger('SCREEN');
 
@@ -882,56 +887,16 @@ class EnhancedScreenshotManager {
                 } catch (err) {
                   console.error(`❌ [SCREENSHOT-ACTIVITY] Failed to get activity data:`, err.message);
                 }
-// Calculate focus percentage using weighted tiered formula
-                const keyboardWeight = 2;
-                const clickWeight = 1.5;
-                const moveWeight = 0.1;
-                const weightedActivity = (activityData.keys * keyboardWeight) + (activityData.clicks * clickWeight) + (activityData.moves * moveWeight);
-                
-                // Continuous tiered formula - coefficients ensure smooth transitions at boundaries
-                let focusPercent = 0;
-                if (weightedActivity === 0) {
-                  focusPercent = 0;
-                } else if (weightedActivity < 5) {
-                  focusPercent = Math.min(25, weightedActivity * 5);
-                } else if (weightedActivity < 20) {
-                  // Coefficient 7/3 ensures continuity: 25 + 15*(7/3) = 60 at w=20
-                  focusPercent = Math.min(60, 25 + (weightedActivity - 5) * (7/3));
-                } else if (weightedActivity < 50) {
-                  // Coefficient 5/6 ensures continuity: 60 + 30*(5/6) = 85 at w=50
-                  focusPercent = Math.min(85, 60 + (weightedActivity - 20) * (5/6));
-                } else {
-                  focusPercent = Math.min(100, 85 + (weightedActivity - 50) * 0.3);
-                }
-                const activityPercent = focusPercent;
 
+                const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
+                const { activityPercent, focusPercent } = this._resolveScreenshotActivity(
+                  activityData,
+                  appName,
+                  windowTitle,
+                  url
+                );
 
-                // Get current app and window info
-                let appName = null;
-                let windowTitle = null;
-try {
-                  if (global.platformManager?.detectActiveApplication) {
-                    // FIX: Add 5 second timeout to prevent app detection from blocking screenshot upload
-                    const APP_DETECT_TIMEOUT = 5000;
-                    const timeoutPromise = new Promise((_, reject) => 
-                      setTimeout(() => reject(new Error('App detection timeout')), APP_DETECT_TIMEOUT)
-                    );
-                    const appData = await Promise.race([
-                      global.platformManager.detectActiveApplication(),
-                      timeoutPromise
-                    ]).catch(e => {
-                      console.warn(`⚠️ [SCREENSHOT-APP] App detection timed out or failed: ${e.message}`);
-                      return null;
-                    });
-                    if (appData) {
-                      appName = appData.appName || appData.name || null;
-                      windowTitle = appData.windowTitle || appData.title || null;
-                    }
-                  }
-                } catch (err) {
-                  console.error(`⚠️ [SCREENSHOT-APP] Failed to get app data:`, err.message);
-                }
-const uploadResult = await uploadScreenshotBuffer({
+                const uploadResult = await uploadScreenshotBuffer({
                   supabase,
                   buffer: result.buffer,
                   userId,
@@ -1093,52 +1058,15 @@ if (uploadResult?.id) {
                   console.error(`❌ [SCREENSHOT-ACTIVITY] Failed to get activity data:`, err.message);
                 }
 
-                const keyboardWeight = 2;
-                const clickWeight = 1.5;
-                const moveWeight = 0.1;
-                const weightedActivity = (activityData.keys * keyboardWeight) + (activityData.clicks * clickWeight) + (activityData.moves * moveWeight);
-                
-                let focusPercent = 0;
-                if (weightedActivity === 0) {
-                  focusPercent = 0;
-                } else if (weightedActivity < 5) {
-                  focusPercent = Math.min(25, weightedActivity * 5);
-                } else if (weightedActivity < 20) {
-                  focusPercent = Math.min(60, 25 + (weightedActivity - 5) * (7/3));
-                } else if (weightedActivity < 50) {
-                  focusPercent = Math.min(85, 60 + (weightedActivity - 20) * (5/6));
-                } else {
-                  focusPercent = Math.min(100, 85 + (weightedActivity - 50) * 0.3);
-                }
-                const activityPercent = focusPercent;
+                const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
+                const { activityPercent, focusPercent } = this._resolveScreenshotActivity(
+                  activityData,
+                  appName,
+                  windowTitle,
+                  url
+                );
 
-
-                // Get current app and window info
-                let appName = null;
-                let windowTitle = null;
-try {
-                  if (global.platformManager?.detectActiveApplication) {
-                    // FIX: Add 5 second timeout to prevent app detection from blocking screenshot upload
-                    const APP_DETECT_TIMEOUT = 5000;
-                    const timeoutPromise = new Promise((_, reject) => 
-                      setTimeout(() => reject(new Error('App detection timeout')), APP_DETECT_TIMEOUT)
-                    );
-                    const appData = await Promise.race([
-                      global.platformManager.detectActiveApplication(),
-                      timeoutPromise
-                    ]).catch(e => {
-                      console.warn(`⚠️ [SCREENSHOT-APP] App detection timed out or failed: ${e.message}`);
-                      return null;
-                    });
-                    if (appData) {
-                      appName = appData.appName || appData.name || null;
-                      windowTitle = appData.windowTitle || appData.title || null;
-                    }
-                  }
-                } catch (err) {
-                  console.error(`⚠️ [SCREENSHOT-APP] Failed to get app data:`, err.message);
-                }
-const uploadResult = await uploadScreenshotBuffer({
+                const uploadResult = await uploadScreenshotBuffer({
                   supabase,
                   buffer: result.buffer,
                   userId,
@@ -2085,6 +2013,99 @@ if (uploadResult?.id) {
 
     // Log AFTER reset
     console.log(`✅ [ACTIVITY-RESET] AFTER reset - per-screenshot counters should be zero, totals preserved`);
+  }
+
+  /**
+   * Resolve activity % for a screenshot, applying video-meeting productive floor.
+   */
+  _resolveScreenshotActivity(activityData, appName, windowTitle, url = null) {
+    const keyboardWeight = 2;
+    const clickWeight = 1.5;
+    const moveWeight = 0.1;
+    const weightedActivity =
+      (activityData.keys * keyboardWeight) +
+      (activityData.clicks * clickWeight) +
+      (activityData.moves * moveWeight);
+
+    let focusPercent = 0;
+    if (weightedActivity === 0) {
+      focusPercent = 0;
+    } else if (weightedActivity < 5) {
+      focusPercent = Math.min(25, weightedActivity * 5);
+    } else if (weightedActivity < 20) {
+      focusPercent = Math.min(60, 25 + (weightedActivity - 5) * (7 / 3));
+    } else if (weightedActivity < 50) {
+      focusPercent = Math.min(85, 60 + (weightedActivity - 20) * (5 / 6));
+    } else {
+      focusPercent = Math.min(100, 85 + (weightedActivity - 50) * 0.3);
+    }
+
+    // Include the active tab URL: browser video calls (Google Meet, Teams, etc.)
+    // often have a window title that is just the meeting name, so the only reliable
+    // signal is the URL (e.g. meet.google.com/xxx-xxxx-xxx).
+    const context = { appName, windowTitle, url };
+    // Refresh "recently in a meeting" state whenever this frame's context is a meeting.
+    let meetingLabel = noteMeetingContext(context);
+    // Fall back to the grace window: meetings are frequently backgrounded while the
+    // user focuses/shares another window, so the meeting isn't the foreground context.
+    if (!meetingLabel) {
+      meetingLabel = getRecentMeetingLabel();
+    }
+
+    const activityPercent = meetingLabel
+      ? Math.max(Number(focusPercent) || 0, MEETING_ACTIVITY_FLOOR_PERCENT)
+      : focusPercent;
+
+    if (meetingLabel && activityPercent !== focusPercent) {
+      console.log(
+        `📹 [MEETING-ACTIVITY] ${meetingLabel} — activity ${activityPercent}% (input was ${focusPercent}%)`
+      );
+    } else if (meetingLabel) {
+      console.log(`📹 [MEETING-ACTIVITY] ${meetingLabel} — activity ${activityPercent}%`);
+    }
+
+    return { activityPercent, focusPercent: activityPercent };
+  }
+
+  async _detectActiveAppForScreenshot() {
+    let appName = null;
+    let windowTitle = null;
+    let url = null;
+    let isBrowser = false;
+
+    try {
+      if (global.platformManager?.detectActiveApplication) {
+        const APP_DETECT_TIMEOUT = 5000;
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('App detection timeout')), APP_DETECT_TIMEOUT)
+        );
+        const appData = await Promise.race([
+          global.platformManager.detectActiveApplication(),
+          timeoutPromise,
+        ]).catch((e) => {
+          console.warn(`⚠️ [SCREENSHOT-APP] App detection timed out or failed: ${e.message}`);
+          return null;
+        });
+        if (appData) {
+          appName = appData.appName || appData.name || null;
+          windowTitle = appData.windowTitle || appData.title || null;
+          isBrowser = Boolean(appData.isBrowser);
+        }
+      }
+    } catch (err) {
+      console.error(`⚠️ [SCREENSHOT-APP] Failed to get app data:`, err.message);
+    }
+
+    // When a browser is foreground, the URL poller's last result is the current tab.
+    // This exposes web meetings (e.g. meet.google.com) whose window title is only the
+    // meeting name and would otherwise not be recognized as a meeting.
+    try {
+      if (isBrowser && global.urlCaptureManager?.lastResult?.url) {
+        url = global.urlCaptureManager.lastResult.url;
+      }
+    } catch (_) {}
+
+    return { appName, windowTitle, url };
   }
 
   /**

@@ -14,7 +14,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
-import { DataService } from './data.service';
+import { isPulseAdmin } from '../database/time-doctor-sql';
+import {
+  DataService,
+  normalizeScreenshotProductivityFilter,
+  normalizeScreenshotSort,
+} from './data.service';
 
 @Controller('data')
 @UseGuards(AuthGuard)
@@ -22,7 +27,7 @@ export class DataController {
   constructor(private readonly dataService: DataService) {}
 
   private ensureAdmin(user: any) {
-    if (!(user?.is_super_admin || user?.role === 'admin' || user?.role === 'manager')) {
+    if (!isPulseAdmin(user)) {
       throw new ForbiddenException('Admin or manager role required');
     }
   }
@@ -44,6 +49,12 @@ export class DataController {
       email_confirmed_at: new Date().toISOString(),
       agent_version: byUserId.get(row.id) || null,
     }));
+  }
+
+  /** Users visible in the screenshots gallery for the current role (self, team, or org). */
+  @Get('screenshot-users')
+  async screenshotUsers(@Req() req: { user: any }) {
+    return this.dataService.listScreenshotUsers(req.user);
   }
 
   @Get('projects')
@@ -197,10 +208,21 @@ export class DataController {
     @Query('start') start?: string,
     @Query('end') end?: string,
     @Query('userId') userId?: string,
+    @Query('userIds') userIdsRaw?: string,
     @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('includeTotal') includeTotal?: string,
+    @Query('productivity') productivity?: string,
+    @Query('sort') sort?: string,
   ) {
+    const userIds = userIdsRaw
+      ? userIdsRaw
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : undefined;
     const hasDateRange = Boolean(start || end);
-    if (!hasDateRange && !userId) {
+    if (!hasDateRange && !userId && !userIds?.length) {
       throw new BadRequestException(
         'userId is required when no date range (start/end) is provided',
       );
@@ -208,13 +230,52 @@ export class DataController {
     if ((start && !end) || (!start && end)) {
       throw new BadRequestException('Both start and end are required for date filtering');
     }
-    return this.dataService.listScreenshots(
+    if (userId && userIds?.length) {
+      throw new BadRequestException('Use either userId or userIds, not both');
+    }
+    const parsedLimit = limit ? Number(limit) : undefined;
+    const parsedOffset = offset ? Number(offset) : undefined;
+    const productivityFilter = normalizeScreenshotProductivityFilter(productivity);
+    const sortBy = normalizeScreenshotSort(sort);
+    const rows = await this.dataService.listScreenshots(
       req.user,
       start,
       end,
       userId,
-      limit ? Number(limit) : undefined,
+      parsedLimit,
+      parsedOffset,
+      userIds,
+      productivityFilter,
+      sortBy,
     );
+    if (includeTotal === '1' || includeTotal === 'true') {
+      const total = await this.dataService.countScreenshots(
+        req.user,
+        start,
+        end,
+        userId,
+        userIds,
+        productivityFilter,
+      );
+      return {
+        items: rows,
+        total,
+        limit: parsedLimit ?? 10000,
+        offset: parsedOffset ?? 0,
+      };
+    }
+    return rows;
+  }
+
+  @Delete('screenshots/:id')
+  async deleteScreenshot(@Req() req: { user: any }, @Param('id') id: string) {
+    const result = await this.dataService.deleteScreenshot(req.user, id);
+    if (!result.deleted) throw new NotFoundException('Screenshot not found');
+    return {
+      success: true,
+      deductedSeconds: result.deductedSeconds,
+      timeLogId: result.timeLogId,
+    };
   }
 
   @Delete('users/:id')

@@ -138,6 +138,63 @@ async function fetchScreenshotsViaInternalApi(userId, config, opts = {}) {
   }
 }
 
+/** POST a screenshot action to the NestJS internal desktop-action endpoint. */
+async function postScreenshotAction(action, payload, config) {
+  const sync = resolveDesktopSync(config);
+  if (!sync) return { success: false, error: 'Backend sync not configured' };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(sync.syncUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': sync.apiKey,
+      },
+      body: JSON.stringify({ action, data: payload }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    if (!res.ok) {
+      const msg = body?.message || body?.error || `HTTP ${res.status}`;
+      console.warn(`[BACKEND-SCREENSHOTS] ${action} failed:`, res.status, String(msg).slice(0, 200));
+      return { success: false, error: typeof msg === 'string' ? msg : `HTTP ${res.status}` };
+    }
+    return body || { success: true };
+  } catch (err) {
+    clearTimeout(timer);
+    console.warn(`[BACKEND-SCREENSHOTS] ${action} error:`, err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/** Estimate time deduction for a screenshot via the backend (RDS). */
+async function estimateDeductionViaBackend(userId, screenshotId, config) {
+  return postScreenshotAction(
+    'estimate_screenshot_deduction',
+    { user_id: userId, screenshot_id: screenshotId },
+    config,
+  );
+}
+
+/** Delete a screenshot (and deduct time) via the backend (RDS + S3). */
+async function deleteScreenshotViaBackend(userId, screenshotId, config) {
+  return postScreenshotAction(
+    'delete_screenshot',
+    { user_id: userId, screenshot_id: screenshotId },
+    config,
+  );
+}
+
 /**
  * Fetch screenshots from NestJS + RDS (presigned S3 image_url on each row).
  */
@@ -243,6 +300,8 @@ module.exports = {
   fetchScreenshotsFromBackend,
   fetchTodayScreenshotsFromBackend,
   usesBackendScreenshots,
+  estimateDeductionViaBackend,
+  deleteScreenshotViaBackend,
   loadDesktopSession,
   applyActivityFilter,
   buildEnhancedResponse,

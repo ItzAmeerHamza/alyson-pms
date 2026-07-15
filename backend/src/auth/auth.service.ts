@@ -1,5 +1,6 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { DatabaseService } from '../database/database.service';
 import {
   parseTenantUserId,
@@ -35,6 +36,36 @@ export interface AuthProfileResponse {
   organization: OrganizationSummary | null;
 }
 
+/**
+ * Payload carried by the Palisade app token (x-auth-token / access_token).
+ * Palisade signs `{ id: <tenant.user.id> }`; we also accept `sub` for tokens
+ * minted by this backend's own /auth/token endpoint.
+ */
+export interface AppTokenPayload {
+  id?: string | number;
+  sub?: string;
+  email?: string | null;
+}
+
+export interface AppTokenResponse {
+  /** Palisade-style field name for the access token. */
+  token: string;
+  /** OAuth-style alias for the same access token. */
+  access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: string;
+  user: User;
+  organization: OrganizationSummary | null;
+}
+
+export interface RefreshTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: 'Bearer';
+  expires_in: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -43,6 +74,7 @@ export class AuthService {
     private configService: ConfigService,
     private databaseService: DatabaseService,
     private cognitoService: CognitoService,
+    private jwtService: JwtService,
   ) {}
 
   async getAuthProfile(token: string): Promise<AuthProfileResponse> {
@@ -84,6 +116,115 @@ export class AuthService {
       : null;
 
     return { user, organization };
+  }
+
+  /**
+   * Palisade-style login: verify a Cognito id token once, then mint our own
+   * app JWT that clients send back on every request (x-auth-token / access_token).
+   */
+  async issueAppToken(cognitoToken: string): Promise<AppTokenResponse> {
+    if (!this.databaseService.isEnabled()) {
+      throw new UnauthorizedException('Database not configured');
+    }
+    if (!this.cognitoService.isEnabled()) {
+      throw new UnauthorizedException('Cognito not configured');
+    }
+    const { user, organization } = await this.getProfileFromCognitoToken(cognitoToken);
+    const token = await this.signAccessToken(user.id, user.email);
+    const refreshToken = await this.signRefreshToken(user.id, user.email);
+    return {
+      token,
+      access_token: token,
+      refresh_token: refreshToken,
+      token_type: 'Bearer',
+      expires_in: this.accessTokenTtl(),
+      user,
+      organization,
+    };
+  }
+
+  /**
+   * OAuth-style refresh (POST /oauth/v2/token, grant_type=refresh_token). Verifies the
+   * refresh token and returns a new access token, matching what Alyson HR expects.
+   */
+  async refreshAppToken(refreshToken: string): Promise<RefreshTokenResponse> {
+    let payload: AppTokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<AppTokenPayload>(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    const rawId = payload?.id ?? payload?.sub;
+    if (rawId === undefined || rawId === null || String(rawId).trim() === '') {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    const user = await this.getUserById(String(rawId));
+    if (!user) {
+      throw new UnauthorizedException('Account not found');
+    }
+    return {
+      access_token: await this.signAccessToken(user.id, user.email),
+      refresh_token: await this.signRefreshToken(user.id, user.email),
+      token_type: 'Bearer',
+      expires_in: this.accessTokenTtl(),
+    };
+  }
+
+  private accessTokenTtl(): string {
+    return this.configService.get<string>('JWT_EXPIRES_IN', '1d');
+  }
+
+  private async signAccessToken(userId: string, email?: string | null): Promise<string> {
+    // Match Palisade's payload shape so access tokens are interchangeable across backends.
+    const payload: AppTokenPayload = { id: userId, email };
+    return this.jwtService.signAsync(payload);
+  }
+
+  private async signRefreshToken(userId: string, email?: string | null): Promise<string> {
+    const payload: AppTokenPayload & { typ: string } = { id: userId, email, typ: 'refresh' };
+    return this.jwtService.signAsync(payload, {
+      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '30d'),
+    });
+  }
+
+  /**
+   * Verify a Palisade-compatible app JWT (x-auth-token / access_token) and resolve
+   * the current user. Reads `id` (Palisade) or `sub` (this backend), then loads the
+   * tenant.user fresh so roles/workspace are always current.
+   *
+   * NOTE: JWT_SECRET must equal Palisade's signing secret for Palisade-issued tokens
+   * to validate here.
+   */
+  async getUserFromAppToken(token: string): Promise<User> {
+    let payload: AppTokenPayload;
+    try {
+      payload = await this.jwtService.verifyAsync<AppTokenPayload>(token);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+    const rawId = payload?.id ?? payload?.sub;
+    if (rawId === undefined || rawId === null || String(rawId).trim() === '') {
+      throw new UnauthorizedException('Invalid token');
+    }
+    const user = await this.getUserById(String(rawId));
+    if (!user) {
+      throw new UnauthorizedException('Account not found');
+    }
+    return user;
+  }
+
+  async getUserById(userId: string): Promise<User | null> {
+    let uid: number;
+    try {
+      uid = parseTenantUserId(userId);
+    } catch {
+      return null;
+    }
+    const result = await this.databaseService.query<User>(
+      `${USER_PROFILE_SELECT} WHERE u.id = $1::int LIMIT 1`,
+      [uid],
+    );
+    return result.rows[0] ?? null;
   }
 
   async getOrganizationBySlug(slug: string): Promise<OrganizationSummary | null> {

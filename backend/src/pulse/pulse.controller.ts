@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { isPulseAdmin } from '../database/time-doctor-sql';
 import { PulseService } from './pulse.service';
 
 @Controller('pulse')
@@ -20,7 +21,7 @@ export class PulseController {
   constructor(private readonly pulse: PulseService) {}
 
   private ensureAdmin(user: { role?: string; is_super_admin?: boolean }) {
-    if (!(user?.is_super_admin || user?.role === 'admin' || user?.role === 'manager')) {
+    if (!isPulseAdmin(user)) {
       throw new ForbiddenException('Admin or manager role required');
     }
   }
@@ -36,18 +37,20 @@ export class PulseController {
     return this.pulse.getDashboard(req.user, n);
   }
 
-  /** Employee × day hours grid for Daily Hours page. */
+  /** Employee × day hours grid for Daily Hours page (admins) or self (employees). */
   @Get('daily-hours')
   async dailyHours(
     @Req() req: { user: any },
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
-    this.ensureAdmin(req.user);
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
-    return this.pulse.getDailyHours(req.user, start, end);
+    if (isPulseAdmin(req.user)) {
+      return this.pulse.getDailyHours(req.user, start, end);
+    }
+    return this.pulse.getDailyHours(req.user, start, end, req.user.id);
   }
 
   /** Activity levels ranked by engagement (no AI — input events ÷ tracked time). */
@@ -62,6 +65,44 @@ export class PulseController {
       throw new BadRequestException('start and end query params are required');
     }
     return this.pulse.getActivityLevels(req.user, start, end);
+  }
+
+  /** Per-employee screenshot and input activity totals. */
+  @Get('activity-summary')
+  async activitySummary(
+    @Req() req: { user: any },
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    this.ensureAdmin(req.user);
+    if (!start || !end) {
+      throw new BadRequestException('start and end query params are required');
+    }
+    return this.pulse.getActivitySummary(req.user, start, end);
+  }
+
+  /** Per-employee AI descriptions and activity classification from screenshots. */
+  @Get('ai-insights')
+  async aiInsights(
+    @Req() req: { user: any },
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    this.ensureAdmin(req.user);
+    if (!start || !end) {
+      throw new BadRequestException('start and end query params are required');
+    }
+    return this.pulse.getAiInsights(req.user, start, end);
+  }
+
+  /** Employees with zero tracked hours on a day and/or the prior day (Daily Check-in). */
+  @Get('not-tracking')
+  async notTracking(
+    @Req() req: { user: any },
+    @Query('date') date?: string,
+  ) {
+    this.ensureAdmin(req.user);
+    return this.pulse.getNotTracking(req.user, date);
   }
 
   /** Team directory: leads and direct reports with weekly hours. */
