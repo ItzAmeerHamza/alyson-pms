@@ -717,6 +717,19 @@ class ForceUpdater {
       }
     }
     
+    // macOS in-place staging (macStagedAppPath) lives in memory only, but isUpdateDownloaded
+    // is persisted to disk. After a restart the flag reloads as true with no staged bundle,
+    // which used to shortcut Download and push Install into the DMG fallback. Reconcile here
+    // so a "downloaded" update without its staged bundle is treated as needing a re-download.
+    if (
+      this.isMacPackaged() &&
+      this.isUpdateDownloaded &&
+      !(this.macStagedAppPath && fs.existsSync(this.macStagedAppPath))
+    ) {
+      console.log('🍎 [FORCE-UPDATER] Persisted downloaded flag has no staged bundle — will re-download for in-place install');
+      this.isUpdateDownloaded = false;
+    }
+
     if (this.isDevMode) {
       return {
         updateAvailable: false,
@@ -891,8 +904,16 @@ class ForceUpdater {
     }
 
     if (this.isUpdateDownloaded) {
-      console.log('📦 [FORCE-UPDATER] Update already downloaded');
-      return { success: true, alreadyDownloaded: true };
+      // On macOS the staged bundle is in-memory; if it's gone (restart, tmp cleanup),
+      // re-stage instead of reporting "already downloaded" with nothing to install.
+      const stagedValid = this.macStagedAppPath && fs.existsSync(this.macStagedAppPath);
+      if (this.isMacPackaged() && !stagedValid) {
+        console.log('📦 [FORCE-UPDATER] Downloaded flag set but staged bundle missing — re-staging in-place update');
+        this.isUpdateDownloaded = false;
+      } else {
+        console.log('📦 [FORCE-UPDATER] Update already downloaded');
+        return { success: true, alreadyDownloaded: true };
+      }
     }
 
     if (this.isDownloading) {
@@ -1151,7 +1172,7 @@ open "$TARGET"
   /**
    * Install the update (quit and install)
    */
-  installUpdate() {
+  async installUpdate() {
     console.log('🔄 [FORCE-UPDATER] installUpdate() called');
     console.log('🔧 [FORCE-UPDATER] State check:', {
       hasAutoUpdater: !!autoUpdater,
@@ -1163,10 +1184,25 @@ open "$TARGET"
     });
 
     if (this.isMacPackaged()) {
-      if (this.macStagedAppPath && !this.manualInstallRequired) {
+      const stagedValid = this.macStagedAppPath && fs.existsSync(this.macStagedAppPath);
+      if (stagedValid && !this.manualInstallRequired) {
         return this.installMacInPlace();
       }
-      // No staged bundle (download failed) — fall back to DMG.
+      // No valid staged bundle (e.g. app restarted after download, losing the in-memory
+      // staged path). Re-stage in place before ever falling back to the DMG, so the running
+      // app updates itself instead of forcing a manual drag-to-Applications.
+      if (!this.manualInstallRequired && (this.isUpdateAvailable || this.pendingVersion)) {
+        console.log('🍎 [FORCE-UPDATER] No staged bundle at install time — attempting in-place re-stage');
+        try {
+          const restage = await this.downloadMacInPlaceUpdate();
+          if (restage?.success && this.macStagedAppPath && fs.existsSync(this.macStagedAppPath)) {
+            return this.installMacInPlace();
+          }
+        } catch (e) {
+          console.warn('⚠️ [FORCE-UPDATER] In-place re-stage failed:', e?.message || e);
+        }
+      }
+      // Genuine failure — fall back to DMG so the user is never stuck.
       const url = this.getManualDownloadUrl();
       this.openManualDownload();
       return {
