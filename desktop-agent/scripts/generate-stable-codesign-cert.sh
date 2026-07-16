@@ -59,12 +59,27 @@ openssl x509 -req \
   -extfile "$TMP/codesign.cnf" \
   -extensions v3_req
 
+# Use legacy PBES1/3DES so macOS `security import` / electron-builder accept the
+# .p12 (OpenSSL 3 default AES-PBES2 often fails with "MAC verification failed").
 openssl pkcs12 -export \
   -out "$P12_PATH" \
   -inkey "$TMP/codesign.key" \
   -in "$TMP/codesign.crt" \
   -password "pass:${PASSWORD}" \
-  -name "${CERT_NAME}"
+  -name "${CERT_NAME}" \
+  -certpbe PBE-SHA1-3DES \
+  -keypbe PBE-SHA1-3DES \
+  -macalg sha1 \
+  -legacy 2>/dev/null \
+  || openssl pkcs12 -export \
+    -out "$P12_PATH" \
+    -inkey "$TMP/codesign.key" \
+    -in "$TMP/codesign.crt" \
+    -password "pass:${PASSWORD}" \
+    -name "${CERT_NAME}" \
+    -certpbe PBE-SHA1-3DES \
+    -keypbe PBE-SHA1-3DES \
+    -macalg sha1
 
 # GitHub Actions / electron-builder expect base64 of the .p12 (no newlines).
 base64 < "$P12_PATH" | tr -d '\n' > "$B64_PATH"
