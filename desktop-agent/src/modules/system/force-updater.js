@@ -772,20 +772,10 @@ class ForceUpdater {
       };
     }
 
-    // Check if we already know about an available update
-    if (this.isUpdateAvailable && this.pendingVersion) {
-      console.log('📦 [FORCE-UPDATER] Already know about update:', this.pendingVersion);
-      const dmgInstallReady = this.shouldUseMacDmgInstall();
-      return {
-        updateAvailable: true,
-        updateDownloaded: dmgInstallReady ? false : this.isUpdateDownloaded,
-        manualInstallRequired: this.manualInstallRequired || dmgInstallReady,
-        dmgInstallReady,
-        manualDownloadUrl: (this.manualInstallRequired || dmgInstallReady) ? this.getManualDownloadUrl(this.pendingVersion) : undefined,
-        currentVersion: this.currentVersion,
-        newVersion: this.pendingVersion
-      };
-    }
+    // Do NOT short-circuit on a remembered pendingVersion from disk. That left
+    // Windows clients stuck offering an old build (e.g. 1.0.206) and calling
+    // downloadUpdate() without a fresh electron-updater check ("Please check
+    // update first"). Always re-query the remote below.
 
     console.log('🔍 [FORCE-UPDATER] Checking for updates...');
     this.recoverFromStaleState();
@@ -930,6 +920,33 @@ class ForceUpdater {
       return await this.downloadMacInPlaceUpdate();
     }
 
+    // electron-updater keeps updateInfo only in-memory for this process. A
+    // restored disk flag (isUpdateAvailable) is not enough — downloadUpdate()
+    // then throws "Please check update first". Always refresh metadata first.
+    try {
+      console.log('📥 [FORCE-UPDATER] Running electron-updater check before Windows download...');
+      const checkResult = await autoUpdater.checkForUpdates();
+      const remote = checkResult?.updateInfo?.version
+        ? String(checkResult.updateInfo.version).replace(/^v/i, '')
+        : null;
+      if (remote) {
+        this.isUpdateAvailable = true;
+        this.pendingVersion = remote;
+        this.saveUpdateState();
+        console.log(`📡 [FORCE-UPDATER] Pre-download remote version: ${remote}`);
+      } else {
+        // Fall back to our GitHub API check so we at least know the latest tag.
+        const api = await this.checkGithubFallbackForUpdate();
+        if (api?.version) {
+          this.isUpdateAvailable = true;
+          this.pendingVersion = api.version;
+          this.saveUpdateState();
+        }
+      }
+    } catch (preCheckErr) {
+      console.warn('⚠️ [FORCE-UPDATER] Pre-download check failed:', preCheckErr?.message || preCheckErr);
+    }
+
     console.log('📥 [FORCE-UPDATER] Starting download...');
     this.isDownloading = true;
     this.downloadProgress = 0;
@@ -941,6 +958,22 @@ class ForceUpdater {
       console.error('❌ [FORCE-UPDATER] Download failed:', error.message);
       this.isDownloading = false;
       this.updateError = error.message;
+
+      // Retry once: check → download (covers "Please check update first").
+      if (/please check update first/i.test(String(error.message || ''))) {
+        try {
+          console.log('🔁 [FORCE-UPDATER] Retrying Windows download after fresh check...');
+          await autoUpdater.checkForUpdates();
+          this.isDownloading = true;
+          await autoUpdater.downloadUpdate();
+          return { success: true };
+        } catch (retryErr) {
+          console.error('❌ [FORCE-UPDATER] Retry download failed:', retryErr.message);
+          this.isDownloading = false;
+          this.updateError = retryErr.message;
+          return this._windowsManualInstallFallback(retryErr.message);
+        }
+      }
       
       // Handle "ZIP file not provided" error - server doesn't have ZIP files for auto-update
       if (error.message.includes('ZIP file not provided') || error.message.includes('zip')) {
@@ -953,9 +986,38 @@ class ForceUpdater {
           pendingVersion: this.pendingVersion
         };
       }
+
+      // Windows: never leave the user stuck — open the Setup.exe download.
+      if (process.platform === 'win32') {
+        return this._windowsManualInstallFallback(error.message);
+      }
       
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Open the Windows NSIS installer URL so the user can finish updating when
+   * electron-updater cannot download (stale state, feed glitch, etc.).
+   */
+  _windowsManualInstallFallback(reason) {
+    const url = this.getManualDownloadUrl(this.pendingVersion);
+    this.manualInstallRequired = true;
+    this.isUpdateDownloaded = false;
+    this.saveUpdateState();
+    try {
+      this.openManualDownload();
+    } catch (_) {}
+    console.log(`🔧 [FORCE-UPDATER] Windows manual install fallback: ${url} (${reason || 'unknown'})`);
+    return {
+      success: false,
+      error: reason || 'download_failed',
+      fallbackToDmg: true, // reuse existing UI path that offers manual installer
+      manualInstallRequired: true,
+      manualDownloadUrl: url,
+      version: this.pendingVersion,
+      message: 'Automatic download failed. The installer was opened in your browser — run it, then reopen the app.',
+    };
   }
 
   /**

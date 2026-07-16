@@ -3800,7 +3800,13 @@ class UIManager {
       
     } catch (error) {
       console.error('❌ [UI-MANAGER] Download failed:', error);
-      this.showUpdateError(error.message || 'Download failed. Please try again.');
+      const msg = error.message || 'Download failed. Please try again.';
+      // electron-updater throws this when download runs without a fresh check
+      // (common after restoring stale update-state.json on Windows).
+      const friendly = /please check update first/i.test(msg)
+        ? 'Update check expired. Click Retry Update — if it fails again, use Download Installer.'
+        : msg;
+      this.showUpdateError(friendly);
       
       // Reset button
       if (updateBtn) updateBtn.disabled = false;
