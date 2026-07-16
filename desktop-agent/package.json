@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.206",
+  "version": "1.0.207",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",

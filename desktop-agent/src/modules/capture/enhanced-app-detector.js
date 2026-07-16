@@ -1015,7 +1015,20 @@ class EnhancedAppDetector {
         console.log('⚠️ [DWELL] Skipping close - invalid duration:', durationSeconds);
         return;
       }
-      
+
+      // Backend RDS mode owns the app_logs lifecycle: durations are derived
+      // server-side from consecutive started_at values, so there is no client-side
+      // row to close. The legacy Supabase fallback below would issue an update keyed
+      // on the tenant user id (an integer like "1202") against a UUID column, which
+      // fails with "invalid input syntax for type uuid". Skip it entirely in RDS mode.
+      try {
+        const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
+        if (isBackendTimeLogsEnabled(this.config || global.config)) {
+          this.previousAppEntry = null;
+          return;
+        }
+      } catch (_) { /* fall through to legacy path */ }
+
       // Update via direct DB if we have the entry ID
       // CRITICAL FIX: Only update ended_at - duration_seconds is a computed column
       if (this.previousAppEntry.id) {
@@ -1039,8 +1052,9 @@ class EnhancedAppDetector {
         // If no ID, try to update based on user_id, app_name, and started_at
         const supabaseClient = await this.waitForSupabase();
         const userId = (this.config && (this.config.user_id || this.config.userId)) || global.currentUserId || null;
-        
-        if (supabaseClient && userId) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || ''));
+
+        if (supabaseClient && userId && isUuid) {
           const previousStartedAt = new Date(this.previousAppEntry.startedAt).toISOString();
           // CRITICAL FIX: Only update ended_at - duration_seconds is a computed column
           const { error } = await supabaseClient

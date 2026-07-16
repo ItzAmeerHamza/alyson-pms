@@ -1656,6 +1656,8 @@ class IPCManager {
       case 'idle_timeout':
       case 'auto_stop_idle':
         return 'Time tracking stopped: You were inactive for too long';
+      case 'on_break':
+        return 'Time tracking stopped: You took a break';
       case 'manual':
         return 'Time tracking stopped: You manually stopped the timer';
       case 'screenshot_failures':

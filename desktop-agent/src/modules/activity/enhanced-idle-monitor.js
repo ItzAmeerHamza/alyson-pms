@@ -78,7 +78,37 @@ class EnhancedIdleMonitor {
     };
     
     this.AUTO_STOP_THRESHOLD = idleThresholdMinutes * 60;
-    
+
+    // Idle-confirmation prompt (replaces the silent idle auto-stop).
+    // Instead of stopping tracking after N minutes of no input, we surface an
+    // always-on-top popup with a countdown. The user chooses "I'm working"
+    // (keep tracking, idle time counted as worked) or "On break" (stop). If they
+    // do not respond before the countdown ends, tracking stops (assumed away).
+    this._idlePromptActive = false;
+    this._idlePromptTimeout = null;
+    this._idlePromptIdleStart = null;
+    this._idlePromptManager = null;
+    const envCountdownSeconds = Number(process.env.IDLE_PROMPT_COUNTDOWN_SECONDS);
+    const promptCountdownSeconds =
+      (envCountdownSeconds > 0 ? envCountdownSeconds : null) ??
+      this.config?.idle_prompt_countdown_seconds ??
+      60;
+    this.IDLE_PROMPT_COUNTDOWN_MS = promptCountdownSeconds * 1000;
+    // Default: the prompt appears only after 10 straight minutes of no keyboard
+    // or mouse input, then gives a 60s countdown before tracking stops. The idle
+    // measure (OS idle time) is continuous — ANY input resets it to zero — so a
+    // user who is idle for a while and then works again never sees the prompt;
+    // it fires solely on an unbroken 10-minute idle stretch. This is intentionally
+    // decoupled from the (often much smaller) workspace idle-detection setting.
+    // Override with config.idle_prompt_minutes.
+    // IDLE_PROMPT_THRESHOLD_SECONDS env is a testing shortcut to fire it sooner.
+    const DEFAULT_IDLE_PROMPT_MINUTES = 10;
+    const envThresholdSeconds = Number(process.env.IDLE_PROMPT_THRESHOLD_SECONDS);
+    const promptMinutes =
+      this.config?.idle_prompt_minutes ?? DEFAULT_IDLE_PROMPT_MINUTES;
+    this.IDLE_PROMPT_THRESHOLD_MS =
+      envThresholdSeconds > 0 ? envThresholdSeconds * 1000 : promptMinutes * 60 * 1000;
+
     cleanupRegistry.registerResource({
       name: 'enhancedIdleMonitor',
       cleanup: async () => this.shutdown()
@@ -136,14 +166,14 @@ class EnhancedIdleMonitor {
 
     if (!this.wasIdleLastCheck) {
       console.log(
-        `⏸️ [IDLE-MONITOR] Screenshot idle detected (${lowSec}s low activity) — starting idle log`,
+        `⏸️ [IDLE-MONITOR] Screenshot idle detected (${lowSec}s low activity)`,
       );
       this.currentIdleStartTime = Date.now() - lowSec * 1000;
       this._lastIdleCheckpointTime = null;
       this.wasIdleLastCheck = true;
     }
-
-    await this._flushIdleCheckpoint();
+    // Idle logging is deferred: the period is persisted when it ends (user
+    // returns) or discarded if the user confirms "I'm working" via the prompt.
   }
 
   recordActivity(_source) {
@@ -217,7 +247,18 @@ class EnhancedIdleMonitor {
   async stopIdleMonitoring() {
     // CRITICAL FIX: Set isTracking to false to prevent any stray interval ticks
     this.isTracking = false;
-    
+
+    // Dismiss any open idle-confirmation prompt (tracking is ending anyway).
+    if (this._idlePromptTimeout) {
+      clearTimeout(this._idlePromptTimeout);
+      this._idlePromptTimeout = null;
+    }
+    this._idlePromptActive = false;
+    this._idlePromptIdleStart = null;
+    try {
+      this._idlePromptManager?.hide();
+    } catch (_) {}
+
     // Clear pending markSessionAsIdle timeout
     if (this._idleSessionTimeout) {
       clearTimeout(this._idleSessionTimeout);
@@ -302,13 +343,11 @@ class EnhancedIdleMonitor {
 
     if (isIdle && !this.wasIdleLastCheck) {
       console.log(
-        `⏸️ [IDLE-MONITOR] Low activity idle started (effective=${idleSeconds}s, os=${os}s, input=${input}s, low=${lowActivity}s)`,
+        `⏸️ [IDLE-MONITOR] Idle started (effective=${idleSeconds}s, os=${os}s, input=${input}s, low=${lowActivity}s)`,
       );
       this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
       this._lastIdleCheckpointTime = null;
       this.wasIdleLastCheck = true;
-
-      console.log('🧍 [IDLE-MONITOR] User went idle - activity counters preserved for next screenshot');
 
       (async () => {
         try {
@@ -318,64 +357,176 @@ class EnhancedIdleMonitor {
           }
         } catch {}
       })();
-
-      if (this._idleSessionTimeout) {
-        clearTimeout(this._idleSessionTimeout);
-      }
-      this._idleSessionTimeout = setTimeout(() => {
-        this._idleSessionTimeout = null;
-        if (this.wasIdleLastCheck && this.currentIdleStartTime) {
-          this.markSessionAsIdle();
-        }
-      }, this.IDLE_SESSION_THRESHOLD);
-
-      await this._flushIdleCheckpoint();
-    }
-
-    if (isIdle && this.wasIdleLastCheck) {
-      await this._flushIdleCheckpoint();
     }
 
     if (!isIdle && this.wasIdleLastCheck) {
-      console.log('▶️ [IDLE-MONITOR] User became active');
-      if (this._idleSessionTimeout) {
-        clearTimeout(this._idleSessionTimeout);
-        this._idleSessionTimeout = null;
-      }
-      await this._flushIdleCheckpoint();
-      this.currentIdleStartTime = null;
-      this._lastIdleCheckpointTime = null;
-      this.wasIdleLastCheck = false;
-      this.idleThresholdExceeded = false;
-      this._phantomIdleStartTime = null;
-      this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
-      this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
-      const resumeStats = global.unifiedInputManager?.stats;
-      this._lastSeenKeystrokesForIdle = resumeStats?.keystrokes || 0;
-      this._lastSeenClicksForIdle = resumeStats?.mouseClicks || 0;
-      this._markHighActivity();
-      if (global.enhancedPermissionManager?.recoverScreenshotPermissions) {
-        await global.enhancedPermissionManager.recoverScreenshotPermissions();
+      // Input resumed. If the confirmation prompt is showing, resuming keyboard/
+      // mouse activity counts as "I'm working" and the idle time is kept as
+      // worked time (not logged as idle).
+      if (this._idlePromptActive) {
+        this._resolveIdlePrompt('working');
+      } else {
+        console.log('▶️ [IDLE-MONITOR] User became active');
+        // A short idle period that ended on its own — persist it as idle.
+        await this._flushIdleCheckpoint();
+        this.currentIdleStartTime = null;
+        this._lastIdleCheckpointTime = null;
+        this.wasIdleLastCheck = false;
+        this.idleThresholdExceeded = false;
+        this._phantomIdleStartTime = null;
+        const resumeStats = global.unifiedInputManager?.stats;
+        this._lastSeenKeystrokes = resumeStats?.keystrokes || 0;
+        this._lastSeenClicks = resumeStats?.mouseClicks || 0;
+        this._lastSeenKeystrokesForIdle = resumeStats?.keystrokes || 0;
+        this._lastSeenClicksForIdle = resumeStats?.mouseClicks || 0;
+        this._markHighActivity();
+        if (global.enhancedPermissionManager?.recoverScreenshotPermissions) {
+          await global.enhancedPermissionManager.recoverScreenshotPermissions();
+        }
       }
     }
 
+    // Instead of silently auto-stopping when idle, surface a confirmation prompt.
     try {
-      const phantomStart = this._phantomIdleStartTime;
-      const autoStop = this.checkAutoStopConditions();
-      if (autoStop?.shouldStop) {
-        const idleStartTime =
-          autoStop.reason === 'phantom_idle'
-            ? phantomStart || this.currentIdleStartTime
-            : this.currentIdleStartTime;
-        const endTimeOverride = idleStartTime
-          ? new Date(idleStartTime).toISOString()
-          : null;
-        global.stopTracking?.(autoStop.reason, null, { endTimeOverride });
-        return;
-      }
-    } catch (_) {}
+      this._evaluateIdlePrompt(os, input);
+    } catch (e) {
+      console.log('❌ [IDLE-PROMPT] evaluate error:', e.message);
+    }
 
     global.enhancedActivityManager?.updateIdleStatus(isIdle, idleSeconds);
+  }
+
+  /**
+   * Lazily create the idle-confirmation popup manager.
+   */
+  _getIdlePromptManager() {
+    if (!this._idlePromptManager) {
+      const IdlePromptManager = require('../../idle-prompt-manager');
+      this._idlePromptManager = new IdlePromptManager();
+      global.idlePromptManager = this._idlePromptManager;
+    }
+    return this._idlePromptManager;
+  }
+
+  /**
+   * Show the idle-confirmation prompt once the user has had no keyboard/mouse
+   * input (mouse movement alone does not count) for the prompt threshold.
+   */
+  _evaluateIdlePrompt(osIdleSeconds = 0, _inputIdleSeconds = 0) {
+    // Honor the existing config switch — if idle auto-stop is disabled, never
+    // interrupt the user at all.
+    if (this.config?.auto_stop_on_idle === false) return;
+    if (this._idlePromptActive) return;
+    if (!this.isTracking || !global.isTracking) return;
+
+    // Only interrupt when the user has genuinely not touched the machine. OS idle
+    // (powerMonitor.getSystemIdleTime) resets on ANY input — keyboard, clicks,
+    // mouse movement, scroll, trackpad — so an actively-working user (even one who
+    // is only reading and moving the mouse) is never prompted. We deliberately do
+    // NOT use the keystroke/click-only idle here: that ignores mouse movement and
+    // would falsely flag someone reviewing screenshots or reading as idle.
+    const noInputSeconds = Number(osIdleSeconds) || 0;
+    if (noInputSeconds * 1000 >= this.IDLE_PROMPT_THRESHOLD_MS) {
+      this._showIdlePrompt(noInputSeconds);
+    }
+  }
+
+  _showIdlePrompt(noInputSeconds) {
+    if (this._idlePromptActive) return;
+    this._idlePromptActive = true;
+    this._idlePromptIdleStart =
+      this.currentIdleStartTime || Date.now() - Math.round(noInputSeconds * 1000);
+
+    const countdownSeconds = Math.round(this.IDLE_PROMPT_COUNTDOWN_MS / 1000);
+    console.log(
+      `🟡 [IDLE-PROMPT] No keyboard/mouse input for ~${Math.floor(noInputSeconds / 60)}m — showing "still working?" prompt (${countdownSeconds}s countdown)`,
+    );
+
+    let shown = false;
+    try {
+      this._getIdlePromptManager().show(countdownSeconds, (choice) =>
+        this._resolveIdlePrompt(choice),
+      );
+      shown = true;
+    } catch (e) {
+      console.log('❌ [IDLE-PROMPT] Failed to show prompt:', e.message);
+    }
+
+    if (!shown) {
+      // If the UI cannot be shown, fall back to the old behavior (stop) so we
+      // never keep counting time for a user who is actually away.
+      this._idlePromptActive = false;
+      this._stopForIdle('idle_timeout');
+      return;
+    }
+
+    if (this._idlePromptTimeout) clearTimeout(this._idlePromptTimeout);
+    this._idlePromptTimeout = setTimeout(() => {
+      this._idlePromptTimeout = null;
+      if (this._idlePromptActive) {
+        console.log('⏱️ [IDLE-PROMPT] No response within countdown — stopping tracking (assumed away)');
+        this._resolveIdlePrompt('timeout');
+      }
+    }, this.IDLE_PROMPT_COUNTDOWN_MS);
+  }
+
+  _resolveIdlePrompt(choice) {
+    if (!this._idlePromptActive) return;
+    this._idlePromptActive = false;
+    if (this._idlePromptTimeout) {
+      clearTimeout(this._idlePromptTimeout);
+      this._idlePromptTimeout = null;
+    }
+    try {
+      this._idlePromptManager?.hide();
+    } catch (_) {}
+
+    if (choice === 'working') {
+      console.log('✅ [IDLE-PROMPT] User is working — continuing tracking, idle time counted as worked');
+      this._idlePromptIdleStart = null;
+      this._discardCurrentIdleAndResume();
+      return;
+    }
+
+    const reason = choice === 'break' ? 'on_break' : 'idle_timeout';
+    console.log(
+      `🛑 [IDLE-PROMPT] ${choice === 'break' ? 'User on break' : 'No response'} — stopping tracking (${reason})`,
+    );
+    this._stopForIdle(reason);
+  }
+
+  /**
+   * User confirmed they are working: forget the pending idle period (so it is
+   * counted as worked time and never logged as idle) and reset counters so the
+   * prompt does not immediately re-fire.
+   */
+  _discardCurrentIdleAndResume() {
+    if (this._idleSessionTimeout) {
+      clearTimeout(this._idleSessionTimeout);
+      this._idleSessionTimeout = null;
+    }
+    this.currentIdleStartTime = null;
+    this._lastIdleCheckpointTime = null;
+    this.wasIdleLastCheck = false;
+    this.idleThresholdExceeded = false;
+    this._phantomIdleStartTime = null;
+    const stats = global.unifiedInputManager?.stats || {};
+    this._lastSeenKeystrokes = stats.keystrokes || 0;
+    this._lastSeenClicks = stats.mouseClicks || 0;
+    this._lastSeenKeystrokesForIdle = stats.keystrokes || 0;
+    this._lastSeenClicksForIdle = stats.mouseClicks || 0;
+    this._markHighActivity();
+  }
+
+  /**
+   * Stop tracking due to idle/break. The time log ends at the moment the user
+   * went idle so the idle minutes are not counted.
+   */
+  _stopForIdle(reason) {
+    const idleStart = this._idlePromptIdleStart || this.currentIdleStartTime;
+    const endTimeOverride = idleStart ? new Date(idleStart).toISOString() : null;
+    this._idlePromptIdleStart = null;
+    global.stopTracking?.(reason, null, { endTimeOverride });
   }
 
   /**
@@ -486,36 +637,21 @@ class EnhancedIdleMonitor {
 
   markSessionAsIdle() {
     if (this.idleThresholdExceeded) return;
-    
+
     console.log('⏸️ [IDLE-SESSION] Marking session as idle due to inactivity');
     this.idleThresholdExceeded = true;
-    
-    // NOTE: stopTracking is NOT called here. The checkAutoStopConditions() method
-    // (which runs every 30s) is the single auto-stop path — it fires at
-    // idle_threshold_minutes (default 10 min), well before this 20-min session
-    // threshold. This method only marks the session state and notifies the UI.
-    // If checkAutoStopConditions somehow didn't fire (e.g., unifiedInputManager is null),
-    // this serves as the fallback auto-stop.
-    if (this.config.auto_stop_on_idle && global.isTracking) {
-      console.log('🛑 [IDLE-SESSION] Fallback auto-stop: checkAutoStopConditions did not fire in time');
-      // FIX-8: Pass idle start time so end_time reflects when user went idle
-      const endTimeOverride = this.currentIdleStartTime
-        ? new Date(this.currentIdleStartTime).toISOString()
-        : null;
-      global.stopTracking?.('idle_timeout', null, { endTimeOverride });
-    }
-    
+
+    // NOTE: Tracking is never stopped silently here. Idle now surfaces the
+    // idle-confirmation prompt (see _evaluateIdlePrompt), which is the single
+    // path that can stop tracking on idle — and only after the user chooses
+    // "On break" or does not respond to the countdown. This method just marks
+    // session state and notifies the UI.
+
     // Notify UI
     global.safeSendToRenderer?.('session-idle', {
       reason: 'idle_timeout',
       timestamp: new Date().toISOString()
     });
-    
-    // Show notification
-    global.showTrayNotification?.(
-      'Session paused due to inactivity',
-      'warning'
-    );
   }
 
   // === AUTO-STOP FUNCTIONALITY ===

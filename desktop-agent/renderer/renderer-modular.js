@@ -3035,3 +3035,143 @@ function showToast(message, type = 'info') {
   document.body.appendChild(toast);
   setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 4000);
 }
+
+// === Idle confirmation prompt (in-app overlay, rendered inside this window) ===
+(function setupIdlePromptOverlay() {
+  if (window.__idlePromptOverlaySetup) return;
+  window.__idlePromptOverlaySetup = true;
+
+  const RADIUS = 42;
+  const CIRC = 2 * Math.PI * RADIUS;
+  let overlay, ringBar, countEl, btnWorking, btnBreak;
+  let timer = null;
+  let remaining = 0;
+  let total = 0;
+  let responded = false;
+
+  function ensureOverlay() {
+    if (overlay) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      #idle-prompt-overlay {
+        position: fixed; inset: 0; z-index: 2147483000;
+        display: none; align-items: center; justify-content: center;
+        background: rgba(30, 27, 75, 0.45); backdrop-filter: blur(4px);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-user-select: none; user-select: none;
+      }
+      #idle-prompt-overlay .idle-card {
+        position: relative; width: 380px; max-width: 88vw; background: #ffffff; color: #1e293b;
+        border: 1px solid #e9ecf5; border-radius: 18px; padding: 30px 26px 22px;
+        text-align: center; box-shadow: 0 24px 60px rgba(102, 126, 234, 0.28);
+        overflow: hidden;
+      }
+      #idle-prompt-overlay .idle-card::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+      }
+      #idle-prompt-overlay .idle-title { font-size: 19px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+      #idle-prompt-overlay .idle-sub { font-size: 13px; line-height: 1.45; color: #64748b; margin-bottom: 20px; }
+      #idle-prompt-overlay .idle-ring { position: relative; width: 96px; height: 96px; margin: 0 auto 22px; }
+      #idle-prompt-overlay .idle-ring svg { transform: rotate(-90deg); }
+      #idle-prompt-overlay .idle-track { stroke: #eef1f8; }
+      #idle-prompt-overlay .idle-bar { stroke: #667eea; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s linear; }
+      #idle-prompt-overlay .idle-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; color: #1e293b; font-variant-numeric: tabular-nums; }
+      #idle-prompt-overlay .idle-buttons { display: flex; flex-direction: column; gap: 10px; }
+      #idle-prompt-overlay button { width: 100%; border: none; border-radius: 12px; padding: 13px 16px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease, background 0.15s ease; }
+      #idle-prompt-overlay button:active:not(:disabled) { transform: translateY(1px); }
+      #idle-prompt-overlay button:disabled { opacity: 0.5; cursor: default; }
+      #idle-prompt-overlay .idle-working { background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32); }
+      #idle-prompt-overlay .idle-working:hover:not(:disabled) { box-shadow: 0 8px 20px rgba(16, 185, 129, 0.42); }
+      #idle-prompt-overlay .idle-break { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+      #idle-prompt-overlay .idle-break:hover:not(:disabled) { background: #fee2e2; border-color: #fca5a5; }
+    `;
+    document.head.appendChild(style);
+
+    overlay = document.createElement('div');
+    overlay.id = 'idle-prompt-overlay';
+    overlay.innerHTML = `
+      <div class="idle-card">
+        <div class="idle-title">Are you still working?</div>
+        <div class="idle-sub">No keyboard or mouse activity detected. Time Doctor will stop when the timer runs out.</div>
+        <div class="idle-ring">
+          <svg width="96" height="96" viewBox="0 0 96 96">
+            <circle class="idle-track" cx="48" cy="48" r="42" fill="none" stroke-width="8"></circle>
+            <circle class="idle-bar" id="idle-bar" cx="48" cy="48" r="42" fill="none" stroke-width="8"></circle>
+          </svg>
+          <div class="idle-count" id="idle-count">60</div>
+        </div>
+        <div class="idle-buttons">
+          <button class="idle-working" id="idle-working">I'm working</button>
+          <button class="idle-break" id="idle-break">On break — stop Time Doctor</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    ringBar = overlay.querySelector('#idle-bar');
+    countEl = overlay.querySelector('#idle-count');
+    btnWorking = overlay.querySelector('#idle-working');
+    btnBreak = overlay.querySelector('#idle-break');
+    ringBar.style.strokeDasharray = String(CIRC);
+    ringBar.style.strokeDashoffset = '0';
+
+    btnWorking.addEventListener('click', () => respond('working'));
+    btnBreak.addEventListener('click', () => respond('break'));
+  }
+
+  function render() {
+    countEl.textContent = String(Math.max(0, remaining));
+    const frac = total > 0 ? remaining / total : 0;
+    ringBar.style.strokeDashoffset = String(CIRC * (1 - frac));
+    ringBar.style.stroke = remaining <= 10 ? '#ef4444' : '#667eea';
+  }
+
+  function stopTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+
+  function hide() {
+    stopTimer();
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  function respond(action) {
+    if (responded) return;
+    responded = true;
+    stopTimer();
+    if (btnWorking) btnWorking.disabled = true;
+    if (btnBreak) btnBreak.disabled = true;
+    try { ipcRenderer.send('idle-prompt-response', action); } catch (e) {}
+    hide();
+  }
+
+  function show(countdownSeconds) {
+    ensureOverlay();
+    total = Math.max(1, parseInt(countdownSeconds, 10) || 60);
+    remaining = total;
+    responded = false;
+    btnWorking.disabled = false;
+    btnBreak.disabled = false;
+    overlay.style.display = 'flex';
+    render();
+    stopTimer();
+    timer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        remaining = 0;
+        render();
+        stopTimer();
+        // Main process is authoritative for the actual stop; just reflect it.
+        btnWorking.disabled = true;
+        btnBreak.disabled = true;
+        return;
+      }
+      render();
+    }, 1000);
+  }
+
+  ipcRenderer.on('display-idle-prompt', (_e, data) => show(data && data.countdownSeconds));
+  ipcRenderer.on('hide-idle-prompt', () => hide());
+})();

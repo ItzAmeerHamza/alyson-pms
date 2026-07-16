@@ -64,6 +64,7 @@ class TrayManager {
       'phantom_idle': 'No keyboard or click activity detected — tracking was paused (mouse jitter does not count as work).',
       'display_sleep': 'Your display was turned off for 2+ minutes — tracking was stopped to save your time log.',
       'screen_lock': 'Your screen was locked for 2+ minutes — tracking was stopped automatically. Click Start to resume.',
+      'on_break': 'You chose to take a break — tracking was stopped. Click Start when you are back.',
       'system_sleep': 'Your laptop went to sleep — tracking was stopped to keep your time log accurate.',
       'system_shutdown': 'System is shutting down — tracking was stopped.',
       'screenshot_failures': 'Screenshot capture failed repeatedly',
