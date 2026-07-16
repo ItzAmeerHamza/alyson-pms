@@ -4,6 +4,12 @@
 .env.development
 .env.production
 
+# Stable code-signing certificate (generate locally; store as GitHub secrets)
+*.p12
+*.p12.base64
+*.pfx
+alyson-pm-codesign*
+
 # Node modules
 node_modules/
 

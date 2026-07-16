@@ -997,7 +997,8 @@ class ForceUpdater {
 
   /**
    * macOS custom updater: download the release ZIP, extract, strip quarantine,
-   * ad-hoc sign, and stage the new .app for an in-place swap on install.
+   * preserve a stable CI code signature (or ad-hoc-sign only if unsigned), and
+   * stage the new .app for an in-place swap on install.
    * Falls back to DMG download if any step fails.
    */
   async downloadMacInPlaceUpdate() {
@@ -1049,12 +1050,12 @@ class ForceUpdater {
       try { execFileSync('xattr', ['-cr', stagedApp], { timeout: 60000 }); } catch (e) {
         console.warn('⚠️ [FORCE-UPDATER] xattr strip warning:', e.message);
       }
-      // Ad-hoc sign so arm64 unsigned bundle is runnable after swap.
-      try {
-        execFileSync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
-      } catch (e) {
-        console.warn('⚠️ [FORCE-UPDATER] ad-hoc codesign warning:', e.message);
-      }
+
+      // Preserve a stable CI signature so macOS TCC permissions (Screen Recording /
+      // Accessibility) survive the in-place swap. Ad-hoc re-signing ("-") creates a
+      // NEW identity on every update and forces users to re-grant permissions.
+      // Only fall back to ad-hoc when the downloaded bundle is unsigned / ad-hoc.
+      this._ensureMacBundleSignature(stagedApp);
 
       this.macStagedAppPath = stagedApp;
       this.macUpdateWorkDir = workDir;
@@ -1084,6 +1085,41 @@ class ForceUpdater {
         manualDownloadUrl: this.getManualDownloadUrl(version),
         message: 'Automatic update could not complete. Use Download Installer to finish updating.',
       };
+    }
+  }
+
+  /**
+   * Keep a stable CI code signature when present; only ad-hoc sign unsigned /
+   * ad-hoc bundles. Stable identity is required for TCC permissions to persist
+   * across in-place updates.
+   */
+  _ensureMacBundleSignature(stagedApp) {
+    const { spawnSync } = require('child_process');
+    const { execFileSync } = require('child_process');
+
+    const probe = spawnSync('codesign', ['-dv', '--verbose=2', stagedApp], {
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    const info = `${probe.stdout || ''}${probe.stderr || ''}`;
+    const unsigned = /code object is not signed/i.test(info) ||
+      (probe.status !== 0 && !/Authority=/i.test(info) && !/Signature=/i.test(info));
+    const adhoc = /Signature=adhoc/i.test(info);
+
+    if (!unsigned && !adhoc) {
+      console.log('✅ [FORCE-UPDATER] Preserving existing code signature (TCC identity intact)');
+      return;
+    }
+
+    try {
+      execFileSync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
+      console.log(
+        adhoc
+          ? '⚠️ [FORCE-UPDATER] Bundle was ad-hoc signed — re-applied ad-hoc (permissions may reset)'
+          : '⚠️ [FORCE-UPDATER] Bundle was unsigned — applied ad-hoc signature',
+      );
+    } catch (e) {
+      console.warn('⚠️ [FORCE-UPDATER] ad-hoc codesign warning:', e.message);
     }
   }
 

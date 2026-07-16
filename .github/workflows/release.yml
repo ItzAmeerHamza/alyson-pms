@@ -15,13 +15,20 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# When MAC_CSC_LINK + MAC_CSC_KEY_PASSWORD secrets are set, macOS builds are
+# signed with that stable self-signed identity so TCC permissions persist across
+# in-app updates. Without those secrets we fall back to unsigned (ad-hoc) builds.
 env:
   CSC_IDENTITY_AUTO_DISCOVERY: false
 
 jobs:
   build-mac:
-    name: Build macOS (unsigned test)
+    name: Build macOS
     runs-on: macos-latest
+    env:
+      # Map secrets to env so the build step can branch without using secrets in `if:`.
+      MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -55,13 +62,69 @@ jobs:
         working-directory: desktop-agent
         run: node scripts/verify-embedded-config.js
 
-      - name: Build macOS (unsigned DMG + ZIP)
+      # Import the stable self-signed .p12 so every release shares one TCC identity.
+      # Generate with: desktop-agent/scripts/generate-stable-codesign-cert.sh
+      - name: Import stable macOS code-signing certificate
+        if: ${{ env.MAC_CSC_LINK != '' && env.MAC_CSC_KEY_PASSWORD != '' }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/alyson-pm-codesign.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/alyson-pm-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          CERT_PEM="$RUNNER_TEMP/alyson-pm-codesign.crt"
+          echo -n "$MAC_CSC_LINK" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$MAC_CSC_KEY_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | sed -e 's/"//g')
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # Extract + trust leaf cert so codesign accepts the self-signed identity.
+          openssl pkcs12 -in "$CERTIFICATE_PATH" -clcerts -nokeys \
+            -passin pass:"$MAC_CSC_KEY_PASSWORD" -out "$CERT_PEM" 2>/dev/null || true
+          if [ -s "$CERT_PEM" ]; then
+            security add-trusted-cert -d -r trustAsRoot -k "$KEYCHAIN_PATH" "$CERT_PEM" || true
+          fi
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "✅ Stable code-signing certificate imported"
+
+      - name: Build macOS (stable-signed when secrets present)
         working-directory: desktop-agent
-        run: >
-          npx electron-builder --mac --publish never
-          -c.mac.identity=null
-          -c.mac.notarize=false
-          -c.mac.hardenedRuntime=false
+        env:
+          CSC_LINK: ${{ env.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ env.MAC_CSC_KEY_PASSWORD }}
+        run: |
+          if [ -n "${CSC_LINK:-}" ] && [ -n "${CSC_KEY_PASSWORD:-}" ]; then
+            echo "🔏 Building macOS with stable self-signed identity (TCC-preserving)"
+            export CSC_IDENTITY_AUTO_DISCOVERY=true
+            npx electron-builder --mac --publish never \
+              -c.mac.identity="Alyson PM Code Signing" \
+              -c.mac.notarize=false \
+              -c.mac.hardenedRuntime=false
+          else
+            echo "⚠️ MAC_CSC_* secrets missing — building unsigned (permissions will reset on update)"
+            npx electron-builder --mac --publish never \
+              -c.mac.identity=null \
+              -c.mac.notarize=false \
+              -c.mac.hardenedRuntime=false
+          fi
+
+      - name: Verify macOS code signature
+        working-directory: desktop-agent
+        run: |
+          shopt -s nullglob
+          apps=(dist/mac*/*.app dist/mac*/*/*.app)
+          if [ ${#apps[@]} -eq 0 ]; then
+            echo "No .app found to verify"
+            exit 0
+          fi
+          for app in "${apps[@]}"; do
+            echo "--- codesign -dv: $app ---"
+            codesign -dv --verbose=2 "$app" 2>&1 || true
+          done
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -231,17 +294,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }} (unsigned test)
+          name: ${{ steps.version.outputs.tag }}
           body: |
-            **Unsigned test build** — no Apple Developer certificate required.
+            **macOS:** In-app update downloads the ZIP and replaces the app in place.
+            When this release is signed with the stable self-signed identity, Screen Recording
+            and Accessibility permissions persist across future updates (one re-grant may be
+            required when first moving from an unsigned build onto this signed build).
 
-            **macOS install:** Download the DMG for your chip (arm64 = Apple Silicon, x64 = Intel).
-            On first launch, right-click the app → **Open** (Gatekeeper will block a double-click).
+            **macOS first install:** Download the DMG for your chip (arm64 = Apple Silicon, x64 = Intel).
+            Right-click the app → **Open** if Gatekeeper blocks a double-click, then grant
+            **Screen Recording** and **Accessibility** to **Alyson PM**.
 
-            Grant **Screen Recording** and **Accessibility** to **Alyson PM** in System Settings.
-
-            **Windows install:** Download the `.exe` Setup installer and run it.
-            Windows SmartScreen may warn because the installer is unsigned — click **More info** → **Run anyway**.
+            **Windows:** Download the `.exe` Setup installer and run it.
+            SmartScreen may warn because the installer is unsigned — **More info** → **Run anyway**.
           draft: false
           prerelease: false
           make_latest: true
