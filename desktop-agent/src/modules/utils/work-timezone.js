@@ -110,6 +110,31 @@ function formatWorkTimezoneLabel(tz = _tz) {
   return tz.replace(/_/g, ' ');
 }
 
+/** Wall-clock time in work TZ, e.g. "17:46" (24h) or "5:46 PM". */
+function formatWorkTime(value, { hour12 = false } = {}, tz = _tz) {
+  if (value == null || value === '') return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12,
+  });
+}
+
+/** Short date in work TZ, e.g. "Jul 16". */
+function formatWorkDateShort(value, tz = _tz) {
+  if (value == null || value === '') return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    timeZone: tz,
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function nextWorkDayMidnight(date = new Date(), tz = _tz) {
   return endOfWorkDayExclusive(date, tz);
 }
@@ -144,6 +169,8 @@ module.exports = {
   secondsWithinWorkDay,
   elapsedSecondsSinceWorkMidnight,
   formatWorkTimezoneLabel,
+  formatWorkTime,
+  formatWorkDateShort,
   nextWorkDayMidnight,
   workDayBoundsForYmd,
   workMonthBounds,

@@ -61,16 +61,26 @@ class SessionManager {
       const accessToken = incomingSession?.access_token;
       const refreshToken = incomingSession?.refresh_token;
       let expiresAt = incomingSession?.expires_at || 0;
+      let refreshExpiresAt = incomingSession?.refresh_expires_at || 0;
       
       // Multi-tenant organization support
       const organizationId = incomingUser?.organization_id || incomingSession?.organization_id || null;
       const organizationSlug = incomingUser?.organization_slug || incomingSession?.organization_slug || null;
       const isOrgAdmin = incomingUser?.is_org_admin || false;
       const isSuperAdmin = incomingUser?.is_super_admin || false;
+      const authProvider = incomingSession?.auth_provider || userData.auth_provider || 'supabase';
 
       // Ensure expires_at is in milliseconds
       if (expiresAt && expiresAt < 9999999999) {
         expiresAt = expiresAt * 1000;
+      }
+      if (refreshExpiresAt && refreshExpiresAt < 9999999999) {
+        refreshExpiresAt = refreshExpiresAt * 1000;
+      }
+      // Standard desktop persistence: keep refresh usable for ~1 year
+      // (Cognito app-client refresh expiry must match or be longer)
+      if (!refreshExpiresAt && refreshToken) {
+        refreshExpiresAt = Date.now() + (365 * 24 * 60 * 60 * 1000);
       }
 
       const sessionToSave = {
@@ -81,8 +91,10 @@ class SessionManager {
         access_token: accessToken,
         refresh_token: refreshToken,
         expires_at: expiresAt,
+        refresh_expires_at: refreshExpiresAt || null,
+        saved_at: Date.now(),
         remember_me: true,
-        auth_provider: incomingSession?.auth_provider || userData.auth_provider || 'supabase',
+        auth_provider: authProvider,
         organization_id: organizationId,
         organization_slug: organizationSlug,
         is_org_admin: isOrgAdmin,
@@ -200,17 +212,35 @@ class SessionManager {
         return null;
       }
       
-      // Check if session is expired
+      // Access/ID token expiry (~1h for Cognito) is NOT a full logout.
+      // Keep the disk session when a refresh token is still usable so the
+      // renderer can refresh and restore login after app/OS restarts (~1 year).
       if (session.expires_at && Date.now() > session.expires_at) {
-        console.log('⚠️ Desktop agent session expired, attempting recovery...');
-        
-        // CRITICAL FIX: Try to recover session before clearing
-        const recoveredSession = await this.recoverExpiredSession(session);
-        if (recoveredSession) {
-          console.log('✅ Session recovered successfully');
-          return recoveredSession;
+        const refreshSoftExpired =
+          session.refresh_expires_at && Date.now() > session.refresh_expires_at;
+
+        if (session.refresh_token && !refreshSoftExpired) {
+          if (session.auth_provider === 'cognito') {
+            console.log(
+              '⚠️ Cognito access token expired — keeping session for refresh-token restore',
+            );
+            return session;
+          }
+
+          console.log('⚠️ Desktop agent session expired, attempting recovery...');
+          const recoveredSession = await this.recoverExpiredSession(session);
+          if (recoveredSession) {
+            console.log('✅ Session recovered successfully');
+            return recoveredSession;
+          }
+
+          // Supabase recovery failed but refresh token still present — hand to renderer
+          console.log(
+            '⚠️ Access token expired — keeping session for renderer refresh restore',
+          );
+          return session;
         }
-        
+
         // CRITICAL FIX: Check for active database sessions before clearing
         const activeSession = await this.syncWithActiveTrackingSession(session);
         if (activeSession) {
@@ -218,7 +248,7 @@ class SessionManager {
           return activeSession;
         }
         
-        console.log('⚠️ Desktop agent session expired, clearing...');
+        console.log('⚠️ Desktop agent session expired (no usable refresh token), clearing...');
         await this.clearDesktopAgentSession();
         return null;
       }

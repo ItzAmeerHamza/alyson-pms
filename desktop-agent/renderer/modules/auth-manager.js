@@ -263,8 +263,7 @@ class AuthManager {
       return false;
     } catch (error) {
       console.error('❌ Auto-login error:', error);
-      // Clear invalid session
-      await this.ipcRenderer.invoke('user-logged-out');
+      // Do not wipe disk session on unexpected errors (e.g. startup races)
       return false;
     }
   }
@@ -277,17 +276,43 @@ class AuthManager {
 
   async tryAutoLoginCognito(savedSession) {
     try {
-      let idToken = savedSession.access_token;
-      const stored = await cognitoAuth.getCurrentCognitoSession(this.authConfig);
-      if (stored?.idToken) {
-        idToken = stored.idToken;
+      // Hydrate renderer Cognito store from disk (refresh token survives ID-token expiry)
+      cognitoAuth.hydrateCognitoSessionFromDisk(savedSession);
+
+      let stored = await cognitoAuth.getCurrentCognitoSession(this.authConfig);
+      if (!stored?.idToken && savedSession?.refresh_token) {
+        stored = await cognitoAuth.refreshCognitoSession(this.authConfig, {
+          refreshToken: savedSession.refresh_token,
+          email: savedSession.email,
+          refreshExpiresAt: savedSession.refresh_expires_at,
+        });
       }
+
+      const idToken = stored?.idToken || savedSession.access_token;
       if (!idToken) {
+        console.warn('⚠️ [AUTH] Cognito auto-login: no usable tokens');
         await this.ipcRenderer.invoke('user-logged-out');
+        cognitoAuth.clearCognitoSession();
         return false;
       }
 
-      const profile = await fetchAuthMe(idToken, this.authConfig, this.ipcRenderer);
+      let profile;
+      try {
+        profile = await fetchAuthMe(idToken, this.authConfig, this.ipcRenderer);
+      } catch (meErr) {
+        // Access token may be stale — force one refresh then retry /auth/me
+        const refreshed = await cognitoAuth.refreshCognitoSession(this.authConfig, stored || {
+          refreshToken: savedSession.refresh_token,
+          email: savedSession.email,
+          refreshExpiresAt: savedSession.refresh_expires_at,
+        });
+        if (!refreshed?.idToken) {
+          throw meErr;
+        }
+        stored = refreshed;
+        profile = await fetchAuthMe(refreshed.idToken, this.authConfig, this.ipcRenderer);
+      }
+
       const details = profile.user;
       const org = profile.organization;
 
@@ -311,6 +336,28 @@ class AuthManager {
 
       await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
       localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+
+      // Persist refreshed tokens so next restart keeps the 30-day session
+      if (stored?.idToken && stored?.refreshToken) {
+        try {
+          await this.ipcRenderer.invoke('user-logged-in', {
+            user: this.currentUser,
+            session: {
+              access_token: stored.idToken,
+              refresh_token: stored.refreshToken,
+              expires_at: stored.expiresAt,
+              refresh_expires_at: stored.refreshExpiresAt,
+              email: this.currentUser.email,
+              remember_me: true,
+              auth_provider: 'cognito',
+              organization_id: this.currentUser.organization_id,
+              organization_slug: this.currentUser.organization_slug,
+            },
+          });
+        } catch (persistErr) {
+          console.warn('⚠️ [AUTH] Failed to persist refreshed Cognito session:', persistErr?.message || persistErr);
+        }
+      }
 
       if (window.__updateGateActive) {
         return false;
@@ -339,9 +386,21 @@ class AuthManager {
       console.log('✅ [AUTH] Cognito auto-login successful');
       return true;
     } catch (error) {
-      console.warn('⚠️ [AUTH] Cognito auto-login failed:', error?.message || error);
-      await this.ipcRenderer.invoke('user-logged-out');
-      cognitoAuth.clearCognitoSession();
+      const msg = String(error?.message || error);
+      const isTransient =
+        /network|fetch|ECONN|ETIMEDOUT|ENOTFOUND|offline|Failed to fetch|timeout|EAI_AGAIN/i.test(msg);
+      const definitiveAuthFailure =
+        /NotAuthorizedException|Token.*revoked|Refresh Token has expired|Invalid Refresh Token|unauthorized|401|403|user.*not found/i.test(
+          msg,
+        );
+
+      console.warn('⚠️ [AUTH] Cognito auto-login failed:', msg);
+
+      // Only wipe the persisted session on real auth failures — keep it on network blips
+      if (definitiveAuthFailure || (!isTransient && /invalid.*(token|session)|expired.*token/i.test(msg))) {
+        await this.ipcRenderer.invoke('user-logged-out');
+        cognitoAuth.clearCognitoSession();
+      }
       return false;
     }
   }
@@ -400,8 +459,9 @@ class AuthManager {
         access_token: stored.idToken,
         refresh_token: stored.refreshToken,
         expires_at: stored.expiresAt,
+        refresh_expires_at: stored.refreshExpiresAt,
         email,
-        remember_me: rememberMe,
+        remember_me: true, // desktop agent always persists (~1y soft limit; Cognito is source of truth)
         auth_provider: 'cognito',
         organization_id: this.currentUser.organization_id,
         organization_slug: this.currentUser.organization_slug,

@@ -92,11 +92,52 @@ describe('SessionManager', () => {
       expect(fs.readFile).toHaveBeenCalledWith(sessionManager.USER_SESSION_PATH, 'utf8');
     });
 
-    it('should return null for expired session', async () => {
+    it('should return null for expired supabase session without recovery', async () => {
       const mockSessionData = {
         email: 'test@example.com',
         access_token: 'token123',
+        auth_provider: 'supabase',
         expires_at: Date.now() - 3600000 // 1 hour ago
+      };
+
+      fs.readFile.mockResolvedValue(JSON.stringify(mockSessionData));
+      fs.unlink.mockResolvedValue();
+
+      const result = await sessionManager.loadDesktopAgentSession();
+
+      expect(result).toBeNull();
+      expect(fs.unlink).toHaveBeenCalled();
+    });
+
+    it('should keep expired Cognito session when refresh token is still valid', async () => {
+      const mockSessionData = {
+        id: 42,
+        email: 'test@example.com',
+        access_token: 'expired-id-token',
+        refresh_token: 'refresh-token-30d',
+        auth_provider: 'cognito',
+        remember_me: true,
+        expires_at: Date.now() - 3600000,
+        refresh_expires_at: Date.now() + (365 * 24 * 60 * 60 * 1000),
+      };
+
+      fs.readFile.mockResolvedValue(JSON.stringify(mockSessionData));
+
+      const result = await sessionManager.loadDesktopAgentSession();
+
+      expect(result).toEqual(mockSessionData);
+      expect(fs.unlink).not.toHaveBeenCalled();
+    });
+
+    it('should clear Cognito session when refresh token soft-expired', async () => {
+      const mockSessionData = {
+        id: 42,
+        email: 'test@example.com',
+        access_token: 'expired-id-token',
+        refresh_token: 'stale-refresh',
+        auth_provider: 'cognito',
+        expires_at: Date.now() - 3600000,
+        refresh_expires_at: Date.now() - 1000,
       };
 
       fs.readFile.mockResolvedValue(JSON.stringify(mockSessionData));

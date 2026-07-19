@@ -97,34 +97,29 @@ class WindowUIManager {
     
     console.log('🔧 [TRAY] Creating tray menu...');
     
-    // Use template icon for macOS to support light/dark mode
-    const isMac = process.platform === 'darwin';
-    const iconName = isMac ? 'tray-iconTemplate.png' : 'tray-icon.png';
-    const trayIconPath = path.join(__dirname, '../../../assets', iconName);
+    // Full-color Alyson PM logo (template icons collapse the orange disc to a blank circle)
+    const trayIconPath = path.join(__dirname, '../../../assets', 'tray-icon.png');
     
     try {
-      // On macOS, use nativeImage to explicitly mark as template
-      if (isMac) {
+      if (process.platform === 'darwin') {
         const { nativeImage } = require('electron');
-        const icon = nativeImage.createFromPath(trayIconPath);
+        let icon = nativeImage.createFromPath(trayIconPath);
         if (!icon || icon.isEmpty()) {
-          console.error('❌ [TRAY] Failed to load template icon from:', trayIconPath);
-          // Fallback to regular icon
-          const fallbackPath = path.join(__dirname, '../../../assets', 'tray-icon.png');
-          this.tray = new Tray(fallbackPath);
-          console.log('⚠️ [TRAY] Using fallback icon');
-        } else {
-          icon.setTemplateImage(true);
-          this.tray = new Tray(icon);
-          console.log('✅ [TRAY] Created macOS template tray icon');
+          const fallbackPath = path.join(__dirname, '../../../assets', 'icon.png');
+          icon = nativeImage.createFromPath(fallbackPath);
         }
+        if (!icon || icon.isEmpty()) {
+          console.error('❌ [TRAY] Failed to load Alyson tray icon from:', trayIconPath);
+          return null;
+        }
+        this.tray = new Tray(icon.resize({ width: 22, height: 22 }));
+        console.log('✅ [TRAY] Created macOS colored Alyson PM tray icon');
       } else {
         this.tray = new Tray(trayIconPath);
         console.log('✅ [TRAY] Created tray icon');
       }
     } catch (error) {
       console.error('❌ [TRAY] Error creating tray icon:', error);
-      // Fallback to regular icon
       try {
         const fallbackPath = path.join(__dirname, '../../../assets', 'tray-icon.png');
         this.tray = new Tray(fallbackPath);

@@ -350,6 +350,31 @@ class IPCEventMap {
       console.log('[IPC] open-url-capture-settings', current);
       return current;
     });
+
+    // Open allowlisted HTTPS URLs in the system browser (e.g. web dashboard)
+    this.registerHandler('open-external-url', async (_event, { url } = {}) => {
+      try {
+        const raw = String(url || '').trim();
+        let parsed;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          return { success: false, error: 'Invalid URL' };
+        }
+        const allowedHosts = new Set(['app.alyson.ai']);
+        if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) {
+          console.warn('⚠️ [IPC] Blocked open-external-url:', raw);
+          return { success: false, error: 'URL not allowed' };
+        }
+        const { shell } = require('electron');
+        await shell.openExternal(parsed.toString());
+        console.log('🌐 [IPC] Opened external URL:', parsed.toString());
+        return { success: true };
+      } catch (error) {
+        console.error('❌ [IPC] open-external-url failed:', error?.message || error);
+        return { success: false, error: 'Failed to open URL' };
+      }
+    });
   }
 
   registerHandler(channel, handler) {

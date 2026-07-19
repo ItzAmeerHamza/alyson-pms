@@ -1,3 +1,10 @@
+const {
+  formatWorkTime,
+  formatWorkDateShort,
+  getWorkTimezone,
+  workDateKey,
+} = require('../../src/modules/utils/work-timezone');
+
 class UIManager {
   constructor(ipcRenderer, notificationManager) {
     this.ipcRenderer = ipcRenderer;
@@ -46,6 +53,26 @@ class UIManager {
       this.showPage(targetPage);
       this.updatePageTitle(targetPage);
     }, 150);
+  }
+
+  /** Open the Alyson web dashboard in the system browser. */
+  async openExternalDashboard(url = 'https://app.alyson.ai') {
+    try {
+      const result = await this.ipcRenderer.invoke('open-external-url', { url });
+      if (!result?.success) {
+        console.error('❌ [UI-MANAGER] Failed to open dashboard:', result?.error);
+        this.notificationManager?.showNotification?.(
+          'Could not open the web dashboard. Please visit app.alyson.ai in your browser.',
+          'error'
+        );
+      }
+    } catch (err) {
+      console.error('❌ [UI-MANAGER] openExternalDashboard error:', err?.message || err);
+      this.notificationManager?.showNotification?.(
+        'Could not open the web dashboard. Please visit app.alyson.ai in your browser.',
+        'error'
+      );
+    }
   }
 
   debounce(func, wait) {
@@ -116,6 +143,12 @@ class UIManager {
           console.log('🔍 [UI-MANAGER-DEBUG] Nav item clicked:', pageId);
           e.preventDefault();
           e.stopPropagation();
+
+          const externalUrl = navElement.getAttribute('data-external-url');
+          if (externalUrl) {
+            this.openExternalDashboard(externalUrl);
+            return;
+          }
           
           // Special debugging for screenshot activity
           if (pageId === 'activity-between-screenshots') {
@@ -3377,10 +3410,7 @@ class UIManager {
   }
 
   _localDateStr(d = new Date()) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
+    return workDateKey(d);
   }
 
   _formatShortLocalDate(dateStr) {
@@ -4135,6 +4165,7 @@ class UIManager {
     screenshots.forEach((screenshot, index) => {
       const capturedAt = new Date(screenshot.captured_at);
       const timeStr = capturedAt.toLocaleTimeString('en-US', {
+        timeZone: getWorkTimezone(),
         hour12: false,
         hour: '2-digit',
         minute: '2-digit',
@@ -4373,9 +4404,8 @@ class UIManager {
 
     // Find max seconds for scaling
     const maxSeconds = Math.max(...daily.map(d => d.totalSeconds), 1);
-    // Use local date (not UTC) so the "today" highlight matches the local-date labels from the handler
-    const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // Pacific work calendar — matches daily totals and session dates
+    const todayStr = this._localDateStr();
 
     let html = '';
     daily.forEach(day => {
@@ -4491,12 +4521,11 @@ class UIManager {
     sessions.forEach((session) => {
       const durationSec = session.durationSeconds || 0;
       listedSeconds += durationSec;
-      const startDate = new Date(session.startTime);
-      const dateStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const startTimeStr = startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateStr = formatWorkDateShort(session.startTime);
+      const startTimeStr = formatWorkTime(session.startTime, { hour12: false });
       let endTimeStr = '--:--';
       if (session.endTime) {
-        endTimeStr = new Date(session.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        endTimeStr = formatWorkTime(session.endTime, { hour12: false });
       }
       const durationStr = this.formatReportDuration(durationSec);
       const isActive = session.status === 'active';

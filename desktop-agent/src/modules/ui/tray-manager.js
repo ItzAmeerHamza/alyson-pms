@@ -105,15 +105,17 @@ class TrayManager {
   }
 
   /**
-   * Build a macOS template tray image from the Alyson tray assets.
+   * Build the macOS menu-bar tray image.
+   * Prefer the full-color Alyson PM logo. Template (monochrome) icons turn the
+   * logo's solid orange disc into a blank white circle in the menu bar.
    */
   _loadMacTrayImage() {
-    const templatePath = this._resolveAssetPath('tray-iconTemplate.png');
-    const template2xPath = this._resolveAssetPath('tray-iconTemplate@2x.png');
     const coloredTrayPath = this._resolveAssetPath('tray-icon.png');
     const appIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
+    const templatePath = this._resolveAssetPath('tray-iconTemplate.png');
+    const template2xPath = this._resolveAssetPath('tray-iconTemplate@2x.png');
 
-    const tryImage = (imagePath, asTemplate = true) => {
+    const tryImage = (imagePath, asTemplate = false) => {
       if (!imagePath || !fs.existsSync(imagePath)) return null;
       const image = nativeImage.createFromPath(imagePath);
       if (!image || image.isEmpty()) return null;
@@ -123,6 +125,19 @@ class TrayManager {
       return image;
     };
 
+    const colored = tryImage(coloredTrayPath, false);
+    if (colored) {
+      console.log('✅ [TRAY] Loaded colored Alyson PM tray icon for macOS');
+      return colored.resize({ width: 22, height: 22 });
+    }
+
+    const appIcon = tryImage(appIconPath, false);
+    if (appIcon) {
+      console.log('⚠️ [TRAY] Using app icon fallback on macOS');
+      return appIcon.resize({ width: 22, height: 22 });
+    }
+
+    // Last resort: monochrome template (often looks like a filled circle)
     if (fs.existsSync(templatePath) && fs.existsSync(template2xPath)) {
       const image = nativeImage.createFromPath(templatePath);
       const image2x = nativeImage.createFromPath(template2xPath);
@@ -136,27 +151,15 @@ class TrayManager {
         if (typeof image.setTemplateImage === 'function') {
           image.setTemplateImage(true);
         }
-        console.log('✅ [TRAY] Loaded macOS template tray icon');
+        console.log('⚠️ [TRAY] Falling back to macOS template tray icon');
         return image;
       }
     }
 
     const templateFallback = tryImage(templatePath, true);
     if (templateFallback) {
-      console.log('✅ [TRAY] Loaded macOS template tray icon (1x only)');
+      console.log('⚠️ [TRAY] Falling back to macOS template tray icon (1x only)');
       return templateFallback;
-    }
-
-    const coloredFallback = tryImage(coloredTrayPath, false);
-    if (coloredFallback) {
-      console.log('⚠️ [TRAY] Using colored tray icon on macOS');
-      return coloredFallback.resize({ width: 22, height: 22 });
-    }
-
-    const appIconFallback = tryImage(appIconPath, false);
-    if (appIconFallback) {
-      console.log('⚠️ [TRAY] Using app icon fallback on macOS');
-      return appIconFallback.resize({ width: 22, height: 22 });
     }
 
     return null;
@@ -172,7 +175,7 @@ class TrayManager {
     }
 
     const isMac = process.platform === 'darwin';
-    const iconPath = this._resolveAssetPath(isMac ? 'tray-iconTemplate.png' : 'tray-icon.png');
+    const iconPath = this._resolveAssetPath('tray-icon.png');
 
     console.log('🔍 [TRAY] Icon path:', iconPath);
     console.log('🔍 [TRAY] File exists:', fs.existsSync(iconPath));
@@ -186,7 +189,7 @@ class TrayManager {
           throw new Error('No macOS tray icon assets found — run npm run generate:icons');
         }
         this.tray = new this.Tray(trayIcon);
-        console.log('✅ [TRAY] macOS tray created with Alyson template icon');
+        console.log('✅ [TRAY] macOS tray created with colored Alyson PM icon');
       } else {
         const alysonIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
         const trayPngPath = this._resolveAssetPath('tray-icon.png');
@@ -226,7 +229,7 @@ class TrayManager {
       }
     });
     
-    console.log(`✅ System tray created (${isMac ? 'macOS template icon' : 'standard icon'})`);
+    console.log(`✅ System tray created (${isMac ? 'macOS colored Alyson PM icon' : 'standard icon'})`);
     this._startLocalDayWatch();
   }
 
@@ -600,6 +603,18 @@ class TrayManager {
       }
 
       menuItems.push({ type: 'separator' });
+
+      menuItems.push({
+        label: 'Open Web Dashboard',
+        click: () => {
+          try {
+            const { shell } = require('electron');
+            shell.openExternal('https://app.alyson.ai');
+          } catch (e) {
+            console.warn('⚠️ [TRAY] Failed to open web dashboard:', e?.message);
+          }
+        }
+      });
 
       // ── Utilities ──
       menuItems.push({
