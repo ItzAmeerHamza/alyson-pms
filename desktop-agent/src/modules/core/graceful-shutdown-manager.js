@@ -290,8 +290,7 @@ class GracefulShutdownManager {
         return false;
       }
 
-      // FIX-8: Use endTimeOverride if available (set by idle auto-stop to
-      // record the actual idle start time instead of the auto-stop time).
+      // FIX-8: Use endTimeOverride if available (idle auto-stop: typically now − 10m).
       const endTime = global._stopEndTimeOverride || new Date().toISOString();
       if (global._stopEndTimeOverride) {
         console.log(`⏱️ [GRACEFUL-SHUTDOWN] Using endTimeOverride: ${endTime}`);

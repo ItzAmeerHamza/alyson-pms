@@ -3968,13 +3968,16 @@
             background: #f1f5f9;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            padding: 8px;
+            padding: 8px 16px;
             cursor: pointer;
-            color: #64748b;
-            transition: all 0.2s;
-            display: flex;
+            color: #475569;
+            transition: all 0.15s ease;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 500;
         }
 
         .monthly-report-refresh-btn:hover {
@@ -5071,7 +5074,8 @@
                             <div class="monthly-report-subtitle" id="monthlyReportLabel">Loading...</div>
                         </div>
                         <button id="monthlyReportRefreshBtn" class="monthly-report-refresh-btn" title="Refresh report">
-                            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                            Refresh
                         </button>
                     </div>
 
@@ -5178,15 +5182,15 @@
                                 <i data-lucide="camera" style="width: 18px; height: 18px; color: #667eea;"></i>
                                 Recent Screenshots
                             </div>
-                            <div class="tracker-screenshots-subtitle">Your latest captured screenshots</div>
+                            <div class="tracker-screenshots-subtitle">Your latest captured screenshots · Pacific Time</div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="tracker-screenshots-date-nav">
-                                <button id="trackerScreenshotPrevDate" title="Previous day">
+                                <button id="trackerScreenshotPrevDate" title="Previous Pacific day">
                                     <i data-lucide="chevron-left" style="width: 14px; height: 14px;"></i>
                                 </button>
-                                <input type="date" id="trackerScreenshotDate" style="font-size: 13px;">
-                                <button id="trackerScreenshotNextDate" title="Next day">
+                                <input type="date" id="trackerScreenshotDate" style="font-size: 13px;" title="Work day in Pacific Time">
+                                <button id="trackerScreenshotNextDate" title="Next Pacific day">
                                     <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
                                 </button>
                             </div>

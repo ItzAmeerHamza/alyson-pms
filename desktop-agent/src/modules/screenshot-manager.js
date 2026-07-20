@@ -208,7 +208,9 @@ class ScreenshotManager {
     }
 
     try {
-      const captureModule = require('../platform/windows/screenshot-capture');
+      const captureModule = process.platform === 'darwin'
+        ? require('../platform/macos/screenshot-capture')
+        : require('../platform/windows/screenshot-capture');
       const result = await captureModule.captureScreenshot();
 
       if (!result || !result.success || !result.buffer || result.buffer.length === 0) {

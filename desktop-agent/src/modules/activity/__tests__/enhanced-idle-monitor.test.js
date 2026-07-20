@@ -152,6 +152,45 @@ describe('EnhancedIdleMonitor', () => {
     });
   });
 
+  // ─── Idle stop truncates exactly the prompt threshold (default 10m) ───
+
+  describe('idle stop time cut', () => {
+    beforeEach(() => {
+      monitor = new EnhancedIdleMonitor(mockConfig);
+      monitor.initialize({ isTracking: true });
+      // Session started well before the cut window
+      global.currentSession = {
+        start_time: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      };
+    });
+
+    test('_stopForIdle ends session exactly 10 minutes before now', () => {
+      const before = Date.now();
+      monitor._stopForIdle('idle_timeout');
+      const after = Date.now();
+
+      expect(global.stopTracking).toHaveBeenCalledTimes(1);
+      const [, , options] = global.stopTracking.mock.calls[0];
+      const endMs = new Date(options.endTimeOverride).getTime();
+      const expectedMin = before - 10 * 60 * 1000;
+      const expectedMax = after - 10 * 60 * 1000;
+      expect(endMs).toBeGreaterThanOrEqual(expectedMin - 5);
+      expect(endMs).toBeLessThanOrEqual(expectedMax + 5);
+    });
+
+    test('_stopForIdle does not use idle-start (avoids cutting the countdown minute)', () => {
+      // Idle started 11 minutes ago (10m idle + 1m countdown)
+      monitor._idlePromptIdleStart = Date.now() - 11 * 60 * 1000;
+      monitor._stopForIdle('idle_timeout');
+
+      const endMs = new Date(global.stopTracking.mock.calls[0][2].endTimeOverride).getTime();
+      const elevenMinAgo = Date.now() - 11 * 60 * 1000;
+      // Must be ~10m cut, not ~11m (idle start)
+      expect(Math.abs(endMs - (Date.now() - 10 * 60 * 1000))).toBeLessThan(2000);
+      expect(endMs).toBeGreaterThan(elevenMinAgo + 30 * 1000);
+    });
+  });
+
   // ─── OS idle auto-stop (existing behavior) ───
 
   describe('OS idle auto-stop', () => {

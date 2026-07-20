@@ -812,21 +812,17 @@ class IPCEventMap {
 
       const { user_id, date, activity_filter = 'all', limit = 50 } = params || {};
       
-      // Fix timezone handling - convert local date to UTC range
+      // Work-calendar day (Pacific by default) → UTC range
       let startUTC, endUTC;
       if (date) {
-        // Get local timezone
-        const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        console.log(`🌍 [FETCH_REQUEST] corrId:${corrId} timezone:${tzName} localDate:${date}`);
-        
-        // Create start and end of day in local timezone, then convert to UTC
-        const localDate = new Date(date + 'T00:00:00');
-        startUTC = new Date(localDate.getTime() - (localDate.getTimezoneOffset() * 60000)).toISOString();
-        
-        const localDateEnd = new Date(date + 'T23:59:59.999');
-        endUTC = new Date(localDateEnd.getTime() - (localDateEnd.getTimezoneOffset() * 60000)).toISOString();
-        
-        console.log(`🌍 [FETCH_REQUEST] corrId:${corrId} UTC range: ${startUTC} to ${endUTC}`);
+        const { workDayBoundsForYmd, getWorkTimezone } = require('../utils/work-timezone');
+        const [y, mo, d] = String(date).split('-').map(Number);
+        const { startMs, endMs } = workDayBoundsForYmd(y, mo, d);
+        startUTC = new Date(startMs).toISOString();
+        endUTC = new Date(endMs - 1).toISOString();
+        console.log(
+          `🌍 [FETCH_REQUEST] corrId:${corrId} workTz:${getWorkTimezone()} date:${date} UTC range: ${startUTC} to ${endUTC}`,
+        );
       }
 
       // Build query with proper column names (removed file_size - doesn't exist in schema)

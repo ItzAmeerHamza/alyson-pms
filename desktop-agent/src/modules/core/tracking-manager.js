@@ -1580,8 +1580,8 @@ try {
       return { success: false, reason: 'no_time_log_id' };
     }
 
-    // FIX-8: Use endTimeOverride if available (set by idle auto-stop to
-    // record the actual idle start time instead of the auto-stop time).
+    // FIX-8: Use endTimeOverride if available (idle auto-stop sets this to
+    // now − idle-prompt threshold, typically exactly 10 minutes).
     const endTime = global._stopEndTimeOverride || new Date().toISOString();
     const userId = this.config.user_id;
     

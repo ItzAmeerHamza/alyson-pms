@@ -421,7 +421,7 @@ class AuthManager {
     if (!/^\d+$/.test(normalizedId)) {
       cognitoAuth.signOutCognito(this.authConfig);
       throw new Error(
-        'Invalid employee profile id from server. Ask your admin to link your account in time_doctor.user_extensions.',
+        'Your account setup is incomplete. Ask your admin to fix your employee profile, then try again.',
       );
     }
 
@@ -751,10 +751,12 @@ class AuthManager {
         errorMessage = 'Cannot connect to the server. Please check your internet connection and try again.';
       } else if (
         msg.includes('Account not found') ||
-        msg.includes('not found. Ask your admin')
+        msg.includes('not found. Ask your admin') ||
+        msg.includes('not linked to an employee') ||
+        msg.includes('link your Cognito')
       ) {
         errorMessage =
-          'Your Cognito account is not linked to an employee profile yet. Ask your admin to add your email in the system.';
+          "We couldn't find an employee account for this email. Ask your admin to add you in Alyson Pulse, then try signing in again.";
       } else if (
         msg.includes('Invalid credentials') ||
         msg.includes('Incorrect username or password') ||
@@ -790,8 +792,12 @@ class AuthManager {
         error.message.includes('member of this organization')
       ) {
         errorMessage = error.message;
-      } else if (error.message.includes('Invalid employee profile id')) {
-        errorMessage = error.message;
+      } else if (
+        error.message.includes('Invalid employee profile id') ||
+        error.message.includes('account setup is incomplete')
+      ) {
+        errorMessage =
+          'Your account setup is incomplete. Ask your admin to fix your employee profile, then try again.';
       } else if (error.message.includes('Email not confirmed')) {
         // Supabase email verification required. Attempt to resend the confirmation email (best-effort).
         try {

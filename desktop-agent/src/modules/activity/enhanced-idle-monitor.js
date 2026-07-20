@@ -519,13 +519,31 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Stop tracking due to idle/break. The time log ends at the moment the user
-   * went idle so the idle minutes are not counted.
+   * Stop tracking due to idle/break. Always truncate exactly the idle-prompt
+   * threshold (default 10 minutes) from worked time — not "idle start → now"
+   * (which would also include the 60s acknowledgement countdown).
    */
   _stopForIdle(reason) {
-    const idleStart = this._idlePromptIdleStart || this.currentIdleStartTime;
-    const endTimeOverride = idleStart ? new Date(idleStart).toISOString() : null;
+    const cutMs = this.IDLE_PROMPT_THRESHOLD_MS || 10 * 60 * 1000;
+    let endMs = Date.now() - cutMs;
+
+    // Never end before the current session started.
+    const sessionStartRaw =
+      global.trackingManager?.sessionStartTime ||
+      global.currentSession?.start_time ||
+      null;
+    if (sessionStartRaw) {
+      const sessionStartMs = new Date(sessionStartRaw).getTime();
+      if (Number.isFinite(sessionStartMs) && endMs < sessionStartMs) {
+        endMs = sessionStartMs;
+      }
+    }
+
+    const endTimeOverride = new Date(endMs).toISOString();
     this._idlePromptIdleStart = null;
+    console.log(
+      `⏱️ [IDLE-PROMPT] Cutting exactly ${Math.round(cutMs / 60000)}m from session end → ${endTimeOverride} (${reason})`,
+    );
     global.stopTracking?.(reason, null, { endTimeOverride });
   }
 

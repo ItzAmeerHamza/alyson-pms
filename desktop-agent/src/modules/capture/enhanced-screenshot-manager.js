@@ -826,7 +826,10 @@ class EnhancedScreenshotManager {
         const result = await winCapture();
 
         if (result && result.success && result.buffer) {
-          log.info({ step: 'CAPTURED VIA WINDOWS', ctx: { method: result.method, size: result.buffer.length } });
+          log.info({
+            step: 'CAPTURED VIA WINDOWS',
+            ctx: { method: result.method, size: result.buffer.length, displayCount: result.displayCount }
+          });
 
           // CRITICAL FIX: Ensure screenshot is saved to database
           let saved = false;
@@ -994,8 +997,13 @@ if (uploadResult?.id) {
         const result = await macCapture();
 
         if (result && result.success && result.buffer) {
-          log.info({ step: 'CAPTURED VIA MACOS', ctx: { method: result.method, size: result.buffer.length } });
-          console.log('📸 [MACOS] Screenshot captured successfully');
+          log.info({
+            step: 'CAPTURED VIA MACOS',
+            ctx: { method: result.method, size: result.buffer.length, displayCount: result.displayCount }
+          });
+          console.log(
+            `📸 [MACOS] Screenshot captured successfully (displays=${result.displayCount || 1}, method=${result.method})`
+          );
 
           // CRITICAL FIX: Ensure screenshot is saved to database
           let saved = false;
@@ -1215,18 +1223,27 @@ if (uploadResult?.id) {
         }
         return ok;
       }
-      // Last-resort: Fall back to native screenshot-desktop module
+      // Last-resort: Fall back to multi-display stitch capture
       try {
         if (process.platform === 'darwin') {
-          console.log('📸 [MACOS] No wrappers, trying direct screenshot-desktop fallback');
+          console.log('📸 [MACOS] No wrappers, trying direct multi-display capture fallback');
         }
-        const screenshot = require('screenshot-desktop');
-        const buffer = await Promise.race([
-          screenshot({ format: 'png' }),
+        const { captureAllDisplaysStitched } = require('../utils/multi-display-screenshot');
+        const directResult = await Promise.race([
+          captureAllDisplaysStitched(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Direct screenshot timed out after 30s')), CAPTURE_TIMEOUT_MS))
         ]);
-        if (buffer && buffer.length > 0) {
-          log.info({ step: 'CAPTURE END (DIRECT)', ctx: { captureId, ok: true, size: buffer.length } });
+        if (directResult?.success && directResult.buffer?.length > 0) {
+          log.info({
+            step: 'CAPTURE END (DIRECT)',
+            ctx: {
+              captureId,
+              ok: true,
+              size: directResult.buffer.length,
+              method: directResult.method,
+              displayCount: directResult.displayCount
+            }
+          });
           if (!isHealthCheck) {
             try { this.onScreenshotSuccess(); } catch { }
             try { this._rateLimiter && this._rateLimiter.record(Date.now()); } catch { }
@@ -1302,25 +1319,27 @@ if (uploadResult?.id) {
     switch (platform) {
       case 'darwin': // macOS
         return {
-          displayId: 0, // Primary display
-          format: 'png'
+          format: 'png',
+          stitchAllDisplays: true
         };
 
       case 'win32': // Windows
         return {
           format: 'png',
-          screen: 0 // Primary screen
+          stitchAllDisplays: true
         };
 
       case 'linux': // Linux
         return {
           format: 'png',
+          stitchAllDisplays: true,
           screen: ':0.0' // Default X11 display
         };
 
       default:
         return {
-          format: 'png'
+          format: 'png',
+          stitchAllDisplays: true
         };
     }
   }

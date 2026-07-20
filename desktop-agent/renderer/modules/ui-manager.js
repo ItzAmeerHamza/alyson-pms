@@ -4079,16 +4079,12 @@ class UIManager {
 
     if (!gridEl) return;
 
-    // Set default date to today if not already set
+    // Default to Pacific work-day "today" (not machine-local Pakistan/etc.)
     if (dateInput && !dateInput.value) {
-      const d = new Date();
-      dateInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dateInput.value = workDateKey();
     }
 
-    const selectedDate = dateInput ? dateInput.value : (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })();
+    const selectedDate = dateInput ? dateInput.value : workDateKey();
 
     // Show loading
     if (loadingEl) loadingEl.style.display = 'block';
@@ -4216,17 +4212,14 @@ class UIManager {
     const navigateDate = (direction) => {
       if (!dateInput) return;
       const parts = dateInput.value.split('-').map(Number);
-      const current = new Date(parts[0], parts[1] - 1, parts[2]);
-      const next = new Date(parts[0], parts[1] - 1, parts[2] + direction);
+      const next = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + direction));
+      const y = next.getUTCFullYear();
+      const m = String(next.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(next.getUTCDate()).padStart(2, '0');
+      const nextKey = `${y}-${m}-${d}`;
+      if (nextKey > workDateKey()) return; // Don't go past Pacific "today"
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (next > today) return; // Don't go into the future
-
-      const y = next.getFullYear();
-      const m = String(next.getMonth() + 1).padStart(2, '0');
-      const d = String(next.getDate()).padStart(2, '0');
-      dateInput.value = `${y}-${m}-${d}`;
+      dateInput.value = nextKey;
       this._trackerScreenshotsCache = null; // invalidate cache
       this.loadTrackerScreenshots(true);
     };

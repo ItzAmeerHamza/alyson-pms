@@ -913,13 +913,19 @@ class DataStatsManager {
           console.warn('⚠️ [ENHANCED-SCREENSHOTS] Falling back to Supabase');
         }
         
+        const { workDayBoundsForYmd } = require('../utils/work-timezone');
+        const [y, mo, d] = String(date).split('-').map(Number);
+        const { startMs, endMs } = workDayBoundsForYmd(y, mo, d);
+        const rangeStartIso = new Date(startMs).toISOString();
+        const rangeEndIso = new Date(endMs - 1).toISOString();
+
         // Build query with activity filtering using service role client for admin access
         let query = this.supabaseService
           .from('screenshots')
           .select('*, is_duplicate, duplicate_reason, duplicate_group_hash, duplicate_hash')
           .eq('user_id', user_id)
-          .gte('captured_at', `${date}T00:00:00.000Z`)
-          .lt('captured_at', `${date}T23:59:59.999Z`)
+          .gte('captured_at', rangeStartIso)
+          .lte('captured_at', rangeEndIso)
           .order('captured_at', { ascending: false });
         
         // Apply activity level filtering
@@ -998,7 +1004,7 @@ class DataStatsManager {
         console.log('🧠 [DEBUG] Filtered for display:', screenshots?.length || 0, 'screenshots found');
         console.log('🧠 [DEBUG] Query parameters used:', {
           user_id,
-          date_range: `${date}T00:00:00.000Z to ${date}T23:59:59.999Z`,
+          date_range: `${rangeStartIso} to ${rangeEndIso}`,
           activity_filter,
           total_found: screenshots?.length || 0
         });
@@ -1127,13 +1133,19 @@ class DataStatsManager {
           return { success: false, error: 'Access denied: Can only view your own screenshots', screenshots: [] };
         }
         
+        const { workDayBoundsForYmd: boundsForYmd } = require('../utils/work-timezone');
+        const [yy, mm, dd] = String(date).split('-').map(Number);
+        const dayBounds = boundsForYmd(yy, mm, dd);
+        const dayStartIso = new Date(dayBounds.startMs).toISOString();
+        const dayEndIso = new Date(dayBounds.endMs - 1).toISOString();
+
         // Query screenshots from database using service role client for admin access
         const { data: screenshots, error } = await this.supabaseService
           .from('screenshots')
           .select('*')
           .eq('user_id', userId)
-          .gte('captured_at', `${date}T00:00:00.000Z`)
-          .lt('captured_at', `${date}T23:59:59.999Z`)
+          .gte('captured_at', dayStartIso)
+          .lte('captured_at', dayEndIso)
           .order('captured_at', { ascending: false })
           .limit(limit);
 

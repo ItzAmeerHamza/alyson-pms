@@ -23,10 +23,8 @@ function getApiBase(config) {
 }
 
 function localDateIso(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  const { workDateKey } = require('./work-timezone');
+  return workDateKey(d);
 }
 
 function sameUserId(a, b) {
@@ -50,24 +48,33 @@ function usesBackendScreenshots(config) {
   return false;
 }
 
-/** Local calendar day bounds (matches Supabase fallback and "today" in the UI). */
+/**
+ * Work-calendar day bounds (Pacific Time by default).
+ * Matches timers / "today" UI — not the machine's local timezone.
+ */
 function resolveDateRange(opts = {}) {
+  const {
+    workDayBoundsForYmd,
+    startOfWorkDay,
+    endOfWorkDayExclusive,
+  } = require('./work-timezone');
+
   if (opts.startIso && opts.endIso) {
     return { start: new Date(opts.startIso), end: new Date(opts.endIso) };
   }
   if (opts.date) {
     const [y, m, d] = opts.date.split('-').map(Number);
     if (y && m && d) {
+      const { startMs, endMs } = workDayBoundsForYmd(y, m, d);
       return {
-        start: new Date(y, m - 1, d, 0, 0, 0, 0),
-        end: new Date(y, m - 1, d, 23, 59, 59, 999),
+        start: new Date(startMs),
+        // list_screenshots uses captured_at <= end (inclusive)
+        end: new Date(endMs - 1),
       };
     }
   }
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+  const start = startOfWorkDay();
+  const end = new Date(endOfWorkDayExclusive().getTime() - 1);
   return { start, end };
 }
 

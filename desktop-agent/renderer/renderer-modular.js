@@ -2172,12 +2172,13 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
                     <div>
-                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date</label>
+                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Pacific Time)</span></label>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <button id="prevDateBtn" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
                                 <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
                             </button>
                             <input type="date" id="screenshotDate" value="${currentDate}" 
+                                   title="Work day in Pacific Time"
                                    style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
                             <button id="nextDateBtn" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
                                 <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
@@ -2409,30 +2410,21 @@ function navigateDate(direction) {
     const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
     const day = parseInt(dateParts[2]);
     
-    // Create date in local timezone
-    const currentDate = new Date(year, month, day);
-    const newDate = new Date(year, month, day + direction);
-    
-    // Don't allow future dates (compare with today at midnight)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (newDate > today) {
-        console.log('❌ Cannot navigate to future date');
+    // Calendar-day arithmetic on the YYYY-MM-DD key (Pacific work calendar)
+    const newDate = new Date(Date.UTC(year, month, day + direction));
+    const newYear = newDate.getUTCFullYear();
+    const newMonth = String(newDate.getUTCMonth() + 1).padStart(2, '0');
+    const newDay = String(newDate.getUTCDate()).padStart(2, '0');
+    const newDateStr = `${newYear}-${newMonth}-${newDay}`;
+
+    if (newDateStr > localDateIso()) {
+        console.log('❌ Cannot navigate past Pacific work-day today');
         return;
     }
-    
-    // Don't go too far back (prevent going before 2020)
-    const earliestDate = new Date(2020, 0, 1); // January 1, 2020
-    if (newDate < earliestDate) {
+    if (newDateStr < '2020-01-01') {
         console.log('❌ Cannot navigate to date before 2020');
         return;
     }
-    
-    // Format the new date properly
-    const newYear = newDate.getFullYear();
-    const newMonth = String(newDate.getMonth() + 1).padStart(2, '0');
-    const newDay = String(newDate.getDate()).padStart(2, '0');
-    const newDateStr = `${newYear}-${newMonth}-${newDay}`;
     
     console.log(`📅 Setting new date: ${newDateStr}`);
     
@@ -2868,7 +2860,7 @@ async function testScreenshotAndVerify() {
     // Wait briefly for upload/insert
     await new Promise(r => setTimeout(r, 2500));
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = localDateIso();
     const fetchResult = await invoker('fetch-screenshots-enhanced', { date: todayIso, limit: 1 });
     console.log('🧪 [TEST] Fetch latest screenshot:', fetchResult);
 
