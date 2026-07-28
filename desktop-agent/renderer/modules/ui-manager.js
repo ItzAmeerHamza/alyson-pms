@@ -11,6 +11,7 @@ class UIManager {
     this.notificationManager = notificationManager;
     this.reportsRefreshInterval = null;
     this.screenshotActivityInterval = null;
+    this.monthlyReportRefreshInterval = null;
     
     // UI state
     this.cachedElements = null;
@@ -251,9 +252,12 @@ class UIManager {
         }
         // Load monthly work report (uses its own cache)
         this.loadMonthlyReport();
+        this.startMonthlyReportAutoRefresh();
         // Load recent screenshots on the time tracker page
         this.loadTrackerScreenshots();
       }, 100);
+    } else {
+      this.stopMonthlyReportAutoRefresh();
     }
     
     // Batch DOM operations for better performance
@@ -1610,7 +1614,7 @@ class UIManager {
         return `
           <div class="recent-screenshot-item" style="display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1px solid #e5e7eb;">
             <div style="width:84px;height:52px;background:#f1f5f9;border-radius:6px;overflow:hidden;flex:none;">
-              ${img ? `<img src="${img}" alt="Screenshot ${idx+1}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">` : ''}
+              ${img ? `<img src="${img}" alt="Screenshot ${idx+1}" style="width:100%;height:100%;object-fit:contain;background:#f1f5f9;" onerror="this.style.display='none'">` : ''}
             </div>
             <div style="flex:1;">
               <div style="font-size:13px;color:#0f172a;font-weight:500;margin-bottom:4px;">${it.window_title || it.app_name || 'Screenshot'}</div>
@@ -1810,7 +1814,7 @@ class UIManager {
         const imageUrl = screenshot.image_url || screenshot.file_path || '';
         
         screenshotEl.innerHTML = `
-          <div style="position: relative; aspect-ratio: 16/9; background: #f8fafc; border-radius: 6px; margin-bottom: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+          <div style="position: relative; aspect-ratio: 32/10; background: #f8fafc; border-radius: 6px; margin-bottom: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
             <img src="${imageUrl}" loading="lazy" alt="Screenshot ${timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}" style="width: 100%; height: 100%; object-fit: contain; display: block; background: #f1f5f9;" onerror="this.onerror=null; this.src='/placeholder-screenshot.png';" />
             <div style="position: absolute; top: 8px; right: 8px; font-size: 11px; background: white; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 6px;">${activityPercent}%</div>
           </div>
@@ -3478,6 +3482,7 @@ class UIManager {
       this.reportsRefreshInterval = null;
       console.log('🧹 [CLEANUP] Cleared reports auto-refresh interval');
     }
+    this.stopMonthlyReportAutoRefresh();
   }
 
   // Call this when navigating away from reports page
@@ -4171,7 +4176,7 @@ class UIManager {
       const activityPercent = screenshot.activity_percent || 0;
       let activityColor = '#10b981'; // green (high)
       let activityLabel = 'High';
-      if (activityPercent < 30) { activityColor = '#ef4444'; activityLabel = 'Low'; }
+      if (activityPercent < 10) { activityColor = '#ef4444'; activityLabel = 'Low'; }
       else if (activityPercent < 70) { activityColor = '#f59e0b'; activityLabel = 'Medium'; }
 
       const clicks = screenshot.mouse_clicks || 0;
@@ -4243,8 +4248,11 @@ class UIManager {
   /**
    * Load and render the monthly work report on the Time Tracker page.
    * Caches data for 5 minutes to avoid excessive re-fetches on page revisits.
+   * @param {boolean} forceRefresh
+   * @param {{ silent?: boolean }} [options] — silent skips loading skeleton (auto-refresh)
    */
-  async loadMonthlyReport(forceRefresh = false) {
+  async loadMonthlyReport(forceRefresh = false, options = {}) {
+    const silent = !!options.silent;
     const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
     const now = Date.now();
 
@@ -4280,10 +4288,14 @@ class UIManager {
 
     if (!contentEl) return; // section not in DOM
 
-    // Show loading
-    if (loadingEl) loadingEl.style.display = 'block';
-    if (emptyEl) emptyEl.style.display = 'none';
-    if (contentEl) contentEl.style.display = 'none';
+    // Show loading (skip on silent auto-refresh so the section doesn't flicker)
+    const hadContent =
+      contentEl.style.display !== 'none' && contentEl.childElementCount > 0;
+    if (!silent || !hadContent) {
+      if (loadingEl) loadingEl.style.display = 'block';
+      if (emptyEl) emptyEl.style.display = 'none';
+      if (contentEl) contentEl.style.display = 'none';
+    }
 
     try {
       const reportData = await this._invokeIpcWhenReady('get-monthly-report-data');
@@ -4292,7 +4304,8 @@ class UIManager {
         totalSeconds: reportData?.totalSeconds,
         sessions: reportData?.totalSessions,
         projects: reportData?.projectBreakdown?.length,
-        weeks: reportData?.weeklyBreakdown?.length
+        weeks: reportData?.weeklyBreakdown?.length,
+        silent
       });
 
       // Hide loading
@@ -4306,6 +4319,7 @@ class UIManager {
             <p style="color: #64748b; font-size: 14px;">Could not load report data.<br>${reportData.error}</p>
           `;
         }
+        if (contentEl) contentEl.style.display = 'none';
         if (labelEl) labelEl.textContent = 'Unavailable';
         return;
       }
@@ -4313,6 +4327,7 @@ class UIManager {
       // Check for empty state
       if (!reportData || (reportData.totalSessions === 0 && reportData.totalSeconds === 0)) {
         if (emptyEl) emptyEl.style.display = 'block';
+        if (contentEl) contentEl.style.display = 'none';
         if (labelEl) labelEl.textContent = reportData?.monthLabel || 'No data';
         return;
       }
@@ -4322,6 +4337,7 @@ class UIManager {
       this._monthlyReportCacheTime = now;
 
       // Show content
+      if (emptyEl) emptyEl.style.display = 'none';
       if (contentEl) contentEl.style.display = 'block';
 
       // Populate
@@ -4342,13 +4358,44 @@ class UIManager {
     } catch (err) {
       console.error('[MONTHLY-REPORT] Error loading report:', err);
       if (loadingEl) loadingEl.style.display = 'none';
-      if (emptyEl) {
-        emptyEl.style.display = 'block';
-        emptyEl.innerHTML = `
-          <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: #f59e0b; margin-bottom: 12px;"></i>
-          <p style="color: #64748b; font-size: 14px;">Could not load report data.<br>Please try again later.</p>
-        `;
+      if (!silent) {
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          emptyEl.innerHTML = `
+            <i data-lucide="alert-triangle" style="width: 48px; height: 48px; color: #f59e0b; margin-bottom: 12px;"></i>
+            <p style="color: #64748b; font-size: 14px;">Could not load report data.<br>Please try again later.</p>
+          `;
+        }
       }
+    }
+  }
+
+  /** Auto-refresh "This Month at a Glance" while Time Tracker is visible (~1 min, like screenshots). */
+  startMonthlyReportAutoRefresh() {
+    this.stopMonthlyReportAutoRefresh();
+    this.monthlyReportRefreshInterval = setInterval(() => {
+      const timetrackerPage = document.getElementById('timetrackerPage');
+      const isActive =
+        timetrackerPage?.classList?.contains('active') ||
+        this.cachedElements?.currentActivePage?.id === 'timetrackerPage';
+      if (!isActive) return;
+      if (this._monthlyReportRefreshing) return;
+      this._monthlyReportRefreshing = true;
+      console.log('🔄 [AUTO-REFRESH] Updating This Month at a Glance...');
+      this.loadMonthlyReport(true, { silent: true })
+        .catch((err) => console.warn('⚠️ [AUTO-REFRESH] Monthly report failed:', err?.message || err))
+        .finally(() => {
+          this._monthlyReportRefreshing = false;
+        });
+    }, 60 * 1000);
+    console.log('🔄 [AUTO-REFRESH] Monthly report auto-refresh started (60s)');
+  }
+
+  stopMonthlyReportAutoRefresh() {
+    if (this.monthlyReportRefreshInterval) {
+      clearInterval(this.monthlyReportRefreshInterval);
+      this.monthlyReportRefreshInterval = null;
+      console.log('⏹️ [AUTO-REFRESH] Monthly report auto-refresh stopped');
     }
   }
 

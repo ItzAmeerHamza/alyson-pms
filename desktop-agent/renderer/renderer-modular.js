@@ -2191,8 +2191,8 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                         <select id="activityFilter" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;" onchange="loadRecentScreenshots()">
                             <option value="all">All Activity Levels</option>
                             <option value="high">High Activity (70%+)</option>
-                            <option value="medium">Medium Activity (30-70%)</option>
-                            <option value="low">Low Activity (0-30%)</option>
+                            <option value="medium">Medium Activity (10-70%)</option>
+                            <option value="low">Low Activity (0-10%)</option>
                         </select>
                     </div>
                     
@@ -2270,7 +2270,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
             // Activity level color
             let activityColor = '#10b981'; // green
             let activityLevel = 'High';
-            if (activityPercent < 30) { activityColor = '#ef4444'; activityLevel = 'Low'; }
+            if (activityPercent < 10) { activityColor = '#ef4444'; activityLevel = 'Low'; }
             else if (activityPercent < 70) { activityColor = '#f59e0b'; activityLevel = 'Medium'; }
             
                         screenshotHTML += `
@@ -2298,11 +2298,11 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                     </div>
                     ` : ''}
                     
-                    <!-- Large screenshot image with fixed aspect ratio (16:10) -->
-                    <div style="width: 100%; aspect-ratio: 16/10; background: #f8fafc; position: relative; overflow: hidden;">
+                    <!-- Wide frame so dual-monitor stitched shots are fully visible -->
+                    <div style="width: 100%; aspect-ratio: 32/10; background: #f8fafc; position: relative; overflow: hidden;">
                         <img src="${screenshot.image_url}" 
                              alt="Screenshot ${index + 1}" 
-                             style="width: 100%; height: 100%; object-fit: cover; display: block;"
+                             style="width: 100%; height: 100%; object-fit: contain; display: block; background: #f1f5f9;"
                              onload="console.log('✅ Image loaded successfully:', '${screenshot.image_url}');"
                              onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 32px;\'>📸</div>';">
                     </div>
@@ -2460,6 +2460,8 @@ ipcRenderer.on('screenshot-saved', (event, data) => {
             console.log('🔄 [AUTO_REFRESH] Auto-refreshing tracker screenshots');
             setTimeout(() => {
                 moduleInstances.uiManager?.loadTrackerScreenshots?.(true);
+                // Keep "This Month at a Glance" in sync when new screenshots land
+                moduleInstances.uiManager?.loadMonthlyReport?.(true, { silent: true });
             }, refreshDelay);
         }
 

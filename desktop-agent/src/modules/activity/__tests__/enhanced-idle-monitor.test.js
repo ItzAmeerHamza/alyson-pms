@@ -164,9 +164,9 @@ describe('EnhancedIdleMonitor', () => {
       };
     });
 
-    test('_stopForIdle ends session exactly 10 minutes before now', () => {
+    test('_stopForIdle with allowCut ends session exactly 10 minutes before now', () => {
       const before = Date.now();
-      monitor._stopForIdle('idle_timeout');
+      monitor._stopForIdle('idle_timeout', { allowCut: true });
       const after = Date.now();
 
       expect(global.stopTracking).toHaveBeenCalledTimes(1);
@@ -178,16 +178,41 @@ describe('EnhancedIdleMonitor', () => {
       expect(endMs).toBeLessThanOrEqual(expectedMax + 5);
     });
 
-    test('_stopForIdle does not use idle-start (avoids cutting the countdown minute)', () => {
+    test('_stopForIdle without allowCut does not subtract time', () => {
+      monitor._stopForIdle('idle_timeout');
+      expect(global.stopTracking).toHaveBeenCalledTimes(1);
+      const [, , options] = global.stopTracking.mock.calls[0];
+      expect(options?.endTimeOverride).toBeUndefined();
+    });
+
+    test('_stopForIdle with allowCut does not use idle-start (avoids cutting the countdown minute)', () => {
       // Idle started 11 minutes ago (10m idle + 1m countdown)
       monitor._idlePromptIdleStart = Date.now() - 11 * 60 * 1000;
-      monitor._stopForIdle('idle_timeout');
+      monitor._stopForIdle('idle_timeout', { allowCut: true });
 
       const endMs = new Date(global.stopTracking.mock.calls[0][2].endTimeOverride).getTime();
       const elevenMinAgo = Date.now() - 11 * 60 * 1000;
       // Must be ~10m cut, not ~11m (idle start)
       expect(Math.abs(endMs - (Date.now() - 10 * 60 * 1000))).toBeLessThan(2000);
       expect(endMs).toBeGreaterThan(elevenMinAgo + 30 * 1000);
+    });
+
+    test('timeout after shown prompt cuts 10m; break stops without cut', () => {
+      monitor._idlePromptActive = true;
+      monitor._idlePromptShown = true;
+      monitor._resolveIdlePrompt('timeout');
+      expect(global.stopTracking).toHaveBeenCalledWith(
+        'idle_timeout',
+        null,
+        expect.objectContaining({ endTimeOverride: expect.any(String) }),
+      );
+
+      global.stopTracking.mockClear();
+      monitor._idlePromptActive = true;
+      monitor._idlePromptShown = true;
+      monitor._resolveIdlePrompt('break');
+      expect(global.stopTracking).toHaveBeenCalledWith('on_break', null, {});
+      expect(global.stopTracking.mock.calls[0][2]?.endTimeOverride).toBeUndefined();
     });
   });
 
@@ -251,9 +276,9 @@ describe('EnhancedIdleMonitor', () => {
   // ─── Continuous idle logging ───
 
   describe('continuous idle logging', () => {
-    test('default idle detection threshold is 60 seconds (1 minute)', () => {
+    test('default idle detection threshold is 300 seconds (5 minutes)', () => {
       monitor = new EnhancedIdleMonitor({ user_id: 'test' });
-      expect(monitor.IDLE_THRESHOLD).toBe(60);
+      expect(monitor.IDLE_THRESHOLD).toBe(300);
       expect(monitor.IDLE_CHECK_INTERVAL).toBe(30000);
       expect(monitor.LOW_ACTIVITY_PERCENT).toBe(30);
     });
@@ -300,7 +325,7 @@ describe('EnhancedIdleMonitor', () => {
       expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(30000);
     });
 
-    test('low activity idle starts after 60s without high activity', async () => {
+    test('low activity / no keys alone does not start idle (OS-only)', async () => {
       monitor = new EnhancedIdleMonitor({ user_id: '1195' });
       monitor.initialize({ isTracking: true });
       monitor.isTracking = true;
@@ -308,25 +333,28 @@ describe('EnhancedIdleMonitor', () => {
       monitor.logIdlePeriod = jest.fn().mockResolvedValue(undefined);
       monitor._lastHighActivityAt = Date.now() - 65000;
       monitor._lastInputActivityAt = Date.now() - 65000;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(10); // mouse still moving
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor.wasIdleLastCheck).toBe(false);
+      expect(monitor.logIdlePeriod).not.toHaveBeenCalled();
+    });
+
+    test('OS idle at/above 5 min starts idle logging', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(300);
 
       await monitor._evaluateIdleState();
 
       expect(monitor.wasIdleLastCheck).toBe(true);
-      expect(monitor.logIdlePeriod).toHaveBeenCalled();
+      expect(monitor.currentIdleStartTime).toBeTruthy();
     });
 
-    test('screenshot low activity triggers idle evaluation', () => {
-      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
-      monitor._evaluateIdleState = jest.fn().mockResolvedValue(undefined);
-      monitor.isTracking = true;
-      global.isTracking = true;
-
-      monitor.onScreenshotActivity(0);
-
-      expect(monitor._evaluateIdleState).toHaveBeenCalled();
-    });
-
-    test('effective idle uses input idle when OS idle is low but no keys/clicks', () => {
+    test('effective idle is OS-only (ignores input/low activity for logging)', () => {
       monitor = new EnhancedIdleMonitor({ user_id: '1195' });
       monitor.initialize({ isTracking: true });
       monitor._lastInputActivityAt = Date.now() - 120000;
@@ -338,7 +366,7 @@ describe('EnhancedIdleMonitor', () => {
       const result = monitor._getEffectiveIdleSeconds();
       expect(result.os).toBe(5);
       expect(result.input).toBeGreaterThanOrEqual(119);
-      expect(result.effective).toBeGreaterThanOrEqual(119);
+      expect(result.effective).toBe(5);
     });
 
     test('resetIdleState clears checkpoint tracking', () => {

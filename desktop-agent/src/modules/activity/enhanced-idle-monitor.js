@@ -39,13 +39,17 @@ class EnhancedIdleMonitor {
     this.PHANTOM_IDLE_THRESHOLD_MS =
       (this.config?.phantom_idle_minutes || global?.appSettings?.phantom_idle_minutes || defaultPhantomIdleMinutes) * 60 * 1000;
     
-    // Constants — idle detection starts after 1 minute of no input (configurable).
+    // Idle logging: OS idle only (any keyboard/mouse/trackpad resets it).
+    // Default 5 minutes so reading/scrolling is not counted as idle.
+    // Override with idle_detection_threshold_seconds / app settings / env.
     const appSettings = this.config?.appSettings || global?.appSettings || {};
+    const envDetectionSeconds = Number(process.env.IDLE_DETECTION_THRESHOLD_SECONDS);
     const detectionSeconds =
+      (envDetectionSeconds > 0 ? envDetectionSeconds : null) ??
       this.config?.idle_detection_threshold_seconds ??
       appSettings.idle_detection_threshold_seconds ??
       this.config?.diagnostic_idle_threshold_seconds ??
-      60;
+      300; // 5 minutes
     const checkpointSeconds =
       this.config?.idle_checkpoint_interval_seconds ??
       appSettings.idle_checkpoint_interval_seconds ??
@@ -80,11 +84,15 @@ class EnhancedIdleMonitor {
     this.AUTO_STOP_THRESHOLD = idleThresholdMinutes * 60;
 
     // Idle-confirmation prompt (replaces the silent idle auto-stop).
-    // Instead of stopping tracking after N minutes of no input, we surface an
-    // always-on-top popup with a countdown. The user chooses "I'm working"
-    // (keep tracking, idle time counted as worked) or "On break" (stop). If they
-    // do not respond before the countdown ends, tracking stops (assumed away).
+    // Policy (product):
+    //   1) OS idle for 10 straight minutes → show "still working?" with a 1-min timer
+    //   2) If that 1-min timer completes with no response → cut exactly 10 minutes
+    //      from the session end, stop tracking; user must press Start again
+    //   3) Never silently subtract idle time without having shown that prompt
+    //   4) "I'm working" → keep tracking (no cut); "On break" → stop (no 10m cut;
+    //      they chose to stop during the visible prompt)
     this._idlePromptActive = false;
+    this._idlePromptShown = false; // true only after UI successfully displayed
     this._idlePromptTimeout = null;
     this._idlePromptIdleStart = null;
     this._idlePromptManager = null;
@@ -157,23 +165,12 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Screenshot-driven idle flush — runs on every low-activity screenshot so idle
-   * is persisted even if the 30s interval misses a window.
+   * Screenshot activity no longer starts idle periods.
+   * Idle is OS-only (see _getEffectiveIdleSeconds); keep this as a no-op hook
+   * so callers do not need to change.
    */
   async _ensureIdleLoggedFromScreenshot() {
-    const lowSec = this._getLowActivityIdleSeconds();
-    if (lowSec < this.IDLE_THRESHOLD) return;
-
-    if (!this.wasIdleLastCheck) {
-      console.log(
-        `⏸️ [IDLE-MONITOR] Screenshot idle detected (${lowSec}s low activity)`,
-      );
-      this.currentIdleStartTime = Date.now() - lowSec * 1000;
-      this._lastIdleCheckpointTime = null;
-      this.wasIdleLastCheck = true;
-    }
-    // Idle logging is deferred: the period is persisted when it ends (user
-    // returns) or discarded if the user confirms "I'm working" via the prompt.
+    // Intentionally empty — low screenshot activity must not inflate IDLE.
   }
 
   recordActivity(_source) {
@@ -214,9 +211,9 @@ class EnhancedIdleMonitor {
     
     console.log('🧍 [IDLE-MONITOR] Starting idle monitoring...');
     console.log(
-      `🧍 [IDLE-MONITOR] Idle detection: ${this.IDLE_THRESHOLD}s low activity (<${this.LOW_ACTIVITY_PERCENT}%), checkpoint every ${this.IDLE_CHECK_INTERVAL / 1000}s`,
+      `🧍 [IDLE-MONITOR] Idle logging: OS idle only, starts after ${this.IDLE_THRESHOLD}s (${Math.round(this.IDLE_THRESHOLD / 60)} min), check every ${this.IDLE_CHECK_INTERVAL / 1000}s`,
     );
-    console.log(`🧍 [IDLE-MONITOR] Auto-stop: ${this.config.idle_threshold_minutes} min OS idle, ${Math.floor(this.PHANTOM_IDLE_THRESHOLD_MS / 60000)} min phantom idle`);
+    console.log(`🧍 [IDLE-MONITOR] Auto-stop prompt: ${this.config.idle_threshold_minutes} min OS idle, ${Math.floor(this.PHANTOM_IDLE_THRESHOLD_MS / 60000)} min phantom idle`);
     
     this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
     this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
@@ -320,14 +317,17 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Use the highest signal: OS idle, no keys/clicks, or sustained low activity %.
+   * Idle for logging / dashboard: OS idle only.
+   * Any keyboard, click, or mouse/trackpad movement resets OS idle — so reading
+   * with scroll/mouse move is not counted. Keys/clicks-only and screenshot %
+   * are kept for diagnostics but do not start idle periods.
    */
   _getEffectiveIdleSeconds() {
     const os = global.unifiedInputManager?.getIdleTime?.() || 0;
     const input = this._getInputIdleSeconds();
     const lowActivity = this._getLowActivityIdleSeconds();
     return {
-      effective: Math.max(os, input, lowActivity),
+      effective: os,
       os,
       input,
       lowActivity,
@@ -335,7 +335,7 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Core idle loop — logs checkpoints while idle; never waits for user input.
+   * Core idle loop — OS idle ≥ threshold starts an idle period for idle_logs.
    */
   async _evaluateIdleState() {
     const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
@@ -343,7 +343,7 @@ class EnhancedIdleMonitor {
 
     if (isIdle && !this.wasIdleLastCheck) {
       console.log(
-        `⏸️ [IDLE-MONITOR] Idle started (effective=${idleSeconds}s, os=${os}s, input=${input}s, low=${lowActivity}s)`,
+        `⏸️ [IDLE-MONITOR] Idle started (os=${os}s ≥ ${this.IDLE_THRESHOLD}s; input=${input}s low%=${lowActivity}s ignored for logging)`,
       );
       this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
       this._lastIdleCheckpointTime = null;
@@ -434,6 +434,7 @@ class EnhancedIdleMonitor {
   _showIdlePrompt(noInputSeconds) {
     if (this._idlePromptActive) return;
     this._idlePromptActive = true;
+    this._idlePromptShown = false;
     this._idlePromptIdleStart =
       this.currentIdleStartTime || Date.now() - Math.round(noInputSeconds * 1000);
 
@@ -448,15 +449,20 @@ class EnhancedIdleMonitor {
         this._resolveIdlePrompt(choice),
       );
       shown = true;
+      this._idlePromptShown = true;
     } catch (e) {
       console.log('❌ [IDLE-PROMPT] Failed to show prompt:', e.message);
     }
 
     if (!shown) {
-      // If the UI cannot be shown, fall back to the old behavior (stop) so we
-      // never keep counting time for a user who is actually away.
+      // Do NOT silently cut 10 minutes or stop — user never saw the timer.
+      // Clear the flag so the next idle-check can retry showing the prompt.
+      console.warn(
+        '⚠️ [IDLE-PROMPT] Prompt UI unavailable — continuing tracking without cut; will retry on next idle check',
+      );
       this._idlePromptActive = false;
-      this._stopForIdle('idle_timeout');
+      this._idlePromptShown = false;
+      this._idlePromptIdleStart = null;
       return;
     }
 
@@ -464,7 +470,9 @@ class EnhancedIdleMonitor {
     this._idlePromptTimeout = setTimeout(() => {
       this._idlePromptTimeout = null;
       if (this._idlePromptActive) {
-        console.log('⏱️ [IDLE-PROMPT] No response within countdown — stopping tracking (assumed away)');
+        console.log(
+          '⏱️ [IDLE-PROMPT] 1-min timer completed with no response — cutting 10m and stopping (assumed away)',
+        );
         this._resolveIdlePrompt('timeout');
       }
     }, this.IDLE_PROMPT_COUNTDOWN_MS);
@@ -472,7 +480,9 @@ class EnhancedIdleMonitor {
 
   _resolveIdlePrompt(choice) {
     if (!this._idlePromptActive) return;
+    const promptWasShown = this._idlePromptShown;
     this._idlePromptActive = false;
+    this._idlePromptShown = false;
     if (this._idlePromptTimeout) {
       clearTimeout(this._idlePromptTimeout);
       this._idlePromptTimeout = null;
@@ -488,11 +498,26 @@ class EnhancedIdleMonitor {
       return;
     }
 
-    const reason = choice === 'break' ? 'on_break' : 'idle_timeout';
-    console.log(
-      `🛑 [IDLE-PROMPT] ${choice === 'break' ? 'User on break' : 'No response'} — stopping tracking (${reason})`,
-    );
-    this._stopForIdle(reason);
+    if (choice === 'break') {
+      // User saw the prompt and chose to stop — end at now (no silent 10m cut).
+      console.log('🛑 [IDLE-PROMPT] User on break — stopping tracking at now (no 10m cut)');
+      this._idlePromptIdleStart = null;
+      global.stopTracking?.('on_break', null, {});
+      return;
+    }
+
+    // choice === 'timeout': 1-min countdown finished with no response
+    if (!promptWasShown) {
+      console.warn(
+        '⚠️ [IDLE-PROMPT] Timeout without a shown prompt — stopping at now without 10m cut',
+      );
+      this._idlePromptIdleStart = null;
+      global.stopTracking?.('idle_timeout', null, {});
+      return;
+    }
+
+    console.log('🛑 [IDLE-PROMPT] No response after 1-min timer — cutting 10m and stopping (idle_timeout)');
+    this._stopForIdle('idle_timeout', { allowCut: true });
   }
 
   /**
@@ -519,11 +544,27 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Stop tracking due to idle/break. Always truncate exactly the idle-prompt
-   * threshold (default 10 minutes) from worked time — not "idle start → now"
-   * (which would also include the 60s acknowledgement countdown).
+   * Stop tracking after the idle prompt's 1-min timer completed unanswered.
+   * Truncates exactly the idle-prompt threshold (default 10 minutes) from
+   * worked time — not "idle start → now" (which would also remove the countdown
+   * minute the user was shown).
+   *
+   * @param {string} reason
+   * @param {{ allowCut?: boolean }} [options] — cut only when allowCut is true
+   *   (prompt was shown and the 1-min timer finished).
    */
-  _stopForIdle(reason) {
+  _stopForIdle(reason, options = {}) {
+    const allowCut = options.allowCut === true;
+    this._idlePromptIdleStart = null;
+
+    if (!allowCut) {
+      console.log(
+        `🛑 [IDLE-PROMPT] Stopping without time cut (${reason}) — prompt cut not authorized`,
+      );
+      global.stopTracking?.(reason, null, {});
+      return;
+    }
+
     const cutMs = this.IDLE_PROMPT_THRESHOLD_MS || 10 * 60 * 1000;
     let endMs = Date.now() - cutMs;
 
@@ -540,7 +581,6 @@ class EnhancedIdleMonitor {
     }
 
     const endTimeOverride = new Date(endMs).toISOString();
-    this._idlePromptIdleStart = null;
     console.log(
       `⏱️ [IDLE-PROMPT] Cutting exactly ${Math.round(cutMs / 60000)}m from session end → ${endTimeOverride} (${reason})`,
     );

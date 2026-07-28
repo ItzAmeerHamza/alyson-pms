@@ -338,7 +338,7 @@ class IPCManager {
       }
       // Force-refresh the monthly report so the stopped session appears immediately
       if (this.uiManager && typeof this.uiManager.loadMonthlyReport === 'function') {
-        this.uiManager.loadMonthlyReport(true).catch(err => {
+        this.uiManager.loadMonthlyReport(true, { silent: true }).catch(err => {
           console.warn('⚠️ [IPC] Failed to refresh monthly report after session update:', err);
         });
       }

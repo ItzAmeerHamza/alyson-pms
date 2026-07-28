@@ -4,7 +4,20 @@
  */
 
 const { getPermissionDiagnosticSnapshot } = require('../../system/permissions-check');
-const { captureAllDisplaysStitched } = require('../../modules/utils/multi-display-screenshot');
+const {
+  captureAllDisplaysStitched,
+  captureViaDesktopCapturerStitched,
+  getPreferredThumbnailSize
+} = require('../../modules/utils/multi-display-screenshot');
+
+function getElectronDisplayCount() {
+  try {
+    const { screen } = require('electron');
+    return screen?.getAllDisplays?.()?.length || 0;
+  } catch (_) {
+    return 0;
+  }
+}
 
 /**
  * Capture screenshot on macOS (all monitors → one stitched image)
@@ -32,7 +45,27 @@ async function captureScreenshot() {
       console.warn(`[MACOS-SCREENSHOT][${attemptId}] Could not pre-check permission:`, permError.message);
     }
 
-    const result = await captureAllDisplaysStitched();
+    const electronCount = getElectronDisplayCount();
+    let result = await captureAllDisplaysStitched();
+
+    if (
+      result.success &&
+      result.buffer &&
+      (result.displayCount || 1) < 2 &&
+      electronCount >= 2
+    ) {
+      console.warn(
+        `[MACOS-SCREENSHOT][${attemptId}] Single-display capture despite multi-monitor; retrying desktopCapturer`
+      );
+      try {
+        const stitched = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
+        if (stitched.success && (stitched.displayCount || 1) >= 2) {
+          result = stitched;
+        }
+      } catch (retryErr) {
+        console.warn(`[MACOS-SCREENSHOT][${attemptId}] desktopCapturer retry failed:`, retryErr.message);
+      }
+    }
 
     if (!result.success || !result.buffer || result.buffer.length === 0) {
       console.warn(`[MACOS-SCREENSHOT][${attemptId}] Capture failed:`, result.error || 'Empty buffer');

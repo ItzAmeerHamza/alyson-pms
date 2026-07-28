@@ -261,8 +261,8 @@ function applyActivityFilter(screenshots, activityFilter = 'all') {
   return screenshots.filter((s) => {
     const pct = s.activity_percent ?? 0;
     if (activityFilter === 'high') return pct >= 70;
-    if (activityFilter === 'medium') return pct >= 30 && pct < 70;
-    if (activityFilter === 'low') return pct < 30;
+    if (activityFilter === 'medium') return pct >= 10 && pct < 70;
+    if (activityFilter === 'low') return pct < 10;
     return true;
   });
 }
