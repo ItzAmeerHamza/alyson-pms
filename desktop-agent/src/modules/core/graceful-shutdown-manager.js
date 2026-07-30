@@ -348,13 +348,16 @@ class GracefulShutdownManager {
       }
       
       const pendingFile = path.join(pendingDir, `${timeLogId}.json`);
-      fs.writeFileSync(pendingFile, JSON.stringify({
+      const tmpFile = `${pendingFile}.tmp`;
+      const payload = JSON.stringify({
         timeLogId,
         endTime: endTime || new Date().toISOString(),
         userId: global.config?.user_id || global.currentUserId,
         reason,
         createdAt: new Date().toISOString()
-      }));
+      });
+      fs.writeFileSync(tmpFile, payload, 'utf8');
+      fs.renameSync(tmpFile, pendingFile);
       
       console.log('📁 [GRACEFUL-SHUTDOWN] Stored pending session close:', timeLogId);
     } catch (error) {
@@ -569,6 +572,7 @@ class GracefulShutdownManager {
           timestamp: global._stopEndTimeOverride || new Date().toISOString(),
           forceStop: true,
           frozenTotalSeconds,
+          timeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
         });
         console.log('✅ [GRACEFUL-SHUTDOWN] Renderer notified');
         return true;
@@ -695,7 +699,25 @@ class GracefulShutdownManager {
         for (const file of files) {
         try {
           const filePath = path.join(pendingDir, file);
-          const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const raw = fs.readFileSync(filePath, 'utf8').trim();
+          if (!raw) {
+            console.warn(`⚠️ [GRACEFUL-SHUTDOWN] Empty pending file — deleting: ${file}`);
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            continue;
+          }
+          let data;
+          try {
+            data = JSON.parse(raw);
+          } catch (parseErr) {
+            console.warn(`⚠️ [GRACEFUL-SHUTDOWN] Corrupt pending file — deleting: ${file} (${parseErr.message})`);
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            continue;
+          }
+          if (!data?.timeLogId || !data?.endTime) {
+            console.warn(`⚠️ [GRACEFUL-SHUTDOWN] Incomplete pending file — deleting: ${file}`);
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            continue;
+          }
           
           console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId} at ${data.endTime}`);
           

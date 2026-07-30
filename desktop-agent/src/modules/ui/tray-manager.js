@@ -505,7 +505,7 @@ class TrayManager {
         if (tickCount <= 3) {
           const readBack = (process.platform === 'darwin' && typeof this.tray.getTitle === 'function')
             ? this.tray.getTitle() : '(n/a)';
-          console.log(`⏱️ [TRAY] Tick #${tickCount}: set="${display}" readBack="${readBack}" (project: ${projectLabel})`);
+          console.log(`⏱️ [TRAY] Tick #${tickCount}: set="${cumulativeDisplay}" (session ${display}) readBack="${readBack}" (project: ${projectLabel})`);
         }
       } catch (e) {
         console.error('❌ [TRAY] Tick error:', e?.message);

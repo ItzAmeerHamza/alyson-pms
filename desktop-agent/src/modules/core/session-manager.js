@@ -537,14 +537,45 @@ class SessionManager {
     try {
       const userId = this.config.user_id;
       const client = this.supabaseService || global.supabaseClient || global.supabase;
-      if (!userId || !client) {
-        console.warn('⚠️ [SESSION] Cannot close existing sessions - missing user_id or supabase client');
+      if (!userId) {
+        console.warn('⚠️ [SESSION] Cannot close existing sessions - missing user_id');
         return { success: false, closedCount: 0 };
       }
-      
+
       console.log('🔄 [SESSION] Closing any existing unclosed sessions before starting new one...');
 
-      // Strategy 1: SECURITY DEFINER RPC (bypasses RLS)
+      // Tenant integer ids (e.g. "1195") are not UUIDs — Supabase RPC/uuid columns fail.
+      // Prefer Nest/RDS close when enabled.
+      const { isBackendTimeLogsEnabled, closeActiveSessions } = require('../utils/backend-time-logs');
+      const { isTenantUserId } = require('../utils/tenant-user-id');
+      if (isBackendTimeLogsEnabled()) {
+        try {
+          const { getDeviceId } = require('../utils/device-id');
+          const deviceId = getDeviceId();
+          const result = await closeActiveSessions(userId, deviceId);
+          const closed = result?.closed ?? 0;
+          console.log(`🔒 [SESSION] RDS close_active_sessions: closed ${closed} session(s)`);
+          return { success: true, closedCount: closed };
+        } catch (rdsErr) {
+          console.warn('⚠️ [SESSION] RDS close failed:', rdsErr.message || rdsErr);
+          if (isTenantUserId(userId)) {
+            // Don't call uuid-typed Supabase RPC with an integer id.
+            return { success: false, closedCount: 0 };
+          }
+        }
+      }
+
+      if (!client) {
+        console.warn('⚠️ [SESSION] Cannot close existing sessions - missing supabase client');
+        return { success: false, closedCount: 0 };
+      }
+
+      if (isTenantUserId(userId)) {
+        console.warn('⚠️ [SESSION] Skipping Supabase UUID RPC for tenant user id', userId);
+        return { success: false, closedCount: 0 };
+      }
+
+      // Strategy 1: SECURITY DEFINER RPC (bypasses RLS) — UUID users only
       try {
         const { data: rpcCount, error: rpcError } = await client
           .rpc('close_user_active_sessions', { p_user_id: userId });
@@ -580,7 +611,6 @@ class SessionManager {
       const now = new Date();
       let closedCount = 0;
       for (const session of existingSessions) {
-        const startTime = new Date(session.start_time);
         const endTime = now;
         
         const { error: updateError } = await client

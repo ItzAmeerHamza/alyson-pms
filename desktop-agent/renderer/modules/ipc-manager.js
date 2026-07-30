@@ -185,6 +185,17 @@ class IPCManager {
           }
         }
         this.optimisticMode = false;
+        // Re-arm display clock if a late tracking-stopped cleared intervals mid-start.
+        if (
+          typeof window.beginLocalTrackingClock === 'function' &&
+          !window.__trackingDisplayWatchdog &&
+          (this.sessionStartTime || data.start_time || data.startTime)
+        ) {
+          const t = this.sessionStartTime || new Date(data.start_time || data.startTime);
+          console.warn('⚠️ [IPC-MANAGER] Re-arming timer clock after start race');
+          window.beginLocalTrackingClock(t);
+          this.startSessionTimer();
+        }
         return;
       }
       
@@ -253,6 +264,42 @@ class IPCManager {
     this.ipcRenderer.on('tracking-stopped', (event, data) => {
       console.log('⏹️ [IPC] Tracking stopped by main process:', data);
       const safeData = data || {};
+      const stoppedId = safeData.timeLogId || safeData.currentTimeLogId || null;
+
+      // Stop→Start race: a late tracking-stopped from the previous session must NOT
+      // kill the new session's UI clock (tray keeps ticking → "stuck" in-app timer).
+      if (this.startInProgress || this.optimisticMode) {
+        console.warn('⚠️ [IPC] Ignoring tracking-stopped during start/optimistic mode', {
+          stoppedId,
+          currentTimeLogId: this.currentTimeLogId,
+        });
+        return;
+      }
+      if (
+        this.isTracking &&
+        this.currentTimeLogId &&
+        stoppedId &&
+        String(stoppedId) !== String(this.currentTimeLogId)
+      ) {
+        console.warn('⚠️ [IPC] Ignoring tracking-stopped for stale session', {
+          stoppedId,
+          currentTimeLogId: this.currentTimeLogId,
+        });
+        return;
+      }
+      // If we're already on a newer generation than the stop event, ignore.
+      const stopGen = Number(safeData.trackingGeneration);
+      if (
+        Number.isFinite(stopGen) &&
+        this._trackingGeneration &&
+        stopGen < this._trackingGeneration
+      ) {
+        console.warn('⚠️ [IPC] Ignoring stale tracking-stopped generation', {
+          stopGen,
+          current: this._trackingGeneration,
+        });
+        return;
+      }
       
       // Update local state
       this.isTracking = false;
@@ -263,6 +310,7 @@ class IPCManager {
       this.sessionStartTime = null;
       this.optimisticMode = false;
       this.currentTimeLogId = null;
+      try { window.__lastTrackingStartTime = null; } catch (_) {}
       
       // Handle force stop signal from main process
       if (safeData.forceStop) {
@@ -863,6 +911,8 @@ class IPCManager {
       }
 
       this.startInProgress = true;
+      this._trackingGeneration = (this._trackingGeneration || 0) + 1;
+      const startGeneration = this._trackingGeneration;
 
       // OPTIMISTIC START first — never block the UI on today-stats / screenshots.
       // Base seconds refresh runs in the background and reconciles the clock.
@@ -894,7 +944,8 @@ class IPCManager {
         isTracking: true,
         status: 'active',
         sessionStartTime: optimisticStartTime,
-        optimistic: true
+        optimistic: true,
+        trackingGeneration: startGeneration,
       });
       
       // Update UI immediately
@@ -930,29 +981,40 @@ class IPCManager {
       console.timeEnd('T1-T2: IPC invoke time');
       console.log('📡 [IPC-MANAGER] T2: After IPC invoke:', new Date().toISOString());
       console.log('▶️ Start tracking result:', result);
+
+      // Another Start superseded this one — don't clobber newer session state.
+      if (startGeneration !== this._trackingGeneration) {
+        console.warn('⚠️ [IPC-MANAGER] Stale start result ignored (newer start in progress)');
+        return result;
+      }
       
       // CRITICAL FIX: Check for success by timeLogId presence, not result.success
       if (result && result.timeLogId) {
         console.log('✅ [IPC-MANAGER] Start tracking successful - timeLogId:', result.timeLogId);
-        // Mark optimistic mode as confirmed
+        // Mark optimistic mode as confirmed — always re-arm the clock in case a
+        // late tracking-stopped from the previous session cleared intervals.
         this.optimisticMode = false;
+        this.startInProgress = false;
+        this.isTracking = true;
+        this.trackingStatus = 'active';
         this.currentTimeLogId = result.timeLogId;
-        
-        // If server time differs significantly, reconcile
-        if (result.startTime) {
-          const serverTime = new Date(result.startTime);
-          const timeDiff = Math.abs(serverTime - optimisticStartTime);
-          if (timeDiff > 1000) { // If more than 1 second difference
-            console.log('🔄 [IPC-MANAGER] Reconciling time difference:', timeDiff, 'ms');
-            this.sessionStartTime = serverTime;
-            if (typeof window.beginLocalTrackingClock === 'function') {
-              window.beginLocalTrackingClock(serverTime);
-            }
-            // Restart session timer only — keep display watchdog running
-            this.stopSessionTimer({ clearDisplayTimers: false });
-            this.startSessionTimer();
-          }
+        const confirmedStart = result.startTime
+          ? new Date(result.startTime)
+          : (this.sessionStartTime || optimisticStartTime);
+        this.sessionStartTime = confirmedStart;
+        if (typeof window.beginLocalTrackingClock === 'function') {
+          window.beginLocalTrackingClock(confirmedStart);
         }
+        this.stopSessionTimer({ clearDisplayTimers: false });
+        this.startSessionTimer();
+        this.emit('tracking-state-changed', {
+          isTracking: true,
+          status: 'active',
+          sessionStartTime: confirmedStart,
+          synced: true,
+          startTime: confirmedStart,
+          trackingGeneration: startGeneration,
+        });
         
         return result;
       } else if (result && result.success === false) {

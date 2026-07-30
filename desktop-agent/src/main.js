@@ -5606,15 +5606,26 @@ if (isElectronContext && ipcMain) {
             ipcMain.handle('get-app-history', async (event, params) => {
               try {
                 console.log('📱 [FALLBACK] get-app-history called', params);
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
+                const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
+                const { isBackendRdsEnabled, listAppLogs } = require('./modules/utils/backend-rds-reads');
                 const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
                 if (!effectiveUserId) return { success: false, error: 'User ID not available' };
                 const { startDate, endDate } = params || {};
                 const start = startDate ? new Date(startDate) : new Date(); if (!startDate) start.setHours(0, 0, 0, 0);
                 const end = endDate ? new Date(endDate) : new Date(); if (!endDate) end.setHours(23, 59, 59, 999);
+                const tenantId = normalizeTenantUserId(effectiveUserId);
+                if (isBackendRdsEnabled() && tenantId) {
+                  const rows = await listAppLogs(tenantId, {
+                    start: start.toISOString(),
+                    end: end.toISOString(),
+                    limit: 1000,
+                  });
+                  return { success: true, data: rows || [] };
+                }
+                if (!supabaseService) return { success: false, error: 'Database service not available' };
                 const { data, error } = await supabaseService
                   .from('app_logs')
-                  .select('id, app_name, window_title, app_path, timestamp, duration_seconds, category, time_log_id, user_id')
+                  .select('id, app_name, window_title, app_path, timestamp, started_at, ended_at, time_log_id, user_id')
                   .gte('timestamp', start.toISOString())
                   .lte('timestamp', end.toISOString())
                   .not('app_name', 'is', null)
@@ -6042,12 +6053,20 @@ if (isElectronContext && ipcMain) {
     return { success: true, totalSeconds: sec };
   });
   ipcMain.handle('get-today-time-stats', async () => {
+    // Single-flight: login/dashboard used to fire 10+ parallel queries and race
+    // zeros vs real totals onto the big clock.
+    if (global._todayStatsInFlight) {
+      return global._todayStatsInFlight;
+    }
+
+    global._todayStatsInFlight = (async () => {
     try {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
       if (!global.supabaseService && !global.supabase && !isBackendTimeLogsEnabled()) {
         console.log('⚠️ [TODAY-TIME-STATS] No database backend available');
+        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
         return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
       }
 
@@ -6059,6 +6078,7 @@ if (isElectronContext && ipcMain) {
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);
       if (!userId) {
+        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
         return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'User not authenticated' };
       }
 
@@ -6069,22 +6089,53 @@ if (isElectronContext && ipcMain) {
       const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
 
       let completedClosedSeconds = agg.completedClosedSeconds;
-      if (!isTracking) {
-        const floor = getFrozenTotalFloor();
-        if (floor > completedClosedSeconds) {
-          completedClosedSeconds = floor;
-        } else if (completedClosedSeconds >= floor) {
-          global._lastTodayTotalAtStop = null;
-          global._rendererFrozenTotalAtStop = null;
+      const floor = getFrozenTotalFloor();
+      if (floor > completedClosedSeconds) {
+        completedClosedSeconds = floor;
+      } else if (!isTracking && completedClosedSeconds >= floor) {
+        global._lastTodayTotalAtStop = null;
+        global._rendererFrozenTotalAtStop = null;
+      }
+
+      // While tracking, never report a closed-base lower than what the tray/renderer
+      // already believes (transient backend failures used to report 0).
+      if (isTracking) {
+        const liveFloor = Math.max(
+          0,
+          Math.floor(Number(global.trayManager?._cumulativeBaseSeconds) || 0),
+          Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
+        );
+        if (liveFloor > completedClosedSeconds) {
+          completedClosedSeconds = liveFloor;
         }
       }
 
-      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: agg.totalTime, completed_closed: completedClosedSeconds } }); } catch { }
-
       const today = new Date();
-      const totalTime = isTracking
+      let totalTime = isTracking
         ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
         : completedClosedSeconds;
+
+      if (isTracking) {
+        const trayCum = Math.max(0, Math.floor(Number(global.trayManager?._lastCumulativeSeconds) || 0));
+        if (trayCum > totalTime) totalTime = trayCum;
+      }
+
+      // Reject absurd regressions vs last good sample (e.g. fetch failed → 0).
+      const lastGood = global._lastGoodTodayStats;
+      if (
+        lastGood &&
+        typeof lastGood.totalTime === 'number' &&
+        lastGood.workDate === workDateKey(today) &&
+        totalTime + 5 < lastGood.totalTime &&
+        lastGood.totalTime > 60
+      ) {
+        console.warn(
+          `⚠️ [TODAY-TIME-STATS] Ignoring regressive total ${totalTime}s (last good ${lastGood.totalTime}s)`,
+        );
+        return lastGood;
+      }
+
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: totalTime, completed_closed: completedClosedSeconds } }); } catch { }
 
       let effectiveSeconds = totalTime;
       let nonEffectiveSeconds = 0;
@@ -6108,7 +6159,7 @@ if (isElectronContext && ipcMain) {
         console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
       }
 
-      return {
+      const payload = {
         totalTime,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
@@ -6122,8 +6173,14 @@ if (isElectronContext && ipcMain) {
         workDate: workDateKey(today),
         date: workDateKey(today),
       };
+      global._lastGoodTodayStats = payload;
+      return payload;
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
+      if (global._lastGoodTodayStats) {
+        console.warn('⚠️ [TODAY-TIME-STATS] Returning last-good stats after error:', error.message);
+        return { ...global._lastGoodTodayStats, stale: true, error: error.message };
+      }
       return {
         totalTime: 0,
         completedTodayBeforeCurrentSessionSeconds: 0,
@@ -6134,6 +6191,13 @@ if (isElectronContext && ipcMain) {
         effectiveStatsComputed: false,
         error: error.message,
       };
+    }
+    })();
+
+    try {
+      return await global._todayStatsInFlight;
+    } finally {
+      global._todayStatsInFlight = null;
     }
   });
 

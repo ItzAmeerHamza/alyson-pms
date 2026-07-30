@@ -1525,21 +1525,65 @@ class DataStatsManager {
         }
         
         console.log(`🔍 [APP-HISTORY] Fetching apps from ${start.toISOString()} to ${end.toISOString()}`);
+
+        const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+        const { isBackendRdsEnabled, listAppLogs } = require('../utils/backend-rds-reads');
+        const tenantId = normalizeTenantUserId(effectiveUserId);
+
+        // Prefer Nest/RDS — production schema has started_at/ended_at, not duration_seconds.
+        if (isBackendRdsEnabled() && tenantId) {
+          try {
+            const rows = await listAppLogs(tenantId, {
+              start: start.toISOString(),
+              end: end.toISOString(),
+              limit: 1000,
+            });
+            const mapped = (rows || []).map((r) => {
+              const started = r.started_at || r.timestamp;
+              const ended = r.ended_at || null;
+              let duration_seconds = 0;
+              if (started && ended) {
+                duration_seconds = Math.max(
+                  0,
+                  Math.round((new Date(ended).getTime() - new Date(started).getTime()) / 1000),
+                );
+              }
+              return {
+                id: r.id,
+                app_name: r.app_name,
+                window_title: r.window_title,
+                app_path: r.app_path || null,
+                timestamp: r.timestamp || started,
+                started_at: started,
+                ended_at: ended,
+                duration_seconds,
+                category: r.category || null,
+                time_log_id: r.time_log_id || null,
+                user_id: tenantId,
+              };
+            });
+            console.log(`✅ [IPC] Fetched ${mapped.length} app history records via RDS`);
+            const enriched = this.enrichWithEstimatedDurations(mapped);
+            const sorted = this._sortAppHistoryRows(enriched);
+            const stats = this.calculateAppHistoryStats(sorted);
+            return { success: true, data: sorted, stats };
+          } catch (rdsErr) {
+            console.warn('⚠️ [APP-HISTORY] RDS list_app_logs failed, trying Supabase:', rdsErr.message);
+          }
+        }
         
-        // Get app logs for the specified date range
-        // Include detected_at (ms epoch) and prefer ordering by it when present
+        // Get app logs for the specified date range (legacy Supabase schema variants)
+        // Prefer columns that exist on time_doctor.app_logs (no duration_seconds).
         let query = this.supabaseService
           .from('app_logs')
-          .select('id, app_name, window_title, app_path, timestamp, detected_at, created_at, duration_seconds, category, time_log_id, user_id')
+          .select('id, app_name, window_title, app_path, timestamp, started_at, ended_at, created_at, category, time_log_id, user_id')
           .gte('timestamp', start.toISOString())
           .lte('timestamp', end.toISOString())
           .not('app_name', 'is', null)
           .eq('user_id', effectiveUserId)
-          // Primary: detected_at desc (nulls last). Secondary: timestamp desc.
-          .order('detected_at', { ascending: false, nullsFirst: false })
           .order('timestamp', { ascending: false })
           .order('created_at', { ascending: false })
-          .limit(1000); // Limit to prevent excessive data transfer
+          .limit(1000);
         
         let data, error;
         try {
@@ -1548,27 +1592,24 @@ class DataStatsManager {
           error = result.error;
           if (error) throw error;
         } catch (e) {
-          if (/(column|could not find).*detected_at/i.test(e.message || '')) {
-            // Fallback: older schema without detected_at
-            console.log('⚠️ [APP-HISTORY] detected_at column not found, using fallback query');
+          const msg = e.message || '';
+          if (/(column|could not find).*(started_at|ended_at|duration_seconds|detected_at)/i.test(msg)) {
+            console.log('⚠️ [APP-HISTORY] Schema mismatch, using minimal column set:', msg);
             const fallbackResult = await this.supabaseService
               .from('app_logs')
-              .select('id, app_name, window_title, app_path, timestamp, created_at, duration_seconds, category, time_log_id, user_id')
+              .select('id, app_name, window_title, timestamp, created_at, time_log_id, user_id')
               .gte('timestamp', start.toISOString())
               .lte('timestamp', end.toISOString())
               .not('app_name', 'is', null)
               .eq('user_id', effectiveUserId)
               .order('timestamp', { ascending: false })
-              .order('created_at', { ascending: false })
               .limit(1000);
             data = fallbackResult.data;
             error = fallbackResult.error;
-            // Extra fallback if created_at is also missing
             if (error && /(column|could not find).*created_at/i.test(error.message || '')) {
-              console.log('⚠️ [APP-HISTORY] created_at column not found, using minimal fallback query');
               const fb2 = await this.supabaseService
                 .from('app_logs')
-                .select('id, app_name, window_title, app_path, timestamp, duration_seconds, category, time_log_id, user_id')
+                .select('id, app_name, window_title, timestamp, time_log_id, user_id')
                 .gte('timestamp', start.toISOString())
                 .lte('timestamp', end.toISOString())
                 .not('app_name', 'is', null)
@@ -1578,20 +1619,6 @@ class DataStatsManager {
               data = fb2.data;
               error = fb2.error;
             }
-          } else if (/(column|could not find).*created_at/i.test(e.message || '')) {
-            // If only created_at missing, retry without it
-            console.log('⚠️ [APP-HISTORY] created_at column not found, retrying without it');
-            const fb2 = await this.supabaseService
-              .from('app_logs')
-              .select('id, app_name, window_title, app_path, timestamp, duration_seconds, category, time_log_id, user_id')
-              .gte('timestamp', start.toISOString())
-              .lte('timestamp', end.toISOString())
-              .not('app_name', 'is', null)
-              .eq('user_id', effectiveUserId)
-              .order('timestamp', { ascending: false })
-              .limit(1000);
-            data = fb2.data;
-            error = fb2.error;
           } else {
             error = e;
           }
@@ -1612,19 +1639,7 @@ class DataStatsManager {
         console.log('🧩 [PARSE-DB] AppHistory: start enrich/sort', { records: data?.length || 0 });
         // Calculate statistics (estimate durations if missing)
         const enriched = this.enrichWithEstimatedDurations(data || []);
-
-        // Enforce deterministic sort on the server side as well
-        const sorted = [...enriched].sort((a, b) => {
-          const aDet = a && a.detected_at != null ? Number(a.detected_at) : Date.parse(a?.timestamp || 0);
-          const bDet = b && b.detected_at != null ? Number(b.detected_at) : Date.parse(b?.timestamp || 0);
-          if (!isNaN(bDet) && !isNaN(aDet) && bDet !== aDet) return bDet - aDet;
-          const aTs = Date.parse(a?.timestamp || 0);
-          const bTs = Date.parse(b?.timestamp || 0);
-          if (!isNaN(bTs) && !isNaN(aTs) && bTs !== aTs) return bTs - aTs;
-          if (a?.id && b?.id) return String(b.id).localeCompare(String(a.id));
-          return 0;
-        });
-
+        const sorted = this._sortAppHistoryRows(enriched);
         const stats = this.calculateAppHistoryStats(sorted);
         
         return { 
@@ -1637,6 +1652,22 @@ class DataStatsManager {
         console.error('❌ Error in get-app-history:', error);
         return { success: false, error: error.message };
       }
+    });
+  }
+
+  /**
+   * Deterministic newest-first sort for app history rows.
+   */
+  _sortAppHistoryRows(enriched) {
+    return [...(enriched || [])].sort((a, b) => {
+      const aDet = a && a.detected_at != null ? Number(a.detected_at) : Date.parse(a?.timestamp || a?.started_at || 0);
+      const bDet = b && b.detected_at != null ? Number(b.detected_at) : Date.parse(b?.timestamp || b?.started_at || 0);
+      if (!isNaN(bDet) && !isNaN(aDet) && bDet !== aDet) return bDet - aDet;
+      const aTs = Date.parse(a?.timestamp || a?.started_at || 0);
+      const bTs = Date.parse(b?.timestamp || b?.started_at || 0);
+      if (!isNaN(bTs) && !isNaN(aTs) && bTs !== aTs) return bTs - aTs;
+      if (a?.id && b?.id) return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }
 

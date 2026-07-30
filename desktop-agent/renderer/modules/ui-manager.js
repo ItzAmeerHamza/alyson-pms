@@ -1237,29 +1237,64 @@ class UIManager {
     // Implementation for showing detailed log information
   }
 
-  // PERF FIX: Cache get-today-time-stats for 5s to prevent duplicate DB queries.
-  // loadDashboardMetrics() and loadTodayTime() both call this within the same dashboard load.
+  // PERF FIX: Cache + single-flight get-today-time-stats so login storms
+  // (10+ parallel calls) share one query and never race zeros onto the clock.
   async _getCachedTodayTimeStats({ force = false } = {}) {
     const now = Date.now();
+    const trackingLive =
+      !!window.__lastTrackingStartTime ||
+      this.trackingStatus === 'active' ||
+      !!(typeof window.isTrayTimerDrivingDisplay === 'function' && window.isTrayTimerDrivingDisplay());
+    const ttlMs = trackingLive ? 15000 : 5000;
+
     if (
       !force &&
       this._todayStatsCache &&
-      (now - this._todayStatsCacheTime) < 5000 &&
-      // Never reuse a response that skipped effective/idle/low-activity computation
+      !this._todayStatsCache.error &&
+      (now - this._todayStatsCacheTime) < ttlMs &&
       this._todayStatsCache.effectiveStatsComputed !== false
     ) {
       return this._todayStatsCache;
     }
-    const result = await this.ipcRenderer.invoke('get-today-time-stats');
-    this._todayStatsCache = result;
-    this._todayStatsCacheTime = now;
-    return result;
+
+    if (this._todayStatsInFlight) {
+      return this._todayStatsInFlight;
+    }
+
+    this._todayStatsInFlight = (async () => {
+      try {
+        const result = await this.ipcRenderer.invoke('get-today-time-stats');
+        // Keep last good if this response is an error / zero regression.
+        const prev = this._todayStatsCache;
+        const incomingTotal = Math.max(0, Math.floor(Number(result?.totalTime) || 0));
+        const prevTotal = Math.max(0, Math.floor(Number(prev?.totalTime) || 0));
+        if (
+          prev &&
+          !prev.error &&
+          prevTotal > 60 &&
+          (result?.error || incomingTotal + 5 < prevTotal)
+        ) {
+          console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring regressive/error response');
+          return prev;
+        }
+        if (result && !result.error) {
+          this._todayStatsCache = result;
+          this._todayStatsCacheTime = Date.now();
+        }
+        return result;
+      } finally {
+        this._todayStatsInFlight = null;
+      }
+    })();
+
+    return this._todayStatsInFlight;
   }
 
   /** Bust cache so Start / focus refresh get fresh effective split. */
   invalidateTodayTimeStatsCache() {
     this._todayStatsCache = null;
     this._todayStatsCacheTime = 0;
+    this._todayStatsInFlight = null;
   }
 
   async loadDashboardMetrics() {
@@ -1469,11 +1504,16 @@ class UIManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(today);
               }
-              const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
+              const base = Math.max(
+                0,
+                Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+                Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
+              );
+              window.__completedTodayBaseSeconds = base;
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                // Pass TRACKED seconds — big clock converts to effective.
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+                // Pass TRACKED seconds — never decrease while live (DB can lag).
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: false });
               }
             } catch {
               // Keep prior effective display; don't flash session-only time into the big clock.
@@ -3256,15 +3296,36 @@ class UIManager {
         this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
         console.log('✅ [TODAY-TIME] Updated effective display:', effectiveSec, 's (tracked', totalSec, 's)');
         if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
-          window.__completedTodayBaseSeconds = completedBase;
+          // Never lower the live base while a session is running — that made the
+          // big clock jump backwards when DB stats lagged the local timer.
+          window.__completedTodayBaseSeconds = Math.max(
+            Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)),
+            completedBase,
+          );
         }
+        const trackingLive =
+          !!window.__lastTrackingStartTime ||
+          !!(typeof window.isTrayTimerDrivingDisplay === 'function' && window.isTrayTimerDrivingDisplay()) ||
+          this.trackingStatus === 'active';
         if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
-          const trackedDisplay =
-            typeof window.resolveStoppedDisplaySeconds === 'function'
-              ? window.resolveStoppedDisplaySeconds(totalSec)
-              : totalSec;
-          window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: true });
-          console.log('✅ [TODAY-TIME] Restored tracker effective clock from tracked', trackedDisplay, 's');
+          if (trackingLive) {
+            // Live session owns the big clock; only refresh cards/base above.
+            if (typeof window.updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
+              window.updateRendererTrackingClock();
+            } else {
+              window.setTrackerDisplaySeconds(
+                Math.max(totalSec, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+                { allowDecrease: false },
+              );
+            }
+          } else {
+            const trackedDisplay =
+              typeof window.resolveStoppedDisplaySeconds === 'function'
+                ? window.resolveStoppedDisplaySeconds(totalSec)
+                : totalSec;
+            window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: true });
+            console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', trackedDisplay, 's');
+          }
         }
       } else {
         console.log('⚠️ [TODAY-TIME] No valid data, trying fallback...');
@@ -3579,10 +3640,15 @@ class UIManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(today);
               }
-              const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
+              const base = Math.max(
+                0,
+                Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+                Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
+              );
+              window.__completedTodayBaseSeconds = base;
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: false });
               }
             } catch (err) {
               console.warn('⚠️ [TIMER-REFRESH] Effective clock refresh failed:', err?.message || err);

@@ -102,7 +102,11 @@ function applyTodayEffectiveStats(stats) {
   // before idle + low-activity queries finish (common right after app launch).
   if (stats.effectiveStatsComputed === false) {
     if (typeof stats.totalTime === 'number') {
-      window.__todayTrackedSeconds = Math.max(0, Math.floor(stats.totalTime));
+      const incoming = Math.max(0, Math.floor(stats.totalTime));
+      window.__todayTrackedSeconds = Math.max(
+        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+        incoming,
+      );
     }
     updateTrackerEffectiveMeta();
     return;
@@ -127,7 +131,17 @@ function applyTodayEffectiveStats(stats) {
     window.__effectiveStatsReady = true;
   }
   if (typeof stats.totalTime === 'number') {
-    window.__todayTrackedSeconds = Math.max(0, Math.floor(stats.totalTime));
+    const incoming = Math.max(0, Math.floor(stats.totalTime));
+    // Never let a lagging DB total pull tracked seconds backwards while the live
+    // clock is ahead (that caused the big timer to bounce 08:37 ↔ 08:38).
+    const live = Math.max(
+      0,
+      Math.floor(Number(window.__todayTrackedSeconds) || 0),
+      typeof readLocalTrackingCumulativeSeconds === 'function'
+        ? readLocalTrackingCumulativeSeconds()
+        : 0,
+    );
+    window.__todayTrackedSeconds = Math.max(live, incoming);
   }
   if (window.__effectiveStatsReady) {
     persistNonEffectiveCache(window.__todayNonEffectiveSeconds);
@@ -269,12 +283,15 @@ function updateRendererTrackingClock() {
   const localCumulative = base + elapsed;
   const trayCumulative = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
   const cumulativeSec = Math.max(localCumulative, trayCumulative);
-  window.__todayTrackedSeconds = cumulativeSec;
+  window.__todayTrackedSeconds = Math.max(
+    Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+    cumulativeSec,
+  );
   const sessionStr = formatSecondsAsHMS(elapsed);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  // Main tracker clock shows effective time (tracked − idle − low activity).
-  // allowDecrease: non-effective can grow as idle/low screenshots sync in.
-  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
+  // Big clock is TRACKED time and must never jump backwards while the session is live.
+  // Effective / non-effective cards update separately via applyTodayEffectiveStats.
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -315,7 +332,11 @@ async function refreshTodayCompletedBaseSeconds() {
     const s = await ipcRenderer.invoke('get-today-time-stats');
     applyTodayEffectiveStats(s);
     const dbBase = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
-    const floor = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
+    const floor = Math.max(
+      0,
+      Math.floor(Number(window.__todayBaseAtLastStop) || 0),
+      Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+    );
     window.__completedTodayBaseSeconds = Math.max(dbBase, floor);
     if (dbBase >= floor) {
       window.__todayBaseAtLastStop = null;
@@ -824,7 +845,10 @@ function setupModuleCommunication() {
       Math.floor(Number(data?.cumulativeSeconds) || 0),
       parseHmsToSeconds(data?.cumulativeDisplay),
     );
-    if (localAhead > incomingTray + 1) {
+    // Only prefer local clock when it is actively running. If watchdog was killed
+    // (stop→start race), always accept tray ticks so the UI does not freeze.
+    const localClockAlive = !!(window.__trackingDisplayWatchdog && window.__lastTrackingStartTime);
+    if (localClockAlive && localAhead > incomingTray + 1) {
       return;
     }
     window.__localTrackingClockActive = false;
@@ -843,9 +867,12 @@ function setupModuleCommunication() {
         ? base + getTodayElapsedSeconds(start)
         : trayCumulative;
       const cumulativeSec = Math.max(localCumulative, trayCumulative);
-      window.__todayTrackedSeconds = cumulativeSec;
+      window.__todayTrackedSeconds = Math.max(
+        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+        cumulativeSec,
+      );
       if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
     }
   });
 
@@ -919,6 +946,8 @@ function setupModuleCommunication() {
       window.timerUpdateInterval = null;
     }
     stopTrackingDisplayWatchdog();
+    window.__lastTrackingStartTime = null;
+    window.__trayTimerActive = false;
     console.log('✅ [TIMER] All timer intervals cleared');
   };
   

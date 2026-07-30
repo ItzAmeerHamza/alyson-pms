@@ -137,15 +137,16 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
       return aggregateTimeLogRows(withActive, currentTimeLogId, isTracking);
     }
   } catch (err) {
-    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend query failed:', err.message);
-    const { normalizeTenantUserId } = require('./tenant-user-id');
-    if (normalizeTenantUserId(userId)) {
-      return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
-    }
+    // Never return zeros here — a transient "fetch failed" must not wipe the live
+    // timer (UI used to jump 08:37 → 00:00 → 08:37). Fall through to Supabase.
+    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend query failed, trying Supabase:', err.message);
   }
 
   if (!supabase) {
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+    // Signal failure explicitly so callers can keep their last-good totals.
+    const err = new Error('No database backend available for today time stats');
+    err.code = 'TODAY_STATS_UNAVAILABLE';
+    throw err;
   }
 
   const { data: timeLogs, error } = await supabase
@@ -158,7 +159,9 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
 
   if (error) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Query failed:', error.message);
-    return { completedClosedSeconds: 0, ongoingCurrentSessionSeconds: 0, totalTime: 0, timeLogsCount: 0 };
+    const err = new Error(error.message || 'Today time stats query failed');
+    err.code = 'TODAY_STATS_QUERY_FAILED';
+    throw err;
   }
 
   const overlapping = logsOverlappingLocalDay(timeLogs);

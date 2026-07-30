@@ -909,7 +909,8 @@ try {
             reason: reason || 'manual',
             message: message || 'Time tracking stopped',
             timestamp: new Date().toISOString(),
-            forceStop: true
+            forceStop: true,
+            timeLogId: this.currentTimeLogId || global.currentTimeLogId || null,
           });
           console.log('📡 [TRACKING-MANAGER] Sent tracking-stopped to renderer immediately');
         }
