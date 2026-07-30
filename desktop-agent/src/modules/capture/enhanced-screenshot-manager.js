@@ -14,6 +14,8 @@ const {
   MEETING_ACTIVITY_FLOOR_PERCENT,
   noteMeetingContext,
   getRecentMeetingLabel,
+  isInMeetingSession,
+  refreshMeetingPresence,
 } = require('../../lib/meeting-context');
 
 const log = createFeatureLogger('SCREEN');
@@ -892,7 +894,7 @@ class EnhancedScreenshotManager {
                 }
 
                 const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
-                const { activityPercent, focusPercent } = this._resolveScreenshotActivity(
+                const { activityPercent, focusPercent } = await this._resolveScreenshotActivity(
                   activityData,
                   appName,
                   windowTitle,
@@ -1067,7 +1069,7 @@ if (uploadResult?.id) {
                 }
 
                 const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
-                const { activityPercent, focusPercent } = this._resolveScreenshotActivity(
+                const { activityPercent, focusPercent } = await this._resolveScreenshotActivity(
                   activityData,
                   appName,
                   windowTitle,
@@ -2035,9 +2037,11 @@ if (uploadResult?.id) {
   }
 
   /**
-   * Resolve activity % for a screenshot, applying video-meeting productive floor.
+   * Resolve activity % for a screenshot.
+   * Floors activity only while a meeting is actually still open (live tab/window probe),
+   * not for a long sticky window after the call ends.
    */
-  _resolveScreenshotActivity(activityData, appName, windowTitle, url = null) {
+  async _resolveScreenshotActivity(activityData, appName, windowTitle, url = null) {
     const keyboardWeight = 2;
     const clickWeight = 1.5;
     const moveWeight = 0.1;
@@ -2059,28 +2063,34 @@ if (uploadResult?.id) {
       focusPercent = Math.min(100, 85 + (weightedActivity - 50) * 0.3);
     }
 
-    // Include the active tab URL: browser video calls (Google Meet, Teams, etc.)
-    // often have a window title that is just the meeting name, so the only reliable
-    // signal is the URL (e.g. meet.google.com/xxx-xxxx-xxx).
     const context = { appName, windowTitle, url };
-    // Refresh "recently in a meeting" state whenever this frame's context is a meeting.
     let meetingLabel = noteMeetingContext(context);
-    // Fall back to the grace window: meetings are frequently backgrounded while the
-    // user focuses/shares another window, so the meeting isn't the foreground context.
+
+    // If foreground isn't the Meet tab (user reading docs during the call),
+    // confirm the Meet tab / Zoom window is still open before flooring.
     if (!meetingLabel) {
-      meetingLabel = getRecentMeetingLabel();
+      try {
+        meetingLabel = await refreshMeetingPresence();
+      } catch (_) {
+        meetingLabel = getRecentMeetingLabel();
+      }
+    } else {
+      // Keep presence in sync when we can see the meeting in the foreground.
+      void refreshMeetingPresence().catch(() => {});
     }
 
-    const activityPercent = meetingLabel
+    const inMeeting = Boolean(meetingLabel) || isInMeetingSession();
+
+    const activityPercent = inMeeting
       ? Math.max(Number(focusPercent) || 0, MEETING_ACTIVITY_FLOOR_PERCENT)
       : focusPercent;
 
-    if (meetingLabel && activityPercent !== focusPercent) {
+    if (inMeeting && activityPercent !== focusPercent) {
       console.log(
-        `📹 [MEETING-ACTIVITY] ${meetingLabel} — activity ${activityPercent}% (input was ${focusPercent}%)`
+        `📹 [MEETING-ACTIVITY] ${meetingLabel || 'meeting'} — activity ${activityPercent}% (input was ${focusPercent}%)`
       );
-    } else if (meetingLabel) {
-      console.log(`📹 [MEETING-ACTIVITY] ${meetingLabel} — activity ${activityPercent}%`);
+    } else if (inMeeting) {
+      console.log(`📹 [MEETING-ACTIVITY] ${meetingLabel || 'meeting'} — activity ${activityPercent}%`);
     }
 
     return { activityPercent, focusPercent: activityPercent };

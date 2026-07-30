@@ -510,6 +510,45 @@ class IPCEventMap {
       return await this._testScreenshotCapability();
     });
 
+    // Verifies dual/multi-monitor capture against Electron's display list.
+    // Returns incompleteMultiDisplay=true when captures < connected monitors.
+    this.registerHandler('verify-multi-display-capture', async () => {
+      try {
+        const { screen } = require('electron');
+        const electronCount = screen?.getAllDisplays?.()?.length || 0;
+        const {
+          captureAllDisplaysStitched,
+        } = require('../utils/multi-display-screenshot');
+        const result = await captureAllDisplaysStitched();
+        const displayCount = result.displayCount || 0;
+        const ok =
+          !!result.success &&
+          (electronCount < 2 || (displayCount >= 2 && !result.incompleteMultiDisplay));
+        return {
+          ok,
+          platform: process.platform,
+          electronCount,
+          displayCount,
+          expectedDisplayCount: result.expectedDisplayCount || electronCount,
+          incompleteMultiDisplay: !!result.incompleteMultiDisplay,
+          method: result.method || null,
+          bytes: result.buffer?.length || 0,
+          error: result.error || null,
+          message: ok
+            ? electronCount < 2
+              ? 'Only 1 display connected — dual capture cannot be proven until an external monitor is attached (Extended mode).'
+              : `Multi-display capture OK (${displayCount} displays via ${result.method})`
+            : `FAILED: Electron sees ${electronCount} display(s) but capture got ${displayCount}`,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error.message,
+          message: `verify-multi-display-capture crashed: ${error.message}`,
+        };
+      }
+    });
+
     this.registerHandler('test-url-detection', async () => {
       return await this._testUrlDetectionCapability();
     });

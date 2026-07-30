@@ -1135,21 +1135,15 @@ class ScreenshotManager {
   }
 
   /**
-   * Multi-display support hook
-   * Default: returns primary/main display only
-   * Future: can be extended to support multiple displays based on config
+   * Multi-display support hook — capture every screen source (external monitors included).
    * @param {Array} sources - Array of screen sources from desktopCapturer
    * @returns {Array} Array of selected screen sources
    */
   getTargetScreens(sources) {
-    // Default: primary display only (first in array)
-    // Future config can select multiple displays or specific display by index
     if (!sources || sources.length === 0) {
       return [];
     }
-    
-    // Return main display only
-    return [sources[0]];
+    return sources.slice();
   }
 }
 

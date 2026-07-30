@@ -3407,40 +3407,60 @@
                 </div>
             </div>
 
-            <!-- SCREENSHOTS PAGE -->
+            <!-- SCREENSHOTS PAGE — shell matches displayEnhancedScreenshots to avoid title flash -->
             <div id="screenshotsPage" class="page-section">
                 <div class="control-section">
                     <div class="control-header">
-                        <div class="control-title">Screenshots Gallery</div>
-                        <div class="control-subtitle">View your activity screenshots in a 3-column grid</div>
+                        <div class="control-title">Screenshots</div>
+                        <div class="control-subtitle">View your activity screenshots with advanced filters</div>
                     </div>
-                    
-                    <!-- Screenshots Filter -->
-                    <div style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center;">
-                        <select id="screenshotFilter" style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: white;">
-                            <option value="today">Today</option>
-                            <option value="yesterday">Yesterday</option>
-                            <option value="week">This Week</option>
-                            <option value="all">All Screenshots</option>
-                        </select>
-                        <button id="refreshScreenshots" style="padding: 8px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
-                        </button>
-                    </div>
-                    
-                    <!-- Screenshots Grid (3 columns) -->
-                    <div id="screenshotsGrid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; min-height: 400px;">
-                        <div id="screenshotsLoading" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; padding: 60px; color: #64748b;">
-                            <i data-lucide="loader" style="width: 24px; height: 24px; animation: spin 2s linear infinite; margin-right: 12px;"></i>
-                            Loading screenshots...
+
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Pacific Time)</span></label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button id="prevDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
+                                        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <input type="date" id="screenshotDate" title="Work day in Pacific Time"
+                                           style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <button id="nextDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
+                                        <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Activity Level</label>
+                                <select id="activityFilter" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <option value="all">All Activity Levels</option>
+                                    <option value="high">High Activity (70%+)</option>
+                                    <option value="medium">Medium Activity (10-70%)</option>
+                                    <option value="low">Low Activity (0-10%)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Show Count</label>
+                                <select id="limitSelect" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <option value="20">20 screenshots</option>
+                                    <option value="50" selected>50 screenshots</option>
+                                    <option value="100">100 screenshots</option>
+                                    <option value="200">200 screenshots</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Quick Actions</label>
+                                <button type="button" onclick="loadRecentScreenshots({ notify: true })" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px; margin-right: 6px;"></i>
+                                    Refresh
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    
-                    <!-- Screenshot Modal -->
-                    <div id="screenshotModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; cursor: pointer;">
-                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px;">
-                            <img id="modalScreenshot" style="max-width: 90%; max-height: 90%; border-radius: 8px;" />
-                        </div>
+
+                    <div style="text-align: center; padding: 60px 40px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b;">
+                        <i data-lucide="loader" style="width: 24px; height: 24px; animation: spin 2s linear infinite; margin-right: 12px;"></i>
+                        Loading screenshots...
                     </div>
                 </div>
             </div>

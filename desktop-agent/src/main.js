@@ -975,42 +975,46 @@ const fallbackSystemMonitor = {
     // display-sleep, display-wake, shutdown) are now ONLY registered in
     // EventHandlerManager to avoid duplicate stopTracking calls.
 
-    // Screenshot failure monitoring (unique to fallback - not in EventHandlerManager)
+    // Screenshot health monitoring (unique to fallback - not in EventHandlerManager)
+    // PAYROLL CRITICAL: Never auto-stop the timer for screenshot problems.
+    // Screenshot gaps must not erase worked time — warn loudly and keep tracking.
     const screenshotFailureInterval = setInterval(() => {
-      if (global.isTracking) {
-        const consecutiveFailures = global.consecutiveScreenshotFailures || 0;
-        const lastSuccessfulTime = global.lastSuccessfulScreenshotTime || 0;
-        const now = Date.now();
+      if (!global.isTracking) return;
 
-        // Stop after 3 consecutive failures
-        if (consecutiveFailures >= 3) {
-          console.log(`🛑 [MAIN] 3 consecutive screenshot failures - stopping tracking automatically`);
-          global.stopTracking('screenshot_failures', '3 consecutive screenshot failures - tracking stopped automatically');
-          return;
-        }
+      const consecutiveFailures = global.consecutiveScreenshotFailures || 0;
+      const lastSuccessfulTime = global.lastSuccessfulScreenshotTime || 0;
+      const now = Date.now();
+      let warnMsg = null;
 
-        // Stop after 15 minutes without successful screenshot
-        if (lastSuccessfulTime > 0 && (now - lastSuccessfulTime) > (15 * 60 * 1000)) {
-          const minutesWithoutScreenshot = Math.floor((now - lastSuccessfulTime) / (60 * 1000));
-          console.log(`🛑 [MAIN] ${minutesWithoutScreenshot} minutes without successful screenshot - stopping tracking automatically`);
-          global.stopTracking('mandatory_screenshot_timeout', `${minutesWithoutScreenshot} minutes without successful screenshot - tracking stopped automatically`);
-          return;
-        }
-
-        // Stop if tracking has been running 15+ minutes with ZERO screenshots ever taken.
-        // This catches the case where screenshot capture never started (e.g. permission
-        // denied silently, scheduler never kicked in, etc.)
-        if (lastSuccessfulTime === 0) {
-          const trackingStartedAt = global.enhancedScreenshotManager?._trackingStartedAt
-            || global.trackingStartTime || 0;
-          if (trackingStartedAt > 0 && (now - trackingStartedAt) > (15 * 60 * 1000)) {
-            const minutesSinceStart = Math.floor((now - trackingStartedAt) / (60 * 1000));
-            console.log(`🛑 [MAIN] ${minutesSinceStart} minutes since tracking started with ZERO screenshots - stopping`);
-            global.stopTracking('mandatory_screenshot_timeout', `${minutesSinceStart} minutes with no screenshots captured - tracking stopped automatically`);
-            return;
-          }
+      if (consecutiveFailures >= 3) {
+        warnMsg = `Screenshot capture failing (${consecutiveFailures} consecutive failures) — timer keeps running`;
+      } else if (lastSuccessfulTime > 0 && (now - lastSuccessfulTime) > (15 * 60 * 1000)) {
+        const minutesWithoutScreenshot = Math.floor((now - lastSuccessfulTime) / (60 * 1000));
+        warnMsg = `No successful screenshot for ${minutesWithoutScreenshot} minutes — timer keeps running`;
+      } else if (lastSuccessfulTime === 0) {
+        const trackingStartedAt = global.enhancedScreenshotManager?._trackingStartedAt
+          || global.trackingStartTime || 0;
+        if (trackingStartedAt > 0 && (now - trackingStartedAt) > (15 * 60 * 1000)) {
+          const minutesSinceStart = Math.floor((now - trackingStartedAt) / (60 * 1000));
+          warnMsg = `${minutesSinceStart} minutes tracking with no screenshots yet — timer keeps running`;
         }
       }
+
+      if (!warnMsg) return;
+
+      // Throttle identical warnings to once per 5 minutes
+      const lastWarnAt = global._lastScreenshotHealthWarnAt || 0;
+      if (now - lastWarnAt < 5 * 60 * 1000) return;
+      global._lastScreenshotHealthWarnAt = now;
+
+      console.warn(`⚠️ [MAIN] ${warnMsg}`);
+      try {
+        global.trayManager?.showNotification?.(
+          'Screenshot issue (timer still running)',
+          warnMsg,
+          { urgency: 'normal' },
+        );
+      } catch (_) {}
     }, 30000); // Check every 30 seconds
 
     // Register with cleanup registry so it gets cleared on shutdown
@@ -1605,8 +1609,20 @@ function loadOfflineQueue() {
 
     if (fs.existsSync(queueFile)) {
       const queue = JSON.parse(fs.readFileSync(queueFile, 'utf8'));
-      offlineQueue = { ...offlineQueue, ...queue };
-      console.log(`💾 Offline queue restored: ${offlineQueue.screenshots.length} screenshots, ${offlineQueue.appLogs.length} app logs`);
+      // Time-log creates now live in offline-time-logs.json. Legacy builds sometimes
+      // wrote a raw array here — ignore arrays so we don't corrupt screenshot queues.
+      if (queue && !Array.isArray(queue) && typeof queue === 'object') {
+        offlineQueue = {
+          ...offlineQueue,
+          ...queue,
+          screenshots: Array.isArray(queue.screenshots) ? queue.screenshots : (offlineQueue.screenshots || []),
+          appLogs: Array.isArray(queue.appLogs) ? queue.appLogs : (offlineQueue.appLogs || []),
+          urlLogs: Array.isArray(queue.urlLogs) ? queue.urlLogs : (offlineQueue.urlLogs || []),
+          idleLogs: Array.isArray(queue.idleLogs) ? queue.idleLogs : (offlineQueue.idleLogs || []),
+          timeLogs: Array.isArray(queue.timeLogs) ? queue.timeLogs : (offlineQueue.timeLogs || []),
+        };
+      }
+      console.log(`💾 Offline queue restored: ${(offlineQueue.screenshots || []).length} screenshots, ${(offlineQueue.appLogs || []).length} app logs`);
     }
   } catch (error) {
     console.log('⚠️ Could not load offline queue:', error.message);
@@ -5940,7 +5956,24 @@ if (isElectronContext && ipcMain) {
 
   // Get current tracking state for UI synchronization
   ipcMain.handle('get-tracking-state', () => {
-    const isTracking = !!(global.isTracking);
+    // Prefer TrackingManager when it is actively tracking — protects against
+    // rare desyncs where global.isTracking was not set (historically caused
+    // the 30s UI sync to silently stop the timer while the employee worked).
+    const managerTracking = !!(global.trackingManager?.isTracking);
+    const isTracking = !!(global.isTracking || managerTracking);
+    if (managerTracking && !global.isTracking) {
+      console.warn('⚠️ [TRACKING-STATE] Healing global.isTracking from TrackingManager');
+      global.isTracking = true;
+      if (!global.currentTimeLogId && global.trackingManager.currentTimeLogId) {
+        global.currentTimeLogId = global.trackingManager.currentTimeLogId;
+      }
+      if (!global.sessionStartTime && global.trackingManager.sessionStartTime) {
+        global.sessionStartTime = global.trackingManager.sessionStartTime;
+      }
+      if (!global.currentSession && global.trackingManager.currentSession) {
+        global.currentSession = global.trackingManager.currentSession;
+      }
+    }
     // FIX-4: Add trackingManager.sessionStartTime as fallback to ensure
     // the start time is always available when tracking is active.
     const startTimeRaw = global.currentSession?.start_time
@@ -5959,7 +5992,7 @@ if (isElectronContext && ipcMain) {
     }
     const state = {
       isTracking,
-      isPaused: global.isPaused || false,
+      isPaused: global.isPaused || global.trackingManager?.isPaused || false,
       sessionStartTime,
       currentTimeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
       trackingDuration
@@ -6052,18 +6085,55 @@ if (isElectronContext && ipcMain) {
       const totalTime = isTracking
         ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
         : completedClosedSeconds;
+
+      let effectiveSeconds = totalTime;
+      let nonEffectiveSeconds = 0;
+      let idleSeconds = 0;
+      let lowActivitySeconds = 0;
+      let effectiveStatsComputed = false;
+      try {
+        const { computeTodayEffectiveStats } = require('./modules/utils/today-effective-stats');
+        const eff = await computeTodayEffectiveStats({
+          userId,
+          totalSeconds: totalTime,
+          config,
+          supabase,
+        });
+        effectiveSeconds = eff.effectiveSeconds;
+        nonEffectiveSeconds = eff.nonEffectiveSeconds;
+        idleSeconds = eff.idleSeconds;
+        lowActivitySeconds = eff.lowActivitySeconds;
+        effectiveStatsComputed = true;
+      } catch (effErr) {
+        console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
+      }
+
       return {
         totalTime,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,
+        effectiveSeconds,
+        nonEffectiveSeconds,
+        idleSeconds,
+        lowActivitySeconds,
+        effectiveStatsComputed,
         userId,
         workDate: workDateKey(today),
         date: workDateKey(today),
       };
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
-      return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: error.message };
+      return {
+        totalTime: 0,
+        completedTodayBeforeCurrentSessionSeconds: 0,
+        effectiveSeconds: 0,
+        nonEffectiveSeconds: 0,
+        idleSeconds: 0,
+        lowActivitySeconds: 0,
+        effectiveStatsComputed: false,
+        error: error.message,
+      };
     }
   });
 

@@ -373,8 +373,10 @@ class SystemMonitor {
             message: 'Database configuration and connectivity verified'
           };
         } catch (dbError) {
+          // PAYROLL CRITICAL: network/DB outages must never block the timer.
+          // Tracking continues offline and syncs when connectivity returns.
           return {
-            status: 'warning',
+            status: 'warn',
             details: {
               hasUrl: true,
               hasKey: true,
@@ -389,7 +391,7 @@ class SystemMonitor {
       
       // Config not ready yet – treat as warning to avoid CRITICAL false alarm at boot
       return {
-        status: 'warning',
+        status: 'warn',
         details: {
           hasUrl,
           hasKey,
@@ -398,8 +400,9 @@ class SystemMonitor {
         message: 'Database configuration not ready yet'
       };
     } catch (error) {
+      // Never fail-closed on connectivity exceptions — offline tracking is required for payroll.
       return {
-        status: 'fail',
+        status: 'warn',
         details: { error: error.message },
         message: `Database check failed: ${error.message}`
       };
@@ -753,11 +756,12 @@ class SystemMonitor {
 
         issues.push(`${checkName}: ${result.message}`);
         
-        // Critical failures that prevent timer start
-        if (['permissions', 'database', 'screenshot', 'inputDetection'].includes(checkName)) {
+        // Critical failures that prevent timer start.
+        // Database/network must NEVER block — employees keep tracking offline.
+        if (['permissions', 'screenshot', 'inputDetection'].includes(checkName)) {
           canStartTimer = false;
         }
-      } else if (result.status === 'warn') {
+      } else if (result.status === 'warn' || result.status === 'warning') {
         warnings.push(`${checkName}: ${result.message}`);
       }
     });

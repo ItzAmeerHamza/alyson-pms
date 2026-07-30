@@ -51,6 +51,15 @@ class TrackingManager extends EventEmitter {
     this.systemMonitor = deps.systemMonitor;
     this.mainWindow = deps.mainWindow;
     this.enhancedAppDetector = deps.enhancedAppDetector;  // 🔧 CRITICAL FIX: Store app detector reference
+
+    // Resume syncing any hours queued while the device was offline
+    try {
+      const pending = this.getOfflineQueue();
+      if (pending.length > 0) {
+        console.log(`📶 [TRACKING-MANAGER] Found ${pending.length} offline time log(s) — starting sync`);
+        this.startOfflineSync();
+      }
+    } catch (_) {}
     
     console.log('🔧 TrackingManager dependencies initialized', {
       hasEnhancedAppDetector: !!this.enhancedAppDetector
@@ -400,66 +409,28 @@ try {
 
       if (error) {
         console.error('❌ [TRACKING-MANAGER] Database error creating time log:', error);
-        
-        // Check if it's a network error
-        if (error.message?.includes('fetch') || error.message?.includes('network') || error.code === 'ENOTFOUND') {
-          console.log('📶 [TRACKING-MANAGER] Network error detected, queueing for offline sync');
-          
-          // Create a local time log with a temporary ID
-          const tempTimeLog = {
-            id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            ...timeLogData,
-            _offline: true,
-            _retryCount: 0
-          };
-          
-          // Store in offline queue
-          const offlineQueue = this.getOfflineQueue();
-          offlineQueue.push({
-            type: 'create_time_log',
-            data: tempTimeLog,
-            timestamp: new Date().toISOString()
-          });
-          this.saveOfflineQueue(offlineQueue);
-          
-          // Continue with the temporary log
-          this.isTracking = true;
-          this.isPaused = false;
-          this.currentTimeLogId = tempTimeLog.id;
-          this.sessionStartTime = startTimeIso;
-          this.currentSession = {
-            id: tempTimeLog.id,
-            user_id: tempTimeLog.user_id,
-            project_id: tempTimeLog.project_id,
-            start_time: tempTimeLog.start_time,
-            is_manual: false,
-            _offline: true
-          };
-          
-          console.log('✅ [TRACKING-MANAGER] Started tracking offline with temp ID:', tempTimeLog.id);
-          
-          // Start offline sync timer
-          this.startOfflineSync();
-          
-          // CRITICAL FIX: Start URL capture AFTER tracking state is set (offline mode)
-          if (global.urlCaptureManager) {
-            try {
-              global.urlCaptureManager.start();
-              console.log('🌐 [URL] UrlCaptureManager started with timer (offline mode, state already set)');
-            } catch (e) {
-              console.warn('⚠️ [URL] Failed to start UrlCaptureManager in offline mode:', e?.message || e);
-            }
-          }
-          
-          return {
-            success: true,
-            timeLogId: tempTimeLog.id,
-            startTime: startTimeIso,
-            offline: true
-          };
+
+        // PAYROLL CRITICAL: network/API failures must never prevent tracking.
+        // Only hard auth/config errors fail the start — everything else starts offline
+        // and syncs when connectivity returns.
+        // IMPORTANT: must fall through to the normal success path so global.isTracking is set.
+        const errMsg = String(error?.message || error || '').toLowerCase();
+        const isHardAuthError =
+          errMsg.includes('user not authenticated') ||
+          errMsg.includes('invalid user_id') ||
+          errMsg.includes('missing internal_api_key') ||
+          errMsg.includes('not authenticated') ||
+          error?.status === 401 ||
+          error?.status === 403;
+
+        if (isHardAuthError) {
+          throw error;
         }
-        
-        throw error;
+
+        console.log('📶 [TRACKING-MANAGER] Create failed (network/backend) — starting offline with temp ID (will sync later)');
+        timeLog = this._queueOfflineTimeLogCreate(timeLogData);
+        error = null;
+        console.log('✅ [TRACKING-MANAGER] Offline time log ready:', timeLog.id);
       }
 
       // Update internal state
@@ -475,7 +446,8 @@ try {
         project_id: finalProjectId,
         start_time: startTimeIso,
         status: 'active',
-        isActive: true
+        isActive: true,
+        ...(timeLog._offline ? { _offline: true } : {})
       };
 
       __phase('DB insert + state setup done');
@@ -867,7 +839,8 @@ try {
         timeLogId: this.currentTimeLogId,
         projectId: this.currentProjectId,
         startTime: this.sessionStartTime,
-        isTracking: true
+        isTracking: true,
+        offline: !!(this.currentSession?._offline || String(this.currentTimeLogId || '').startsWith('temp-'))
       };
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] Failed to start tracking:', error);
@@ -890,6 +863,12 @@ try {
     try {
       // ALWAYS set this flag regardless of current state — belt and suspenders
       global.userExplicitlyStopped = true;
+
+      // End sticky video-meeting session so the next work block isn't floored
+      try {
+        const { clearMeetingSession } = require('../../lib/meeting-context');
+        clearMeetingSession();
+      } catch (_) {}
       
       if (!this.isTracking) {
         console.log('⚠️ [TRACKING-MANAGER] Tracking already stopped');
@@ -1193,6 +1172,10 @@ try {
     
     // ALWAYS set this flag regardless of current state
     global.userExplicitlyStopped = true;
+    try {
+      const { clearMeetingSession } = require('../../lib/meeting-context');
+      clearMeetingSession();
+    } catch (_) {}
     
     // Check if already stopped
     if (!this.isTracking && !global.isTracking) {
@@ -1511,6 +1494,8 @@ try {
   async _checkpointCurrentTimeLog() {
     const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
     if (!this.isTracking || !timeLogId) return;
+    // Temp offline IDs are not in RDS yet — updating them only produces noise / 500s.
+    if (String(timeLogId).startsWith('temp-')) return;
 
     try {
       await backendTimeLogs.updateTimeLog(
@@ -1584,6 +1569,7 @@ try {
     // now − idle-prompt threshold, typically exactly 10 minutes).
     const endTime = global._stopEndTimeOverride || new Date().toISOString();
     const userId = this.config.user_id;
+    const isTempOfflineId = String(timeLogId).startsWith('temp-');
     
     console.log(`🔄 [TRACKING-MANAGER] Closing time log ${timeLogId} with end_time ${endTime}`);
     
@@ -1628,6 +1614,81 @@ try {
         console.warn('⚠️ [TRACKING-MANAGER] Could not compute idle_seconds:', idleErr.message);
       }
 
+      // Offline temp sessions were never inserted — create a completed row now
+      // so worked time is not lost when the employee stops before sync.
+      if (isTempOfflineId) {
+        const startTime =
+          this.sessionStartTime ||
+          this.currentSession?.start_time ||
+          endTime;
+        const createPayload = {
+          user_id: userId,
+          project_id: this.currentProjectId || this.currentSession?.project_id || null,
+          start_time: startTime,
+          end_time: endTime,
+          status: 'completed',
+          is_manual: false,
+          idle_seconds: idleSeconds || 0,
+          device_id: getDeviceId(),
+        };
+
+        try {
+          if (useBackendTimeLogs) {
+            const orgId =
+              global.currentOrganizationId ||
+              this.config.organization_id ||
+              null;
+            await backendTimeLogs.createTimeLog(
+              {
+                id: crypto.randomUUID(),
+                ...createPayload,
+                organization_id: orgId,
+              },
+              this.config,
+            );
+          } else {
+            const { error } = await supabase.from('time_logs').insert([createPayload]);
+            if (error) {
+              throw error;
+            }
+          }
+        } catch (persistErr) {
+          // Still offline — replace queued active create with a completed create
+          console.warn('⚠️ [TRACKING-MANAGER] Offline temp persist failed — queuing completed session:', persistErr?.message || persistErr);
+          try {
+            const queue = this.getOfflineQueue().filter(
+              (item) => !(item.type === 'create_time_log' && item.data?.id === timeLogId),
+            );
+            queue.push({
+              type: 'create_time_log',
+              data: {
+                id: timeLogId,
+                ...createPayload,
+                _offline: true,
+                _retryCount: 0,
+              },
+              timestamp: new Date().toISOString(),
+            });
+            this.saveOfflineQueue(queue);
+            this.startOfflineSync();
+          } catch (_) {}
+          // Local stop still succeeds — hours are durable on disk
+          return { success: true, queued: true };
+        }
+
+        // Drop the queued create so we don't insert a duplicate active session later.
+        try {
+          const queue = this.getOfflineQueue().filter(
+            (item) => !(item.type === 'create_time_log' && item.data?.id === timeLogId),
+          );
+          this.saveOfflineQueue(queue);
+        } catch (_) {}
+
+        console.log(`✅ [TRACKING-MANAGER] Offline temp session persisted as completed (${startTime} → ${endTime})`);
+        this._clearPendingSessionClose(timeLogId);
+        return { success: true };
+      }
+
       const updatePayload = {
         end_time: endTime,
         status: 'completed',
@@ -1643,8 +1704,17 @@ try {
           .eq('id', timeLogId);
 
         if (error) {
-          console.error('❌ [TRACKING-MANAGER] Database update failed:', error.message);
-          return { success: false, reason: 'db_error', error: error.message };
+          console.error('❌ [TRACKING-MANAGER] Database update failed — queuing offline:', error.message);
+          this._queueOfflineTimeLogUpdate({
+            id: timeLogId,
+            user_id: userId,
+            project_id: this.currentProjectId || this.currentSession?.project_id || null,
+            start_time: this.sessionStartTime || this.currentSession?.start_time || null,
+            ...updatePayload,
+            device_id: getDeviceId(),
+            action: 'update',
+          });
+          return { success: true, queued: true };
         }
       }
       
@@ -1653,8 +1723,21 @@ try {
       return { success: true };
       
     } catch (error) {
-      console.error('❌ [TRACKING-MANAGER] Background time log update error:', error.message);
-      return { success: false, reason: 'exception', error: error.message };
+      console.error('❌ [TRACKING-MANAGER] Background time log update error — queuing offline:', error.message);
+      try {
+        this._queueOfflineTimeLogUpdate({
+          id: timeLogId,
+          user_id: userId,
+          project_id: this.currentProjectId || this.currentSession?.project_id || null,
+          start_time: this.sessionStartTime || this.currentSession?.start_time || null,
+          end_time: endTime,
+          status: 'completed',
+          idle_seconds: 0,
+          device_id: getDeviceId(),
+          action: 'update',
+        });
+      } catch (_) {}
+      return { success: true, queued: true };
     }
   }
 
@@ -1995,52 +2078,120 @@ try {
   }
 
   /**
-   * Get offline queue
+   * App data dir for durable offline payroll files
+   */
+  _getAppDataDir() {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const userDataDir = process.env.APPDATA || (process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : path.join(os.homedir(), '.config'));
+    const appDataDir = path.join(userDataDir, 'Alyson Work Time');
+    if (!fs.existsSync(appDataDir)) {
+      fs.mkdirSync(appDataDir, { recursive: true });
+    }
+    return appDataDir;
+  }
+
+  /**
+   * Dedicated file for time-log offline queue.
+   * Must NOT share offline-queue.json (screenshots/appLogs object) — that collision
+   * previously wiped queued hours when either side saved.
+   */
+  _getTimeLogOfflineQueuePath() {
+    const path = require('path');
+    return path.join(this._getAppDataDir(), 'offline-time-logs.json');
+  }
+
+  /**
+   * Queue a local temp time log create and return the temp row
+   */
+  _queueOfflineTimeLogCreate(timeLogData, extra = {}) {
+    const tempTimeLog = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      ...timeLogData,
+      ...extra,
+      _offline: true,
+      _retryCount: 0,
+    };
+
+    const offlineQueue = this.getOfflineQueue();
+    offlineQueue.push({
+      type: 'create_time_log',
+      data: tempTimeLog,
+      timestamp: new Date().toISOString(),
+    });
+    this.saveOfflineQueue(offlineQueue);
+    this.startOfflineSync();
+    return tempTimeLog;
+  }
+
+  /**
+   * Queue a completed/update time log so stop-during-outage never loses hours
+   */
+  _queueOfflineTimeLogUpdate(payload) {
+    const offlineQueue = this.getOfflineQueue();
+    offlineQueue.push({
+      type: 'update_time_log',
+      data: {
+        ...payload,
+        _offline: true,
+        _retryCount: 0,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    this.saveOfflineQueue(offlineQueue);
+    this.startOfflineSync();
+  }
+
+  /**
+   * Get offline time-log queue (array)
    */
   getOfflineQueue() {
     try {
       const fs = require('fs');
       const path = require('path');
-      const os = require('os');
-      
-      // Use same user data directory as saveOfflineQueue
-      const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-      const appDataDir = path.join(userDataDir, 'Alyson Work Time');
-      const queuePath = path.join(appDataDir, 'offline-queue.json');
-      
+      const queuePath = this._getTimeLogOfflineQueuePath();
+
       if (fs.existsSync(queuePath)) {
-        const data = fs.readFileSync(queuePath, 'utf8');
-        return JSON.parse(data);
+        const parsed = JSON.parse(fs.readFileSync(queuePath, 'utf8'));
+        if (Array.isArray(parsed)) return parsed;
+      }
+
+      // One-time migration: older builds stored create_time_log items as a raw
+      // array inside offline-queue.json (corrupting the screenshot queue object).
+      const legacyPath = path.join(this._getAppDataDir(), 'offline-queue.json');
+      if (fs.existsSync(legacyPath)) {
+        const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+        if (Array.isArray(legacy)) {
+          const timeItems = legacy.filter(
+            (item) => item && (item.type === 'create_time_log' || item.type === 'update_time_log'),
+          );
+          if (timeItems.length) {
+            this.saveOfflineQueue(timeItems);
+            console.log(`💾 [TRACKING-MANAGER] Migrated ${timeItems.length} offline time log(s) to dedicated file`);
+            return timeItems;
+          }
+        }
       }
     } catch (error) {
-      console.error('❌ [TRACKING-MANAGER] Error reading offline queue:', error);
+      console.error('❌ [TRACKING-MANAGER] Error reading offline time-log queue:', error);
     }
     return [];
   }
 
   /**
-   * Save offline queue
+   * Save offline time-log queue
    */
   saveOfflineQueue(queue) {
     try {
       const fs = require('fs');
-      const path = require('path');
-      const os = require('os');
-      
-      // Use user data directory instead of app.asar path
-      const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
-      const appDataDir = path.join(userDataDir, 'Alyson Work Time');
-      
-      // Ensure directory exists
-      if (!fs.existsSync(appDataDir)) {
-        fs.mkdirSync(appDataDir, { recursive: true });
-      }
-      
-      const queuePath = path.join(appDataDir, 'offline-queue.json');
-      fs.writeFileSync(queuePath, JSON.stringify(queue, null, 2));
-      console.log('💾 [TRACKING-MANAGER] Offline queue saved with', queue.length, 'items');
+      const queuePath = this._getTimeLogOfflineQueuePath();
+      fs.writeFileSync(queuePath, JSON.stringify(Array.isArray(queue) ? queue : [], null, 2));
+      console.log('💾 [TRACKING-MANAGER] Offline time-log queue saved with', (queue || []).length, 'items');
     } catch (error) {
-      console.error('❌ [TRACKING-MANAGER] Error saving offline queue:', error);
+      console.error('❌ [TRACKING-MANAGER] Error saving offline time-log queue:', error);
     }
   }
 
@@ -2053,7 +2204,7 @@ try {
     
     console.log('🔄 [TRACKING-MANAGER] Starting offline sync timer');
     
-    // Try to sync every 30 seconds
+    // Try to sync every 30 seconds while network may be down
     this.offlineSyncTimer = setInterval(() => {
       this.processOfflineQueue();
     }, 30000);
@@ -2063,74 +2214,160 @@ try {
   }
 
   /**
-   * Process offline queue
+   * Process offline time-log queue — never drop payroll items
    */
   async processOfflineQueue() {
-    const queue = this.getOfflineQueue();
-    if (queue.length === 0) {
-      if (this.offlineSyncTimer) {
-        clearInterval(this.offlineSyncTimer);
-        this.offlineSyncTimer = null;
+    if (this._processingOfflineQueue) return;
+    this._processingOfflineQueue = true;
+
+    try {
+      const queue = this.getOfflineQueue();
+      if (queue.length === 0) {
+        if (this.offlineSyncTimer) {
+          clearInterval(this.offlineSyncTimer);
+          this.offlineSyncTimer = null;
+        }
+        return;
       }
-      return;
-    }
-    
-    console.log('📶 [TRACKING-MANAGER] Processing offline queue with', queue.length, 'items');
-    
-    const remainingItems = [];
-    
-    for (const item of queue) {
-      if (item.type === 'create_time_log') {
+
+      console.log('📶 [TRACKING-MANAGER] Processing offline time-log queue with', queue.length, 'items');
+
+      const remainingItems = [];
+
+      for (const item of queue) {
         try {
-          // Remove temporary fields
-          const timeLogData = { ...item.data };
-          delete timeLogData._offline;
-          delete timeLogData._retryCount;
-          delete timeLogData.id; // Remove temp ID, let DB generate new one
-          
-          const { data: timeLog, error } = await this.supabaseService
-            .from('time_logs')
-            .insert([timeLogData])
-            .select()
-            .single();
-          
-          if (error) throw error;
-          
-          console.log('✅ [TRACKING-MANAGER] Synced offline time log:', timeLog.id);
-          
-          // If this is the current session, update the ID
-          if (this.currentTimeLogId === item.data.id) {
-            this.currentTimeLogId = timeLog.id;
-            this.currentSession.id = timeLog.id;
-            delete this.currentSession._offline;
-            
-            // Notify renderer of the ID update
-            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-              this.mainWindow.webContents.send('time-log-id-updated', {
-                oldId: item.data.id,
-                newId: timeLog.id
-              });
+          if (item.type === 'create_time_log') {
+            const timeLogData = { ...item.data };
+            delete timeLogData._offline;
+            delete timeLogData._retryCount;
+            const tempId = timeLogData.id;
+            delete timeLogData.id; // Remove temp ID; assign a real UUID for backend
+
+            let timeLog = null;
+            if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+              const orgId =
+                global.currentOrganizationId ||
+                this.config.organization_id ||
+                null;
+              const newId = crypto.randomUUID();
+              timeLog = await backendTimeLogs.createTimeLog(
+                {
+                  id: newId,
+                  ...timeLogData,
+                  organization_id: orgId,
+                },
+                this.config,
+              );
+            } else {
+              if (!this.supabaseService) {
+                throw new Error('No Supabase client for offline time log sync');
+              }
+              const { data, error } = await this.supabaseService
+                .from('time_logs')
+                .insert([timeLogData])
+                .select()
+                .single();
+              if (error) throw error;
+              timeLog = data;
             }
+
+            console.log('✅ [TRACKING-MANAGER] Synced offline time log:', timeLog.id);
+
+            // If this is the current session, update the ID
+            if (this.currentTimeLogId === tempId || this.currentTimeLogId === item.data.id) {
+              this.currentTimeLogId = timeLog.id;
+              global.currentTimeLogId = timeLog.id;
+              if (this.currentSession) {
+                this.currentSession.id = timeLog.id;
+                this.currentSession.time_log_id = timeLog.id;
+                delete this.currentSession._offline;
+              }
+              if (global.currentSession) {
+                global.currentSession.id = timeLog.id;
+                global.currentSession.time_log_id = timeLog.id;
+                delete global.currentSession._offline;
+              }
+
+              if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.webContents.send('time-log-id-updated', {
+                  oldId: item.data.id,
+                  newId: timeLog.id,
+                });
+              }
+            }
+          } else if (item.type === 'update_time_log') {
+            const updates = { ...item.data };
+            const id = updates.id;
+            delete updates.id;
+            delete updates._offline;
+            delete updates._retryCount;
+            delete updates.action;
+
+            if (!id || String(id).startsWith('temp-')) {
+              // Convert stranded temp updates into a completed create
+              const createPayload = {
+                user_id: updates.user_id || this.config.user_id,
+                project_id: updates.project_id || this.currentProjectId || null,
+                start_time: updates.start_time || updates.end_time,
+                end_time: updates.end_time,
+                status: 'completed',
+                is_manual: false,
+                idle_seconds: updates.idle_seconds || 0,
+                device_id: updates.device_id || getDeviceId(),
+              };
+              if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+                const orgId =
+                  global.currentOrganizationId ||
+                  this.config.organization_id ||
+                  null;
+                await backendTimeLogs.createTimeLog(
+                  { id: crypto.randomUUID(), ...createPayload, organization_id: orgId },
+                  this.config,
+                );
+              } else if (this.supabaseService) {
+                const { error } = await this.supabaseService.from('time_logs').insert([createPayload]);
+                if (error) throw error;
+              } else {
+                throw new Error('No DB client for offline completed create');
+              }
+              console.log('✅ [TRACKING-MANAGER] Synced offline completed temp session');
+            } else if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+              await backendTimeLogs.updateTimeLog(id, updates, this.config);
+              console.log('✅ [TRACKING-MANAGER] Synced offline time log update:', id);
+            } else if (this.supabaseService) {
+              const { error } = await this.supabaseService
+                .from('time_logs')
+                .update(updates)
+                .eq('id', id);
+              if (error) throw error;
+              console.log('✅ [TRACKING-MANAGER] Synced offline time log update:', id);
+            } else {
+              throw new Error('No DB client for offline time log update');
+            }
+          } else {
+            // Unknown item types are kept so we never silently discard payroll data
+            remainingItems.push(item);
+            continue;
           }
         } catch (error) {
-          console.error('❌ [TRACKING-MANAGER] Failed to sync offline item:', error);
-          item.data._retryCount = (item.data._retryCount || 0) + 1;
-          
-          // Keep trying unless it's been too many attempts
-          if (item.data._retryCount < 10) {
-            remainingItems.push(item);
+          console.error('❌ [TRACKING-MANAGER] Failed to sync offline item (will retry forever):', error?.message || error);
+          if (item.data) {
+            item.data._retryCount = (item.data._retryCount || 0) + 1;
           }
+          // PAYROLL CRITICAL: never drop time-log items — keep retrying indefinitely
+          remainingItems.push(item);
         }
       }
-    }
-    
-    // Save remaining items
-    this.saveOfflineQueue(remainingItems);
-    
-    if (remainingItems.length === 0 && this.offlineSyncTimer) {
-      clearInterval(this.offlineSyncTimer);
-      this.offlineSyncTimer = null;
-      console.log('✅ [TRACKING-MANAGER] Offline queue processed successfully');
+
+      this.saveOfflineQueue(remainingItems);
+
+      if (remainingItems.length === 0 && this.offlineSyncTimer) {
+        clearInterval(this.offlineSyncTimer);
+        this.offlineSyncTimer = null;
+        console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
+      }
+    } finally {
+      this._processingOfflineQueue = false;
     }
   }
 

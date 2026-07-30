@@ -7,6 +7,7 @@ const { isBackendRdsEnabled, getTimeLogsInRange } = require('./backend-rds-reads
 const { fetchScreenshotsFromBackend } = require('./backend-screenshots');
 const { listUserProjects } = require('./backend-time-logs');
 const { normalizeTenantUserId } = require('./tenant-user-id');
+const { computeEffectiveSeconds } = require('./effective-time');
 
 function usesRdsBackend(config) {
   try {
@@ -34,7 +35,7 @@ async function fetchTimeLogs(userId, opts, config, supabaseService) {
   }
   const { data, error } = await supabaseService
     .from('time_logs')
-    .select('id, start_time, end_time, project_id, status, projects(name)')
+    .select('id, start_time, end_time, project_id, status, idle_seconds, projects(name)')
     .eq('user_id', userId)
     .gte('start_time', opts.start)
     .lt('start_time', opts.end)
@@ -111,14 +112,14 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     const [timeLogsResult, screenshotsResult] = await Promise.all([
       supabaseService
         .from('time_logs')
-        .select('id, start_time, end_time, project_id, status, projects(name)')
+        .select('id, start_time, end_time, project_id, status, idle_seconds, projects(name)')
         .eq('user_id', userId)
         .gte('start_time', monthStartIso)
         .lt('start_time', monthEndExclusive)
         .order('start_time', { ascending: false }),
       supabaseService
         .from('screenshots')
-        .select('activity_percent')
+        .select('activity_percent, captured_at')
         .eq('user_id', userId)
         .gte('captured_at', monthStartIso)
         .lt('captured_at', monthEndExclusive),
@@ -143,12 +144,15 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
       date: dateKey,
       dayName: new Date(dayStartMs).toLocaleDateString('en-US', { timeZone: workTz, weekday: 'short' }),
       totalSeconds: 0,
+      idleSeconds: 0,
+      lowSeconds: 0,
       sessions: 0,
     });
   }
 
   const projectMap = {};
   const sessions = [];
+  let idleSecondsTotal = 0;
 
   timeLogs.forEach((log) => {
     if (!log.start_time) return;
@@ -169,12 +173,20 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     const projectName =
       log.projects?.name || projectNameById[log.project_id] || 'No Project';
     const projectId = log.project_id || 'none';
+    const logIdle = Math.max(0, Math.floor(Number(log.idle_seconds) || 0));
+    idleSecondsTotal += logIdle;
 
     for (let d = 1; d <= daysInMonth; d++) {
       const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
       const sec = Math.floor(clamp(startMs, endMs, dayStartMs, dayEndMs) / 1000);
       if (sec > 0) {
         dailyBreakdown[d - 1].totalSeconds += sec;
+        // Approximate idle share for the day from session idle_seconds.
+        if (clampedSeconds > 0 && logIdle > 0) {
+          dailyBreakdown[d - 1].idleSeconds =
+            (dailyBreakdown[d - 1].idleSeconds || 0) +
+            Math.floor((logIdle * sec) / clampedSeconds);
+        }
       }
     }
 
@@ -227,7 +239,49 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     avgActivityPercent = Math.round(sum / screenshots.length);
   }
 
+  // Low activity estimate: screenshots under 10% × capture interval (default 3 min).
+  const intervalMinutes = Math.max(
+    1,
+    Number(config?.screenshot_interval_minutes || config?.screenshotIntervalMinutes || 3) || 3,
+  );
+  const lowSecondsPerShot = intervalMinutes * 60;
+  let lowSecondsTotal = 0;
+  for (const shot of screenshots) {
+    const pct = Number(shot.activity_percent);
+    if (!Number.isFinite(pct) || pct >= 10) continue;
+    const capturedAt = shot.captured_at || shot.capturedAt;
+    if (!capturedAt) {
+      lowSecondsTotal += lowSecondsPerShot;
+      continue;
+    }
+    const shotMs = new Date(capturedAt).getTime();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
+      if (shotMs >= dayStartMs && shotMs < dayEndMs) {
+        dailyBreakdown[d - 1].lowSeconds =
+          (dailyBreakdown[d - 1].lowSeconds || 0) + lowSecondsPerShot;
+        lowSecondsTotal += lowSecondsPerShot;
+        break;
+      }
+    }
+  }
+
   const activeDays = dailyBreakdown.filter((d) => d.totalSeconds > 0).length;
+  const effectiveTotals = computeEffectiveSeconds(
+    totalSeconds,
+    lowSecondsTotal,
+    idleSecondsTotal,
+  );
+
+  for (const day of dailyBreakdown) {
+    const dayEff = computeEffectiveSeconds(
+      day.totalSeconds,
+      day.lowSeconds || 0,
+      day.idleSeconds || 0,
+    );
+    day.nonEffectiveSeconds = dayEff.nonEffectiveSeconds;
+    day.effectiveSeconds = dayEff.effectiveSeconds;
+  }
 
   return {
     sessions: sessions
@@ -236,7 +290,11 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     projectBreakdown,
     dailyBreakdown,
     weeklyBreakdown,
-    totalSeconds,
+    totalSeconds: effectiveTotals.totalSeconds,
+    nonEffectiveSeconds: effectiveTotals.nonEffectiveSeconds,
+    effectiveSeconds: effectiveTotals.effectiveSeconds,
+    idleSeconds: idleSecondsTotal,
+    lowActivitySeconds: lowSecondsTotal,
     avgActivityPercent,
     totalSessions: sessions.length,
     activeDays,

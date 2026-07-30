@@ -103,7 +103,7 @@ describe('ScreenshotManager', () => {
   });
 
   describe('getTargetScreens', () => {
-    it('should return primary display only by default', () => {
+    it('should return all displays including external monitors', () => {
       const sources = [
         { id: 'screen:0:0', name: 'Primary' },
         { id: 'screen:1:0', name: 'Secondary' }
@@ -111,8 +111,9 @@ describe('ScreenshotManager', () => {
 
       const targets = screenshotManager.getTargetScreens(sources);
 
-      expect(targets).toHaveLength(1);
+      expect(targets).toHaveLength(2);
       expect(targets[0]).toBe(sources[0]);
+      expect(targets[1]).toBe(sources[1]);
     });
 
     it('should handle empty sources array', () => {

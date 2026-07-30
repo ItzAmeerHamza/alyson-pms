@@ -372,6 +372,19 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
         supabaseService: this.supabaseService,
         systemMonitor: global.systemMonitor
       });
+
+      // Flush any time logs queued during prior network outages
+      try {
+        if (typeof global.trackingManager.startOfflineSync === 'function') {
+          const pending = global.trackingManager.getOfflineQueue?.() || [];
+          if (pending.length > 0) {
+            console.log(`📶 [STARTUP-MANAGER] Resuming sync for ${pending.length} offline time log(s)`);
+            global.trackingManager.startOfflineSync();
+          }
+        }
+      } catch (offlineErr) {
+        console.warn('⚠️ [STARTUP-MANAGER] Could not resume offline time-log sync:', offlineErr?.message || offlineErr);
+      }
       
       console.log('✅ [STARTUP-MANAGER] All managers created');
     } catch (error) {

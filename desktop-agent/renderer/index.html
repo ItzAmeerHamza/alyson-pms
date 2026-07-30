@@ -1983,6 +1983,15 @@
             border: 1px solid #e2e8f0;
         }
 
+        #timetrackerPage .tracker-clock-caption {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
         #timetrackerPage #trackerTime.metric-value,
         #timetrackerPage .tracker-clock {
             font-size: 56px;
@@ -2000,6 +2009,51 @@
             color: #475569;
         }
 
+        #timetrackerPage .tracker-time-breakdown {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin: 16px auto 0;
+            max-width: 360px;
+            text-align: center;
+        }
+
+        #timetrackerPage .tracker-time-stat {
+            padding: 10px 8px;
+            border-radius: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        #timetrackerPage .tracker-time-stat-value {
+            font-size: 15px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+
+        #timetrackerPage .tracker-time-stat-label {
+            margin-top: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: #64748b;
+        }
+
+        #timetrackerPage .tracker-time-stat--tracked .tracker-time-stat-value {
+            color: #1e293b;
+        }
+
+        #timetrackerPage .tracker-time-stat--non-effective .tracker-time-stat-value {
+            color: #b45309;
+        }
+
+        #timetrackerPage .tracker-time-stat--effective .tracker-time-stat-value {
+            color: #312e81;
+        }
+
         #timetrackerPage #trackerTodayHint {
             font-size: 12px !important;
             color: #94a3b8 !important;
@@ -2008,6 +2062,13 @@
             margin-left: auto;
             margin-right: auto;
             line-height: 1.45;
+        }
+
+        @media (max-width: 560px) {
+            #timetrackerPage .tracker-time-breakdown {
+                grid-template-columns: 1fr;
+                max-width: 280px;
+            }
         }
 
         #timetrackerPage .form-group {
@@ -2029,11 +2090,188 @@
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
         }
 
+        /* Smooth custom project dropdown */
+        .project-dd {
+            position: relative;
+            width: 100%;
+        }
+
+        .project-dd-native {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            padding: 0 !important;
+            margin: -1px !important;
+            overflow: hidden !important;
+            clip: rect(0, 0, 0, 0) !important;
+            white-space: nowrap !important;
+            border: 0 !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        .project-dd-trigger {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 15px;
+            color: #0f172a;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease, transform 120ms ease;
+        }
+
+        .project-dd-trigger:hover {
+            border-color: #94a3b8;
+            background: #fafbfc;
+        }
+
+        .project-dd.is-open .project-dd-trigger,
+        .project-dd-trigger:focus {
+            outline: none;
+            border-color: #818cf8;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .project-dd-trigger.is-disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .project-dd-trigger-label {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .project-dd-trigger-label.is-placeholder {
+            color: #64748b;
+            font-weight: 400;
+        }
+
+        .project-dd-chevron {
+            display: inline-flex;
+            color: #64748b;
+            transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+            flex-shrink: 0;
+        }
+
+        .project-dd.is-open .project-dd-chevron {
+            transform: rotate(180deg);
+            color: #4f46e5;
+        }
+
+        .project-dd-menu {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 6px);
+            z-index: 40;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(-6px) scale(0.98);
+            transform-origin: top center;
+            transition: opacity 160ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+            pointer-events: none;
+        }
+
+        .project-dd-menu.is-visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        .project-dd-search-wrap {
+            padding: 10px 10px 6px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .project-dd-search {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            color: #0f172a;
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+        }
+
+        .project-dd-search:focus {
+            border-color: #818cf8;
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+        }
+
+        .project-dd-options {
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 6px;
+            overscroll-behavior: contain;
+        }
+
+        .project-dd-option {
+            width: 100%;
+            display: block;
+            text-align: left;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            padding: 11px 12px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #0f172a;
+            cursor: pointer;
+            transition: background 120ms ease, color 120ms ease, transform 80ms ease;
+        }
+
+        .project-dd-option:hover,
+        .project-dd-option:focus {
+            outline: none;
+            background: #eef2ff;
+            color: #312e81;
+        }
+
+        .project-dd-option.is-selected {
+            background: #e0e7ff;
+            color: #312e81;
+        }
+
+        .project-dd-option.is-selected::after {
+            content: '✓';
+            float: right;
+            color: #4f46e5;
+            font-weight: 700;
+        }
+
+        .project-dd-empty {
+            padding: 16px 12px;
+            text-align: center;
+            color: #64748b;
+            font-size: 13px;
+        }
+
         #timetrackerPage #selectedProjectInfo {
             background: #eef2ff !important;
             border: 1px solid #c7d2fe !important;
             border-radius: 12px !important;
             padding: 12px 14px !important;
+            transition: opacity 180ms ease, transform 180ms ease;
         }
 
         #timetrackerPage #selectedProjectInfo > div {
@@ -4890,13 +5128,13 @@
                                 <i data-lucide="clock" style="color: white; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
-                                <div class="card-title">Today's Time</div>
-                                <div class="card-subtitle">Total work hours</div>
+                                <div class="card-title">Today's Effective Time</div>
+                                <div class="card-subtitle">Tracked minus idle + low activity</div>
                             </div>
                         </div>
                         <div class="metric-display">
                             <div class="metric-value" id="todayTime">0h 0m</div>
-                            <div class="metric-label">Active tracking time</div>
+                            <div class="metric-label" id="todayTimeMeta">Effective working time</div>
                         </div>
                     </div>
 
@@ -5048,8 +5286,19 @@
                     </div>
                     
                     <div class="tracker-timer-block">
+                        <div class="metric-label tracker-clock-caption">Tracked time today</div>
                         <div class="metric-value tracker-clock" id="trackerTime">00:00:00</div>
                         <div class="metric-label" id="trackerStatus">Select a project to start tracking</div>
+                        <div id="trackerEffectiveMeta" class="tracker-time-breakdown" aria-label="Today effective time breakdown">
+                            <div class="tracker-time-stat tracker-time-stat--effective">
+                                <div class="tracker-time-stat-value" id="trackerEffectiveValue">—</div>
+                                <div class="tracker-time-stat-label">Effective</div>
+                            </div>
+                            <div class="tracker-time-stat tracker-time-stat--non-effective">
+                                <div class="tracker-time-stat-value" id="trackerNonEffectiveValue">—</div>
+                                <div class="tracker-time-stat-label">Non-effective</div>
+                            </div>
+                        </div>
                         <div id="trackerTodayHint"></div>
                     </div>
                     
@@ -5102,28 +5351,28 @@
                                     <i data-lucide="clock" style="width: 20px; height: 20px; color: white;"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrTotalHours">0h 0m</div>
-                                <div class="mr-stat-label">Total Hours</div>
+                                <div class="mr-stat-label">Total Tracked</div>
                             </div>
                             <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: linear-gradient(135deg, #f093fb, #f5576c);">
-                                    <i data-lucide="layers" style="width: 20px; height: 20px; color: white;"></i>
+                                <div class="mr-stat-icon" style="background: #FB7185;">
+                                    <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: white;"></i>
                                 </div>
-                                <div class="mr-stat-value" id="mrTotalSessions">0</div>
-                                <div class="mr-stat-label">Sessions</div>
+                                <div class="mr-stat-value" id="mrNonEffectiveHours">0h 0m</div>
+                                <div class="mr-stat-label">Non-effective</div>
+                            </div>
+                            <div class="mr-stat-card">
+                                <div class="mr-stat-icon" style="background: #22C55E;">
+                                    <i data-lucide="check-circle" style="width: 20px; height: 20px; color: white;"></i>
+                                </div>
+                                <div class="mr-stat-value" id="mrEffectiveHours">0h 0m</div>
+                                <div class="mr-stat-label">Effective</div>
                             </div>
                             <div class="mr-stat-card">
                                 <div class="mr-stat-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
                                     <i data-lucide="calendar-check" style="width: 20px; height: 20px; color: white;"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrAvgPerDay">0h 0m</div>
-                                <div class="mr-stat-label">Avg / Day</div>
-                            </div>
-                            <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">
-                                    <i data-lucide="zap" style="width: 20px; height: 20px; color: white;"></i>
-                                </div>
-                                <div class="mr-stat-value" id="mrActivityLevel">--</div>
-                                <div class="mr-stat-label">Activity</div>
+                                <div class="mr-stat-label">Avg Effective / Day</div>
                             </div>
                         </div>
 
@@ -5286,40 +5535,60 @@
                 </div>
             </div>
 
-            <!-- SCREENSHOTS PAGE -->
+            <!-- SCREENSHOTS PAGE — shell matches displayEnhancedScreenshots to avoid title flash -->
             <div id="screenshotsPage" class="page-section">
                 <div class="control-section">
                     <div class="control-header">
-                        <div class="control-title">Screenshots Gallery</div>
-                        <div class="control-subtitle">View your activity screenshots in a 3-column grid</div>
+                        <div class="control-title">Screenshots</div>
+                        <div class="control-subtitle">View your activity screenshots with advanced filters</div>
                     </div>
-                    
-                    <!-- Screenshots Filter -->
-                    <div style="margin-bottom: 24px; display: flex; gap: 12px; align-items: center;">
-                        <select id="screenshotFilter" style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: white;">
-                            <option value="today">Today</option>
-                            <option value="yesterday">Yesterday</option>
-                            <option value="week">This Week</option>
-                            <option value="all">All Screenshots</option>
-                        </select>
-                        <button id="refreshScreenshots" style="padding: 8px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
-                        </button>
-                    </div>
-                    
-                    <!-- Screenshots Grid (3 columns) -->
-                    <div id="screenshotsGrid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; min-height: 400px;">
-                        <div id="screenshotsLoading" style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; padding: 60px; color: #64748b;">
-                            <i data-lucide="loader" style="width: 24px; height: 24px; animation: spin 2s linear infinite; margin-right: 12px;"></i>
-                            Loading screenshots...
+
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Pacific Time)</span></label>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button id="prevDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
+                                        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                    <input type="date" id="screenshotDate" title="Work day in Pacific Time"
+                                           style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <button id="nextDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
+                                        <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Activity Level</label>
+                                <select id="activityFilter" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <option value="all">All Activity Levels</option>
+                                    <option value="high">High Activity (70%+)</option>
+                                    <option value="medium">Medium Activity (10-70%)</option>
+                                    <option value="low">Low Activity (0-10%)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Show Count</label>
+                                <select id="limitSelect" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <option value="20">20 screenshots</option>
+                                    <option value="50" selected>50 screenshots</option>
+                                    <option value="100">100 screenshots</option>
+                                    <option value="200">200 screenshots</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Quick Actions</label>
+                                <button type="button" onclick="loadRecentScreenshots({ notify: true })" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px; margin-right: 6px;"></i>
+                                    Refresh
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    
-                    <!-- Screenshot Modal -->
-                    <div id="screenshotModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; cursor: pointer;">
-                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px;">
-                            <img id="modalScreenshot" style="max-width: 90%; max-height: 90%; border-radius: 8px;" />
-                        </div>
+
+                    <div style="text-align: center; padding: 60px 40px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b;">
+                        <i data-lucide="loader" style="width: 24px; height: 24px; animation: spin 2s linear infinite; margin-right: 12px;"></i>
+                        Loading screenshots...
                     </div>
                 </div>
             </div>
@@ -5922,6 +6191,7 @@
         <div id="notificationMessage">Notification message</div>
     </div>
 
+    <script src="modules/project-dropdown.js"></script>
     <script src="renderer-modular.js"></script>
     <script>
         // Initialize Lucide icons

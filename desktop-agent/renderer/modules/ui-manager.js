@@ -1239,15 +1239,27 @@ class UIManager {
 
   // PERF FIX: Cache get-today-time-stats for 5s to prevent duplicate DB queries.
   // loadDashboardMetrics() and loadTodayTime() both call this within the same dashboard load.
-  async _getCachedTodayTimeStats() {
+  async _getCachedTodayTimeStats({ force = false } = {}) {
     const now = Date.now();
-    if (this._todayStatsCache && (now - this._todayStatsCacheTime) < 5000) {
+    if (
+      !force &&
+      this._todayStatsCache &&
+      (now - this._todayStatsCacheTime) < 5000 &&
+      // Never reuse a response that skipped effective/idle/low-activity computation
+      this._todayStatsCache.effectiveStatsComputed !== false
+    ) {
       return this._todayStatsCache;
     }
     const result = await this.ipcRenderer.invoke('get-today-time-stats');
     this._todayStatsCache = result;
     this._todayStatsCacheTime = now;
     return result;
+  }
+
+  /** Bust cache so Start / focus refresh get fresh effective split. */
+  invalidateTodayTimeStatsCache() {
+    this._todayStatsCache = null;
+    this._todayStatsCacheTime = 0;
   }
 
   async loadDashboardMetrics() {
@@ -1269,7 +1281,12 @@ class UIManager {
         
         // Update today's time
         if (todayStats && !todayStats.error) {
-          this.updateTodayTime(todayStats.totalTime);
+          if (typeof window.applyTodayEffectiveStats === 'function') {
+            window.applyTodayEffectiveStats(todayStats);
+          }
+          this.updateTodayTime(todayStats.totalTime, {
+            effectiveSeconds: todayStats.effectiveSeconds,
+          });
         }
         
         // Update weekly time
@@ -1382,10 +1399,25 @@ class UIManager {
     }
   }
 
-  updateTodayTime(totalSeconds) {
+  updateTodayTime(totalSeconds, options = {}) {
     const todayTimeElement = document.getElementById('todayTime');
+    const metaEl = document.getElementById('todayTimeMeta');
+    const effectiveSeconds =
+      typeof options.effectiveSeconds === 'number'
+        ? Math.max(0, Math.floor(options.effectiveSeconds))
+        : typeof window.toEffectiveSeconds === 'function'
+          ? window.toEffectiveSeconds(totalSeconds)
+          : Math.max(0, Math.floor(Number(totalSeconds) || 0));
     if (todayTimeElement) {
-      todayTimeElement.textContent = this.formatDuration(totalSeconds);
+      todayTimeElement.textContent = this.formatDuration(effectiveSeconds);
+    }
+    if (metaEl) {
+      const tracked = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+      const nonEff = Math.max(0, tracked - effectiveSeconds);
+      metaEl.textContent =
+        nonEff > 0
+          ? `Effective · Tracked ${this.formatDuration(tracked)} (−${this.formatDuration(nonEff)} non-effective)`
+          : 'Effective working time';
     }
   }
 
@@ -1434,14 +1466,18 @@ class UIManager {
             try {
               this._todayStatsCacheTime = 0;
               const today = await this._getCachedTodayTimeStats();
+              if (typeof window.applyTodayEffectiveStats === 'function') {
+                window.applyTodayEffectiveStats(today);
+              }
               const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
               const totalSec = base + elapsed;
-              const th = Math.floor(totalSec / 3600);
-              const tm = Math.floor((totalSec % 3600) / 60);
-              const ts = totalSec % 60;
-              timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+              if (typeof window.setTrackerDisplaySeconds === 'function') {
+                // Pass TRACKED seconds — big clock converts to effective.
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+              }
             } catch {
-              timerElement.textContent = sessionStr;
+              // Keep prior effective display; don't flash session-only time into the big clock.
+              console.warn('⚠️ [TIMETRACKER] Could not refresh effective clock; keeping current display');
             }
           }
         } else {
@@ -1451,17 +1487,15 @@ class UIManager {
             const today = await this._getCachedTodayTimeStats();
             const te = document.getElementById('trackerTime');
             if (te && today && typeof today.totalTime === 'number') {
-              const displaySec =
+              if (typeof window.applyTodayEffectiveStats === 'function') {
+                window.applyTodayEffectiveStats(today);
+              }
+              const trackedSec =
                 typeof window.resolveStoppedDisplaySeconds === 'function'
                   ? window.resolveStoppedDisplaySeconds(today.totalTime)
                   : Math.max(0, Math.floor(today.totalTime));
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(displaySec, { allowDecrease: true });
-              } else {
-                const th = Math.floor(displaySec / 3600);
-                const tm = Math.floor((displaySec % 3600) / 60);
-                const ts = displaySec % 60;
-                te.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
               }
               if (typeof today.completedTodayBeforeCurrentSessionSeconds === 'number') {
                 window.__completedTodayBaseSeconds = Math.max(
@@ -2805,6 +2839,7 @@ class UIManager {
       
       const projectSelect = document.getElementById('projectSelect');
       const dashboardProjectSelect = document.getElementById('dashboardProjectSelect');
+      const previousProjectId = projectSelect?.value || '';
       
       // Clear existing options for both dropdowns
       if (projectSelect) {
@@ -2829,6 +2864,7 @@ class UIManager {
         const noProjectsOption = `<option value="" disabled>${emptyMessage}</option>`;
         if (projectSelect) projectSelect.innerHTML += noProjectsOption;
         if (dashboardProjectSelect) dashboardProjectSelect.innerHTML += noProjectsOption;
+        try { window.refreshProjectDropdown?.(); } catch (_) {}
         console.log('⚠️ [UI-MANAGER] No projects for user', currentUser.id);
         return;
       }
@@ -2856,6 +2892,21 @@ class UIManager {
           dashboardProjectSelect.appendChild(option);
         }
       });
+
+      // Restore prior selection so reload doesn't flash back to placeholder
+      if (projectSelect && previousProjectId) {
+        const stillExists = Array.from(projectSelect.options).some((o) => o.value === previousProjectId);
+        if (stillExists) projectSelect.value = previousProjectId;
+      }
+      if (dashboardProjectSelect && previousProjectId) {
+        const stillExists = Array.from(dashboardProjectSelect.options).some((o) => o.value === previousProjectId);
+        if (stillExists) dashboardProjectSelect.value = previousProjectId;
+      }
+
+      try {
+        window.initProjectDropdown?.();
+        window.refreshProjectDropdown?.();
+      } catch (_) {}
       
       console.log(`✅ [UI-MANAGER] Added ${projectData.length} projects to main app dropdowns`);
       
@@ -2866,6 +2917,7 @@ class UIManager {
       const errorOption = '<option value="" disabled>Could not load projects</option>';
       if (projectSelect) projectSelect.innerHTML = errorOption;
       if (dashboardProjectSelect) dashboardProjectSelect.innerHTML = errorOption;
+      try { window.refreshProjectDropdown?.(); } catch (_) {}
     }
   }
 
@@ -3175,8 +3227,10 @@ class UIManager {
       
       console.log('📊 [TODAY-TIME] Attempting to call get-today-time-stats...');
       
-      // Get today's time logs from main process (uses 5s cache to avoid duplicate DB queries)
-      const todayStats = await this._getCachedTodayTimeStats().catch(err => {
+      // Force a fresh fetch when effective split is not ready yet (avoids first-paint
+      // flash of "all effective / 0 non-effective" from a stale incomplete cache).
+      const forceFresh = !window.__effectiveStatsReady;
+      const todayStats = await this._getCachedTodayTimeStats({ force: forceFresh }).catch(err => {
         console.error('❌ [TODAY-TIME] get-today-time-stats failed:', err);
         return null;
       });
@@ -3184,28 +3238,33 @@ class UIManager {
       console.log('📊 [TODAY-TIME] Response from main process:', todayStats);
       
       if (todayStats && todayStats.totalTime !== undefined) {
-        const todayTimeElement = document.getElementById('todayTime');
         const trackerTimeElement = document.getElementById('trackerTime');
         const totalSec = Math.max(0, Math.floor(Number(todayStats.totalTime) || 0));
         const completedBase = Math.max(
           0,
           Math.floor(Number(todayStats.completedTodayBeforeCurrentSessionSeconds) || 0),
         );
-        const formattedTime = this.formatDuration(totalSec);
-        if (todayTimeElement) {
-          todayTimeElement.textContent = formattedTime;
-          console.log('✅ [TODAY-TIME] Updated display:', formattedTime);
+        if (typeof window.applyTodayEffectiveStats === 'function') {
+          window.applyTodayEffectiveStats(todayStats);
         }
+        const effectiveSec =
+          typeof todayStats.effectiveSeconds === 'number'
+            ? Math.max(0, Math.floor(todayStats.effectiveSeconds))
+            : typeof window.toEffectiveSeconds === 'function'
+              ? window.toEffectiveSeconds(totalSec)
+              : totalSec;
+        this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
+        console.log('✅ [TODAY-TIME] Updated effective display:', effectiveSec, 's (tracked', totalSec, 's)');
         if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
           window.__completedTodayBaseSeconds = completedBase;
         }
         if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
-          const displaySec =
+          const trackedDisplay =
             typeof window.resolveStoppedDisplaySeconds === 'function'
               ? window.resolveStoppedDisplaySeconds(totalSec)
               : totalSec;
-          window.setTrackerDisplaySeconds(displaySec, { allowDecrease: true });
-          console.log('✅ [TODAY-TIME] Restored tracker clock:', displaySec, 's');
+          window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: true });
+          console.log('✅ [TODAY-TIME] Restored tracker effective clock from tracked', trackedDisplay, 's');
         }
       } else {
         console.log('⚠️ [TODAY-TIME] No valid data, trying fallback...');
@@ -3514,23 +3573,21 @@ class UIManager {
             const elapsed = typeof window.getTodayElapsedSeconds === 'function'
               ? window.getTodayElapsedSeconds(startTime)
               : Math.floor((Date.now() - startTime.getTime()) / 1000);
-            const hours = Math.floor(elapsed / 3600);
-            const minutes = Math.floor((elapsed % 3600) / 60);
-            const seconds = elapsed % 60;
-            const sessionStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             try {
               this._todayStatsCacheTime = 0;
               const today = await this._getCachedTodayTimeStats();
+              if (typeof window.applyTodayEffectiveStats === 'function') {
+                window.applyTodayEffectiveStats(today);
+              }
               const base = Math.max(0, Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0));
               const totalSec = base + elapsed;
-              const th = Math.floor(totalSec / 3600);
-              const tm = Math.floor((totalSec % 3600) / 60);
-              const ts = totalSec % 60;
-              timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
-            } catch {
-              timerElement.textContent = sessionStr;
+              if (typeof window.setTrackerDisplaySeconds === 'function') {
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+              }
+            } catch (err) {
+              console.warn('⚠️ [TIMER-REFRESH] Effective clock refresh failed:', err?.message || err);
             }
-            console.log('✅ [TIMER-REFRESH] Tracker timer updated (cumulative today)');
+            console.log('✅ [TIMER-REFRESH] Tracker timer updated (effective today)');
           }
           
           // Also update dashboard timer if available
@@ -3563,19 +3620,27 @@ class UIManager {
               try {
                 const today = await this.ipcRenderer.invoke('get-today-time-stats');
                 if (today && typeof today.totalTime === 'number') {
-                  const displaySec =
+                  if (typeof window.applyTodayEffectiveStats === 'function') {
+                    window.applyTodayEffectiveStats(today);
+                  }
+                  const trackedSec =
                     typeof window.resolveStoppedDisplaySeconds === 'function'
                       ? window.resolveStoppedDisplaySeconds(today.totalTime)
                       : Math.max(0, Math.floor(today.totalTime));
-                  const th = Math.floor(displaySec / 3600);
-                  const tm = Math.floor((displaySec % 3600) / 60);
-                  const ts = displaySec % 60;
-                  timerElement.textContent = `${th.toString().padStart(2, '0')}:${tm.toString().padStart(2, '0')}:${ts.toString().padStart(2, '0')}`;
+                  if (typeof window.setTrackerDisplaySeconds === 'function') {
+                    window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
+                  }
+                } else if (typeof window.setTrackerDisplaySeconds === 'function') {
+                  window.setTrackerDisplaySeconds(0, { allowDecrease: true });
                 } else {
                   timerElement.textContent = '00:00:00';
                 }
               } catch {
-                timerElement.textContent = '00:00:00';
+                if (typeof window.setTrackerDisplaySeconds === 'function') {
+                  window.setTrackerDisplaySeconds(0, { allowDecrease: true });
+                } else {
+                  timerElement.textContent = '00:00:00';
+                }
               }
             }
             
@@ -3673,7 +3738,7 @@ class UIManager {
       manualBtn.style.display = 'flex';
       const manualLabel = manualBtn.querySelector('span');
       if (manualLabel) {
-        manualLabel.textContent = updateInfo.dmgInstallReady ? 'Download Installer' : 'Download Manually';
+        manualLabel.textContent = updateInfo.dmgInstallReady ? 'Download Installer' : 'Download Installer Manually';
       }
       if (!manualBtn._manualHandlerAttached) {
         manualBtn._manualHandlerAttached = true;
@@ -3683,9 +3748,16 @@ class UIManager {
 
     const rawVersion = updateInfo.newVersion || updateInfo.version || '';
     const versionPrefix = rawVersion ? `Version ${rawVersion} is ready. ` : 'The new version is ready. ';
-    const message = updateInfo.dmgInstallReady
-      ? `${versionPrefix}Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`
-      : 'Automatic install could not complete. Download the installer, drag Alyson PM to Applications to replace the old version, then reopen the app.';
+    let message = updateInfo.message;
+    if (!message) {
+      if (updateInfo.dmgInstallReady) {
+        message = `${versionPrefix}Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`;
+      } else if (updateInfo.windowsInstaller) {
+        message = `${versionPrefix}Click Download Installer Manually, run the Setup file, then reopen Alyson PM. If Windows shows a SmartScreen warning, choose More info → Run anyway.`;
+      } else {
+        message = 'Automatic install could not complete. Download the installer, run it, then reopen the app.';
+      }
+    }
     this.showUpdateError(message);
   }
 
@@ -3821,12 +3893,24 @@ class UIManager {
         return;
       }
 
+      // Windows: browser fallback after Node download also failed
+      if (result.fallbackToWindowsInstaller || (result.manualInstallRequired && process.platform !== 'darwin' && !result.dmgInstallReady)) {
+        this.showManualInstallFallback({
+          dmgInstallReady: false,
+          windowsInstaller: true,
+          newVersion: result.version,
+          manualDownloadUrl: result.manualDownloadUrl,
+          message: result.message,
+        });
+        return;
+      }
+
       if (!result.success && result.error) {
-        throw new Error(result.error);
+        throw new Error(result.message || result.error);
       }
 
       // Download complete / staged — ready to install
-      if (result.inPlaceReady || result.alreadyDownloaded) {
+      if (result.inPlaceReady || result.alreadyDownloaded || result.windowsInstallerReady) {
         this.showInstallReady();
       } else if (result.dmgInstall) {
         this.showManualInstallFallback({ dmgInstallReady: true });
@@ -3838,9 +3922,12 @@ class UIManager {
       const msg = error.message || 'Download failed. Please try again.';
       // electron-updater throws this when download runs without a fresh check
       // (common after restoring stale update-state.json on Windows).
-      const friendly = /please check update first/i.test(msg)
-        ? 'Update check expired. Click Retry Update — if it fails again, use Download Installer.'
-        : msg;
+      let friendly = msg;
+      if (/please check update first/i.test(msg)) {
+        friendly = 'Update check expired. Click Retry Update — if it fails again, use Download Installer.';
+      } else if (/ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_|ENETUNREACH|ERR_NAME_NOT_RESOLVED/i.test(msg)) {
+        friendly = 'Could not reach the update server. Click Retry Update, or use Download Installer Manually.';
+      }
       this.showUpdateError(friendly);
       
       // Reset button
@@ -4039,7 +4126,16 @@ class UIManager {
     // Listen for update errors
     this.ipcRenderer.on('update-error', (event, data) => {
       console.error('❌ [UI-MANAGER] Update error:', data);
-      this.showUpdateError(data.error || 'An error occurred');
+      const raw = data?.error || 'An error occurred';
+      // Don't flash Chromium net codes — download path may still recover via Node fallback.
+      if (/ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_|ENETUNREACH|ERR_NAME_NOT_RESOLVED/i.test(raw)) {
+        const progressText = document.getElementById('updateProgressText');
+        if (progressText) {
+          progressText.textContent = 'Primary download failed — trying alternate method…';
+        }
+        return;
+      }
+      this.showUpdateError(raw);
     });
     
     // Listen for dev mode update (download works, install doesn't in dev)
@@ -4399,35 +4495,26 @@ class UIManager {
     }
   }
 
-  /** Render the 4 summary stat cards */
+  /** Render the summary stat cards (Total / Non-effective / Effective) */
   _renderMonthlyReportSummary(reportData) {
     const totalSeconds = reportData?.totalSeconds || 0;
-    const totalSessions = reportData?.totalSessions || 0;
+    const nonEffectiveSeconds = reportData?.nonEffectiveSeconds || 0;
+    const effectiveSeconds = reportData?.effectiveSeconds ?? Math.max(0, totalSeconds - nonEffectiveSeconds);
     const activeDays = reportData?.activeDays || 1;
-    const avgActivity = reportData?.avgActivityPercent || 0;
 
-    // Total hours
     const totalHoursEl = document.getElementById('mrTotalHours');
     if (totalHoursEl) totalHoursEl.textContent = this.formatReportDuration(totalSeconds);
 
-    // Sessions
-    const sessionsEl = document.getElementById('mrTotalSessions');
-    if (sessionsEl) sessionsEl.textContent = totalSessions;
+    const nonEffEl = document.getElementById('mrNonEffectiveHours');
+    if (nonEffEl) nonEffEl.textContent = this.formatReportDuration(nonEffectiveSeconds);
 
-    // Avg per day
+    const effectiveEl = document.getElementById('mrEffectiveHours');
+    if (effectiveEl) effectiveEl.textContent = this.formatReportDuration(effectiveSeconds);
+
     const avgPerDayEl = document.getElementById('mrAvgPerDay');
     if (avgPerDayEl) {
-      const avgSecondsPerDay = activeDays > 0 ? Math.floor(totalSeconds / activeDays) : 0;
+      const avgSecondsPerDay = activeDays > 0 ? Math.floor(effectiveSeconds / activeDays) : 0;
       avgPerDayEl.textContent = this.formatReportDuration(avgSecondsPerDay);
-    }
-
-    // Activity level
-    const activityEl = document.getElementById('mrActivityLevel');
-    if (activityEl) {
-      let level = 'Low';
-      if (avgActivity >= 80) level = 'High';
-      else if (avgActivity >= 50) level = 'Medium';
-      activityEl.textContent = `${level} (${avgActivity}%)`;
     }
   }
 

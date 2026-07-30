@@ -7,6 +7,8 @@ const { getPermissionDiagnosticSnapshot } = require('../../system/permissions-ch
 const {
   captureAllDisplaysStitched,
   captureViaDesktopCapturerStitched,
+  captureViaMacScreencaptureDashD,
+  stitchCaptures,
   getPreferredThumbnailSize
 } = require('../../modules/utils/multi-display-screenshot');
 
@@ -46,8 +48,11 @@ async function captureScreenshot() {
     }
 
     const electronCount = getElectronDisplayCount();
+    console.log(`[MACOS-SCREENSHOT][${attemptId}] Electron display count=${electronCount}`);
     let result = await captureAllDisplaysStitched();
 
+    // Hot-plug / profiler under-count: if Electron still sees 2+ monitors but we
+    // only got one pane, force native -D capture then desktopCapturer.
     if (
       result.success &&
       result.buffer &&
@@ -55,15 +60,33 @@ async function captureScreenshot() {
       electronCount >= 2
     ) {
       console.warn(
-        `[MACOS-SCREENSHOT][${attemptId}] Single-display capture despite multi-monitor; retrying desktopCapturer`
+        `[MACOS-SCREENSHOT][${attemptId}] Single-display capture despite multi-monitor; forcing -D + desktopCapturer`
       );
+
       try {
-        const stitched = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
-        if (stitched.success && (stitched.displayCount || 1) >= 2) {
-          result = stitched;
+        const panes = await captureViaMacScreencaptureDashD(electronCount);
+        if (panes.length >= 2) {
+          const buffer = await stitchCaptures(panes);
+          result = {
+            success: true,
+            buffer,
+            method: 'screencapture-D-stitched-retry',
+            displayCount: panes.length,
+          };
         }
-      } catch (retryErr) {
-        console.warn(`[MACOS-SCREENSHOT][${attemptId}] desktopCapturer retry failed:`, retryErr.message);
+      } catch (dashErr) {
+        console.warn(`[MACOS-SCREENSHOT][${attemptId}] screencapture -D retry failed:`, dashErr.message);
+      }
+
+      if ((result.displayCount || 1) < 2) {
+        try {
+          const stitched = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
+          if (stitched.success && (stitched.displayCount || 1) >= 2) {
+            result = stitched;
+          }
+        } catch (retryErr) {
+          console.warn(`[MACOS-SCREENSHOT][${attemptId}] desktopCapturer retry failed:`, retryErr.message);
+        }
       }
     }
 
@@ -76,11 +99,19 @@ async function captureScreenshot() {
       };
     }
 
-    console.log(`[MACOS-SCREENSHOT][${attemptId}] Capture succeeded`, {
-      bytes: result.buffer.length,
-      method: result.method,
-      displayCount: result.displayCount
-    });
+    if (result.incompleteMultiDisplay) {
+      console.error(`[MACOS-SCREENSHOT][${attemptId}] INCOMPLETE MULTI-DISPLAY`, {
+        expected: result.expectedDisplayCount,
+        got: result.displayCount,
+        method: result.method,
+      });
+    } else {
+      console.log(`[MACOS-SCREENSHOT][${attemptId}] Capture succeeded`, {
+        bytes: result.buffer.length,
+        method: result.method,
+        displayCount: result.displayCount,
+      });
+    }
 
     return result;
   } catch (error) {

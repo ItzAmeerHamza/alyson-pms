@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.212",
+  "version": "1.0.213",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",
@@ -27,6 +27,8 @@
     "clean": "rm -rf dist/ build/",
     "test-mac": "electron test-mac-permissions.js",
     "test-screenshot": "node test-screenshot.js",
+    "prove:multi-display": "node scripts/prove-multi-display-logic.js",
+    "verify:multi-display": "ELECTRON_RUN_AS_NODE= electron scripts/verify-multi-display-capture.js",
     "postinstall": "electron-builder install-app-deps && bash scripts/setup-python-deps.sh"
   },
   "dependencies": {

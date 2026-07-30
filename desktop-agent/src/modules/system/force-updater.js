@@ -54,6 +54,8 @@ class ForceUpdater {
     this.manualInstallRequired = false;
     this.macStagedAppPath = null;
     this.macUpdateWorkDir = null;
+    /** @type {string|null} Path to a Node-downloaded Windows Setup.exe ready to launch */
+    this.windowsInstallerPath = null;
     this.isDevMode = !!(app && app.isPackaged === false);
     
     // Window references
@@ -176,6 +178,7 @@ class ForceUpdater {
         currentVersion: this.currentVersion,
         installAttempts: this.installAttempts,
         manualInstallRequired: this.manualInstallRequired,
+        windowsInstallerPath: this.windowsInstallerPath || null,
         savedAt: new Date().toISOString()
       };
       fs.writeFileSync(this.updateStatePath, JSON.stringify(state, null, 2));
@@ -213,6 +216,13 @@ class ForceUpdater {
 
         this.installAttempts = Number(state.installAttempts) || 0;
         this.manualInstallRequired = !!state.manualInstallRequired;
+        if (
+          state.windowsInstallerPath &&
+          typeof state.windowsInstallerPath === 'string' &&
+          fs.existsSync(state.windowsInstallerPath)
+        ) {
+          this.windowsInstallerPath = state.windowsInstallerPath;
+        }
         
         return state;
       }
@@ -233,6 +243,7 @@ class ForceUpdater {
       }
       this.installAttempts = 0;
       this.manualInstallRequired = false;
+      this.windowsInstallerPath = null;
     } catch (error) {
       console.error('⚠️ [FORCE-UPDATER] Could not clear update state:', error.message);
     }
@@ -480,6 +491,11 @@ class ForceUpdater {
     // On macOS we download/install manually (Squirrel cannot apply unsigned updates).
     autoUpdater.autoDownload = !macInPlace;
     autoUpdater.autoInstallOnAppQuit = !macInPlace;
+    // Differential downloads hit GitHub CDN with many range requests and fail often
+    // on corporate/VPN networks (net::ERR_ADDRESS_UNREACHABLE). Prefer one full file.
+    try {
+      autoUpdater.disableDifferentialDownload = true;
+    } catch (_) {}
     
     // Event handlers
     autoUpdater.on('checking-for-update', () => {
@@ -548,6 +564,18 @@ class ForceUpdater {
           return; // Don't show error in dev mode if download was successful
         }
       }
+
+      // Windows: electron-updater often emits net::ERR_ADDRESS_UNREACHABLE while we
+      // still have a Node https fallback in flight. Don't scare the user with raw Chromium codes.
+      if (process.platform === 'win32' && this.isTransientNetworkUpdateError(err)) {
+        this.updateError = err.message;
+        this.isDownloading = false;
+        this.sendToRenderer('update-download-progress', {
+          percent: this.downloadProgress || 0,
+          message: 'Primary download failed — trying alternate method…',
+        });
+        return;
+      }
       
       this.updateError = err.message;
       this.isDownloading = false;
@@ -556,7 +584,7 @@ class ForceUpdater {
       this.sendToRenderer('update-error', {
         error: isDevModeError ? 
           'Development mode: Update downloaded but install requires production build. Run "npm run build" then test the built app.' :
-          err.message
+          this.friendlyUpdateError(err.message)
       });
     });
 
@@ -749,6 +777,22 @@ class ForceUpdater {
 
     // Check if we already have a downloaded update
     if (this.isUpdateDownloaded && this.pendingVersion && !this.manualInstallRequired && !this.shouldUseMacDmgInstall()) {
+      if (
+        process.platform === 'win32' &&
+        this.windowsInstallerPath &&
+        fs.existsSync(this.windowsInstallerPath)
+      ) {
+        console.log('📦 [FORCE-UPDATER] Already have Node-downloaded Windows installer:', this.windowsInstallerPath);
+        return {
+          updateAvailable: true,
+          updateDownloaded: true,
+          windowsInstallerReady: true,
+          alreadyDownloaded: true,
+          currentVersion: this.currentVersion,
+          newVersion: this.pendingVersion,
+          manualInstallRequired: false,
+        };
+      }
       console.log('📦 [FORCE-UPDATER] Already have downloaded update:', this.pendingVersion);
       return {
         updateAvailable: true,
@@ -920,11 +964,26 @@ class ForceUpdater {
       return await this.downloadMacInPlaceUpdate();
     }
 
+    // Windows: prefer Node https download of Setup.exe. Electron's Chromium net
+    // stack frequently fails with net::ERR_ADDRESS_UNREACHABLE against GitHub's
+    // release CDN on employee networks; Node + IPv4 is much more reliable.
+    if (process.platform === 'win32') {
+      console.log('📥 [FORCE-UPDATER] Windows — downloading Setup.exe via Node (primary path)...');
+      const nodePrimary = await this.downloadWindowsInstallerViaNode();
+      if (nodePrimary?.success) {
+        return nodePrimary;
+      }
+      console.warn(
+        '⚠️ [FORCE-UPDATER] Node primary download failed, trying electron-updater:',
+        nodePrimary?.error
+      );
+    }
+
     // electron-updater keeps updateInfo only in-memory for this process. A
     // restored disk flag (isUpdateAvailable) is not enough — downloadUpdate()
     // then throws "Please check update first". Always refresh metadata first.
     try {
-      console.log('📥 [FORCE-UPDATER] Running electron-updater check before Windows download...');
+      console.log('📥 [FORCE-UPDATER] Running electron-updater check before download...');
       const checkResult = await autoUpdater.checkForUpdates();
       const remote = checkResult?.updateInfo?.version
         ? String(checkResult.updateInfo.version).replace(/^v/i, '')
@@ -947,7 +1006,7 @@ class ForceUpdater {
       console.warn('⚠️ [FORCE-UPDATER] Pre-download check failed:', preCheckErr?.message || preCheckErr);
     }
 
-    console.log('📥 [FORCE-UPDATER] Starting download...');
+    console.log('📥 [FORCE-UPDATER] Starting electron-updater download...');
     this.isDownloading = true;
     this.downloadProgress = 0;
 
@@ -962,7 +1021,7 @@ class ForceUpdater {
       // Retry once: check → download (covers "Please check update first").
       if (/please check update first/i.test(String(error.message || ''))) {
         try {
-          console.log('🔁 [FORCE-UPDATER] Retrying Windows download after fresh check...');
+          console.log('🔁 [FORCE-UPDATER] Retrying download after fresh check...');
           await autoUpdater.checkForUpdates();
           this.isDownloading = true;
           await autoUpdater.downloadUpdate();
@@ -971,10 +1030,13 @@ class ForceUpdater {
           console.error('❌ [FORCE-UPDATER] Retry download failed:', retryErr.message);
           this.isDownloading = false;
           this.updateError = retryErr.message;
-          return this._windowsManualInstallFallback(retryErr.message);
+          if (process.platform === 'win32') {
+            return this._windowsDownloadFallback(retryErr.message);
+          }
+          return { success: false, error: retryErr.message };
         }
       }
-      
+
       // Handle "ZIP file not provided" error - server doesn't have ZIP files for auto-update
       if (error.message.includes('ZIP file not provided') || error.message.includes('zip')) {
         console.log('🔧 [FORCE-UPDATER] ZIP error - release missing ZIP files for auto-update');
@@ -987,7 +1049,7 @@ class ForceUpdater {
         };
       }
 
-      // Windows: never leave the user stuck — open the Setup.exe download.
+      // Windows: Node already tried as primary; last resort is browser.
       if (process.platform === 'win32') {
         return this._windowsManualInstallFallback(error.message);
       }
@@ -997,8 +1059,30 @@ class ForceUpdater {
   }
 
   /**
+   * Prefer in-app Node download of Setup.exe; only open the browser if that fails too.
+   */
+  async _windowsDownloadFallback(reason) {
+    console.log(`🔧 [FORCE-UPDATER] Windows download fallback after: ${reason || 'unknown'}`);
+    this.sendToRenderer('update-download-progress', {
+      percent: 0,
+      bytesPerSecond: 0,
+      transferred: 0,
+      total: 0,
+      via: 'node-fallback',
+      message: 'Retrying download…',
+    });
+
+    const nodeResult = await this.downloadWindowsInstallerViaNode();
+    if (nodeResult?.success && (nodeResult.windowsInstallerReady || nodeResult.alreadyDownloaded || nodeResult.inProgress)) {
+      return nodeResult;
+    }
+
+    return this._windowsManualInstallFallback(nodeResult?.error || reason);
+  }
+
+  /**
    * Open the Windows NSIS installer URL so the user can finish updating when
-   * electron-updater cannot download (stale state, feed glitch, etc.).
+   * in-app download cannot complete.
    */
   _windowsManualInstallFallback(reason) {
     const url = this.getManualDownloadUrl(this.pendingVersion);
@@ -1009,29 +1093,58 @@ class ForceUpdater {
       this.openManualDownload();
     } catch (_) {}
     console.log(`🔧 [FORCE-UPDATER] Windows manual install fallback: ${url} (${reason || 'unknown'})`);
+    const friendly = this.isTransientNetworkUpdateError(reason)
+      ? 'Could not reach the update server from the app. The installer page was opened in your browser — save the file, run it, then reopen Alyson PM. If Windows SmartScreen appears, choose More info → Run anyway.'
+      : 'Automatic download failed. The installer was opened in your browser — run it, then reopen the app. If Windows SmartScreen appears, choose More info → Run anyway.';
     return {
       success: false,
       error: reason || 'download_failed',
-      fallbackToDmg: true, // reuse existing UI path that offers manual installer
+      fallbackToWindowsInstaller: true,
       manualInstallRequired: true,
       manualDownloadUrl: url,
       version: this.pendingVersion,
-      message: 'Automatic download failed. The installer was opened in your browser — run it, then reopen the app.',
+      message: friendly,
     };
   }
 
   /**
    * Download a file over HTTPS following redirects, reporting progress.
+   * Forces IPv4 first — broken IPv6 on many Windows networks surfaces as
+   * net::ERR_ADDRESS_UNREACHABLE / ENETUNREACH when Electron's Chromium net is used.
    */
-  downloadFile(url, destPath, onProgress) {
+  downloadFile(url, destPath, onProgress, { family = 4 } = {}) {
     const https = require('https');
+    const http = require('http');
+    const { URL } = require('url');
     return new Promise((resolve, reject) => {
       const request = (currentUrl, redirects = 0) => {
-        if (redirects > 6) return reject(new Error('Too many redirects'));
-        const req = https.get(currentUrl, { headers: { 'User-Agent': 'alyson-pm-desktop-agent-updater' } }, (res) => {
+        if (redirects > 8) return reject(new Error('Too many redirects'));
+        let parsed;
+        try {
+          parsed = new URL(currentUrl);
+        } catch (e) {
+          return reject(new Error(`Invalid download URL: ${currentUrl}`));
+        }
+        const lib = parsed.protocol === 'http:' ? http : https;
+        const opts = {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+          port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+          path: `${parsed.pathname}${parsed.search || ''}`,
+          headers: {
+            'User-Agent': 'alyson-pm-desktop-agent-updater',
+            Accept: '*/*',
+          },
+          timeout: 180000,
+        };
+        if (family === 4 || family === 6) {
+          opts.family = family;
+        }
+        const req = lib.get(opts, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            const next = new URL(res.headers.location, currentUrl).toString();
             res.resume();
-            return request(res.headers.location, redirects + 1);
+            return request(next, redirects + 1);
           }
           if (res.statusCode !== 200) {
             res.resume();
@@ -1042,19 +1155,200 @@ class ForceUpdater {
           const out = fs.createWriteStream(destPath);
           res.on('data', (chunk) => {
             received += chunk.length;
-            if (total && typeof onProgress === 'function') {
-              onProgress(Math.round((received / total) * 100), received, total);
+            if (typeof onProgress === 'function') {
+              const percent = total ? Math.round((received / total) * 100) : Math.min(99, Math.round(received / (1024 * 1024)));
+              onProgress(percent, received, total);
             }
+          });
+          res.on('error', (err) => {
+            try { out.destroy(); } catch (_) {}
+            reject(err);
           });
           res.pipe(out);
           out.on('finish', () => out.close(() => resolve({ received, total })));
           out.on('error', reject);
         });
         req.on('error', reject);
-        req.setTimeout(120000, () => req.destroy(new Error('Download timed out')));
+        req.setTimeout(180000, () => req.destroy(new Error('Download timed out')));
       };
       request(url);
     });
+  }
+
+  /**
+   * True when the failure looks like a network / CDN reachability problem
+   * (common for GitHub release-assets.githubusercontent.com on Windows).
+   */
+  isTransientNetworkUpdateError(err) {
+    const msg = String(err?.message || err || '');
+    return /ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_|ERR_NAME_NOT_RESOLVED|ERR_NETWORK|ERR_TIMED_OUT|ENETUNREACH|EHOSTUNREACH|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|socket hang up|getaddrinfo|Download timed out|Download failed: HTTP 5/i.test(msg);
+  }
+
+  friendlyUpdateError(message) {
+    const msg = String(message || '');
+    if (this.isTransientNetworkUpdateError(msg)) {
+      return 'Could not reach the update server. Retrying with an alternate download…';
+    }
+    if (/please check update first/i.test(msg)) {
+      return 'Update check expired. Click Retry Update.';
+    }
+    return msg || 'Update failed. Please try again.';
+  }
+
+  /**
+   * Download the Windows NSIS Setup.exe with Node https (IPv4 + retries), then
+   * stage it for install. Used when electron-updater's Chromium download fails.
+   */
+  async downloadWindowsInstallerViaNode() {
+    const os = require('os');
+    const version = String(this.pendingVersion || '').replace(/^v/i, '');
+    if (!version) {
+      return { success: false, error: 'No pending version for Windows installer download' };
+    }
+
+    if (this.isDownloading) {
+      return { success: true, inProgress: true };
+    }
+
+    const url = this.getManualDownloadUrl(version);
+    const destDir = path.join(os.tmpdir(), 'alyson-pm-updates');
+    try {
+      fs.mkdirSync(destDir, { recursive: true });
+    } catch (_) {}
+    const destPath = path.join(destDir, `Alyson.PM.Setup.${version}.exe`);
+
+    console.log(`📥 [FORCE-UPDATER] Windows Node download: ${url}`);
+    this.isDownloading = true;
+    this.downloadProgress = 0;
+    this.updateError = null;
+    this.sendToRenderer('update-download-progress', {
+      percent: 0,
+      bytesPerSecond: 0,
+      transferred: 0,
+      total: 0,
+      via: 'node-fallback',
+    });
+
+    const families = [4, 0]; // IPv4 first, then dual-stack
+    let lastErr = null;
+
+    for (const family of families) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          if (fs.existsSync(destPath)) {
+            try { fs.unlinkSync(destPath); } catch (_) {}
+          }
+          const result = await this.downloadFile(
+            url,
+            destPath,
+            (percent, received, total) => {
+              this.downloadProgress = percent;
+              this.sendToRenderer('update-download-progress', {
+                percent,
+                transferred: received,
+                total: total || 0,
+                bytesPerSecond: 0,
+                via: 'node-fallback',
+              });
+            },
+            { family }
+          );
+
+          const size = result?.received || (fs.existsSync(destPath) ? fs.statSync(destPath).size : 0);
+          if (!size || size < 1024 * 1024) {
+            throw new Error(`Downloaded installer too small (${size} bytes)`);
+          }
+
+          this.windowsInstallerPath = destPath;
+          this.isUpdateDownloaded = true;
+          this.isDownloading = false;
+          this.downloadProgress = 100;
+          this.manualInstallRequired = false;
+          this.updateError = null;
+          this.saveUpdateState();
+          this.sendToRenderer('update-downloaded', {
+            version,
+            currentVersion: this.currentVersion,
+            via: 'node-fallback',
+          });
+          console.log(`✅ [FORCE-UPDATER] Windows installer saved (${size} bytes): ${destPath}`);
+          return {
+            success: true,
+            windowsInstallerReady: true,
+            alreadyDownloaded: true,
+            path: destPath,
+            version,
+          };
+        } catch (err) {
+          lastErr = err;
+          console.warn(
+            `⚠️ [FORCE-UPDATER] Windows Node download failed (family=${family}, attempt=${attempt}):`,
+            err?.message || err
+          );
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+        }
+      }
+    }
+
+    this.isDownloading = false;
+    this.updateError = lastErr?.message || 'Windows installer download failed';
+    return { success: false, error: this.updateError };
+  }
+
+  /**
+   * Launch a previously downloaded Windows Setup.exe and quit so NSIS can replace files.
+   */
+  launchWindowsInstaller(installerPath) {
+    const { spawn } = require('child_process');
+    const exePath = installerPath || this.windowsInstallerPath;
+    if (!exePath || !fs.existsSync(exePath)) {
+      return { success: false, error: 'Windows installer file not found' };
+    }
+
+    console.log(`🚀 [FORCE-UPDATER] Launching Windows installer: ${exePath}`);
+    global.isInstallingUpdate = true;
+    this.recordInstallAttempt();
+
+    try {
+      // Detached so NSIS keeps running after we exit. /S = silent when supported;
+      // oneClick NSIS still shows UI for elevation — that is fine.
+      const child = spawn(exePath, [], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false,
+      });
+      child.unref();
+    } catch (err) {
+      global.isInstallingUpdate = false;
+      console.error('❌ [FORCE-UPDATER] Failed to spawn Windows installer:', err.message);
+      // Last resort: open in Explorer / default handler
+      try {
+        if (shell?.openPath) {
+          shell.openPath(exePath);
+        } else if (shell?.openExternal) {
+          shell.openExternal(`file:///${exePath.replace(/\\/g, '/')}`);
+        }
+      } catch (_) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    setTimeout(() => {
+      try {
+        if (app) {
+          app.quit();
+        }
+      } catch (_) {
+        process.exit(0);
+      }
+    }, 800);
+
+    return {
+      success: true,
+      installing: true,
+      via: 'windows-setup-exe',
+      message: 'Installer started. Follow the prompts, then reopen Alyson PM.',
+    };
   }
 
   /**
@@ -1279,7 +1573,31 @@ open "$TARGET"
       pendingVersion: this.pendingVersion,
       installAttempts: this.installAttempts,
       manualInstallRequired: this.manualInstallRequired,
+      windowsInstallerPath: this.windowsInstallerPath,
     });
+
+    // Node-downloaded Setup.exe (Windows CDN fallback) — launch it directly.
+    if (
+      process.platform === 'win32' &&
+      this.windowsInstallerPath &&
+      fs.existsSync(this.windowsInstallerPath)
+    ) {
+      return this.launchWindowsInstaller(this.windowsInstallerPath);
+    }
+
+    // If electron-updater never staged a payload but we know the version, try Node download then launch.
+    if (
+      process.platform === 'win32' &&
+      this.isUpdateAvailable &&
+      this.pendingVersion &&
+      !this.isUpdateDownloaded
+    ) {
+      console.log('🔧 [FORCE-UPDATER] No staged Windows update — downloading Setup.exe via Node before install');
+      const dl = await this.downloadWindowsInstallerViaNode();
+      if (dl?.success && this.windowsInstallerPath && fs.existsSync(this.windowsInstallerPath)) {
+        return this.launchWindowsInstaller(this.windowsInstallerPath);
+      }
+    }
 
     if (this.isMacPackaged()) {
       const stagedValid = this.macStagedAppPath && fs.existsSync(this.macStagedAppPath);

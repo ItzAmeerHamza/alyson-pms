@@ -320,18 +320,18 @@ class IPCManager {
           if (!trackerTimer || this.isTracking) return;
           return window.ipc?.invoke('get-today-time-stats').then((s) => {
             if (s && typeof s.totalTime === 'number') {
-              const sec = Math.max(
+              if (typeof window.applyTodayEffectiveStats === 'function') {
+                window.applyTodayEffectiveStats(s);
+              }
+              const trackedSec = Math.max(
                 Math.max(0, Math.floor(s.totalTime)),
                 frozenFloor,
-                typeof window.readTrackerDisplaySeconds === 'function'
-                  ? window.readTrackerDisplaySeconds()
-                  : 0,
+                Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
               );
-              const h = Math.floor(sec / 3600);
-              const m = Math.floor((sec % 3600) / 60);
-              const ss = sec % 60;
-              trackerTimer.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-              window.__todayBaseAtLastStop = sec;
+              window.__todayBaseAtLastStop = trackedSec;
+              if (typeof window.setTrackerDisplaySeconds === 'function') {
+                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
+              }
             }
           });
         });
@@ -682,6 +682,12 @@ class IPCManager {
    */
   async updateTrackingState(state) {
     if (!state) return;
+
+    // Never demote while a start is in flight (focus/sync races)
+    if ((this.startInProgress || this.optimisticMode) && !state.isTracking) {
+      console.warn('⚠️ [IPC-MANAGER] Ignoring not-tracking update during start/optimistic mode');
+      return;
+    }
     
     const wasTracking = this.isTracking;
     this.isTracking = state.isTracking || false;
@@ -839,23 +845,35 @@ class IPCManager {
   async startTracking(projectId) {
     try {
       console.log('🚀 [IPC-MANAGER] Starting tracking with project ID:', projectId);
+
+      // Prevent double-click / overlapping starts (first click used to await a slow
+      // today-stats fetch before any UI feedback, so users clicked again).
+      if (this.startInProgress) {
+        console.log('⏭️ [IPC-MANAGER] Start already in progress — ignoring duplicate click');
+        return { success: true, alreadyStarting: true, timeLogId: this.currentTimeLogId || null };
+      }
+      if (this.isTracking && this.trackingStatus === 'active' && this.currentTimeLogId) {
+        console.log('⏭️ [IPC-MANAGER] Already tracking — ignoring start click');
+        return { success: true, alreadyTracking: true, timeLogId: this.currentTimeLogId };
+      }
+      if (!projectId) {
+        const msg = 'Please select a project before starting the timer';
+        this.notificationManager?.showNotification?.(msg, 'warning');
+        return { success: false, error: 'Project required', message: msg };
+      }
+
       this.startInProgress = true;
 
-      // Load today's completed sessions before optimistic clock starts at 00:00:00.
-      if (typeof window.refreshTodayCompletedBaseSeconds === 'function') {
-        try {
-          await window.refreshTodayCompletedBaseSeconds();
-        } catch (baseErr) {
-          console.warn('⚠️ [IPC-MANAGER] Could not preload today base seconds:', baseErr?.message || baseErr);
-        }
-      }
-      
-      // OPTIMISTIC START: Start timer immediately
+      // OPTIMISTIC START first — never block the UI on today-stats / screenshots.
+      // Base seconds refresh runs in the background and reconciles the clock.
       const optimisticStartTime = new Date();
       this.isTracking = true;
       this.trackingStatus = 'active';
       this.sessionStartTime = optimisticStartTime;
       this.optimisticMode = true; // Flag to track optimistic state
+
+      // Fresh effective/non-effective split after Start (avoid stale 5s cache flash)
+      try { this.uiManager?.invalidateTodayTimeStatsCache?.(); } catch (_) {}
       
       if (typeof window.beginLocalTrackingClock === 'function') {
         window.beginLocalTrackingClock(optimisticStartTime);
@@ -884,6 +902,14 @@ class IPCManager {
         this.uiManager.setTrackingStatus('active');
         this.uiManager.updateSessionTime();
       }
+
+      // Background refresh of today's base / effective stats (non-blocking).
+      const baseRefreshPromise =
+        typeof window.refreshTodayCompletedBaseSeconds === 'function'
+          ? window.refreshTodayCompletedBaseSeconds().catch((baseErr) => {
+              console.warn('⚠️ [IPC-MANAGER] Background today base refresh failed:', baseErr?.message || baseErr);
+            })
+          : Promise.resolve();
       
       // T1: Before IPC invoke
       console.time('T1-T2: IPC invoke time');
@@ -891,6 +917,14 @@ class IPCManager {
       
       // Now do the IPC call in the background
       const result = await this.ipcRenderer.invoke('start-timer', projectId);
+      // Let base refresh finish when it can; don't block start confirmation on it.
+      void baseRefreshPromise.then(() => {
+        if (this.isTracking && typeof window.updateRendererTrackingClock === 'function') {
+          try { window.updateRendererTrackingClock(); } catch (_) {}
+        } else if (this.isTracking && typeof window.beginLocalTrackingClock === 'function' && this.sessionStartTime) {
+          try { window.beginLocalTrackingClock(this.sessionStartTime); } catch (_) {}
+        }
+      });
       
       // T2: After IPC invoke returns
       console.timeEnd('T1-T2: IPC invoke time');
@@ -1017,14 +1051,18 @@ class IPCManager {
     console.log('⏹️ [IPC] Stop tracking requested - waiting for complete stop');
     
     try {
-      // Freeze the displayed total at click time (DB save may finish seconds later)
-      if (typeof window.readTrackerDisplaySeconds === 'function') {
-        const frozen = window.readTrackerDisplaySeconds();
-        if (frozen > 0) {
-          window.__todayBaseAtLastStop = frozen;
-          window.setTrackerDisplaySeconds?.(frozen);
-          void this.ipcRenderer.invoke('set-frozen-total-at-stop', frozen).catch(() => {});
-        }
+      // Freeze TRACKED total at click time (big clock shows effective derived from it)
+      const frozenTracked = Math.max(
+        0,
+        Math.floor(Number(window.__todayTrackedSeconds) || 0),
+        typeof window.readLocalTrackingCumulativeSeconds === 'function'
+          ? window.readLocalTrackingCumulativeSeconds()
+          : 0,
+      );
+      if (frozenTracked > 0) {
+        window.__todayBaseAtLastStop = frozenTracked;
+        window.setTrackerDisplaySeconds?.(frozenTracked, { allowDecrease: true });
+        void this.ipcRenderer.invoke('set-frozen-total-at-stop', frozenTracked).catch(() => {});
       }
       this.stopSessionTimer();
       window.clearAllTimers?.();
@@ -1195,8 +1233,12 @@ class IPCManager {
 
     // Sync tracking state with main process every 30 seconds
   startTrackingSync() {
+    this._falseTrackingSyncCount = 0;
     setInterval(async () => {
       try {
+        // Never demote UI while a start is in flight
+        if (this.startInProgress || this.optimisticMode) return;
+
         const mainState = await this.getTrackingState();
         
         // Check if local state is out of sync with main process
@@ -1206,14 +1248,29 @@ class IPCManager {
           let derivedStatus = 'stopped';
           if (mainState.isTracking) {
             derivedStatus = mainState.isPaused ? 'paused' : 'active';
+            this._falseTrackingSyncCount = 0;
           }
           
           if (mainState.isTracking !== this.isTracking || derivedStatus !== this.trackingStatus) {
+            // PAYROLL CRITICAL: require two consecutive "not tracking" readings before
+            // flipping a live timer to stopped (prevents single stale sync from killing UI).
+            if (!mainState.isTracking && this.isTracking) {
+              this._falseTrackingSyncCount = (this._falseTrackingSyncCount || 0) + 1;
+              if (this._falseTrackingSyncCount < 2) {
+                console.warn(
+                  '⚠️ [TRACKING-SYNC] Main said not tracking while UI is tracking — waiting for confirmation',
+                  { count: this._falseTrackingSyncCount, timeLogId: this.currentTimeLogId },
+                );
+                return;
+              }
+            }
+
             console.log('🔄 Syncing tracking state with main process:', mainState);
             console.log('🔄 Derived status from main state:', derivedStatus);
             
             this.isTracking = mainState.isTracking;
             this.trackingStatus = derivedStatus;
+            if (mainState.isTracking) this._falseTrackingSyncCount = 0;
             
             // Update UI
               this.emit('tracking-state-changed', {

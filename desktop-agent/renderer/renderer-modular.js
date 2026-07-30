@@ -48,30 +48,164 @@ const TRAY_TICK_STALE_MS = 1500;
 window.__trayTimerActive = false;
 window.__lastTrayTimerTickAt = 0;
 window.__lastTrayCumulativeSeconds = 0;
+/** Non-effective seconds (idle + low activity) for today — used to show effective time. */
+window.__todayNonEffectiveSeconds = 0;
+window.__todayTrackedSeconds = 0;
+window.__effectiveStatsReady = false;
 
 function getTrackerTimerElement() {
   return document.getElementById('trackerTime');
 }
 
+function formatHmsCompact(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function _nonEffectiveStorageKey() {
+  return `tf_non_effective_${localDateIso()}`;
+}
+
+function hydrateNonEffectiveFromCache() {
+  try {
+    // Prefer sessionStorage (same app session), then localStorage (survives restart).
+    let raw = sessionStorage.getItem(_nonEffectiveStorageKey());
+    if (raw == null || raw === '') {
+      raw = localStorage.getItem(_nonEffectiveStorageKey());
+    }
+    if (raw == null || raw === '') return;
+    const n = Math.max(0, Math.floor(Number(raw) || 0));
+    // Cache may be 0 for a fully-effective day — still treat as hydrated.
+    window.__todayNonEffectiveSeconds = n;
+    window.__effectiveStatsReady = true;
+  } catch (_) {}
+}
+
+function persistNonEffectiveCache(nonEff) {
+  const value = String(Math.max(0, Math.floor(Number(nonEff) || 0)));
+  try {
+    sessionStorage.setItem(_nonEffectiveStorageKey(), value);
+  } catch (_) {}
+  try {
+    localStorage.setItem(_nonEffectiveStorageKey(), value);
+  } catch (_) {}
+}
+
+/** Apply effective-time fields from get-today-time-stats and refresh the cards. */
+function applyTodayEffectiveStats(stats) {
+  if (!stats || typeof stats !== 'object') return;
+
+  // Ignore incomplete responses that would flash "0 non-effective / all effective"
+  // before idle + low-activity queries finish (common right after app launch).
+  if (stats.effectiveStatsComputed === false) {
+    if (typeof stats.totalTime === 'number') {
+      window.__todayTrackedSeconds = Math.max(0, Math.floor(stats.totalTime));
+    }
+    updateTrackerEffectiveMeta();
+    return;
+  }
+
+  if (typeof stats.nonEffectiveSeconds === 'number') {
+    window.__todayNonEffectiveSeconds = Math.max(0, Math.floor(stats.nonEffectiveSeconds));
+    window.__effectiveStatsReady = true;
+  } else if (
+    typeof stats.idleSeconds === 'number' ||
+    typeof stats.lowActivitySeconds === 'number'
+  ) {
+    window.__todayNonEffectiveSeconds = Math.max(
+      0,
+      Math.floor(Number(stats.idleSeconds) || 0) + Math.floor(Number(stats.lowActivitySeconds) || 0),
+    );
+    window.__effectiveStatsReady = true;
+  } else if (typeof stats.effectiveSeconds === 'number' && typeof stats.totalTime === 'number') {
+    const tracked = Math.max(0, Math.floor(stats.totalTime));
+    const effective = Math.max(0, Math.floor(stats.effectiveSeconds));
+    window.__todayNonEffectiveSeconds = Math.max(0, tracked - effective);
+    window.__effectiveStatsReady = true;
+  }
+  if (typeof stats.totalTime === 'number') {
+    window.__todayTrackedSeconds = Math.max(0, Math.floor(stats.totalTime));
+  }
+  if (window.__effectiveStatsReady) {
+    persistNonEffectiveCache(window.__todayNonEffectiveSeconds);
+  }
+  updateTrackerEffectiveMeta();
+}
+
+function toEffectiveSeconds(trackedSeconds) {
+  const tracked = Math.max(0, Math.floor(Number(trackedSeconds) || 0));
+  if (!window.__effectiveStatsReady) return tracked;
+  const nonEff = Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0));
+  return Math.max(0, tracked - Math.min(tracked, nonEff));
+}
+
+function updateTrackerEffectiveMeta() {
+  let tracked = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+  if (tracked <= 0) {
+    tracked = Math.max(0, readLocalTrackingCumulativeSeconds() || 0);
+  }
+
+  const nonEffEl = document.getElementById('trackerNonEffectiveValue');
+  const effectiveEl = document.getElementById('trackerEffectiveValue');
+
+  // Until idle/low-activity stats load, don't pretend non-effective is 0
+  // (that made Effective look equal to Tracked on first paint).
+  if (!window.__effectiveStatsReady) {
+    if (nonEffEl) nonEffEl.textContent = '—';
+    if (effectiveEl) effectiveEl.textContent = '—';
+    return;
+  }
+
+  // Big clock = tracked; cards under it show effective / non-effective.
+  const nonEff = Math.min(tracked, Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0)));
+  const effective = Math.max(0, tracked - nonEff);
+
+  if (nonEffEl) nonEffEl.textContent = formatHmsCompact(nonEff);
+  if (effectiveEl) effectiveEl.textContent = formatHmsCompact(effective);
+}
+
+window.applyTodayEffectiveStats = applyTodayEffectiveStats;
+window.toEffectiveSeconds = toEffectiveSeconds;
+window.updateTrackerEffectiveMeta = updateTrackerEffectiveMeta;
+
 function readTrackerDisplaySeconds() {
   return parseHmsToSeconds(getTrackerTimerElement()?.textContent);
 }
 
-/** Never lower the tracker clock unless allowDecrease is true (e.g. new local day at midnight). */
-function setTrackerDisplaySeconds(totalSec, { allowDecrease = false } = {}) {
+/**
+ * Set the big tracker clock to TRACKED (complete recorded) time.
+ * Effective / non-effective are shown in the cards underneath.
+ */
+function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}) {
   const el = getTrackerTimerElement();
   if (!el) return 0;
-  const next = Math.max(0, Math.floor(Number(totalSec) || 0));
-  const current = readTrackerDisplaySeconds();
   const todayKey = localDateIso();
   if (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey) {
     allowDecrease = true;
+    window.__todayNonEffectiveSeconds = 0;
+    window.__effectiveStatsReady = false;
+    try { sessionStorage.removeItem(_nonEffectiveStorageKey()); } catch (_) {}
   }
   window.__trackerDisplayDayKey = todayKey;
-  const resolved = allowDecrease ? next : Math.max(current, next);
+
+  const incomingTracked = Math.max(0, Math.floor(Number(trackedSeconds) || 0));
+  const prevTracked = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+  const tracked = allowDecrease ? incomingTracked : Math.max(prevTracked, incomingTracked);
+  window.__todayTrackedSeconds = tracked;
+
+  const currentDisplay = readTrackerDisplaySeconds();
+  const resolved = allowDecrease ? tracked : Math.max(currentDisplay, tracked);
   el.textContent = formatSecondsAsHMS(resolved);
+  updateTrackerEffectiveMeta();
   return resolved;
 }
+
+// Avoid first-paint flash of full tracked time before IPC returns non-effective.
+hydrateNonEffectiveFromCache();
+try { updateTrackerEffectiveMeta(); } catch (_) {}
 
 function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
@@ -79,8 +213,12 @@ function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const floorFromStop = window.__trackerDisplayDayKey === todayKey
     ? Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0))
     : 0;
+  // Use tracked floor only — big clock display is effective and must not inflate tracked.
+  const floorFromTracked = window.__trackerDisplayDayKey === todayKey
+    ? Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0))
+    : 0;
   const floor = Math.max(
-    window.__trackerDisplayDayKey === todayKey ? readTrackerDisplaySeconds() : 0,
+    floorFromTracked,
     floorFromStop,
     Math.max(0, Math.floor(Number(extraFloor) || 0)),
   );
@@ -120,6 +258,7 @@ function beginLocalTrackingClock(startTime) {
   updateRendererTrackingClock();
 }
 window.beginLocalTrackingClock = beginLocalTrackingClock;
+window.updateRendererTrackingClock = updateRendererTrackingClock;
 
 function updateRendererTrackingClock() {
   const start = window.__lastTrackingStartTime;
@@ -130,10 +269,12 @@ function updateRendererTrackingClock() {
   const localCumulative = base + elapsed;
   const trayCumulative = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
   const cumulativeSec = Math.max(localCumulative, trayCumulative);
+  window.__todayTrackedSeconds = cumulativeSec;
   const sessionStr = formatSecondsAsHMS(elapsed);
-  const cumulativeStr = formatSecondsAsHMS(cumulativeSec);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  setTrackerDisplaySeconds(cumulativeSec);
+  // Main tracker clock shows effective time (tracked − idle − low activity).
+  // allowDecrease: non-effective can grow as idle/low screenshots sync in.
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -142,6 +283,22 @@ function ensureTrackingDisplayWatchdog() {
     if (!window.__lastTrackingStartTime) return;
     updateRendererTrackingClock();
   }, 1000);
+  // Refresh idle/low-activity deductions periodically while the session is live.
+  if (!window.__effectiveStatsRefresh) {
+    window.__effectiveStatsRefresh = setInterval(() => {
+      const tracking =
+        !!window.__lastTrackingStartTime ||
+        !!(typeof moduleInstances !== 'undefined' && moduleInstances?.ipcManager?.isTracking);
+      if (!tracking) return;
+      void refreshTodayCompletedBaseSeconds().then(() => {
+        if (window.__lastTrackingStartTime) {
+          updateRendererTrackingClock();
+        } else if (typeof window.__todayTrackedSeconds === 'number') {
+          setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
+        }
+      });
+    }, 60 * 1000);
+  }
 }
 
 function stopTrackingDisplayWatchdog() {
@@ -156,6 +313,7 @@ function stopTrackingDisplayWatchdog() {
 async function refreshTodayCompletedBaseSeconds() {
   try {
     const s = await ipcRenderer.invoke('get-today-time-stats');
+    applyTodayEffectiveStats(s);
     const dbBase = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
     const floor = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
     window.__completedTodayBaseSeconds = Math.max(dbBase, floor);
@@ -246,6 +404,7 @@ window.setTrackerDisplaySeconds = setTrackerDisplaySeconds;
 window.resolveStoppedDisplaySeconds = resolveStoppedDisplaySeconds;
 window.ensureLocalDayRolloverWatch = ensureLocalDayRolloverWatch;
 window.getTodayElapsedSeconds = getTodayElapsedSeconds;
+window.readLocalTrackingCumulativeSeconds = readLocalTrackingCumulativeSeconds;
 
 // Import our focused modules
 let AuthManager, UIManager, NotificationManager, IPCManager, AppHistoryManager, ActivityMonitor;
@@ -684,23 +843,34 @@ function setupModuleCommunication() {
         ? base + getTodayElapsedSeconds(start)
         : trayCumulative;
       const cumulativeSec = Math.max(localCumulative, trayCumulative);
+      window.__todayTrackedSeconds = cumulativeSec;
       if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-      const currentDisplay = readTrackerDisplaySeconds();
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: cumulativeSec < currentDisplay });
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
     }
   });
 
   ipcRenderer.on('tracking-stopped', (_event, data) => {
-    const displaySec = readTrackerDisplaySeconds();
-    const frozen = Math.max(
-      displaySec,
+    const trackedFloor = Math.max(
+      Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
       Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0)),
     );
-    if (frozen > 0) {
-      window.__todayBaseAtLastStop = frozen;
-      setTrackerDisplaySeconds(frozen);
-      void ipcRenderer.invoke('set-frozen-total-at-stop', frozen).catch(() => {});
+    if (trackedFloor > 0) {
+      window.__todayBaseAtLastStop = trackedFloor;
+      window.__todayTrackedSeconds = Math.max(
+        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+        trackedFloor,
+      );
+      setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
+      void ipcRenderer.invoke('set-frozen-total-at-stop', trackedFloor).catch(() => {});
     }
+    // Refresh idle/low so effective reflects the closed session soon after stop.
+    void refreshTodayCompletedBaseSeconds().then(() => {
+      const tracked = Math.max(
+        trackedFloor,
+        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
+      );
+      setTrackerDisplaySeconds(tracked, { allowDecrease: true });
+    });
   });
 
   // Session timer updates (renderer-side fallback — only used when tray timer is NOT active)
@@ -721,13 +891,13 @@ function setupModuleCommunication() {
       const seconds = elapsed % 60;
       const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
       const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-      const cumulativeStr = formatSecondsAsHMS(base + elapsed);
+      const cumulativeSec = base + elapsed;
 
       if (dashboardTimer) {
         dashboardTimer.textContent = timeString;
       }
       if (trackerTimer) {
-        trackerTimer.textContent = cumulativeStr;
+        setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
       }
     }
   });
@@ -839,12 +1009,14 @@ function setupModuleCommunication() {
           const seconds = elapsed % 60;
           const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
           const base0 = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+          const trackedNow = base0 + elapsed;
+          window.__todayTrackedSeconds = trackedNow;
           
           if (dashboardTimer) {
             dashboardTimer.textContent = timeString;
           }
           if (trackerTimer) {
-            trackerTimer.textContent = formatSecondsAsHMS(base0 + elapsed);
+            setTrackerDisplaySeconds(trackedNow, { allowDecrease: true });
           }
           
           window.__localTrackingClockActive = true;
@@ -880,8 +1052,9 @@ function setupModuleCommunication() {
           if (trackerTimer) {
             ipcRenderer.invoke('get-today-time-stats').then((s) => {
               if (trackerTimer && s && typeof s.totalTime === 'number') {
+                applyTodayEffectiveStats(s);
                 const resolved = resolveStoppedDisplaySeconds(s.totalTime);
-                setTrackerDisplaySeconds(resolved);
+                setTrackerDisplaySeconds(resolved, { allowDecrease: true });
               }
             }).catch(() => {
               const current = readTrackerDisplaySeconds();
@@ -922,8 +1095,9 @@ function setupModuleCommunication() {
         if (trackerTimer) {
           ipcRenderer.invoke('get-today-time-stats').then((s) => {
             if (trackerTimer && s && typeof s.totalTime === 'number') {
+              applyTodayEffectiveStats(s);
               const resolved = resolveStoppedDisplaySeconds(s.totalTime);
-              setTrackerDisplaySeconds(resolved);
+              setTrackerDisplaySeconds(resolved, { allowDecrease: true });
             }
           }).catch(() => {
             const current = readTrackerDisplaySeconds();
@@ -1233,20 +1407,25 @@ async function handleProjectSelection() {
   const trackerStartBtn = document.getElementById('trackerStartBtn');
   const startBtn = document.getElementById('startBtn');
   const trackerStatus = document.getElementById('trackerStatus');
+  const selectedProjectInfo = document.getElementById('selectedProjectInfo');
+  const selectedProjectName = document.getElementById('selectedProjectName');
   
   if (!projectSelect) return;
   
   const selectedProjectId = projectSelect.value;
   const selectedOption = projectSelect.selectedOptions[0];
-  const projectName = selectedOption ? selectedOption.textContent : '';
+  const projectName = selectedOption ? (selectedOption.textContent || '').trim() : '';
   
   console.log('📋 [MODULAR] Project selection changed:', { 
     id: selectedProjectId, 
     name: projectName 
   });
-  
+
+  // Optimistic UI first — never wait on IPC for the dropdown to feel responsive
+  const ipcMgrTracking = !!(moduleInstances.ipcManager?.isTracking);
+  const isCurrentlyTracking = ipcMgrTracking || !!(window.__isTracking);
+
   if (!selectedProjectId) {
-    // No project selected - disable timer buttons
     if (trackerStartBtn) {
       trackerStartBtn.disabled = true;
       trackerStartBtn.title = 'Select a project first';
@@ -1255,50 +1434,41 @@ async function handleProjectSelection() {
       startBtn.disabled = true;
       startBtn.title = 'Select a project first';
     }
-    if (trackerStatus) {
-      trackerStatus.textContent = 'Select a project to start tracking';
-    }
-    
-    console.log('🔒 [MODULAR] Timer buttons disabled - no project selected');
-    
-    // Notify main process to clear project ID
-    try {
-      await ipcRenderer.invoke('set-project-id', null);
-    } catch (error) {
+    if (trackerStatus) trackerStatus.textContent = 'Select a project to start tracking';
+    if (selectedProjectInfo) selectedProjectInfo.style.display = 'none';
+    try { window.refreshProjectDropdown?.(); } catch (_) {}
+    void ipcRenderer.invoke('set-project-id', null).catch((error) => {
       console.log('⚠️ [MODULAR] Failed to clear project ID:', error);
+    });
+    return;
+  }
+
+  if (!isCurrentlyTracking) {
+    if (trackerStartBtn) {
+      trackerStartBtn.disabled = false;
+      trackerStartBtn.title = '';
     }
-  } else {
-    // Project selected - enable timer buttons if not currently tracking
-    try {
-      const trackingState = await ipcRenderer.invoke('get-tracking-state');
-      const isCurrentlyTracking = trackingState && trackingState.isTracking;
-      
-      if (!isCurrentlyTracking) {
-        if (trackerStartBtn) {
-          trackerStartBtn.disabled = false;
-          trackerStartBtn.title = '';
-        }
-        if (startBtn) {
-          startBtn.disabled = false;
-          startBtn.title = '';
-        }
-      }
-      
-      if (trackerStatus) {
-        trackerStatus.textContent = `Ready to track: ${projectName}`;
-      }
-      
-      console.log('✅ [MODULAR] Timer buttons enabled - project selected:', projectName);
-      
-      // Notify main process about project selection
-      await ipcRenderer.invoke('set-project-id', selectedProjectId);
-      console.log('✅ [MODULAR] Project ID set in main process:', selectedProjectId);
-      
-    } catch (error) {
-      console.log('❌ [MODULAR] Failed to handle project selection:', error);
-      if (moduleInstances.notificationManager) {
-        moduleInstances.notificationManager.showNotification('Failed to set project', 'error');
-      }
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.title = '';
+    }
+  }
+
+  if (trackerStatus) trackerStatus.textContent = `Ready to track: ${projectName}`;
+  if (selectedProjectName) selectedProjectName.textContent = projectName;
+  if (selectedProjectInfo) {
+    selectedProjectInfo.style.display = 'block';
+  }
+
+  try { window.refreshProjectDropdown?.(); } catch (_) {}
+
+  try {
+    await ipcRenderer.invoke('set-project-id', selectedProjectId);
+    console.log('✅ [MODULAR] Project ID set in main process:', selectedProjectId);
+  } catch (error) {
+    console.log('❌ [MODULAR] Failed to handle project selection:', error);
+    if (moduleInstances.notificationManager) {
+      moduleInstances.notificationManager.showNotification('Failed to set project', 'error');
     }
   }
 }
@@ -1520,13 +1690,38 @@ if (!window.__rendererInitAttached) {
     window.addEventListener('focus', async () => {
       console.log('🔄 [FOCUS] Window focused - refreshing tracking state...');
       try {
+        const ipcMgr = moduleInstances.ipcManager;
+        // Never demote a live / starting timer on focus flicker
+        if (ipcMgr?.startInProgress || ipcMgr?.optimisticMode) {
+          console.log('⚡ [FOCUS] Start in progress — skipping focus sync');
+          return;
+        }
+
         // Force re-fetch tracking state from main process
-        const trackingState = await ipcRenderer.invoke('get-tracking-state');
+        let trackingState = await ipcRenderer.invoke('get-tracking-state');
         console.log('✅ [FOCUS] Tracking state refreshed:', trackingState);
+
+        // PAYROLL CRITICAL: if UI thinks we are tracking but one focus read says stopped,
+        // confirm once more before flipping the timer off (matches Adil Windows silent-stop).
+        // A confirmed second "not tracking" is treated as a real stop and allowed through.
+        if (
+          !trackingState?.isTracking &&
+          ipcMgr?.isTracking &&
+          (ipcMgr.currentTimeLogId || window.__lastTrackingStartTime)
+        ) {
+          await new Promise((r) => setTimeout(r, 400));
+          const confirmState = await ipcRenderer.invoke('get-tracking-state');
+          console.warn('⚠️ [FOCUS] Confirming not-tracking after mismatch:', confirmState);
+          if (confirmState?.isTracking) {
+            trackingState = confirmState;
+          } else {
+            trackingState = confirmState || trackingState;
+          }
+        }
         
         // Update UI to reflect current state
-        if (moduleInstances.ipcManager) {
-          await moduleInstances.ipcManager.updateTrackingState(trackingState);
+        if (ipcMgr) {
+          await ipcMgr.updateTrackingState(trackingState);
         }
         
         // CRITICAL FIX: Update button states based on tracking state, not blanket re-enable
@@ -1844,6 +2039,16 @@ function setupLegacyEventListeners() {
       const projectSelect = document.getElementById('projectSelect');
       const projectId = projectSelect ? projectSelect.value : null;
       console.log('📋 [RENDERER] Selected project ID:', projectId);
+
+      if (!projectId) {
+        console.warn('⚠️ [RENDERER] No project selected');
+        moduleInstances.notificationManager?.showNotification?.(
+          'Please select a project before starting the timer',
+          'warning',
+        );
+        console.timeEnd('T0-T2: Total renderer time');
+        return;
+      }
       
       if (moduleInstances.ipcManager) {
         try {
@@ -1950,6 +2155,7 @@ function setupLegacyEventListeners() {
   const projectSelect = document.getElementById('projectSelect');
   if (projectSelect) {
     projectSelect.addEventListener('change', handleProjectSelection);
+    try { window.initProjectDropdown?.(); } catch (_) {}
     console.log('✅ Project selection event listener added');
   }
   
