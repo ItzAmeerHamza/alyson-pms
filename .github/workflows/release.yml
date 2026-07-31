@@ -179,18 +179,17 @@ jobs:
 
       - name: Install dependencies
         working-directory: desktop-agent
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --include=optional
 
-      # Dual-monitor stitch requires sharp + @img/sharp-win32-*. Fail the build if missing.
-      - name: Verify sharp Windows native package
+      # npm ci can skip sharp's platform optional deps; force the Windows native binary.
+      - name: Install sharp Windows native package
         working-directory: desktop-agent
         shell: bash
         run: |
-          node -e "const s=require('sharp'); console.log('sharp', s.versions || 'ok', process.platform, process.arch)"
-          ls -d node_modules/@img/sharp-win32-* || {
-            echo "ERROR: @img/sharp-win32-* missing — dual-monitor stitch will fall back to primary only"
-            exit 1
-          }
+          npm install --no-save --ignore-scripts --include=optional @img/sharp-win32-x64@0.34.5
+          npm install --no-save --ignore-scripts --include=optional --os=win32 --cpu=x64 sharp@0.34.5
+          node -e "const s=require('sharp'); console.log('sharp OK', process.platform, process.arch, s.versions||'')"
+          ls -d node_modules/@img/sharp-win32-*
 
       - name: Prebuild Windows (env config, Python bundle)
         working-directory: desktop-agent

@@ -35,8 +35,30 @@ async function captureAllDisplaysStitched() {
     `[MULTI-DISPLAY] Displays: electron=${electronCount}, screenshot-desktop=${listedCount}, target=${targetCount}`
   );
 
-  // When multiple monitors are present, prefer Electron desktopCapturer first.
-  // It sees the same display topology as the OS session (incl. external screens).
+  // Multi-monitor path order:
+  // - Windows: PowerShell AllScreens first (desktopCapturer often drops secondary under DPI).
+  // - macOS/others: desktopCapturer first, then native screencapture.
+  if (targetCount >= 2 && process.platform === 'win32') {
+    const nativeCaptures = await captureViaWindowsPowerShellAllScreens();
+    if (nativeCaptures.length >= 2) {
+      try {
+        const buffer = await stitchCaptures(nativeCaptures);
+        return annotateMultiDisplayResult({
+          success: true,
+          buffer,
+          method: 'windows-powershell-stitched',
+          displayCount: nativeCaptures.length,
+        }, targetCount);
+      } catch (stitchErr) {
+        console.warn('[MULTI-DISPLAY] Windows PowerShell stitch failed:', stitchErr.message);
+      }
+    } else {
+      console.warn(
+        `[MULTI-DISPLAY] Windows PowerShell got ${nativeCaptures.length} pane(s); trying desktopCapturer`,
+      );
+    }
+  }
+
   if (targetCount >= 2) {
     try {
       const viaCapturer = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
@@ -54,8 +76,8 @@ async function captureAllDisplaysStitched() {
     }
   }
 
-  // Platform-native per-display capture (independent of screenshot-desktop quirks)
-  if (targetCount >= 2) {
+  // Platform-native per-display capture (macOS screencapture; Windows already tried above)
+  if (targetCount >= 2 && process.platform !== 'win32') {
     const nativeCaptures = await captureViaPlatformNativeAllScreens(targetCount);
     if (nativeCaptures.length >= 2) {
       try {
@@ -64,11 +86,9 @@ async function captureAllDisplaysStitched() {
           success: true,
           buffer,
           method:
-            process.platform === 'win32'
-              ? 'windows-powershell-stitched'
-              : nativeCaptures[0]?.id === 0 && nativeCaptures.length >= 2
-                ? 'screencapture-native-stitched'
-                : 'screencapture-D-stitched',
+            nativeCaptures[0]?.id === 0 && nativeCaptures.length >= 2
+              ? 'screencapture-native-stitched'
+              : 'screencapture-D-stitched',
           displayCount: nativeCaptures.length,
         }, targetCount);
       } catch (stitchErr) {
