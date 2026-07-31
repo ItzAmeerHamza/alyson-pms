@@ -116,8 +116,8 @@ async function captureAllDisplaysStitched() {
     if (guessed.length > captures.length) captures = guessed;
   }
 
-  // Numeric screen indices (mostly macOS / some Windows builds)
-  if (captures.length < 2 && targetCount >= 2 && process.platform !== 'win32') {
+  // Numeric screen indices — useful on both macOS and some Windows GPU drivers
+  if (captures.length < 2 && targetCount >= 2) {
     const byIndex = await captureByScreenIndex(targetCount);
     if (byIndex.length > captures.length) {
       captures = byIndex;
@@ -317,21 +317,38 @@ async function captureViaWindowsPowerShellAllScreens() {
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+# Mixed-DPI dual monitors need process DPI awareness or secondary CopyFromScreen is wrong/blank.
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class AlysonDpi {
+  [DllImport("user32.dll")]
+  public static extern bool SetProcessDPIAware();
+}
+"@
+try { [void][AlysonDpi]::SetProcessDPIAware() } catch {}
 $outDir = '${tmpDir.replace(/'/g, "''")}'
 $screens = [System.Windows.Forms.Screen]::AllScreens | Sort-Object { if ($_.Primary) { 0 } else { 1 } }, { $_.Bounds.X }, { $_.Bounds.Y }
 $i = 0
 foreach ($s in $screens) {
   $b = $s.Bounds
-  $bmp = New-Object System.Drawing.Bitmap ([int]$b.Width), ([int]$b.Height)
+  $w = [Math]::Max(1, [int]$b.Width)
+  $h = [Math]::Max(1, [int]$b.Height)
+  $bmp = New-Object System.Drawing.Bitmap $w, $h
   $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+  try {
+    $g.CopyFromScreen([int]$b.X, [int]$b.Y, 0, 0, (New-Object System.Drawing.Size $w, $h))
+  } catch {
+    # Retry once with Bounds.Location overload
+    $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, (New-Object System.Drawing.Size $w, $h))
+  }
   $file = Join-Path $outDir ("display-" + $i + ".png")
   $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose()
   $bmp.Dispose()
   $i++
 }
-Write-Output $i
+Write-Output ("screens=" + $screens.Count + ";captured=" + $i)
 `.trim();
 
   try {
@@ -461,21 +478,48 @@ async function capturePrimaryOnly(method) {
   }
 }
 
-/**
- * Stitch using Electron display bounds when counts match; otherwise side-by-side.
- * @param {Array<{id: *, primary: boolean, buffer: Buffer}>} captures
- */
-async function stitchCaptures(captures) {
-  const sharp = require('sharp');
-
-  const sorted = captures.slice().sort((a, b) => {
+function sortCapturesForStitch(captures) {
+  return captures.slice().sort((a, b) => {
     if (a.primary !== b.primary) return a.primary ? -1 : 1;
     const aId = Number(a.id);
     const bId = Number(b.id);
     if (!Number.isNaN(aId) && !Number.isNaN(bId)) return aId - bId;
     return String(a.id).localeCompare(String(b.id));
   });
+}
 
+/**
+ * Stitch using Electron display bounds when counts match; otherwise side-by-side.
+ * Prefer sharp; on Windows fall back to System.Drawing if sharp is missing/broken
+ * (common when packaged without @img/sharp-win32-* or asarUnpack).
+ * @param {Array<{id: *, primary: boolean, buffer: Buffer}>} captures
+ */
+async function stitchCaptures(captures) {
+  if (!Array.isArray(captures) || captures.length < 2) {
+    throw new Error('Need at least 2 captures to stitch');
+  }
+
+  try {
+    return await stitchCapturesWithSharp(captures);
+  } catch (sharpErr) {
+    console.warn('[MULTI-DISPLAY] sharp stitch failed:', sharpErr?.message || sharpErr);
+    if (process.platform === 'win32') {
+      console.warn('[MULTI-DISPLAY] Trying Windows GDI stitch fallback');
+      return stitchCapturesViaWindowsGdi(captures);
+    }
+    throw sharpErr;
+  }
+}
+
+async function stitchCapturesWithSharp(captures) {
+  let sharp;
+  try {
+    sharp = require('sharp');
+  } catch (err) {
+    throw new Error(`sharp unavailable: ${err.message}`);
+  }
+
+  const sorted = sortCapturesForStitch(captures);
   const metas = await Promise.all(sorted.map((c) => sharp(c.buffer).metadata()));
   const electronLayouts = getElectronLayouts();
 
@@ -543,6 +587,98 @@ async function stitchCaptures(captures) {
   }
 
   return pipeline.png({ compressionLevel: 6 }).toBuffer();
+}
+
+/**
+ * Windows-only stitch via System.Drawing (no sharp / native node binary required).
+ * Side-by-side layout; good enough when sharp packaging fails in the NSIS build.
+ */
+async function stitchCapturesViaWindowsGdi(captures) {
+  if (process.platform !== 'win32') {
+    throw new Error('Windows GDI stitch is only available on win32');
+  }
+
+  const sorted = sortCapturesForStitch(captures);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-stitch-'));
+  const outFile = path.join(tmpDir, 'stitched.png');
+  const scriptPath = path.join(tmpDir, 'stitch.ps1');
+  const paneFiles = [];
+
+  try {
+    for (let i = 0; i < sorted.length; i++) {
+      const panePath = path.join(tmpDir, `pane-${i}.png`);
+      fs.writeFileSync(panePath, sorted[i].buffer);
+      paneFiles.push(panePath);
+    }
+
+    const paneList = paneFiles.map((p) => `'${p.replace(/'/g, "''")}'`).join(',');
+    const ps = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
+$files = @(${paneList})
+$images = @()
+foreach ($f in $files) {
+  $images += [System.Drawing.Image]::FromFile($f)
+}
+try {
+  $totalW = 0
+  $maxH = 0
+  foreach ($img in $images) {
+    $totalW += [int]$img.Width
+    if ([int]$img.Height -gt $maxH) { $maxH = [int]$img.Height }
+  }
+  if ($totalW -le 0 -or $maxH -le 0) { throw 'Invalid stitch dimensions' }
+  $maxEdge = ${MAX_STITCH_EDGE_PX}
+  $scale = 1.0
+  if ($totalW -gt $maxEdge -or $maxH -gt $maxEdge) {
+    $scale = [Math]::Min($maxEdge / [double]$totalW, $maxEdge / [double]$maxH)
+  }
+  $canvasW = [Math]::Max(1, [int][Math]::Round($totalW * $scale))
+  $canvasH = [Math]::Max(1, [int][Math]::Round($maxH * $scale))
+  $bmp = New-Object System.Drawing.Bitmap $canvasW, $canvasH
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.Clear([System.Drawing.Color]::FromArgb(255, 16, 16, 16))
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $x = 0
+  foreach ($img in $images) {
+    $dw = [Math]::Max(1, [int][Math]::Round($img.Width * $scale))
+    $dh = [Math]::Max(1, [int][Math]::Round($img.Height * $scale))
+    $y = [Math]::Max(0, [int](($canvasH - $dh) / 2))
+    $g.DrawImage($img, $x, $y, $dw, $dh)
+    $x += $dw
+  }
+  $bmp.Save('${outFile.replace(/'/g, "''")}', [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose()
+  $bmp.Dispose()
+} finally {
+  foreach ($img in $images) { $img.Dispose() }
+}
+`.trim();
+
+    fs.writeFileSync(scriptPath, ps, 'utf8');
+    await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+      { timeout: 60000, windowsHide: true },
+    );
+
+    if (!fs.existsSync(outFile)) {
+      throw new Error('Windows GDI stitch produced no output file');
+    }
+    const buffer = fs.readFileSync(outFile);
+    if (!buffer.length) {
+      throw new Error('Windows GDI stitch produced empty buffer');
+    }
+    console.log(`[MULTI-DISPLAY] Windows GDI stitch ok (${buffer.length} bytes, ${sorted.length} panes)`);
+    return buffer;
+  } finally {
+    try {
+      for (const f of fs.readdirSync(tmpDir)) {
+        try { fs.unlinkSync(path.join(tmpDir, f)); } catch (_) {}
+      }
+      fs.rmdirSync(tmpDir);
+    } catch (_) {}
+  }
 }
 
 function layoutsMatchCaptureSizes(layouts, metas) {
@@ -724,6 +860,7 @@ module.exports = {
   captureViaWindowsPowerShellAllScreens,
   captureViaPlatformNativeAllScreens,
   stitchCaptures,
+  stitchCapturesViaWindowsGdi,
   annotateMultiDisplayResult,
   getPreferredThumbnailSize,
   getElectronDisplayCount,

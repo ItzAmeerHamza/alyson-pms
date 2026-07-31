@@ -181,6 +181,17 @@ jobs:
         working-directory: desktop-agent
         run: npm ci --ignore-scripts
 
+      # Dual-monitor stitch requires sharp + @img/sharp-win32-*. Fail the build if missing.
+      - name: Verify sharp Windows native package
+        working-directory: desktop-agent
+        shell: bash
+        run: |
+          node -e "const s=require('sharp'); console.log('sharp', s.versions || 'ok', process.platform, process.arch)"
+          ls -d node_modules/@img/sharp-win32-* || {
+            echo "ERROR: @img/sharp-win32-* missing — dual-monitor stitch will fall back to primary only"
+            exit 1
+          }
+
       - name: Prebuild Windows (env config, Python bundle)
         working-directory: desktop-agent
         env:
@@ -204,6 +215,24 @@ jobs:
       - name: Build Windows (unsigned NSIS installer)
         working-directory: desktop-agent
         run: npx electron-builder --win --publish never --config.npmRebuild=false
+
+      # Confirm dual-monitor stitch deps landed in the packaged app (not pruned as a devDependency).
+      - name: Verify sharp bundled in Windows app
+        working-directory: desktop-agent
+        shell: bash
+        run: |
+          APP_DIR="dist/win-unpacked"
+          test -d "$APP_DIR/resources" || { echo "Missing $APP_DIR/resources"; ls -la dist; exit 1; }
+          if [ -d "$APP_DIR/resources/app.asar.unpacked/node_modules/sharp" ] || \
+             [ -d "$APP_DIR/resources/app.asar.unpacked/node_modules/@img" ] || \
+             find "$APP_DIR/resources" -type d -name 'sharp-win32-*' | grep -q .; then
+            echo "OK: sharp / @img present in packaged Windows app"
+            find "$APP_DIR/resources" -type d \( -name 'sharp' -o -name 'sharp-win32-*' \) | head -20
+          else
+            echo "ERROR: sharp not found in packaged Windows app — dual screens will not stitch"
+            find "$APP_DIR/resources" -maxdepth 4 -type d | head -80
+            exit 1
+          fi
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
