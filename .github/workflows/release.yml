@@ -334,11 +334,22 @@ jobs:
       - name: Get version
         id: version
         run: |
-          TAG="${{ github.ref_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "refs/heads/main" ]; then
-            TAG="${{ inputs.version }}"
+          # workflow_dispatch sets github.ref_name to the branch (e.g. "main").
+          # Prefer the explicit input so we never publish a release tagged "main".
+          TAG="${{ inputs.version }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.ref_name }}"
+          fi
+          if [ -z "$TAG" ] || [ "$TAG" = "main" ] || [ "$TAG" = "master" ] || [[ "$TAG" == refs/heads/* ]]; then
+            echo "❌ Refusing to publish release with invalid tag: '${TAG}'"
+            echo "For workflow_dispatch, pass inputs.version (e.g. v1.0.218)."
+            exit 1
+          fi
+          if [[ "$TAG" != v* ]]; then
+            TAG="v${TAG}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Publishing release tag: $TAG"
 
       # Retagging the same version leaves a published shell + draft with assets.
       # Remove all existing releases for this tag so publish is a single clean release.
