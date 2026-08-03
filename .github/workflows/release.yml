@@ -115,6 +115,9 @@ jobs:
             # Do NOT set CSC_LINK — identity is already in the keychain.
             unset CSC_LINK CSC_KEY_PASSWORD || true
             export CSC_IDENTITY_AUTO_DISCOVERY=true
+            # after-pack.js signs macos-input-helper with CSC_NAME — keep it identical
+            # to the app bundle so Accessibility TCC grants stay on one identity.
+            export CSC_NAME="Alyson PM Code Signing"
             npx electron-builder --mac --publish never \
               -c.mac.identity="Alyson PM Code Signing" \
               -c.mac.notarize=false \
@@ -150,6 +153,24 @@ jobs:
               if ! echo "$info" | grep -qi 'Authority=Alyson PM Code Signing'; then
                 echo "❌ Missing Authority=Alyson PM Code Signing"
                 exit 1
+              fi
+              dr="$(codesign -d -r- "$app" 2>&1 || true)"
+              # Pin releases to the known stable cert root. Regenerating MAC_CSC_LINK
+              # without updating this check would silently break TCC persistence.
+              expected_root='513051c01cadd77c6abafa1a9e141de08c1851c0'
+              if ! echo "$dr" | grep -qi "certificate root = H\"${expected_root}\""; then
+                echo "❌ Code-signing cert root changed — TCC permissions would reset for all users"
+                echo "$dr"
+                exit 1
+              fi
+              helper="$app/Contents/Resources/helpers/macos-input-helper"
+              if [ -f "$helper" ]; then
+                hinfo="$(codesign -dv --verbose=2 "$helper" 2>&1 || true)"
+                if ! echo "$hinfo" | grep -qi 'Authority=Alyson PM Code Signing'; then
+                  echo "❌ macos-input-helper is not stable-signed (Accessibility would reset)"
+                  echo "$hinfo"
+                  exit 1
+                fi
               fi
               echo "✅ Stable signature confirmed for $app"
             fi

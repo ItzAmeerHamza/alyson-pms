@@ -35,20 +35,24 @@ print(f'Removed {count} detritus xattrs')
   if (fs.existsSync(helperPath)) {
     try {
       fs.chmodSync(helperPath, 0o755);
-      // Sign helper so macOS TCC treats it consistently with the app bundle (ad-hoc if unsigned).
-      const signIdentity = process.env.CSC_NAME || process.env.APPLE_IDENTITY || '-';
-      execSync(`codesign --force --sign "${signIdentity}" --options runtime "${helperPath}"`, {
-        stdio: 'inherit',
-        timeout: 60000,
-      });
-      console.log(`  • signed macos-input-helper (${signIdentity})`);
-    } catch (e) {
+      // Prefer the stable CI identity so Accessibility grants on this helper persist.
+      // Do not use --options runtime here — main app is not hardened-runtime signed.
+      const signIdentity =
+        process.env.CSC_NAME ||
+        process.env.APPLE_IDENTITY ||
+        'Alyson PM Code Signing';
       try {
+        execSync(`codesign --force --sign "${signIdentity}" "${helperPath}"`, {
+          stdio: 'inherit',
+          timeout: 60000,
+        });
+        console.log(`  • signed macos-input-helper (${signIdentity})`);
+      } catch (primaryErr) {
         execSync(`codesign --force --sign - "${helperPath}"`, { stdio: 'inherit', timeout: 60000 });
-        console.log('  • signed macos-input-helper (ad-hoc)');
-      } catch (e2) {
-        console.warn(`  ⚠ could not codesign macos-input-helper: ${e2.message}`);
+        console.log('  • signed macos-input-helper (ad-hoc fallback)');
       }
+    } catch (e) {
+      console.warn(`  ⚠ could not codesign macos-input-helper: ${e.message}`);
     }
   } else {
     console.warn('  ⚠ macos-input-helper missing from Resources/helpers — clicks/keys will be 0 in installed builds');

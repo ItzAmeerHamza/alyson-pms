@@ -1552,22 +1552,34 @@ class ForceUpdater {
       timeout: 30000,
     });
     const info = `${probe.stdout || ''}${probe.stderr || ''}`;
+    const hasStableAuthority = /Authority=Alyson PM Code Signing/i.test(info);
     const unsigned = /code object is not signed/i.test(info) ||
       (probe.status !== 0 && !/Authority=/i.test(info) && !/Signature=/i.test(info));
     const adhoc = /Signature=adhoc/i.test(info);
+
+    // Never strip a stable CI signature — TCC grants are pinned to this cert root.
+    if (hasStableAuthority) {
+      console.log('✅ [FORCE-UPDATER] Preserving Alyson PM Code Signing identity (TCC intact)');
+      return;
+    }
 
     if (!unsigned && !adhoc) {
       console.log('✅ [FORCE-UPDATER] Preserving existing code signature (TCC identity intact)');
       return;
     }
 
+    // Re-signing an already ad-hoc bundle with "-" creates a NEW cdhash identity and
+    // forces another permissions re-grant. Leave the downloaded signature alone.
+    if (adhoc) {
+      console.warn(
+        '⚠️ [FORCE-UPDATER] Bundle is ad-hoc signed — leaving as-is (permissions may still reset vs prior build)',
+      );
+      return;
+    }
+
     try {
       execFileSync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
-      console.log(
-        adhoc
-          ? '⚠️ [FORCE-UPDATER] Bundle was ad-hoc signed — re-applied ad-hoc (permissions may reset)'
-          : '⚠️ [FORCE-UPDATER] Bundle was unsigned — applied ad-hoc signature',
-      );
+      console.log('⚠️ [FORCE-UPDATER] Bundle was unsigned — applied ad-hoc signature');
     } catch (e) {
       console.warn('⚠️ [FORCE-UPDATER] ad-hoc codesign warning:', e.message);
     }
@@ -1601,6 +1613,10 @@ class ForceUpdater {
     const pid = process.pid;
     const scriptPath = path.join(os.tmpdir(), `alyson-pm-swap-${Date.now()}.sh`);
     const workDir = this.macUpdateWorkDir || path.dirname(path.dirname(stagedApp));
+    // Overwrite the existing .app in place. Do NOT rm -rf the target first —
+    // deleting the bundle breaks Launch Services / TCC association even when the
+    // new build uses the same code-signing certificate (macOS then asks for
+    // Screen Recording / Accessibility again).
     const script = `#!/bin/bash
 set -e
 PID=${pid}
@@ -1613,8 +1629,19 @@ for i in $(seq 1 60); do
   sleep 0.5
 done
 sleep 1
-rm -rf "$TARGET"
-ditto "$STAGED" "$TARGET"
+if [ -d "$TARGET" ]; then
+  # Keep the destination bundle directory; sync contents from the staged update.
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$STAGED/" "$TARGET/"
+  else
+    ditto "$STAGED/" "$TARGET/"
+  fi
+else
+  mkdir -p "$(dirname "$TARGET")"
+  ditto "$STAGED" "$TARGET"
+fi
+# Strip quarantine only — do not touch the code signature.
+xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
 xattr -cr "$TARGET" 2>/dev/null || true
 rm -rf "$WORKDIR" 2>/dev/null || true
 open "$TARGET"
