@@ -1081,27 +1081,27 @@ class ForceUpdater {
   }
 
   /**
-   * Open the Windows NSIS installer URL so the user can finish updating when
-   * in-app download cannot complete.
+   * Last-resort Windows path when in-app download cannot complete.
+   * Do NOT auto-open the browser — that made every slow-network failure look like
+   * "auto update never works". Offer Retry + an optional manual URL instead.
    */
   _windowsManualInstallFallback(reason) {
     const url = this.getManualDownloadUrl(this.pendingVersion);
     this.manualInstallRequired = true;
     this.isUpdateDownloaded = false;
     this.saveUpdateState();
-    try {
-      this.openManualDownload();
-    } catch (_) {}
-    console.log(`🔧 [FORCE-UPDATER] Windows manual install fallback: ${url} (${reason || 'unknown'})`);
+    console.log(`🔧 [FORCE-UPDATER] Windows manual fallback ready (browser NOT opened): ${url} (${reason || 'unknown'})`);
     const friendly = this.isTransientNetworkUpdateError(reason)
-      ? 'Could not reach the update server from the app. The installer page was opened in your browser — save the file, run it, then reopen Alyson PM. If Windows SmartScreen appears, choose More info → Run anyway.'
-      : 'Automatic download failed. The installer was opened in your browser — run it, then reopen the app. If Windows SmartScreen appears, choose More info → Run anyway.';
+      ? 'Could not reach the update server from the app. Click Retry Update. If it keeps failing, use Download Installer Manually.'
+      : 'Automatic download failed. Click Retry Update. If it keeps failing, use Download Installer Manually.';
     return {
       success: false,
       error: reason || 'download_failed',
       fallbackToWindowsInstaller: true,
       manualInstallRequired: true,
       manualDownloadUrl: url,
+      // UI can open browser only when the user clicks the manual button.
+      openBrowser: false,
       version: this.pendingVersion,
       message: friendly,
     };
@@ -1111,19 +1111,77 @@ class ForceUpdater {
    * Download a file over HTTPS following redirects, reporting progress.
    * Forces IPv4 first — broken IPv6 on many Windows networks surfaces as
    * net::ERR_ADDRESS_UNREACHABLE / ENETUNREACH when Electron's Chromium net is used.
+   *
+   * IMPORTANT: do NOT use a short absolute socket timeout. Corporate networks often
+   * download the ~100MB Windows installer at 20–50 KB/s (30–60+ minutes). A 3-minute
+   * hard timeout was the main reason Windows "auto update" always fell back to the browser.
+   *
+   * @param {object} [opts]
+   * @param {number} [opts.family=4] - 4 = IPv4, 6 = IPv6, 0 = dual
+   * @param {number} [opts.idleTimeoutMs=180000] - abort only if NO bytes arrive for this long
+   * @param {number} [opts.maxDurationMs=3600000] - absolute max (default 60 minutes)
    */
-  downloadFile(url, destPath, onProgress, { family = 4 } = {}) {
+  downloadFile(url, destPath, onProgress, {
+    family = 4,
+    idleTimeoutMs = 180000,
+    maxDurationMs = 60 * 60 * 1000,
+  } = {}) {
     const https = require('https');
     const http = require('http');
     const { URL } = require('url');
+    const startedAt = Date.now();
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let idleTimer = null;
+      let hardTimer = null;
+      let activeReq = null;
+      let activeRes = null;
+      let outStream = null;
+
+      const cleanup = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        if (hardTimer) clearTimeout(hardTimer);
+        idleTimer = null;
+        hardTimer = null;
+      };
+
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        try { activeReq?.destroy?.(err); } catch (_) {}
+        try { activeRes?.destroy?.(err); } catch (_) {}
+        try { outStream?.destroy?.(err); } catch (_) {}
+        try { if (fs.existsSync(destPath)) fs.unlinkSync(destPath); } catch (_) {}
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
+
+      const succeed = (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+
+      const bumpIdle = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          fail(new Error(`Download stalled (no data for ${Math.round(idleTimeoutMs / 1000)}s)`));
+        }, idleTimeoutMs);
+      };
+
+      hardTimer = setTimeout(() => {
+        fail(new Error(`Download exceeded ${Math.round(maxDurationMs / 60000)} minute limit`));
+      }, maxDurationMs);
+
       const request = (currentUrl, redirects = 0) => {
-        if (redirects > 8) return reject(new Error('Too many redirects'));
+        if (settled) return;
+        if (redirects > 8) return fail(new Error('Too many redirects'));
         let parsed;
         try {
           parsed = new URL(currentUrl);
         } catch (e) {
-          return reject(new Error(`Invalid download URL: ${currentUrl}`));
+          return fail(new Error(`Invalid download URL: ${currentUrl}`));
         }
         const lib = parsed.protocol === 'http:' ? http : https;
         const opts = {
@@ -1135,12 +1193,15 @@ class ForceUpdater {
             'User-Agent': 'alyson-pm-desktop-agent-updater',
             Accept: '*/*',
           },
-          timeout: 180000,
+          // Connect/headers only — body uses idle timeout so slow corporate links work.
+          timeout: Math.min(120000, idleTimeoutMs),
         };
         if (family === 4 || family === 6) {
           opts.family = family;
         }
+        bumpIdle();
         const req = lib.get(opts, (res) => {
+          activeRes = res;
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             const next = new URL(res.headers.location, currentUrl).toString();
             res.resume();
@@ -1148,28 +1209,41 @@ class ForceUpdater {
           }
           if (res.statusCode !== 200) {
             res.resume();
-            return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+            return fail(new Error(`Download failed: HTTP ${res.statusCode}`));
           }
           const total = parseInt(res.headers['content-length'] || '0', 10);
           let received = 0;
-          const out = fs.createWriteStream(destPath);
+          outStream = fs.createWriteStream(destPath);
+          bumpIdle();
           res.on('data', (chunk) => {
             received += chunk.length;
+            bumpIdle();
             if (typeof onProgress === 'function') {
-              const percent = total ? Math.round((received / total) * 100) : Math.min(99, Math.round(received / (1024 * 1024)));
+              const percent = total
+                ? Math.round((received / total) * 100)
+                : Math.min(99, Math.round(received / (1024 * 1024)));
               onProgress(percent, received, total);
             }
           });
-          res.on('error', (err) => {
-            try { out.destroy(); } catch (_) {}
-            reject(err);
+          res.on('error', fail);
+          res.pipe(outStream);
+          outStream.on('finish', () => {
+            outStream.close(() => {
+              succeed({
+                received,
+                total,
+                elapsedMs: Date.now() - startedAt,
+              });
+            });
           });
-          res.pipe(out);
-          out.on('finish', () => out.close(() => resolve({ received, total })));
-          out.on('error', reject);
+          outStream.on('error', fail);
         });
-        req.on('error', reject);
-        req.setTimeout(180000, () => req.destroy(new Error('Download timed out')));
+        activeReq = req;
+        req.on('error', fail);
+        req.on('timeout', () => {
+          // Only applies before response body starts; body uses idle timer.
+          req.destroy(new Error('Connection timed out'));
+        });
       };
       request(url);
     });
@@ -1221,19 +1295,24 @@ class ForceUpdater {
     this.isDownloading = true;
     this.downloadProgress = 0;
     this.updateError = null;
+    // Fresh attempt — clear sticky "manual only" so Retry can succeed in-app.
+    this.manualInstallRequired = false;
     this.sendToRenderer('update-download-progress', {
       percent: 0,
       bytesPerSecond: 0,
       transferred: 0,
       total: 0,
-      via: 'node-fallback',
+      via: 'node',
+      message: 'Downloading update… this can take a while on slow networks.',
     });
 
     const families = [4, 0]; // IPv4 first, then dual-stack
     let lastErr = null;
+    let lastProgressAt = Date.now();
+    let lastReceived = 0;
 
     for (const family of families) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
         try {
           if (fs.existsSync(destPath)) {
             try { fs.unlinkSync(destPath); } catch (_) {}
@@ -1243,15 +1322,28 @@ class ForceUpdater {
             destPath,
             (percent, received, total) => {
               this.downloadProgress = percent;
+              const now = Date.now();
+              const dt = Math.max(1, now - lastProgressAt);
+              const bytesPerSecond = Math.max(0, Math.round(((received - lastReceived) * 1000) / dt));
+              lastProgressAt = now;
+              lastReceived = received;
               this.sendToRenderer('update-download-progress', {
                 percent,
                 transferred: received,
                 total: total || 0,
-                bytesPerSecond: 0,
-                via: 'node-fallback',
+                bytesPerSecond,
+                via: 'node',
+                message: total
+                  ? `Downloading update… ${percent}%`
+                  : 'Downloading update…',
               });
             },
-            { family }
+            {
+              family,
+              // Stall only if truly idle; allow up to 60 minutes for slow links.
+              idleTimeoutMs: 5 * 60 * 1000,
+              maxDurationMs: 60 * 60 * 1000,
+            }
           );
 
           const size = result?.received || (fs.existsSync(destPath) ? fs.statSync(destPath).size : 0);
@@ -1269,9 +1361,11 @@ class ForceUpdater {
           this.sendToRenderer('update-downloaded', {
             version,
             currentVersion: this.currentVersion,
-            via: 'node-fallback',
+            via: 'node',
           });
-          console.log(`✅ [FORCE-UPDATER] Windows installer saved (${size} bytes): ${destPath}`);
+          console.log(
+            `✅ [FORCE-UPDATER] Windows installer saved (${size} bytes in ${Math.round((result?.elapsedMs || 0) / 1000)}s): ${destPath}`
+          );
           return {
             success: true,
             windowsInstallerReady: true,
@@ -1285,7 +1379,7 @@ class ForceUpdater {
             `⚠️ [FORCE-UPDATER] Windows Node download failed (family=${family}, attempt=${attempt}):`,
             err?.message || err
           );
-          await new Promise((r) => setTimeout(r, 800 * attempt));
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
         }
       }
     }
@@ -1310,12 +1404,12 @@ class ForceUpdater {
     this.recordInstallAttempt();
 
     try {
-      // Detached so NSIS keeps running after we exit. /S = silent when supported;
-      // oneClick NSIS still shows UI for elevation — that is fine.
-      const child = spawn(exePath, [], {
+      // Detached so NSIS keeps running after we exit.
+      // /S = silent oneClick NSIS reinstall (no wizard). UAC may still prompt.
+      const child = spawn(exePath, ['/S'], {
         detached: true,
         stdio: 'ignore',
-        windowsHide: false,
+        windowsHide: true,
       });
       child.unref();
     } catch (err) {
@@ -1632,15 +1726,31 @@ open "$TARGET"
     }
 
     if (this.manualInstallRequired) {
+      // Windows: sticky "manual" state used to open the browser forever. Prefer
+      // another in-app Node download + silent NSIS launch before browser.
+      if (process.platform === 'win32' && this.pendingVersion) {
+        console.log('🔧 [FORCE-UPDATER] Clearing sticky Windows manual flag — retrying in-app download');
+        this.manualInstallRequired = false;
+        const dl = await this.downloadWindowsInstallerViaNode();
+        if (dl?.success && this.windowsInstallerPath && fs.existsSync(this.windowsInstallerPath)) {
+          return this.launchWindowsInstaller(this.windowsInstallerPath);
+        }
+      }
       const url = this.getManualDownloadUrl();
-      this.openManualDownload();
+      // Only open browser when install is explicitly stuck after retry.
+      if (process.platform !== 'win32') {
+        this.openManualDownload();
+      }
       return {
-        success: true,
+        success: false,
         installing: false,
-        dmgOpened: true,
+        dmgOpened: process.platform !== 'win32',
         manualInstallRequired: true,
         manualDownloadUrl: url,
-        message: 'Installer opened in your browser. Install it, then reopen the app.',
+        message:
+          process.platform === 'win32'
+            ? 'In-app download failed. Click Retry Update, or use Download Installer Manually.'
+            : 'Installer opened in your browser. Install it, then reopen the app.',
       };
     }
 

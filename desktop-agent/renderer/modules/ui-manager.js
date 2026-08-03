@@ -4017,10 +4017,17 @@ class UIManager {
     
     if (progressText) {
       const percent = Math.round(progress.percent || 0);
-      const speed = progress.bytesPerSecond 
-        ? (progress.bytesPerSecond / 1024 / 1024).toFixed(1) + ' MB/s'
-        : '';
-      progressText.textContent = `Downloading... ${percent}% ${speed}`;
+      let speed = '';
+      const bps = Number(progress.bytesPerSecond) || 0;
+      if (bps > 0) {
+        speed = bps >= 1024 * 1024
+          ? `${(bps / 1024 / 1024).toFixed(1)} MB/s`
+          : `${Math.max(1, Math.round(bps / 1024))} KB/s`;
+      }
+      const hint = progress.message || (percent < 100 ? 'Downloading update…' : 'Download complete');
+      progressText.textContent = speed
+        ? `${hint} ${percent}% (${speed})`
+        : `${hint} ${percent}%`;
     }
   }
 
