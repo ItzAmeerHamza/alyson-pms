@@ -711,8 +711,13 @@ class TrayManager {
         ? (global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null)
         : null;
       const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
-      this._cumulativeBaseSeconds = agg.completedClosedSeconds;
-      console.log('⏱️ [TRAY] Cumulative base synced from DB:', this._cumulativeBaseSeconds, 's');
+      const prevBase = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+      const nextBase = Math.max(0, Math.floor(Number(agg.completedClosedSeconds) || 0));
+      // Exact closed base for 1:1 wall-clock ticks. Keep prev only on wipe-to-zero.
+      if (!isTracking || nextBase > 0 || prevBase <= 0) {
+        this._cumulativeBaseSeconds = nextBase;
+      }
+      console.log('⏱️ [TRAY] Cumulative base synced from DB+offline:', this._cumulativeBaseSeconds, 's');
     } catch (e) {
       console.warn('⚠️ [TRAY] ensureCumulativeBaseFromDb failed:', e?.message || e);
     }

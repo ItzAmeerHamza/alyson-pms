@@ -1442,13 +1442,11 @@ try {
       const elapsed = start
         ? elapsedSecondsSinceLocalMidnight(start)
         : 0;
-      const freshTotal = base + elapsed;
-      const trayCumulative =
-        typeof tray?._lastCumulativeSeconds === 'number' ? Math.floor(tray._lastCumulativeSeconds) : 0;
-      const total = Math.max(freshTotal, trayCumulative, global._lastTodayTotalAtStop || 0);
+      // Hint only for empty DB reads — must not permanently outrank real DB totals.
+      const total = base + elapsed;
       if (total > 0) {
         global._lastTodayTotalAtStop = total;
-        console.log(`⏱️ [TRACKING-MANAGER] Stop snapshot: ${total}s (fresh=${freshTotal}, tray=${trayCumulative})`);
+        console.log(`⏱️ [TRACKING-MANAGER] Stop snapshot hint: ${total}s (base=${base}, elapsed=${elapsed})`);
       }
     } catch (error) {
       console.warn('⚠️ [TRACKING-MANAGER] Stop snapshot failed:', error?.message || error);
@@ -1464,15 +1462,13 @@ try {
       global._frozenTotalDate = todayKey;
     }
     const db = Math.max(0, Math.floor(Number(dbCompletedSeconds) || 0));
-    const floor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
-    const resolved = Math.max(db, floor);
-    if (floor > db) {
-      console.log(`⏱️ [TRACKING-MANAGER] Using stop snapshot total ${floor}s (DB had ${db}s)`);
-    }
-    if (db >= floor) {
+    // DB wins whenever it has a real total. Snapshot only covers empty fetches.
+    if (db > 0) {
       global._lastTodayTotalAtStop = null;
+      return db;
     }
-    return resolved;
+    const floor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
+    return floor;
   }
 
   _startTimeLogCheckpoint() {
@@ -2210,8 +2206,35 @@ try {
       this.processOfflineQueue();
     }, 30000);
     
-    // Also try immediately
-    setTimeout(() => this.processOfflineQueue(), 5000);
+    // Immediate attempt + short retry (reconnect often needs a beat)
+    setTimeout(() => this.processOfflineQueue(), 0);
+    setTimeout(() => this.processOfflineQueue(), 3000);
+
+    // When the machine wakes / network returns, flush queued hours ASAP.
+    if (!this._offlineResumeHooksBound) {
+      this._offlineResumeHooksBound = true;
+      try {
+        const { powerMonitor } = require('electron');
+        if (powerMonitor?.on) {
+          powerMonitor.on('resume', () => {
+            console.log('🔄 [TRACKING-MANAGER] System resume — flushing offline time logs');
+            this.startOfflineSync();
+            void this.processOfflineQueue();
+          });
+        }
+      } catch (_) { /* ignore */ }
+      try {
+        // When OS reports online again, flush immediately (complements 30s retry).
+        const { app } = require('electron');
+        if (app && typeof app.on === 'function') {
+          // Some Electron builds emit this when Chromium network status changes.
+          app.on('browser-window-focus', () => {
+            const q = this.getOfflineQueue();
+            if (q.length > 0) void this.processOfflineQueue();
+          });
+        }
+      } catch (_) { /* ignore */ }
+    }
   }
 
   /**
@@ -2360,12 +2383,31 @@ try {
         }
       }
 
+      const hadItems = queue.length > 0;
+      const syncedCount = queue.length - remainingItems.length;
       this.saveOfflineQueue(remainingItems);
 
       if (remainingItems.length === 0 && this.offlineSyncTimer) {
         clearInterval(this.offlineSyncTimer);
         this.offlineSyncTimer = null;
         console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
+      }
+
+      // After any successful sync, refresh UI totals from portal so the clock
+      // matches web once offline hours land remotely.
+      if (hadItems && syncedCount > 0) {
+        try {
+          global._todayStatsInFlight = null;
+          global._lastGoodTodayStats = null;
+        } catch (_) { /* ignore */ }
+        try {
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('offline-time-logs-synced', {
+              syncedCount,
+              remaining: remainingItems.length,
+            });
+          }
+        } catch (_) { /* ignore */ }
       }
     } finally {
       this._processingOfflineQueue = false;

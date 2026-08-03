@@ -1264,17 +1264,23 @@ class UIManager {
     this._todayStatsInFlight = (async () => {
       try {
         const result = await this.ipcRenderer.invoke('get-today-time-stats');
-        // Keep last good if this response is an error / zero regression.
+        // Keep last-good only on hard failure / wipe-to-zero — never freeze an
+        // inflated total (that made the live clock run ahead of wall time).
         const prev = this._todayStatsCache;
         const incomingTotal = Math.max(0, Math.floor(Number(result?.totalTime) || 0));
         const prevTotal = Math.max(0, Math.floor(Number(prev?.totalTime) || 0));
+        if (result?.error && prev && !prev.error && prevTotal > 0) {
+          console.warn('⚠️ [TODAY-TIME] Keeping cached stats after error');
+          return prev;
+        }
         if (
           prev &&
           !prev.error &&
           prevTotal > 60 &&
-          (result?.error || incomingTotal + 5 < prevTotal)
+          incomingTotal < 30 &&
+          !result?.offlinePendingCount
         ) {
-          console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring regressive/error response');
+          console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring wipe-to-zero response');
           return prev;
         }
         if (result && !result.error) {
@@ -1506,14 +1512,13 @@ class UIManager {
               }
               const base = Math.max(
                 0,
-                Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
                 Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
               );
               window.__completedTodayBaseSeconds = base;
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                // Pass TRACKED seconds — never decrease while live (DB can lag).
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: false });
+                // DB closed-base + live elapsed — allow decrease when DB corrects down.
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
               }
             } catch {
               // Keep prior effective display; don't flash session-only time into the big clock.
@@ -3295,28 +3300,24 @@ class UIManager {
               : totalSec;
         this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
         console.log('✅ [TODAY-TIME] Updated effective display:', effectiveSec, 's (tracked', totalSec, 's)');
-        if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
-          // Never lower the live base while a session is running — that made the
-          // big clock jump backwards when DB stats lagged the local timer.
-          window.__completedTodayBaseSeconds = Math.max(
-            Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)),
-            completedBase,
-          );
-        }
         const trackingLive =
           !!window.__lastTrackingStartTime ||
           !!(typeof window.isTrayTimerDrivingDisplay === 'function' && window.isTrayTimerDrivingDisplay()) ||
           this.trackingStatus === 'active';
+        if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+          if (typeof window.applyClosedBaseFromStats === 'function') {
+            window.applyClosedBaseFromStats(completedBase, { live: trackingLive });
+          } else if (!(trackingLive && completedBase <= 0 && (window.__completedTodayBaseSeconds || 0) > 60)) {
+            window.__completedTodayBaseSeconds = completedBase;
+          }
+        }
         if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
           if (trackingLive) {
-            // Live session owns the big clock; only refresh cards/base above.
+            // Live session owns the big clock; wall-clock base + elapsed.
             if (typeof window.updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
               window.updateRendererTrackingClock();
             } else {
-              window.setTrackerDisplaySeconds(
-                Math.max(totalSec, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-                { allowDecrease: false },
-              );
+              window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
             }
           } else {
             const trackedDisplay =
@@ -3642,13 +3643,12 @@ class UIManager {
               }
               const base = Math.max(
                 0,
-                Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
                 Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
               );
               window.__completedTodayBaseSeconds = base;
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: false });
+                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
               }
             } catch (err) {
               console.warn('⚠️ [TIMER-REFRESH] Effective clock refresh failed:', err?.message || err);

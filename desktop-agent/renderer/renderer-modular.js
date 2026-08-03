@@ -101,12 +101,16 @@ function applyTodayEffectiveStats(stats) {
   // Ignore incomplete responses that would flash "0 non-effective / all effective"
   // before idle + low-activity queries finish (common right after app launch).
   if (stats.effectiveStatsComputed === false) {
-    if (typeof stats.totalTime === 'number') {
+    if (typeof stats.totalTime === 'number' && stats.stale !== true) {
       const incoming = Math.max(0, Math.floor(stats.totalTime));
-      window.__todayTrackedSeconds = Math.max(
-        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-        incoming,
-      );
+      if (window.__lastTrackingStartTime && typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+        applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
+        window.__todayTrackedSeconds =
+          Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
+          getTodayElapsedSeconds(window.__lastTrackingStartTime);
+      } else if (!window.__lastTrackingStartTime) {
+        window.__todayTrackedSeconds = incoming;
+      }
     }
     updateTrackerEffectiveMeta();
     return;
@@ -130,18 +134,22 @@ function applyTodayEffectiveStats(stats) {
     window.__todayNonEffectiveSeconds = Math.max(0, tracked - effective);
     window.__effectiveStatsReady = true;
   }
-  if (typeof stats.totalTime === 'number') {
+  if (typeof stats.totalTime === 'number' && stats.stale !== true) {
     const incoming = Math.max(0, Math.floor(stats.totalTime));
-    // Never let a lagging DB total pull tracked seconds backwards while the live
-    // clock is ahead (that caused the big timer to bounce 08:37 ↔ 08:38).
-    const live = Math.max(
-      0,
-      Math.floor(Number(window.__todayTrackedSeconds) || 0),
-      typeof readLocalTrackingCumulativeSeconds === 'function'
-        ? readLocalTrackingCumulativeSeconds()
-        : 0,
-    );
-    window.__todayTrackedSeconds = Math.max(live, incoming);
+    // Live: closed base from DB+offline (ignore wipe-to-zero only).
+    // Display ticks use wall clock so the timer neither races nor lags.
+    // Stopped: trust DB + offline-queue merge.
+    if (window.__lastTrackingStartTime) {
+      applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
+      window.__todayTrackedSeconds =
+        Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
+        getTodayElapsedSeconds(window.__lastTrackingStartTime);
+    } else {
+      window.__todayTrackedSeconds = incoming;
+      if (typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+        applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: false });
+      }
+    }
   }
   if (window.__effectiveStatsReady) {
     persistNonEffectiveCache(window.__todayNonEffectiveSeconds);
@@ -223,25 +231,45 @@ try { updateTrackerEffectiveMeta(); } catch (_) {}
 
 function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
+  // Prefer DB after stop. Only fall back to floors when DB has not synced yet (0).
+  if (db > 0) {
+    window.__todayBaseAtLastStop = null;
+    return db;
+  }
   const todayKey = localDateIso();
   const floorFromStop = window.__trackerDisplayDayKey === todayKey
     ? Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0))
     : 0;
-  // Use tracked floor only — big clock display is effective and must not inflate tracked.
   const floorFromTracked = window.__trackerDisplayDayKey === todayKey
     ? Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0))
     : 0;
-  const floor = Math.max(
+  return Math.max(
     floorFromTracked,
     floorFromStop,
     Math.max(0, Math.floor(Number(extraFloor) || 0)),
   );
-  return Math.max(db, floor);
 }
 
 function getTodayElapsedSeconds(sessionStart) {
   return elapsedSecondsSinceWorkMidnight(sessionStart);
 }
+
+/**
+ * Closed-session base for the big clock (completed intervals only — not live elapsed).
+ * Live display is always: base + wall-clock session elapsed (never a counter).
+ * While tracking: adopt real base updates; only ignore a wipe to ~0 (failed fetch).
+ */
+function applyClosedBaseFromStats(rawBase, { live = false } = {}) {
+  const incoming = Math.max(0, Math.floor(Number(rawBase) || 0));
+  const prev = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  if (live && incoming <= 0 && prev > 60) {
+    // Failed/empty fetch — keep base so the clock does not jump backward mid-session.
+    return prev;
+  }
+  window.__completedTodayBaseSeconds = incoming;
+  return window.__completedTodayBaseSeconds;
+}
+window.applyClosedBaseFromStats = applyClosedBaseFromStats;
 
 function readLocalTrackingCumulativeSeconds() {
   const start = window.__lastTrackingStartTime;
@@ -251,14 +279,11 @@ function readLocalTrackingCumulativeSeconds() {
   return base + elapsed;
 }
 
-/** Tray IPC is preferred when fresh, but local clock wins if it is ahead (e.g. during optimistic start). */
+/** Tray IPC is preferred when fresh; both sides should show DB-base + live elapsed. */
 function isTrayTimerDrivingDisplay() {
   if (window.__localTrackingClockActive) return false;
   if (!window.__trayTimerActive) return false;
   if (Date.now() - (window.__lastTrayTimerTickAt || 0) >= TRAY_TICK_STALE_MS) return false;
-  const local = readLocalTrackingCumulativeSeconds();
-  const tray = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
-  if (local > 0 && local > tray + 1) return false;
   return true;
 }
 window.isTrayTimerDrivingDisplay = isTrayTimerDrivingDisplay;
@@ -278,20 +303,16 @@ function updateRendererTrackingClock() {
   const start = window.__lastTrackingStartTime;
   if (!start) return;
   const dashboardTimer = document.getElementById('sessionTime');
+  // Wall-clock only: floor((now - start) / 1000). Never ++ a counter (that drifts fast/slow).
   const elapsed = getTodayElapsedSeconds(start);
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  const localCumulative = base + elapsed;
-  const trayCumulative = Math.max(0, Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0));
-  const cumulativeSec = Math.max(localCumulative, trayCumulative);
-  window.__todayTrackedSeconds = Math.max(
-    Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-    cumulativeSec,
-  );
+  const cumulativeSec = base + elapsed;
+  window.__todayTrackedSeconds = cumulativeSec;
+  window.__lastTrayCumulativeSeconds = cumulativeSec;
   const sessionStr = formatSecondsAsHMS(elapsed);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  // Big clock is TRACKED time and must never jump backwards while the session is live.
-  // Effective / non-effective cards update separately via applyTodayEffectiveStats.
-  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
+  // Exact paint — allowDecrease so we never freeze ahead of wall clock.
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -330,20 +351,21 @@ function stopTrackingDisplayWatchdog() {
 async function refreshTodayCompletedBaseSeconds() {
   try {
     const s = await ipcRenderer.invoke('get-today-time-stats');
+    if (s?.stale === true) return;
     applyTodayEffectiveStats(s);
-    const dbBase = Math.max(0, Math.floor(Number(s?.completedTodayBeforeCurrentSessionSeconds) || 0));
-    const floor = Math.max(
-      0,
-      Math.floor(Number(window.__todayBaseAtLastStop) || 0),
-      Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
-    );
-    window.__completedTodayBaseSeconds = Math.max(dbBase, floor);
-    if (dbBase >= floor) {
-      window.__todayBaseAtLastStop = null;
+    const live = !!window.__lastTrackingStartTime;
+    applyClosedBaseFromStats(s?.completedTodayBeforeCurrentSessionSeconds, { live });
+    if (!live) {
+      // After stop, drop stop-floor once we have a real total from DB/offline merge.
+      if (Math.max(0, Math.floor(Number(s?.totalTime) || 0)) > 0) {
+        window.__todayBaseAtLastStop = null;
+      }
     }
   } catch {
+    // Keep last known base only when the fetch itself fails.
     window.__completedTodayBaseSeconds = Math.max(
       0,
+      Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
       Math.floor(Number(window.__todayBaseAtLastStop) || 0),
     );
   }
@@ -839,18 +861,6 @@ function setupModuleCommunication() {
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
     window.__trayTimerActive = true;
     window.__lastTrayTimerTickAt = Date.now();
-    const localAhead = readLocalTrackingCumulativeSeconds();
-    const incomingTray = Math.max(
-      0,
-      Math.floor(Number(data?.cumulativeSeconds) || 0),
-      parseHmsToSeconds(data?.cumulativeDisplay),
-    );
-    // Only prefer local clock when it is actively running. If watchdog was killed
-    // (stop→start race), always accept tray ticks so the UI does not freeze.
-    const localClockAlive = !!(window.__trackingDisplayWatchdog && window.__lastTrackingStartTime);
-    if (localClockAlive && localAhead > incomingTray + 1) {
-      return;
-    }
     window.__localTrackingClockActive = false;
     const dashboardTimer = document.getElementById('sessionTime');
     if (data && (data.display || data.cumulativeDisplay)) {
@@ -858,45 +868,55 @@ function setupModuleCommunication() {
       const trayCumulative = Math.max(
         0,
         Math.floor(Number(data.cumulativeSeconds) || 0),
-        parseHmsToSeconds(data.cumulativeDisplay),
+        parseHmsToSeconds(data?.cumulativeDisplay),
       );
-      window.__lastTrayCumulativeSeconds = trayCumulative;
       const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
       const start = window.__lastTrackingStartTime;
-      const localCumulative = start
-        ? base + getTodayElapsedSeconds(start)
-        : trayCumulative;
-      const cumulativeSec = Math.max(localCumulative, trayCumulative);
-      window.__todayTrackedSeconds = Math.max(
-        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-        cumulativeSec,
-      );
+      // Same formula everywhere: closed base + wall-clock session elapsed.
+      const cumulativeSec = start ? base + getTodayElapsedSeconds(start) : trayCumulative;
+      window.__lastTrayCumulativeSeconds = cumulativeSec;
+      window.__todayTrackedSeconds = cumulativeSec;
       if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
     }
   });
 
-  ipcRenderer.on('tracking-stopped', (_event, data) => {
-    const trackedFloor = Math.max(
-      Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-      Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0)),
-    );
-    if (trackedFloor > 0) {
-      window.__todayBaseAtLastStop = trackedFloor;
-      window.__todayTrackedSeconds = Math.max(
-        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-        trackedFloor,
-      );
-      setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
-      void ipcRenderer.invoke('set-frozen-total-at-stop', trackedFloor).catch(() => {});
-    }
-    // Refresh idle/low so effective reflects the closed session soon after stop.
+  ipcRenderer.on('offline-time-logs-synced', (_event, data) => {
+    console.log('📶 [RENDERER] Offline time logs synced to portal:', data);
+    try {
+      if (moduleInstances?.uiManager?.invalidateTodayTimeStatsCache) {
+        moduleInstances.uiManager.invalidateTodayTimeStatsCache();
+      }
+    } catch (_) { /* ignore */ }
     void refreshTodayCompletedBaseSeconds().then(() => {
-      const tracked = Math.max(
-        trackedFloor,
-        Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-      );
-      setTrackerDisplaySeconds(tracked, { allowDecrease: true });
+      if (window.__lastTrackingStartTime) {
+        updateRendererTrackingClock();
+      } else if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
+        void moduleInstances.uiManager.loadTodaysTotalTime();
+      }
+    });
+  });
+
+  ipcRenderer.on('tracking-stopped', (_event, data) => {
+    const hint = Math.max(
+      0,
+      Math.floor(Number(window.__todayTrackedSeconds) || 0),
+      Math.floor(Number(data?.frozenTotalSeconds) || 0),
+    );
+    // Brief placeholder only until DB refresh lands — do not permanently freeze above DB.
+    if (hint > 0) {
+      window.__todayBaseAtLastStop = hint;
+      setTrackerDisplaySeconds(hint, { allowDecrease: true });
+      void ipcRenderer.invoke('set-frozen-total-at-stop', hint).catch(() => {});
+    }
+    void refreshTodayCompletedBaseSeconds().then(() => {
+      const dbTracked = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+      // DB wins after stop (even if lower than the live hint).
+      setTrackerDisplaySeconds(dbTracked > 0 ? dbTracked : hint, { allowDecrease: true });
+      if (dbTracked > 0) {
+        window.__todayBaseAtLastStop = null;
+        void ipcRenderer.invoke('clear-frozen-total-at-stop').catch(() => {});
+      }
     });
   });
 

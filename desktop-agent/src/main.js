@@ -6064,12 +6064,6 @@ if (isElectronContext && ipcMain) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
-      if (!global.supabaseService && !global.supabase && !isBackendTimeLogsEnabled()) {
-        console.log('⚠️ [TODAY-TIME-STATS] No database backend available');
-        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
-        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
-      }
-
       const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
       const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
       const { initWorkTimezone, workDateKey } = require('./modules/utils/work-timezone');
@@ -6086,28 +6080,63 @@ if (isElectronContext && ipcMain) {
       const currentTimeLogId = isTracking
         ? (global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null)
         : null;
-      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
 
-      let completedClosedSeconds = agg.completedClosedSeconds;
-      const floor = getFrozenTotalFloor();
-      if (floor > completedClosedSeconds) {
-        completedClosedSeconds = floor;
-      } else if (!isTracking && completedClosedSeconds >= floor) {
-        global._lastTodayTotalAtStop = null;
-        global._rendererFrozenTotalAtStop = null;
+      // No remote DB yet — still compute from local offline queue so the clock
+      // keeps recording smoothly until connectivity returns.
+      if (!supabase && !isBackendTimeLogsEnabled()) {
+        console.log('⚠️ [TODAY-TIME-STATS] No remote DB — using offline queue / last-good');
+        try {
+          const offlineAgg = await computeTodayTimeLogSeconds(null, userId, currentTimeLogId, isTracking);
+          if ((offlineAgg.timeLogsCount || 0) > 0 || (offlineAgg.totalTime || 0) > 0) {
+            const completedClosedSeconds = offlineAgg.completedClosedSeconds;
+            const totalTime = isTracking
+              ? completedClosedSeconds + offlineAgg.ongoingCurrentSessionSeconds
+              : completedClosedSeconds;
+            try {
+              if (global.trayManager && isTracking) {
+                const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
+                // Exact closed base — only skip wipe-to-zero so tray does not jump.
+                if (completedClosedSeconds > 0 || prevBase <= 0) {
+                  global.trayManager._cumulativeBaseSeconds = completedClosedSeconds;
+                }
+              }
+            } catch (_) { /* ignore */ }
+            const today = new Date();
+            const payload = {
+              totalTime,
+              completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
+              ongoingCurrentSessionSeconds: offlineAgg.ongoingCurrentSessionSeconds,
+              timeLogsCount: offlineAgg.timeLogsCount,
+              offlinePendingCount: offlineAgg.offlinePendingCount || 0,
+              effectiveSeconds: totalTime,
+              nonEffectiveSeconds: 0,
+              idleSeconds: 0,
+              lowActivitySeconds: 0,
+              effectiveStatsComputed: false,
+              userId,
+              workDate: workDateKey(today),
+              date: workDateKey(today),
+              offlineOnly: true,
+            };
+            global._lastGoodTodayStats = payload;
+            return payload;
+          }
+        } catch (_) { /* fall through */ }
+        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
+        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
       }
 
-      // While tracking, never report a closed-base lower than what the tray/renderer
-      // already believes (transient backend failures used to report 0).
-      if (isTracking) {
-        const liveFloor = Math.max(
-          0,
-          Math.floor(Number(global.trayManager?._cumulativeBaseSeconds) || 0),
-          Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
-        );
-        if (liveFloor > completedClosedSeconds) {
-          completedClosedSeconds = liveFloor;
-        }
+      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
+
+      // Source of truth = remote time_logs + local offline queue (merged).
+      // Frozen stop floors only paper over a true empty/failed read (0s).
+      let completedClosedSeconds = agg.completedClosedSeconds;
+      const floor = getFrozenTotalFloor();
+      if (completedClosedSeconds <= 0 && floor > 0 && (agg.timeLogsCount || 0) === 0) {
+        completedClosedSeconds = floor;
+      } else if (completedClosedSeconds > 0 || (agg.timeLogsCount || 0) > 0) {
+        global._lastTodayTotalAtStop = null;
+        global._rendererFrozenTotalAtStop = null;
       }
 
       const today = new Date();
@@ -6115,22 +6144,30 @@ if (isElectronContext && ipcMain) {
         ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
         : completedClosedSeconds;
 
-      if (isTracking) {
-        const trayCum = Math.max(0, Math.floor(Number(global.trayManager?._lastCumulativeSeconds) || 0));
-        if (trayCum > totalTime) totalTime = trayCum;
-      }
+      // Tray closed-base = DB+offline merge. Exact value (not a high-water mark)
+      // so menu-bar time tracks wall clock 1:1. Ignore wipe-to-zero only.
+      try {
+        if (global.trayManager && isTracking) {
+          const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
+          if (completedClosedSeconds > 0 || prevBase <= 0) {
+            global.trayManager._cumulativeBaseSeconds = completedClosedSeconds;
+          }
+        }
+      } catch (_) { /* ignore */ }
 
-      // Reject absurd regressions vs last good sample (e.g. fetch failed → 0).
+      // Only ignore a collapse to ~0 when we previously had real time (failed fetch).
+      // Do NOT block legitimate DB corrections that are lower than a stale UI total.
       const lastGood = global._lastGoodTodayStats;
       if (
         lastGood &&
         typeof lastGood.totalTime === 'number' &&
         lastGood.workDate === workDateKey(today) &&
-        totalTime + 5 < lastGood.totalTime &&
-        lastGood.totalTime > 60
+        lastGood.totalTime > 60 &&
+        totalTime < 30 &&
+        (agg.timeLogsCount || 0) === 0
       ) {
         console.warn(
-          `⚠️ [TODAY-TIME-STATS] Ignoring regressive total ${totalTime}s (last good ${lastGood.totalTime}s)`,
+          `⚠️ [TODAY-TIME-STATS] Ignoring empty total ${totalTime}s (last good ${lastGood.totalTime}s)`,
         );
         return lastGood;
       }
@@ -6164,6 +6201,7 @@ if (isElectronContext && ipcMain) {
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,
+        offlinePendingCount: agg.offlinePendingCount || 0,
         effectiveSeconds,
         nonEffectiveSeconds,
         idleSeconds,
