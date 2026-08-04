@@ -15,13 +15,26 @@ const fs = require('fs');
 const path = require('path');
 const { performance } = require('perf_hooks');
 
+function resolvePerfLogDir() {
+  try {
+    const { app } = require('electron');
+    if (app && typeof app.getPath === 'function') {
+      // Packaged + dev: durable under Application Support / userData
+      return path.join(app.getPath('userData'), 'logs', 'performance');
+    }
+  } catch (_) { /* non-Electron */ }
+  return path.join(process.cwd(), 'logs', 'performance');
+}
+
 class PerformanceMonitor {
   constructor(options = {}) {
     this.enabled = options.enabled !== false;
-    this.logDir = path.join(process.cwd(), 'logs', 'performance');
+    this.logDir = options.logDir || resolvePerfLogDir();
     this.today = new Date().toISOString().split('T')[0];
     this.metricsFile = path.join(this.logDir, `${this.today}.ndjson`);
     this.reportFile = path.join(this.logDir, `${this.today}-report.json`);
+    this.cpuNdjsonFile = path.join(this.logDir, `cpu-${this.today}.ndjson`);
+    this.cpuTextFile = path.join(this.logDir, `cpu-${this.today}.log`);
     
     this.metrics = {
       screenshots: { capture: [], encode: [], write: [], upload: [] },
@@ -30,7 +43,8 @@ class PerformanceMonitor {
       sync: { enqueue: [], batch: [], post: [] },
       ipc: { calls: [], payloads: [] },
       eventLoop: { lag: [] },
-      memory: { rss: [], heap: [] }
+      memory: { rss: [], heap: [] },
+      cpu: { samples: [] },
     };
     
     this.featureFlags = {
@@ -43,6 +57,10 @@ class PerformanceMonitor {
     
     this.timers = new Map();
     this.counters = new Map();
+
+    // CPU sampling baseline (microseconds of user+system time)
+    this._lastCpuUsage = process.cpuUsage();
+    this._lastCpuSampleAt = Date.now();
     
     this.ensureLogDirectory();
     // PERFORMANCE FIX: Removed startEventLoopMonitoring() - 100ms polling causes battery drain
@@ -55,7 +73,27 @@ class PerformanceMonitor {
       this.autoFlushInterval = setInterval(() => {
         try { this.saveReport(); } catch {}
       }, this.flushIntervalMs);
+      if (typeof this.autoFlushInterval.unref === 'function') {
+        this.autoFlushInterval.unref();
+      }
     } catch {}
+
+    // Periodic CPU + memory lines in the normal app log stream (cheap; default 60s).
+    try {
+      this.startCpuUsageLogging();
+    } catch {}
+  }
+
+  /** Roll file paths when the Pacific/local calendar day changes. */
+  _ensureCpuLogFilesForToday() {
+    const day = new Date().toISOString().split('T')[0];
+    if (day === this.today) return;
+    this.today = day;
+    this.metricsFile = path.join(this.logDir, `${this.today}.ndjson`);
+    this.reportFile = path.join(this.logDir, `${this.today}-report.json`);
+    this.cpuNdjsonFile = path.join(this.logDir, `cpu-${this.today}.ndjson`);
+    this.cpuTextFile = path.join(this.logDir, `cpu-${this.today}.log`);
+    this.ensureLogDirectory();
   }
 
   ensureLogDirectory() {
@@ -65,6 +103,47 @@ class PerformanceMonitor {
       }
     } catch (error) {
       console.error('[PERF] Failed to create log directory:', error.message);
+    }
+  }
+
+  /** Persist one CPU sample to disk (NDJSON + human-readable .log). */
+  persistCpuUsageSample(sample) {
+    if (!sample) return;
+    try {
+      this._ensureCpuLogFilesForToday();
+      this.ensureLogDirectory();
+      const iso = new Date(sample.timestamp).toISOString();
+      const ndjsonLine = JSON.stringify({
+        ts: iso,
+        type: 'cpu',
+        mainCpuPercent: sample.mainCpuPercent,
+        electronCpuPercent: sample.electronCpuPercent,
+        processCount: sample.processCount,
+        userMs: sample.userMs,
+        systemMs: sample.systemMs,
+        intervalSec: Math.round(sample.intervalMs / 1000),
+        rssMb: sample.rssMb,
+        heapMb: sample.heapMb,
+        isTracking: sample.isTracking,
+      }) + '\n';
+      fs.appendFileSync(this.cpuNdjsonFile, ndjsonLine);
+      // Also keep in the general metrics NDJSON for older tooling.
+      fs.appendFileSync(
+        this.metricsFile,
+        JSON.stringify({ timestamp: sample.timestamp, type: 'cpu', data: sample }) + '\n',
+      );
+      const textLine =
+        `${iso}  main=${sample.mainCpuPercent}%` +
+        `  electron=${sample.electronCpuPercent ?? 'n/a'}%` +
+        `  procs=${sample.processCount ?? 'n/a'}` +
+        `  rss=${sample.rssMb}MB` +
+        `  heap=${sample.heapMb}MB` +
+        `  tracking=${sample.isTracking ? 'yes' : 'no'}\n`;
+      fs.appendFileSync(this.cpuTextFile, textLine);
+    } catch (err) {
+      try {
+        console.warn('[PERF] Failed to persist CPU log:', err?.message || err);
+      } catch { /* ignore */ }
     }
   }
 
@@ -270,6 +349,221 @@ class PerformanceMonitor {
     }
   }
 
+  /**
+   * Sample main-process CPU since the last sample + optional Electron process group.
+   * Uses process.cpuUsage() (microseconds) — very cheap.
+   */
+  sampleCpuUsage() {
+    if (!this.enabled) return null;
+
+    const now = Date.now();
+    const elapsedMs = Math.max(1, now - (this._lastCpuSampleAt || now));
+    const diff = process.cpuUsage(this._lastCpuUsage);
+    this._lastCpuUsage = process.cpuUsage();
+    this._lastCpuSampleAt = now;
+
+    // cpuUsage is microseconds; wall clock is ms → percent of one core.
+    const mainCpuPercent =
+      Math.round(((diff.user + diff.system) / (elapsedMs * 1000)) * 1000) / 10;
+
+    let electronCpuPercent = null;
+    let processCount = null;
+    try {
+      const { app } = require('electron');
+      if (app && typeof app.getAppMetrics === 'function') {
+        const metrics = app.getAppMetrics() || [];
+        processCount = metrics.length;
+        electronCpuPercent = Math.round(
+          metrics.reduce((sum, m) => sum + (Number(m?.cpu?.percentCPUUsage) || 0), 0) * 10,
+        ) / 10;
+      }
+    } catch (_) { /* non-Electron / early boot */ }
+
+    const mem = process.memoryUsage();
+    const sample = {
+      timestamp: now,
+      intervalMs: elapsedMs,
+      mainCpuPercent,
+      electronCpuPercent,
+      processCount,
+      // `value` used by calculateStats() in performance reports
+      value: mainCpuPercent,
+      userMs: Math.round(diff.user / 1000),
+      systemMs: Math.round(diff.system / 1000),
+      rssMb: Math.round((mem.rss / (1024 * 1024)) * 10) / 10,
+      heapMb: Math.round((mem.heapUsed / (1024 * 1024)) * 10) / 10,
+      isTracking: !!(typeof global !== 'undefined' && global.isTracking),
+    };
+
+    if (!this.metrics.cpu) this.metrics.cpu = { samples: [] };
+    this.metrics.cpu.samples.push(sample);
+    if (this.metrics.cpu.samples.length > 500) {
+      this.metrics.cpu.samples = this.metrics.cpu.samples.slice(-500);
+    }
+
+    return sample;
+  }
+
+  /** Write one CPU sample into the normal app console / structured logs + disk. */
+  logCpuUsageSample(sample = null) {
+    const s = sample || this.sampleCpuUsage();
+    if (!s) return s;
+
+    try {
+      const { createFeatureLogger } = require('../modules/utils/logger');
+      const log = createFeatureLogger('PERF');
+      log.info({
+        step: 'CPU',
+        message: `${s.mainCpuPercent}% main` +
+          (s.electronCpuPercent != null ? ` / ${s.electronCpuPercent}% all-electron` : ''),
+        ctx: {
+          mainCpuPercent: s.mainCpuPercent,
+          electronCpuPercent: s.electronCpuPercent,
+          processCount: s.processCount,
+          userMs: s.userMs,
+          systemMs: s.systemMs,
+          intervalSec: Math.round(s.intervalMs / 1000),
+          rssMb: s.rssMb,
+          heapMb: s.heapMb,
+          isTracking: s.isTracking,
+          logFile: this.cpuTextFile,
+        },
+      });
+    } catch (_) {
+      try {
+        console.log(
+          `[PERF] CPU main=${s.mainCpuPercent}% electron=${s.electronCpuPercent ?? 'n/a'}% rss=${s.rssMb}MB heap=${s.heapMb}MB tracking=${s.isTracking}`,
+        );
+      } catch { /* ignore */ }
+    }
+
+    // Always persist to userData logs (unless explicitly disabled).
+    if (process.env.PERF_CPU_NDJSON !== '0') {
+      this.persistCpuUsageSample(s);
+    }
+    // Also append to time_doctor.time_log_events via backend (best-effort).
+    if (process.env.PERF_CPU_DB !== '0') {
+      void this.persistCpuUsageToTimeLogEvents(s);
+    }
+    return s;
+  }
+
+  /**
+   * Push one CPU sample into time_doctor.time_log_events (action=cpu_sample).
+   * Fire-and-forget; never throws into the sampler loop.
+   */
+  async persistCpuUsageToTimeLogEvents(sample) {
+    if (!sample) return;
+    try {
+      const {
+        isBackendTimeLogsEnabled,
+        insertTimeLogEvents,
+      } = require('../modules/utils/backend-time-logs');
+      if (!isBackendTimeLogsEnabled()) return;
+
+      const userId =
+        global.currentUserId ||
+        global.config?.user_id ||
+        global.trackingManager?.currentSession?.user_id ||
+        null;
+      if (!userId) return;
+
+      let agentVersion = null;
+      try {
+        const { app } = require('electron');
+        agentVersion = app?.getVersion?.() || null;
+      } catch (_) { /* ignore */ }
+      if (!agentVersion) {
+        try {
+          agentVersion = require('../../package.json').version;
+        } catch (_) { /* ignore */ }
+      }
+
+      const deviceId =
+        global.deviceId ||
+        global.config?.device_id ||
+        null;
+      const timeLogId =
+        global.currentTimeLogId ||
+        global.trackingManager?.currentTimeLogId ||
+        null;
+      const orgId =
+        global.config?.organization_id ||
+        global.trackingManager?.currentSession?.organization_id ||
+        null;
+
+      await insertTimeLogEvents({
+        user_id: userId,
+        time_log_id: timeLogId,
+        organization_id: orgId,
+        action: 'cpu_sample',
+        source: 'desktop-agent',
+        device_id: deviceId,
+        agent_version: agentVersion,
+        meta: {
+          kind: 'cpu',
+          mainCpuPercent: sample.mainCpuPercent,
+          electronCpuPercent: sample.electronCpuPercent,
+          processCount: sample.processCount,
+          userMs: sample.userMs,
+          systemMs: sample.systemMs,
+          intervalSec: Math.round(sample.intervalMs / 1000),
+          rssMb: sample.rssMb,
+          heapMb: sample.heapMb,
+          isTracking: sample.isTracking,
+          sampledAt: new Date(sample.timestamp).toISOString(),
+        },
+      });
+    } catch (err) {
+      // Offline / API down — disk log still has the sample.
+      if (process.env.PERF_CPU_DB_DEBUG === '1') {
+        try {
+          console.warn('[PERF] CPU→time_log_events failed:', err?.message || err);
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  startCpuUsageLogging() {
+    if (!this.enabled) return;
+    if (process.env.PERF_CPU_LOG === '0') {
+      console.log('[PERF] CPU usage logging disabled (PERF_CPU_LOG=0)');
+      return;
+    }
+    if (this._cpuLogInterval) return;
+
+    const intervalMs = Math.max(
+      15_000,
+      Number(process.env.PERF_CPU_LOG_MS) || 60_000,
+    );
+
+    // Prime baseline so the first logged sample is a real delta.
+    this._lastCpuUsage = process.cpuUsage();
+    this._lastCpuSampleAt = Date.now();
+    this.ensureLogDirectory();
+
+    this._cpuLogInterval = setInterval(() => {
+      try {
+        this.recordMemoryMetrics();
+        this.logCpuUsageSample();
+      } catch (_) { /* ignore */ }
+    }, intervalMs);
+    if (typeof this._cpuLogInterval.unref === 'function') {
+      this._cpuLogInterval.unref();
+    }
+
+    console.log(
+      `[PERF] CPU usage logging every ${Math.round(intervalMs / 1000)}s → ${this.cpuTextFile}`,
+    );
+  }
+
+  stopCpuUsageLogging() {
+    if (this._cpuLogInterval) {
+      clearInterval(this._cpuLogInterval);
+      this._cpuLogInterval = null;
+    }
+  }
+
   // Statistics calculation
   calculateStats(values) {
     if (values.length === 0) return { count: 0, min: 0, max: 0, avg: 0, p50: 0, p95: 0, p99: 0 };
@@ -417,6 +711,7 @@ class PerformanceMonitor {
   shutdown() {
     try { this.saveReport(); } catch {}
     try {
+      this.stopCpuUsageLogging();
       if (this.autoFlushInterval) {
         clearInterval(this.autoFlushInterval);
         this.autoFlushInterval = null;

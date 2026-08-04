@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
 import {
@@ -9,14 +9,15 @@ import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
   WORKSPACE_AS_ORG_SELECT,
+  canManagePulseUsers,
   isPulseAdmin,
   isPulseOrgAdmin,
-  isPulseTeamManager,
   parseTenantUserId,
   parseWorkspaceId,
   scopedPulseUserId,
   workspaceScope,
 } from '../database/time-doctor-sql';
+import { AccessGrantsService } from '../access-grants/access-grants.service';
 
 export type ScreenshotProductivityFilter = 'all' | 'distraction' | 'low_productivity' | 'idle';
 export type ScreenshotSort = 'newest' | 'least_productive' | 'low_activity';
@@ -111,32 +112,89 @@ export class DataService {
   constructor(
     private readonly database: DatabaseService,
     private readonly s3: S3Service,
+    private readonly accessGrants: AccessGrantsService,
   ) {}
 
   private isAdmin(user: ScopedAuthUser): boolean {
     return isPulseAdmin(user);
   }
 
-  /** User ids whose screenshots the caller may view. null = all workspace users. */
+  /** Restrict log queries by role, delegated grant, or self. */
+  private async applyLogUserScope(
+    user: ScopedAuthUser,
+    userId: string | undefined,
+    params: unknown[],
+    filters: string[],
+    column: string,
+  ): Promise<void> {
+    if (userId) {
+      const targetId = scopedPulseUserId(user, userId);
+      if (!(await this.canAccessUserData(user, targetId))) {
+        throw new ForbiddenException('Insufficient permissions to view this user');
+      }
+      params.push(parseTenantUserId(targetId));
+      filters.push(`${column} = $${params.length}`);
+      return;
+    }
+    if (this.isAdmin(user)) {
+      return;
+    }
+    const granted = await this.accessGrants.getGrantedTargetIds(user);
+    if (granted.length) {
+      const ids = [...new Set([...granted, String(user.id)])];
+      params.push(ids.map((id) => parseTenantUserId(id)));
+      filters.push(`${column} = ANY($${params.length}::int[])`);
+      return;
+    }
+    params.push(parseTenantUserId(user.id));
+    filters.push(`${column} = $${params.length}`);
+  }
+
+  /**
+   * User ids whose screenshots the caller may view.
+   * null = all workspace users (org admin only).
+   * Delegated grantees = self + assigned employees.
+   * Everyone else = self only.
+   */
   async getAllowedScreenshotUserIds(user: ScopedAuthUser): Promise<string[] | null> {
     if (isPulseOrgAdmin(user)) {
       return null;
     }
-
-    if (isPulseTeamManager(user)) {
-      const scope = workspaceScope(user, 'ext');
-      const managerId = parseTenantUserId(user.id);
-      const result = await this.database.query<{ id: string }>(
-        `${EMPLOYEE_USER_SELECT}
-         WHERE ${scope.clause}
-           AND u.email NOT ILIKE '%@example.com%'
-           AND (ext.manager_id = $${scope.params.length + 1} OR u.id = $${scope.params.length + 1})`,
-        [...scope.params, managerId],
-      );
-      return result.rows.map((row) => row.id);
+    try {
+      const granted = await this.accessGrants.getGrantedTargetIds(user);
+      if (granted.length) {
+        return [...new Set([...granted.map(String), String(user.id)])];
+      }
+    } catch {
+      /* migration not applied yet */
     }
+    return [String(user.id)];
+  }
 
-    return [user.id];
+  /** Direct reports of a team lead (plus self). */
+  async getDirectReportIds(user: ScopedAuthUser): Promise<string[]> {
+    const scope = workspaceScope(user, 'ext');
+    const managerId = parseTenantUserId(user.id);
+    const result = await this.database.query<{ id: string }>(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE ${scope.clause}
+         AND u.email NOT ILIKE '%@example.com%'
+         AND (ext.manager_id = $${scope.params.length + 1} OR u.id = $${scope.params.length + 1})`,
+      [...scope.params, managerId],
+    );
+    return result.rows.map((row) => row.id);
+  }
+
+  /** Whether the viewer may access non-screenshot data for targetUserId. */
+  async canAccessUserData(viewer: ScopedAuthUser, targetUserId: string): Promise<boolean> {
+    if (isPulseOrgAdmin(viewer) || viewer.is_super_admin) return true;
+    if (String(targetUserId) === String(viewer.id)) return true;
+    try {
+      const granted = await this.accessGrants.getGrantedTargetIds(viewer);
+      return granted.map(String).includes(String(targetUserId));
+    } catch {
+      return false;
+    }
   }
 
   async listScreenshotUsers(user: ScopedAuthUser) {
@@ -163,12 +221,34 @@ export class DataService {
 
   async listUsers(user: ScopedAuthUser) {
     const scope = workspaceScope(user, 'ext');
+    const params: unknown[] = [...scope.params];
+    let teamFilter = '';
+    // Admins and managers need the full directory for user management.
+    if (canManagePulseUsers(user)) {
+      teamFilter = '';
+    } else {
+      let granted: string[] = [];
+      try {
+        granted = await this.accessGrants.getGrantedTargetIds(user);
+      } catch {
+        granted = [];
+      }
+      if (granted.length) {
+        const ids = [...new Set([...granted.map(String), String(user.id)])];
+        params.push(ids.map((id) => parseTenantUserId(id)));
+        teamFilter = ` AND u.id = ANY($${params.length}::int[])`;
+      } else {
+        params.push(parseTenantUserId(user.id));
+        teamFilter = ` AND u.id = $${params.length}`;
+      }
+    }
     const result = await this.database.query(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND u.email NOT ILIKE '%@example.com%'
+         ${teamFilter}
        ORDER BY full_name ASC NULLS LAST`,
-      scope.params,
+      params,
     );
     return result.rows;
   }
@@ -193,7 +273,12 @@ export class DataService {
   async listProjects(user: ScopedAuthUser) {
     const scope = workspaceScope(user, 'p');
     const result = await this.database.query(
-      `SELECT p.id, p.name, p.description, p.workspace_id::text AS organization_id, p.created_at
+      `SELECT p.id, p.name, p.description, p.workspace_id::text AS organization_id, p.created_at,
+              (
+                SELECT COUNT(*)::int
+                FROM time_doctor.employee_project_assignments epa
+                WHERE epa.project_id = p.id
+              ) AS assignment_count
        FROM time_doctor.projects p
        WHERE ${scope.clause}
        ORDER BY p.created_at DESC`,
@@ -206,8 +291,8 @@ export class DataService {
     user: ScopedAuthUser,
     payload: { name: string; description?: string | null; organization_id?: string | null },
   ) {
-    if (!this.isAdmin(user)) {
-      throw new Error('Insufficient permissions to create project');
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to create project');
     }
     const workspaceId = user.is_super_admin
       ? parseWorkspaceId(payload.organization_id) ?? parseWorkspaceId(user.organization_id)
@@ -229,8 +314,8 @@ export class DataService {
     projectId: string,
     updates: { name?: string; description?: string | null },
   ) {
-    if (!this.isAdmin(user)) {
-      throw new Error('Insufficient permissions to update project');
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to update project');
     }
     const scope = workspaceScope(user, 'p');
     const result = await this.database.query(
@@ -248,17 +333,47 @@ export class DataService {
 
   async deleteProject(user: ScopedAuthUser, projectId: string) {
     if (!this.isAdmin(user)) {
-      throw new Error('Insufficient permissions to delete project');
+      throw new ForbiddenException('Insufficient permissions to delete project');
     }
-    const scope = workspaceScope(user, 'p');
-    const result = await this.database.query(
-      `DELETE FROM time_doctor.projects p
-       WHERE ${scope.clause}
-         AND p.id = $${scope.params.length + 1}::uuid
-       RETURNING p.id`,
-      [...scope.params, projectId],
-    );
-    return Boolean(result.rows[0]);
+    const project = await this.assertProjectInWorkspace(user, projectId);
+    if (!project) return false;
+
+    const client = await this.database.getClient();
+    try {
+      await client.query('BEGIN');
+
+      // Clear dependents explicitly so delete never depends on FK ON DELETE behavior.
+      await client.query(
+        `DELETE FROM time_doctor.employee_project_assignments WHERE project_id = $1::uuid`,
+        [projectId],
+      );
+      await client.query(
+        `UPDATE time_doctor.time_logs SET project_id = NULL, updated_at = NOW()
+         WHERE project_id = $1::uuid`,
+        [projectId],
+      );
+      await client.query(
+        `UPDATE time_doctor.idle_logs SET project_id = NULL
+         WHERE project_id = $1::uuid`,
+        [projectId],
+      );
+
+      const result = await client.query(
+        `DELETE FROM time_doctor.projects
+         WHERE id = $1::uuid
+           AND workspace_id = $2
+         RETURNING id`,
+        [projectId, project.workspace_id],
+      );
+
+      await client.query('COMMIT');
+      return Boolean(result.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async countProjectAssignments(user: ScopedAuthUser, projectId: string): Promise<number> {
@@ -276,22 +391,276 @@ export class DataService {
 
   async deleteProjectAssignments(user: ScopedAuthUser, projectId: string): Promise<void> {
     if (!this.isAdmin(user)) {
-      throw new Error('Insufficient permissions to delete assignments');
+      throw new ForbiddenException('Insufficient permissions to delete assignments');
     }
-    const scope = workspaceScope(user, 'p');
+    const project = await this.assertProjectInWorkspace(user, projectId);
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
     await this.database.query(
-      `DELETE FROM time_doctor.employee_project_assignments epa
-       USING time_doctor.projects p
-       WHERE epa.project_id = p.id
-         AND ${scope.clause}
-         AND epa.project_id = $${scope.params.length + 1}::uuid`,
-      [...scope.params, projectId],
+      `DELETE FROM time_doctor.employee_project_assignments WHERE project_id = $1::uuid`,
+      [projectId],
     );
   }
 
+  private async assertProjectInWorkspace(
+    user: ScopedAuthUser,
+    projectId: string,
+  ): Promise<{ id: string; workspace_id: number } | null> {
+    const scope = workspaceScope(user, 'p');
+    const result = await this.database.query<{ id: string; workspace_id: number }>(
+      `SELECT p.id::text AS id, p.workspace_id
+       FROM time_doctor.projects p
+       WHERE ${scope.clause}
+         AND p.id = $${scope.params.length + 1}::uuid
+       LIMIT 1`,
+      [...scope.params, projectId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listProjectAssignments(user: ScopedAuthUser, projectId: string) {
+    const project = await this.assertProjectInWorkspace(user, projectId);
+    if (!project) return null;
+
+    const result = await this.database.query(
+      `SELECT u.id::text AS id,
+              trim(both FROM coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS full_name,
+              u.email,
+              coalesce(ext.pulse_role, 'employee') AS role,
+              epa.created_at AS assigned_at
+       FROM time_doctor.employee_project_assignments epa
+       JOIN tenant."user" u ON u.id = epa.user_id
+       JOIN time_doctor.user_extensions ext
+         ON ext.user_id = u.id AND ext.workspace_id = $2
+       WHERE epa.project_id = $1::uuid
+       ORDER BY lower(coalesce(u.first_name, u.email))`,
+      [projectId, project.workspace_id],
+    );
+    return result.rows;
+  }
+
+  async listUserProjects(user: ScopedAuthUser, targetUserId: string) {
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to list user projects');
+    }
+    const uid = parseTenantUserId(targetUserId);
+    const scope = workspaceScope(user, 'ext');
+    const member = await this.database.query<{ user_id: number; workspace_id: number }>(
+      `SELECT ext.user_id, ext.workspace_id
+       FROM time_doctor.user_extensions ext
+       WHERE ${scope.clause}
+         AND ext.user_id = $${scope.params.length + 1}
+       LIMIT 1`,
+      [...scope.params, uid],
+    );
+    if (!member.rows[0]) return null;
+
+    const result = await this.database.query(
+      `SELECT p.id, p.name, p.description
+       FROM time_doctor.employee_project_assignments epa
+       JOIN time_doctor.projects p ON p.id = epa.project_id
+       WHERE epa.user_id = $1
+         AND p.workspace_id = $2
+       ORDER BY p.name ASC`,
+      [uid, member.rows[0].workspace_id],
+    );
+    return result.rows;
+  }
+
+  /**
+   * Replaces a user's project assignments within their Pulse workspace.
+   */
+  async setUserProjects(
+    user: ScopedAuthUser,
+    targetUserId: string,
+    projectIds: unknown[],
+  ): Promise<{ assigned: number }> {
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to assign projects');
+    }
+    const uid = parseTenantUserId(targetUserId);
+    const scope = workspaceScope(user, 'ext');
+    const member = await this.database.query<{ user_id: number; workspace_id: number }>(
+      `SELECT ext.user_id, ext.workspace_id
+       FROM time_doctor.user_extensions ext
+       WHERE ${scope.clause}
+         AND ext.user_id = $${scope.params.length + 1}
+       LIMIT 1`,
+      [...scope.params, uid],
+    );
+    if (!member.rows[0]) {
+      throw new NotFoundException('User not found in workspace');
+    }
+    const workspaceId = member.rows[0].workspace_id;
+
+    const wanted = Array.from(
+      new Set(
+        (projectIds || [])
+          .map((id) => String(id || '').trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const client = await this.database.getClient();
+    try {
+      await client.query('BEGIN');
+
+      const valid = wanted.length
+        ? await client.query<{ id: string }>(
+            `SELECT p.id::text AS id
+             FROM time_doctor.projects p
+             WHERE p.workspace_id = $1
+               AND p.id = ANY($2::uuid[])`,
+            [workspaceId, wanted],
+          )
+        : { rows: [] as { id: string }[] };
+      const allowed = valid.rows.map((r) => r.id);
+
+      if (allowed.length === 0) {
+        await client.query(
+          `DELETE FROM time_doctor.employee_project_assignments epa
+           USING time_doctor.projects p
+           WHERE epa.project_id = p.id
+             AND epa.user_id = $1
+             AND p.workspace_id = $2`,
+          [uid, workspaceId],
+        );
+      } else {
+        await client.query(
+          `DELETE FROM time_doctor.employee_project_assignments epa
+           USING time_doctor.projects p
+           WHERE epa.project_id = p.id
+             AND epa.user_id = $1
+             AND p.workspace_id = $2
+             AND NOT (epa.project_id = ANY($3::uuid[]))`,
+          [uid, workspaceId, allowed],
+        );
+        await client.query(
+          `INSERT INTO time_doctor.employee_project_assignments (user_id, project_id, created_at)
+           SELECT $1::int, unnest($2::uuid[]), NOW()
+           ON CONFLICT (user_id, project_id) DO NOTHING`,
+          [uid, allowed],
+        );
+      }
+
+      await client.query('COMMIT');
+      return { assigned: allowed.length };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Replaces assignees for a project with the given user ids (workspace members only).
+   */
+  async setProjectAssignments(
+    user: ScopedAuthUser,
+    projectId: string,
+    userIds: unknown[],
+  ): Promise<{ assigned: number; skipped: number }> {
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to assign projects');
+    }
+    const project = await this.assertProjectInWorkspace(user, projectId);
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const parsedIds = Array.from(
+      new Set(
+        (userIds || [])
+          .map((id) => {
+            try {
+              return parseTenantUserId(id);
+            } catch {
+              return null;
+            }
+          })
+          .filter((id): id is number => id != null),
+      ),
+    );
+
+    const client = await this.database.getClient();
+    try {
+      await client.query('BEGIN');
+
+      if (parsedIds.length === 0) {
+        await client.query(
+          `DELETE FROM time_doctor.employee_project_assignments WHERE project_id = $1::uuid`,
+          [projectId],
+        );
+        await client.query('COMMIT');
+        return { assigned: 0, skipped: 0 };
+      }
+
+      // Only assign users who belong to this workspace via Pulse extensions.
+      const members = await client.query<{ user_id: number }>(
+        `SELECT ext.user_id
+         FROM time_doctor.user_extensions ext
+         WHERE ext.workspace_id = $1
+           AND ext.user_id = ANY($2::int[])`,
+        [project.workspace_id, parsedIds],
+      );
+      const allowed = members.rows.map((r) => r.user_id);
+      const skipped = parsedIds.length - allowed.length;
+
+      await client.query(
+        `DELETE FROM time_doctor.employee_project_assignments epa
+         WHERE epa.project_id = $1::uuid
+           AND NOT (epa.user_id = ANY($2::int[]))`,
+        [projectId, allowed.length ? allowed : [-1]],
+      );
+
+      if (allowed.length > 0) {
+        await client.query(
+          `INSERT INTO time_doctor.employee_project_assignments (user_id, project_id, created_at)
+           SELECT unnest($1::int[]), $2::uuid, NOW()
+           ON CONFLICT (user_id, project_id) DO NOTHING`,
+          [allowed, projectId],
+        );
+      }
+
+      await client.query('COMMIT');
+      return { assigned: allowed.length, skipped };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async unassignUserFromProject(
+    user: ScopedAuthUser,
+    projectId: string,
+    targetUserId: string,
+  ): Promise<boolean> {
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to unassign projects');
+    }
+    const project = await this.assertProjectInWorkspace(user, projectId);
+    if (!project) return false;
+    const uid = parseTenantUserId(targetUserId);
+    const result = await this.database.query(
+      `DELETE FROM time_doctor.employee_project_assignments epa
+       USING time_doctor.projects p
+       WHERE epa.project_id = p.id
+         AND p.id = $1::uuid
+         AND p.workspace_id = $2
+         AND epa.user_id = $3
+       RETURNING epa.id`,
+      [projectId, project.workspace_id, uid],
+    );
+    return Boolean(result.rows[0]);
+  }
+
   async deleteUser(user: ScopedAuthUser, targetUserId: string): Promise<boolean> {
-    if (!this.isAdmin(user)) {
-      throw new Error('Insufficient permissions to delete user');
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to delete user');
     }
     const uid = parseTenantUserId(targetUserId);
     const scope = workspaceScope(user, 'ext');
@@ -341,21 +710,28 @@ export class DataService {
     const params: unknown[] = [...scope.params];
     const filters: string[] = [scope.clause];
 
-    if (start) {
+    if (start && end) {
+      // Include sessions that overlap the window (not only those that started inside it).
       params.push(start);
-      filters.push(`t.start_time >= $${params.length}`);
-    }
-    if (end) {
+      const startIdx = params.length;
       params.push(end);
-      filters.push(`t.start_time <= $${params.length}`);
+      const endIdx = params.length;
+      filters.push(`t.start_time < $${endIdx}::timestamptz`);
+      filters.push(`COALESCE(t.end_time, NOW()) > $${startIdx}::timestamptz`);
+      filters.push(
+        `t.start_time >= ($${startIdx}::timestamptz - INTERVAL '3 days')`,
+      );
+    } else {
+      if (start) {
+        params.push(start);
+        filters.push(`t.start_time >= $${params.length}`);
+      }
+      if (end) {
+        params.push(end);
+        filters.push(`t.start_time <= $${params.length}`);
+      }
     }
-    if (userId) {
-      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
-      filters.push(`t.user_id = $${params.length}`);
-    } else if (!this.isAdmin(user)) {
-      params.push(parseTenantUserId(user.id));
-      filters.push(`t.user_id = $${params.length}`);
-    }
+    await this.applyLogUserScope(user, userId, params, filters, 't.user_id');
 
     const selectDetailed = detailed
       ? `t.*, t.user_id::text AS user_id,
@@ -385,6 +761,69 @@ export class DataService {
     return result.rows;
   }
 
+  /**
+   * Payroll debug trail: every desktop-action mutation of time_logs
+   * with before/after end_time and duration_delta_seconds.
+   */
+  async listTimeLogEvents(
+    user: ScopedAuthUser,
+    opts: {
+      start?: string;
+      end?: string;
+      userId?: string;
+      timeLogId?: string;
+      shortenedOnly?: boolean;
+      action?: string;
+      limit?: number;
+    } = {},
+  ) {
+    const scope = workspaceScope(user, 'e');
+    const params: unknown[] = [...scope.params];
+    const filters: string[] = [scope.clause];
+
+    if (opts.start) {
+      params.push(opts.start);
+      filters.push(`e.created_at >= $${params.length}`);
+    }
+    if (opts.end) {
+      params.push(opts.end);
+      filters.push(`e.created_at <= $${params.length}`);
+    }
+    if (opts.timeLogId) {
+      params.push(opts.timeLogId);
+      filters.push(`e.time_log_id = $${params.length}`);
+    }
+    if (opts.shortenedOnly) {
+      filters.push(`e.shortened = TRUE`);
+    }
+    if (opts.action && String(opts.action).trim()) {
+      params.push(String(opts.action).trim());
+      filters.push(`e.action = $${params.length}`);
+    }
+    await this.applyLogUserScope(user, opts.userId, params, filters, 'e.user_id');
+
+    const limitClause = `LIMIT ${Math.max(1, Math.min(opts.limit || 2000, 10000))}`;
+
+    const result = await this.database.query(
+      `SELECT e.id, e.created_at, e.user_id::text AS user_id, e.time_log_id,
+              e.workspace_id, e.action, e.source, e.device_id, e.agent_version,
+              e.old_start_time, e.old_end_time, e.old_status,
+              e.old_idle_seconds, e.old_deducted_seconds,
+              e.new_start_time, e.new_end_time, e.new_status,
+              e.new_idle_seconds, e.new_deducted_seconds,
+              e.duration_delta_seconds, e.shortened, e.meta,
+              trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS employee_name,
+              u.email AS employee_email
+         FROM time_doctor.time_log_events e
+         LEFT JOIN tenant."user" u ON u.id = e.user_id
+        WHERE ${filters.join(' AND ')}
+        ORDER BY e.created_at DESC
+        ${limitClause}`,
+      params,
+    );
+    return result.rows;
+  }
+
   async listAppLogs(
     user: ScopedAuthUser,
     start?: string,
@@ -404,10 +843,7 @@ export class DataService {
       params.push(end);
       filters.push(`COALESCE(a.started_at, a.timestamp) <= $${params.length}`);
     }
-    if (userId || !this.isAdmin(user)) {
-      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
-      filters.push(`a.user_id = $${params.length}`);
-    }
+    await this.applyLogUserScope(user, userId, params, filters, 'a.user_id');
 
     const limitClause = `LIMIT ${Math.max(1, Math.min(limit ?? 10000, 10000))}`;
 
@@ -455,10 +891,7 @@ export class DataService {
       params.push(end);
       filters.push(`u.started_at <= $${params.length}`);
     }
-    if (userId || !this.isAdmin(user)) {
-      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
-      filters.push(`u.user_id = $${params.length}`);
-    }
+    await this.applyLogUserScope(user, userId, params, filters, 'u.user_id');
 
     const limitClause = `LIMIT ${Math.max(1, Math.min(limit ?? 10000, 10000))}`;
 
@@ -501,18 +934,27 @@ export class DataService {
     const params: unknown[] = [...scope.params];
     const filters: string[] = [scope.clause];
 
-    if (start) {
+    if (start && end) {
       params.push(start);
-      filters.push(`i.idle_start >= $${params.length}`);
-    }
-    if (end) {
+      const startIdx = params.length;
       params.push(end);
-      filters.push(`i.idle_start <= $${params.length}`);
+      const endIdx = params.length;
+      filters.push(`i.idle_start < $${endIdx}::timestamptz`);
+      filters.push(`COALESCE(i.idle_end, NOW()) > $${startIdx}::timestamptz`);
+      filters.push(
+        `i.idle_start >= ($${startIdx}::timestamptz - INTERVAL '3 days')`,
+      );
+    } else {
+      if (start) {
+        params.push(start);
+        filters.push(`i.idle_start >= $${params.length}`);
+      }
+      if (end) {
+        params.push(end);
+        filters.push(`i.idle_start <= $${params.length}`);
+      }
     }
-    if (userId || !this.isAdmin(user)) {
-      params.push(parseTenantUserId(scopedPulseUserId(user, userId)));
-      filters.push(`i.user_id = $${params.length}`);
-    }
+    await this.applyLogUserScope(user, userId, params, filters, 'i.user_id');
 
     const limitClause = `LIMIT ${Math.max(1, Math.min(limit ?? 10000, 10000))}`;
 
@@ -556,7 +998,10 @@ export class DataService {
     filters: string[],
   ): void {
     const assertAllowed = (id: string) => {
-      if (allowedUserIds && !allowedUserIds.includes(id)) {
+      if (
+        allowedUserIds &&
+        !allowedUserIds.map(String).includes(String(id))
+      ) {
         throw new ForbiddenException('Insufficient permissions to view screenshots for this user');
       }
     };
@@ -571,8 +1016,9 @@ export class DataService {
 
     if (userIds?.length) {
       const scopedIds = userIds.map((id) => scopedPulseUserId(user, id));
-      const filteredIds = allowedUserIds
-        ? scopedIds.filter((id) => allowedUserIds.includes(id))
+      const allowed = allowedUserIds?.map(String);
+      const filteredIds = allowed
+        ? scopedIds.filter((id) => allowed.includes(String(id)))
         : scopedIds;
       if (!filteredIds.length) {
         params.push([-1]);

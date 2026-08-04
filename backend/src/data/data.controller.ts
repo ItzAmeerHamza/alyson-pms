@@ -14,7 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
-import { isPulseAdmin } from '../database/time-doctor-sql';
+import { canManagePulseUsers, isPulseAdmin } from '../database/time-doctor-sql';
 import {
   DataService,
   normalizeScreenshotProductivityFilter,
@@ -28,6 +28,12 @@ export class DataController {
 
   private ensureAdmin(user: any) {
     if (!isPulseAdmin(user)) {
+      throw new ForbiddenException('Admin role required');
+    }
+  }
+
+  private ensureCanManageUsers(user: any) {
+    if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Admin or manager role required');
     }
   }
@@ -67,7 +73,7 @@ export class DataController {
     @Req() req: { user: any },
     @Body() body: { name: string; description?: string; organization_id?: string | null },
   ) {
-    this.ensureAdmin(req.user);
+    this.ensureCanManageUsers(req.user);
     if (!body?.name?.trim()) {
       throw new BadRequestException('Project name is required');
     }
@@ -80,7 +86,7 @@ export class DataController {
     @Param('id') id: string,
     @Body() body: { name?: string; description?: string | null },
   ) {
-    this.ensureAdmin(req.user);
+    this.ensureCanManageUsers(req.user);
     const updated = await this.dataService.updateProject(req.user, id, body);
     if (!updated) throw new NotFoundException('Project not found');
     return updated;
@@ -97,6 +103,36 @@ export class DataController {
   @Get('projects/:id/assignment-count')
   async projectAssignmentCount(@Req() req: { user: any }, @Param('id') id: string) {
     return { count: await this.dataService.countProjectAssignments(req.user, id) };
+  }
+
+  @Get('projects/:id/assignments')
+  async listProjectAssignments(@Req() req: { user: any }, @Param('id') id: string) {
+    this.ensureCanManageUsers(req.user);
+    const rows = await this.dataService.listProjectAssignments(req.user, id);
+    if (rows == null) throw new NotFoundException('Project not found');
+    return rows;
+  }
+
+  @Post('projects/:id/assignments')
+  async setProjectAssignments(
+    @Req() req: { user: any },
+    @Param('id') id: string,
+    @Body() body: { user_ids?: unknown[] },
+  ) {
+    this.ensureCanManageUsers(req.user);
+    return this.dataService.setProjectAssignments(req.user, id, body?.user_ids ?? []);
+  }
+
+  @Delete('projects/:id/assignments/:userId')
+  async unassignUserFromProject(
+    @Req() req: { user: any },
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    this.ensureCanManageUsers(req.user);
+    const ok = await this.dataService.unassignUserFromProject(req.user, id, userId);
+    if (!ok) throw new NotFoundException('Assignment not found');
+    return { success: true };
   }
 
   @Delete('projects/:id/assignments')
@@ -135,6 +171,33 @@ export class DataController {
       limit ? Number(limit) : undefined,
       detailed === '1' || detailed === 'true',
     );
+  }
+
+  /** Append-only payroll audit trail (time_log_events). Managers/admins. */
+  @Get('time-log-events')
+  async timeLogEvents(
+    @Req() req: { user: any },
+    @Query('start') start?: string,
+    @Query('end') end?: string,
+    @Query('userId') userId?: string,
+    @Query('timeLogId') timeLogId?: string,
+    @Query('shortenedOnly') shortenedOnly?: string,
+    @Query('action') action?: string,
+    @Query('limit') limit?: string,
+  ) {
+    this.ensureCanManageUsers(req.user);
+    if ((start && !end) || (!start && end)) {
+      throw new BadRequestException('Both start and end are required for date filtering');
+    }
+    return this.dataService.listTimeLogEvents(req.user, {
+      start,
+      end,
+      userId,
+      timeLogId,
+      shortenedOnly: shortenedOnly === '1' || shortenedOnly === 'true',
+      action,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get('app-logs')
@@ -278,9 +341,27 @@ export class DataController {
     };
   }
 
+  @Get('users/:id/projects')
+  async listUserProjects(@Req() req: { user: any }, @Param('id') id: string) {
+    this.ensureCanManageUsers(req.user);
+    const rows = await this.dataService.listUserProjects(req.user, id);
+    if (rows == null) throw new NotFoundException('User not found');
+    return rows;
+  }
+
+  @Post('users/:id/projects')
+  async setUserProjects(
+    @Req() req: { user: any },
+    @Param('id') id: string,
+    @Body() body: { project_ids?: unknown[] },
+  ) {
+    this.ensureCanManageUsers(req.user);
+    return this.dataService.setUserProjects(req.user, id, body?.project_ids ?? []);
+  }
+
   @Delete('users/:id')
   async deleteUser(@Req() req: { user: any }, @Param('id') id: string) {
-    this.ensureAdmin(req.user);
+    this.ensureCanManageUsers(req.user);
     const deleted = await this.dataService.deleteUser(req.user, id);
     if (!deleted) throw new NotFoundException('User not found');
     return { success: true };

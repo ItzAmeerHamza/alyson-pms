@@ -3088,6 +3088,22 @@ function registerDeveloperConsoleHandlers() {
         logData.consoleLogs = global.consoleLogBuffer;
       }
 
+      // Attach recent on-disk CPU samples when available (for support exports).
+      try {
+        const cpuFile = global.performanceMonitor?.cpuNdjsonFile;
+        if (cpuFile && fs.existsSync(cpuFile)) {
+          const lines = fs.readFileSync(cpuFile, 'utf8').trim().split('\n').filter(Boolean);
+          logData.cpuUsageSamples = lines.slice(-120).map((line) => {
+            try { return JSON.parse(line); } catch { return { raw: line }; }
+          });
+          logData.cpuLogFiles = {
+            text: global.performanceMonitor?.cpuTextFile || null,
+            ndjson: cpuFile,
+            dir: global.performanceMonitor?.logDir || null,
+          };
+        }
+      } catch (_) { /* ignore */ }
+
       const logContent = JSON.stringify(logData, null, 2);
       const defaultPath = path.join(app.getPath('desktop'), `timeflow-logs-${timestamp}.json`);
       const result = await dialog.showSaveDialog(global.mainWindow, {
@@ -4495,8 +4511,10 @@ if (isElectronContext && ipcMain) {
         }
       }
 
-      // === PERFORMANCE MONITOR INITIALIZATION ===
-      if (process.env.PERF_MONITOR === '1') {
+      // === PERFORMANCE MONITOR + CPU USAGE LOGS ===
+      // Always on (cheap 60s CPU samples → userData/logs/performance/).
+      // Set PERF_MONITOR=0 to disable the full monitor; PERF_CPU_LOG=0 disables CPU files only.
+      if (process.env.PERF_MONITOR !== '0') {
         try {
           try {
             console.log('[PERF-MONITOR] Initializing performance monitor...');
@@ -4522,6 +4540,9 @@ if (isElectronContext && ipcMain) {
 
           try {
             console.log('[PERF-MONITOR] Performance monitor started successfully');
+            if (global.performanceMonitor?.cpuTextFile) {
+              console.log(`[PERF-MONITOR] CPU log file: ${global.performanceMonitor.cpuTextFile}`);
+            }
           } catch (logError) {
             // Silently handle EPIPE and other console errors
             if (logError.code !== 'EPIPE') {

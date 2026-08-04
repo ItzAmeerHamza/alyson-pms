@@ -50,29 +50,6 @@ export class ForceSyncController {
     return Math.round(n);
   }
 
-  /** Last credible activity moment for a time_log (screenshots, app/url logs). */
-  private sessionEvidenceEndExpr(alias = 't', graceMinutes = 0): string {
-    const screenshotMax = `(SELECT MAX(s.captured_at)
-         FROM time_doctor.screenshots s
-         WHERE s.time_log_id = ${alias}.id)`;
-    const appMax = `(SELECT MAX(COALESCE(a.timestamp, a.started_at))
-         FROM time_doctor.app_logs a
-         WHERE a.time_log_id = ${alias}.id)`;
-    const urlMax = `(SELECT MAX(COALESCE(u.started_at, u.ended_at))
-         FROM time_doctor.url_logs u
-         WHERE u.time_log_id = ${alias}.id)`;
-    const activityMax = `GREATEST(
-      COALESCE(${screenshotMax}, ${alias}.start_time),
-      COALESCE(${appMax}, ${alias}.start_time),
-      COALESCE(${urlMax}, ${alias}.start_time)
-    )`;
-    const grace =
-      graceMinutes > 0
-        ? `COALESCE(${activityMax} + interval '${graceMinutes} minutes', ${alias}.start_time + interval '30 seconds')`
-        : `COALESCE(${activityMax}, ${alias}.start_time + interval '30 seconds')`;
-    return `GREATEST(${alias}.start_time + interval '30 seconds', ${grace})`;
-  }
-
   /** Cap on time deducted per deleted screenshot — mirrors the desktop agent. */
   private static readonly MAX_SCREENSHOT_DEDUCTION_SECONDS = 240;
 
@@ -400,17 +377,65 @@ export class ForceSyncController {
     switch (action) {
       case 'insert_app_logs': {
         const logs = Array.isArray(data?.logs) ? data.logs : [];
+        const ids: string[] = [];
         for (const log of logs) {
-          await this.forceAppInsert(log);
+          const result = await this.forceAppInsert(log);
+          if (result?.id) ids.push(result.id);
         }
-        return { success: true, inserted: logs.length };
+        return { success: true, inserted: logs.length, ids };
       }
       case 'insert_url_logs': {
         const logs = Array.isArray(data?.logs) ? data.logs : [];
+        const ids: string[] = [];
         for (const log of logs) {
-          await this.forceUrlInsert(log);
+          const result = await this.forceUrlInsert(log);
+          if (result?.id) ids.push(result.id);
         }
-        return { success: true, inserted: logs.length };
+        return { success: true, inserted: logs.length, ids };
+      }
+      case 'close_open_app_logs': {
+        // Session model: close open app focus rows (no per-minute snapshots).
+        const userId = parseUserIdParam(data?.user_id);
+        const endedAt = data?.ended_at || new Date().toISOString();
+        const appName = typeof data?.app_name === 'string' ? data.app_name.trim() : null;
+        const params: any[] = [endedAt, userId];
+        let sql = `
+          UPDATE time_doctor.app_logs
+             SET ended_at = GREATEST(started_at, $1::timestamptz)
+           WHERE user_id = $2
+             AND ended_at IS NULL
+             AND started_at <= $1::timestamptz`;
+        if (appName) {
+          params.push(appName);
+          sql += ` AND app_name = $${params.length}`;
+        }
+        const result = await this.db.query(sql, params);
+        this.logger.log(
+          `close_open_app_logs: user=${userId} closed=${result.rowCount ?? 0} app=${appName || '*'}`,
+        );
+        return { success: true, closed: result.rowCount ?? 0 };
+      }
+      case 'close_open_url_logs': {
+        // Session model: close open URL visit rows.
+        const userId = parseUserIdParam(data?.user_id);
+        const endedAt = data?.ended_at || new Date().toISOString();
+        const siteUrl = typeof data?.site_url === 'string' ? data.site_url.trim() : null;
+        const params: any[] = [endedAt, userId];
+        let sql = `
+          UPDATE time_doctor.url_logs
+             SET ended_at = GREATEST(started_at, $1::timestamptz)
+           WHERE user_id = $2
+             AND ended_at IS NULL
+             AND started_at <= $1::timestamptz`;
+        if (siteUrl) {
+          params.push(siteUrl);
+          sql += ` AND site_url = $${params.length}`;
+        }
+        const result = await this.db.query(sql, params);
+        this.logger.log(
+          `close_open_url_logs: user=${userId} closed=${result.rowCount ?? 0} url=${siteUrl || '*'}`,
+        );
+        return { success: true, closed: result.rowCount ?? 0 };
       }
       case 'insert_idle_log': {
         const log = data?.log;
@@ -443,18 +468,34 @@ export class ForceSyncController {
         const workspaceId =
           (await this.resolveWorkspaceId(payload.user_id, payload.organization_id)) ?? null;
         const projectId = await this.resolveProjectId(payload.project_id);
+        // PAYROLL CRITICAL: never shorten duration on upsert.
+        // start_time only moves earlier; end_time only moves later (or stays).
         await this.db.query(
           `INSERT INTO time_doctor.time_logs
             (id, user_id, project_id, start_time, end_time, status, idle_seconds, deducted_seconds, workspace_id, device_id, updated_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
            ON CONFLICT (id) DO UPDATE SET
-             project_id = EXCLUDED.project_id,
-             start_time = EXCLUDED.start_time,
-             end_time = EXCLUDED.end_time,
-             status = EXCLUDED.status,
-             idle_seconds = EXCLUDED.idle_seconds,
-             deducted_seconds = EXCLUDED.deducted_seconds,
-             workspace_id = EXCLUDED.workspace_id,
+             project_id = COALESCE(EXCLUDED.project_id, time_doctor.time_logs.project_id),
+             start_time = LEAST(time_doctor.time_logs.start_time, EXCLUDED.start_time),
+             end_time = CASE
+               WHEN EXCLUDED.end_time IS NULL THEN time_doctor.time_logs.end_time
+               WHEN time_doctor.time_logs.end_time IS NULL THEN EXCLUDED.end_time
+               ELSE GREATEST(time_doctor.time_logs.end_time, EXCLUDED.end_time)
+             END,
+             status = CASE
+               WHEN EXCLUDED.status = 'completed' OR time_doctor.time_logs.status = 'completed'
+                 THEN 'completed'
+               ELSE COALESCE(EXCLUDED.status, time_doctor.time_logs.status)
+             END,
+             idle_seconds = GREATEST(
+               COALESCE(time_doctor.time_logs.idle_seconds, 0),
+               COALESCE(EXCLUDED.idle_seconds, 0)
+             ),
+             deducted_seconds = GREATEST(
+               COALESCE(time_doctor.time_logs.deducted_seconds, 0),
+               COALESCE(EXCLUDED.deducted_seconds, 0)
+             ),
+             workspace_id = COALESCE(EXCLUDED.workspace_id, time_doctor.time_logs.workspace_id),
              device_id = COALESCE(EXCLUDED.device_id, time_doctor.time_logs.device_id),
              updated_at = NOW()`,
           [
@@ -477,34 +518,33 @@ export class ForceSyncController {
         const updates = data?.updates || {};
         if (!id) throw new HttpException('Missing time log id', HttpStatus.BAD_REQUEST);
         const clientEnd = updates.end_time || null;
-        const isExplicitStop = updates.status === 'completed' && Boolean(clientEnd);
-        const isCheckpoint = updates.status === 'active' && Boolean(clientEnd);
-        const evidenceEnd = this.sessionEvidenceEndExpr('t', 5);
-        const endTimeSql =
-          isExplicitStop || isCheckpoint
-            ? `CASE
+        const authorizedIdleCut = updates.authorized_idle_cut === true;
+        // - authorized_idle_cut: allow exactly the alert timeout cut (now − 10m) while completing
+        // - once status is already completed: freeze end_time (no further cuts or sync rewrites)
+        // - otherwise: end_time only moves forward
+        const endTimeSql = authorizedIdleCut
+          ? `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
-                 ELSE GREATEST(
-                   t.start_time + interval '30 seconds',
-                   LEAST($2::timestamptz, NOW())
-                 )
+                 ELSE GREATEST(t.start_time + interval '30 seconds', $2::timestamptz)
                END`
-            : `CASE
+          : `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
-                 ELSE GREATEST(
-                   t.start_time + interval '30 seconds',
-                   LEAST($2::timestamptz, ${evidenceEnd})
-                 )
+                 WHEN t.status = 'completed' THEN t.end_time
+                 WHEN t.end_time IS NULL THEN GREATEST(t.start_time + interval '30 seconds', $2::timestamptz)
+                 ELSE GREATEST(t.end_time, t.start_time + interval '30 seconds', $2::timestamptz)
                END`;
         await this.db.query(
           `UPDATE time_doctor.time_logs t
            SET end_time = ${endTimeSql},
-               status = COALESCE($3, t.status),
-               idle_seconds = COALESCE($4, t.idle_seconds),
-               deducted_seconds = COALESCE($5, t.deducted_seconds),
+               status = CASE
+                 WHEN $3::text = 'completed' OR t.status = 'completed' THEN 'completed'
+                 ELSE COALESCE($3, t.status)
+               END,
+               idle_seconds = GREATEST(COALESCE(t.idle_seconds, 0), COALESCE($4, 0)),
+               deducted_seconds = GREATEST(COALESCE(t.deducted_seconds, 0), COALESCE($5, 0)),
                updated_at = NOW()
            WHERE t.id = $1`,
-          [id, clientEnd, updates.status || null, updates.idle_seconds || null, updates.deducted_seconds || null],
+          [id, clientEnd, updates.status || null, updates.idle_seconds ?? null, updates.deducted_seconds ?? null],
         );
         return { success: true, id };
       }
@@ -535,7 +575,7 @@ export class ForceSyncController {
             userId,
             projectId,
             log.start_time,
-            null,
+            log.end_time || null,
             log.status || 'active',
             log.device_id || null,
             workspaceId,
@@ -564,17 +604,18 @@ export class ForceSyncController {
           deviceClause = ` AND device_id = $${params.length}`;
         }
 
-        // When the agent stops but the DB update fails, a later close must not use NOW()
-        // for the whole gap — cap at last screenshot (or a minimal session slice).
-        const evidenceEnd = this.sessionEvidenceEndExpr('t');
+        // Wall-clock close. Never shorten an existing end_time.
+        // Screenshots pause during sleep/lock while tracking stays on — evidence
+        // capping previously ate multi-hour gaps with no idle prompt.
         let result;
         if (explicitEnd) {
           params.push(explicitEnd);
           result = await this.db.query<{ id: string }>(
             `UPDATE time_doctor.time_logs t
              SET end_time = GREATEST(
+                   COALESCE(t.end_time, t.start_time),
                    t.start_time + interval '30 seconds',
-                   LEAST($${params.length}::timestamptz, NOW())
+                   $${params.length}::timestamptz
                  ),
                  status = 'completed',
                  updated_at = NOW()
@@ -588,13 +629,14 @@ export class ForceSyncController {
           result = await this.db.query<{ id: string }>(
             `UPDATE time_doctor.time_logs t
              SET end_time = GREATEST(
+                   COALESCE(t.end_time, t.start_time),
                    t.start_time + interval '30 seconds',
-                   LEAST(NOW(), ${evidenceEnd})
+                   NOW()
                  ),
                  status = 'completed',
                  updated_at = NOW()
              WHERE t.user_id = $1
-               AND t.end_time IS NULL
+               AND (t.end_time IS NULL OR t.status = 'active')
                ${deviceClause.replace(/device_id/g, 't.device_id')}
              RETURNING t.id AS id`,
             params,
@@ -603,35 +645,9 @@ export class ForceSyncController {
         return { success: true, closed: result.rowCount ?? result.rows.length };
       }
       case 'reconcile_inflated_time_logs': {
-        const userId = data?.user_id;
-        if (!userId) {
-          throw new HttpException('Missing user_id', HttpStatus.BAD_REQUEST);
-        }
-        const uid = parseUserIdParam(userId);
-        const deviceId = data?.device_id || null;
-        const params: unknown[] = [uid];
-        let deviceClause = '';
-        if (deviceId) {
-          params.push(deviceId);
-          deviceClause = ` AND t.device_id = $${params.length}`;
-        }
-        const evidenceEnd = this.sessionEvidenceEndExpr('t', 5);
-        const result = await this.db.query<{ id: string }>(
-          `UPDATE time_doctor.time_logs t
-           SET end_time = ${evidenceEnd},
-               status = 'completed',
-               updated_at = NOW()
-           WHERE t.user_id = $1
-             AND t.start_time >= NOW() - interval '7 days'
-             AND (
-               (t.end_time IS NOT NULL AND t.end_time > ${evidenceEnd})
-               OR (t.end_time IS NOT NULL AND t.end_time < t.start_time + interval '30 seconds')
-             )
-             ${deviceClause}
-           RETURNING t.id AS id`,
-          params,
-        );
-        return { success: true, reconciled: result.rowCount ?? result.rows.length };
+        // No-op for duration: never shorten employee time.
+        // Kept as a success stub so older agents calling this action do not fail.
+        return { success: true, reconciled: 0 };
       }
       case 'get_workspace_settings': {
         const userId = parseUserIdParam(data?.user_id);
@@ -639,7 +655,7 @@ export class ForceSyncController {
         const defaults = {
           hours_threshold: 7,
           high_activity_threshold: 60,
-          low_activity_threshold: 30,
+          low_activity_threshold: 10,
           screenshot_interval_minutes: 10,
         };
         if (!workspaceId) {
@@ -731,8 +747,9 @@ export class ForceSyncController {
           start_time: string;
           end_time: string | null;
           status: string;
+          idle_seconds: number | null;
         }>(
-          `SELECT id, start_time, end_time, status
+          `SELECT id, start_time, end_time, status, idle_seconds
            FROM time_doctor.time_logs
            WHERE user_id = $1
              AND start_time < $3::timestamptz
@@ -985,6 +1002,44 @@ export class ForceSyncController {
           'upload_screenshot is deprecated; use screenshot_upload_init + PUT to S3 + screenshot_upload_complete',
           HttpStatus.GONE,
         );
+      }
+      case 'insert_time_log_events': {
+        // Desktop agent diagnostics / audit breadcrumbs (e.g. CPU samples).
+        // Does not mutate time_logs — append-only into time_log_events.
+        const events = Array.isArray(data?.events) ? data.events : data?.event ? [data.event] : [];
+        if (!events.length) {
+          throw new HttpException('Missing events', HttpStatus.BAD_REQUEST);
+        }
+        let inserted = 0;
+        for (const ev of events.slice(0, 50)) {
+          const userId = parseUserIdParam(ev.user_id);
+          const action = String(ev.action || '').trim().slice(0, 64);
+          if (!action) continue;
+          const workspaceId =
+            (await this.resolveWorkspaceId(ev.user_id, ev.organization_id)) ?? null;
+          const timeLogId = await this.resolveTimeLogId(ev.time_log_id);
+          const meta =
+            ev.meta && typeof ev.meta === 'object' && !Array.isArray(ev.meta) ? ev.meta : {};
+          await this.db.query(
+            `INSERT INTO time_doctor.time_log_events
+              (user_id, time_log_id, workspace_id, action, source, device_id, agent_version, request_id, meta)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
+            [
+              userId,
+              timeLogId,
+              workspaceId,
+              action,
+              String(ev.source || 'desktop-agent').slice(0, 64),
+              ev.device_id ? String(ev.device_id).slice(0, 128) : null,
+              ev.agent_version ? String(ev.agent_version).slice(0, 64) : null,
+              ev.request_id ? String(ev.request_id).slice(0, 128) : null,
+              JSON.stringify(meta),
+            ],
+          );
+          inserted += 1;
+        }
+        this.logger.log(`insert_time_log_events: inserted=${inserted}`);
+        return { success: true, inserted };
       }
       default:
         throw new HttpException(`Unsupported action: ${action}`, HttpStatus.BAD_REQUEST);

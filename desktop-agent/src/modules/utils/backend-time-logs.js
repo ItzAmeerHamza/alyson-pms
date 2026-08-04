@@ -211,6 +211,20 @@ async function insertIdleLog(log, config = global.config) {
   );
 }
 
+/**
+ * Append-only events into time_doctor.time_log_events (CPU samples, diagnostics).
+ * @param {Array<object>|object} events
+ */
+async function insertTimeLogEvents(events, config = global.config) {
+  const list = Array.isArray(events) ? events : events ? [events] : [];
+  if (!list.length) return { success: true, inserted: 0 };
+  const normalized = list.map((ev) => ({
+    ...ev,
+    user_id: requireTenantUserId(ev.user_id),
+  }));
+  return callDesktopAction('insert_time_log_events', { events: normalized }, config);
+}
+
 module.exports = {
   resolveBackendCredentials,
   isBackendTimeLogsEnabled,
@@ -227,4 +241,5 @@ module.exports = {
   closeOpenAppLogs,
   closeOpenUrlLogs,
   insertIdleLog,
+  insertTimeLogEvents,
 };
