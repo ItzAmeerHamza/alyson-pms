@@ -21,9 +21,9 @@ class UrlCaptureManager extends EventEmitter {
 
       // Performance toggles
       diagRateLimitPerMin: Number(process.env.URL_DIAG_RATE_LIMIT_PER_MIN || 120),
-      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 2500),
-      minPollMsWayland: Number(process.env.URL_TRACKING_MIN_POLL_MS_WAYLAND || 1500),
-      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 2500),
+      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 8000),
+      minPollMsWayland: Number(process.env.URL_TRACKING_MIN_POLL_MS_WAYLAND || 5000),
+      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 20000),
       workerYieldMs: Number(process.env.URL_WORKER_YIELD_MS || 8),
       maxPerTick: Number(process.env.URL_MAX_PER_TICK || 1),
       redactPipelineConcurrency: Number(process.env.URL_REDACT_PIPELINE_CONCURRENCY || 1)
@@ -46,7 +46,7 @@ class UrlCaptureManager extends EventEmitter {
     this.debounceTimers = new Map();
 
     // Adaptive polling state - matches steady-state after CPU budget backoff
-    this.pollDelay = 2500;
+    this.pollDelay = 8000;
     this.lastResult = null;
 
     // Status tracking
@@ -175,8 +175,28 @@ if (!this.config.enabled) {
 
         // Skip URL capture when tracking is inactive, but keep polling loop alive
         if (!isTracking || !hasTimeLog) {
-          // Schedule next check with moderate delay when inactive (1s for quick resume)
-          this.pollInterval = setTimeout(adaptivePoll, 1000);
+          // Reset session keys so the same URL can open a new visit on next start
+          for (const state of this.windowStates.values()) {
+            state.lastUrl = null;
+            state.lastUrlTime = 0;
+          }
+          let inactiveDelay = 15000;
+          try {
+            const { getUrlPollDelayMs } = require('../utils/power-profile');
+            inactiveDelay = getUrlPollDelayMs();
+          } catch (_) {}
+          this.pollInterval = setTimeout(adaptivePoll, inactiveDelay);
+          return;
+        }
+
+        // Screen locked: do not spawn AppleScript (sessions stay open; time_logs untouched)
+        if (global.isScreenLocked) {
+          let lockedDelay = 60000;
+          try {
+            const { getUrlPollDelayMs } = require('../utils/power-profile');
+            lockedDelay = getUrlPollDelayMs();
+          } catch (_) {}
+          this.pollInterval = setTimeout(adaptivePoll, lockedDelay);
           return;
         }
 
@@ -195,20 +215,25 @@ if (!this.config.enabled) {
             // Otherwise the adaptive logic overwrites the exponential backoff delay,
             // making CPU budget enforcement ineffective.
             if (!this.cpuBudget.backoffActive) {
-              const isIdle = global.enhancedIdleMonitor?.isIdle || false;
-              const hasActiveBrowser = this.lastResult?.browser && this.lastResult?.url;
-              const isLinuxWayland = this.lastResult?.platform === 'wayland';
+              try {
+                const { getUrlPollDelayMs } = require('../utils/power-profile');
+                this.pollDelay = getUrlPollDelayMs();
+              } catch (_) {
+                const isIdle = global.enhancedIdleMonitor?.isIdle || false;
+                const hasActiveBrowser = this.lastResult?.browser && this.lastResult?.url;
+                const isLinuxWayland = this.lastResult?.platform === 'wayland';
 
-              if (isIdle || !hasActiveBrowser) {
-                this.pollDelay = Math.max(
-                  isLinuxWayland ? 3000 : this.config.pollMsIdle,
-                  isLinuxWayland ? this.config.minPollMsWayland : this.config.minPollMsActive
-                );
-              } else {
-                this.pollDelay = Math.max(
-                  isLinuxWayland ? this.config.minPollMsWayland : this.config.minPollMsActive,
-                  500
-                );
+                if (isIdle || !hasActiveBrowser) {
+                  this.pollDelay = Math.max(
+                    isLinuxWayland ? 3000 : this.config.pollMsIdle,
+                    isLinuxWayland ? this.config.minPollMsWayland : this.config.minPollMsActive
+                  );
+                } else {
+                  this.pollDelay = Math.max(
+                    isLinuxWayland ? this.config.minPollMsWayland : this.config.minPollMsActive,
+                    5000
+                  );
+                }
               }
             }
 
@@ -806,21 +831,11 @@ this.internalDrops++;
       this.windowStates.set(windowId, state);
     }
 
-    // 🔧 RE-ENABLED: Check for duplicate AFTER redaction - prevents duplicate URL logging
+    // Session model: same URL stays one visit — never re-emit until the URL changes
     if (state.lastUrl === processedUrl) {
-      // Allow the same URL to be processed if enough time has passed (5 seconds)
-      const timeSinceLastUrl = now - (state.lastUrlTime || 0);
-      if (timeSinceLastUrl < 5000) { // 5 seconds to reduce duplicates
-        if (this.config.debugLogging) {
-          console.log('[URL] DEDUPED_SUPPRESS:', processedUrl, 'timeSinceLast:', timeSinceLastUrl);
-        }
-        this.suppressedCount++;
-        return;
-      } else {
-        if (this.config.debugLogging) {
-          console.log('[URL] DEDUPED_ALLOW (time passed):', processedUrl, 'timeSinceLast:', timeSinceLastUrl);
-        }
-      }
+      state.lastUrlTime = now;
+      this.suppressedCount++;
+      return;
     }
 
     // Update last URL tracking

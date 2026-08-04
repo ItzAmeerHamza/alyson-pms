@@ -31,6 +31,12 @@ class TrayManager {
     this._currentProjectName = null;
     this._projectList = [];          // Cached project list [{project_id, name}]
     this._selectedProjectId = null;
+    this._lastTrayTitle = null;
+    this._lastTrayTooltip = null;
+    this._lastRendererPushAt = 0;
+    this._lastPushedCumulative = -1;
+    this._windowShowHooksInstalled = false;
+    this.BrowserWindow = electronModules.BrowserWindow || null;
     
     // Callbacks
     this.onStartTracking = null;
@@ -369,11 +375,13 @@ class TrayManager {
     const todayKey = localDateKey();
     if (!this._localDayKey) {
       this._localDayKey = todayKey;
+      this._scheduleNextWorkDayRollover();
       return false;
     }
     if (this._localDayKey === todayKey) return false;
 
-    console.log(`🌙 [TRAY] Work-day rollover (${require('../utils/work-timezone').getWorkTimezone()}): ${this._localDayKey} → ${todayKey}`);
+    const previousDate = this._localDayKey;
+    console.log(`🌙 [TRAY] Work-day rollover (${require('../utils/work-timezone').getWorkTimezone()}): ${previousDate} → ${todayKey}`);
     this._localDayKey = todayKey;
     this._cumulativeBaseSeconds = 0;
     this._lastCumulativeSeconds = 0;
@@ -381,6 +389,8 @@ class TrayManager {
       global._lastTodayTotalAtStop = null;
       global._rendererFrozenTotalAtStop = null;
       global._frozenTotalDate = todayKey;
+      // Drop yesterday's floor so get-today-time-stats cannot reinflate the clock.
+      global._lastGoodTodayStats = null;
     }
 
     if (this.isTracking && this.tray && !this.tray.isDestroyed()) {
@@ -398,24 +408,133 @@ class TrayManager {
       if (windows.length > 0 && !windows[0].isDestroyed()) {
         windows[0].webContents.send('local-day-rollover', {
           date: todayKey,
+          previousDate,
           isTracking: this.isTracking,
         });
       }
     } catch (_) { /* ignore send failures */ }
 
+    this._scheduleNextWorkDayRollover();
     return true;
+  }
+
+  _scheduleNextWorkDayRollover() {
+    if (this._workDayRolloverTimeout) {
+      clearTimeout(this._workDayRolloverTimeout);
+      this._workDayRolloverTimeout = null;
+    }
+    try {
+      const { nextWorkDayMidnight } = require('../utils/work-timezone');
+      const nextMs = nextWorkDayMidnight().getTime();
+      const delay = Math.max(250, nextMs - Date.now() + 250);
+      this._workDayRolloverTimeout = setTimeout(() => {
+        this._workDayRolloverTimeout = null;
+        this._maybeRolloverLocalDay();
+        this._scheduleNextWorkDayRollover();
+      }, Math.min(delay, 2147483647));
+      if (typeof this._workDayRolloverTimeout.unref === 'function') {
+        this._workDayRolloverTimeout.unref();
+      }
+    } catch (err) {
+      console.warn('⚠️ [TRAY] Failed to schedule work-day rollover:', err?.message || err);
+    }
   }
 
   _startLocalDayWatch() {
     if (this._dayWatchInterval) return;
     const { localDateKey } = require('../utils/today-time-log-stats');
     this._localDayKey = localDateKey();
+    this._scheduleNextWorkDayRollover();
     this._dayWatchInterval = setInterval(() => {
       this._maybeRolloverLocalDay();
-    }, 1000);
+    }, 5000);
     if (typeof this._dayWatchInterval.unref === 'function') {
       this._dayWatchInterval.unref();
     }
+  }
+
+  _getMainTrackerWindow() {
+    try {
+      const BrowserWindow = this.BrowserWindow || require('electron').BrowserWindow;
+      const windows = BrowserWindow.getAllWindows();
+      // Prefer a visible non-destroyed window; fall back to first live window.
+      return (
+        windows.find((w) => w && !w.isDestroyed() && w.isVisible() && !w.isMinimized()) ||
+        windows.find((w) => w && !w.isDestroyed()) ||
+        null
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _installWindowShowHooks() {
+    if (this._windowShowHooksInstalled) return;
+    this._windowShowHooksInstalled = true;
+    try {
+      const BrowserWindow = this.BrowserWindow || require('electron').BrowserWindow;
+      const hook = (win) => {
+        if (!win || win.isDestroyed()) return;
+        const push = () => {
+          if (!this.isTracking || !this._timerInterval) return;
+          this._pushRendererTick({ force: true });
+        };
+        win.on('show', push);
+        win.on('restore', push);
+        win.on('focus', push);
+      };
+      BrowserWindow.getAllWindows().forEach(hook);
+      const { app } = require('electron');
+      if (app && !app._trayShowHooked) {
+        app._trayShowHooked = true;
+        app.on('browser-window-created', (_e, win) => hook(win));
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  /**
+   * Push one tray tick to the renderer. Cheap no-op when nothing changed and
+   * the window is hidden (except periodic heartbeat / force on show).
+   */
+  _pushRendererTick({ force = false, display, cumulativeDisplay, elapsed, cumulativeSeconds } = {}) {
+    const elapsedSec =
+      elapsed != null ? elapsed : this._getSessionElapsedSeconds();
+    const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+    const cum =
+      cumulativeSeconds != null
+        ? cumulativeSeconds
+        : Math.max(0, baseSec + elapsedSec);
+    const disp = display != null ? display : this._formatElapsed(elapsedSec);
+    const cumDisp =
+      cumulativeDisplay != null ? cumulativeDisplay : this._formatElapsed(cum);
+
+    const win = this._getMainTrackerWindow();
+    if (!win || win.webContents.isDestroyed()) return;
+
+    const visible = win.isVisible() && !win.isMinimized();
+    const now = Date.now();
+    const sameSecond = cum === this._lastPushedCumulative;
+    // Hidden: at most one heartbeat / 15s so we do not burn IPC while idle in tray.
+    // Visible: 1Hz only when the displayed second actually changes (or force).
+    if (!force) {
+      if (!visible) {
+        if (now - (this._lastRendererPushAt || 0) < 15000) return;
+      } else if (sameSecond && now - (this._lastRendererPushAt || 0) < 900) {
+        return;
+      }
+    }
+
+    this._lastRendererPushAt = now;
+    this._lastPushedCumulative = cum;
+    try {
+      win.webContents.send('tray-timer-tick', {
+        display: disp,
+        cumulativeDisplay: cumDisp,
+        elapsed: elapsedSec,
+        cumulativeSeconds: cum,
+        sessionElapsedSeconds: elapsedSec,
+      });
+    } catch (_) { /* ignore */ }
   }
 
   _getSessionElapsedSeconds() {
@@ -429,6 +548,7 @@ class TrayManager {
    */
   startTrayTimer() {
     this.stopTrayTimer(); // clear any existing interval
+    this._installWindowShowHooks();
 
     // Switch to green tracking icon on Windows/Linux
     this._setTrackingIcon();
@@ -457,6 +577,7 @@ class TrayManager {
       if (hasSetTitle) {
         try {
           this.tray.setTitle(initialCumulativeDisplay, { fontType: 'monospacedDigit' });
+          this._lastTrayTitle = initialCumulativeDisplay;
         } catch (e) {
           console.error('❌ [TRAY] setTitle failed:', e?.message);
         }
@@ -476,29 +597,24 @@ class TrayManager {
         const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
         this._lastCumulativeSeconds = cumulativeSeconds;
 
-        if (process.platform === 'darwin') {
-          // macOS: show timer text next to tray icon in the menu bar
-          // Use monospacedDigit font for consistent width and better macOS compatibility
+        if (process.platform === 'darwin' && cumulativeDisplay !== this._lastTrayTitle) {
+          // Only touch the menu bar when the second string changes.
           this.tray.setTitle(cumulativeDisplay, { fontType: 'monospacedDigit' });
+          this._lastTrayTitle = cumulativeDisplay;
         }
-        // All platforms: update tooltip with clear tracking indicator
         const projectLabel = this._currentProjectName || 'No Project';
-        this.tray.setToolTip(`▶ Today: ${cumulativeDisplay} (session ${display}) — ${projectLabel}`);
+        const tooltip = `▶ Today: ${cumulativeDisplay} (session ${display}) — ${projectLabel}`;
+        if (tooltip !== this._lastTrayTooltip) {
+          this.tray.setToolTip(tooltip);
+          this._lastTrayTooltip = tooltip;
+        }
 
-        // Push elapsed time to renderer so the in-app timer stays in sync
-        try {
-          const { BrowserWindow } = require('electron');
-          const windows = BrowserWindow.getAllWindows();
-          if (windows.length > 0 && !windows[0].isDestroyed()) {
-            windows[0].webContents.send('tray-timer-tick', {
-              display,
-              cumulativeDisplay,
-              elapsed,
-              cumulativeSeconds,
-              sessionElapsedSeconds: elapsed
-            });
-          }
-        } catch (_) { /* ignore send failures */ }
+        this._pushRendererTick({
+          display,
+          cumulativeDisplay,
+          elapsed,
+          cumulativeSeconds,
+        });
 
         // Log first few ticks for diagnostics
         tickCount++;
@@ -528,6 +644,10 @@ class TrayManager {
       clearInterval(this._timerInterval);
       this._timerInterval = null;
     }
+    this._lastTrayTitle = null;
+    this._lastTrayTooltip = null;
+    this._lastPushedCumulative = -1;
+    this._lastRendererPushAt = 0;
     // Switch to red stopped icon on Windows/Linux
     this._setStoppedIcon();
 
@@ -689,6 +809,10 @@ class TrayManager {
       this.startTrayTimer();
       const projLabel = this._currentProjectName || 'your project';
       this.showNotification('Tracking Started', `Now tracking time for ${projLabel}.`);
+    } else if (isTracking && wasTracking && !this._timerInterval) {
+      // Recover if interval was lost while still tracking (sleep, tray recreate, etc.).
+      console.log('⏱️ [TRAY] Tracking active but timer missing — restarting tray timer');
+      this.startTrayTimer();
     } else if (!isTracking && wasTracking) {
       this.stopTrayTimer();
       this._trackingStartTime = null;

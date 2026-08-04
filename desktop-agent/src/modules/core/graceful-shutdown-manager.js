@@ -35,8 +35,16 @@ class GracefulShutdownManager {
   /**
    * Freeze end_time and today's displayed total at the earliest possible moment
    * (button click, window close, app quit). Safe to call multiple times.
+   * Never overwrites an authorized idle-alert cut (now − 10m).
    */
   captureStopMoment() {
+    if (global._stopAuthorizedIdleCut) {
+      // Idle cut already fixed the end moment — do not replace with "now".
+      if (global.trackingManager?._captureStopTodayTotalSnapshot) {
+        global.trackingManager._captureStopTodayTotalSnapshot();
+      }
+      return global._stopEndTimeOverride;
+    }
     if (!global._stopEndTimeOverride) {
       global._stopEndTimeOverride = new Date().toISOString();
     }
@@ -44,6 +52,26 @@ class GracefulShutdownManager {
       global.trackingManager._captureStopTodayTotalSnapshot();
     }
     return global._stopEndTimeOverride;
+  }
+
+  /**
+   * Authorized idle-alert end time: exactly now − cutSeconds (default 10m),
+   * never wall-clock "now". Clamped to session start.
+   */
+  resolveAuthorizedIdleCutEndTime(cutSeconds = 600) {
+    const cutMs = Math.max(60, Math.floor(Number(cutSeconds) || 600)) * 1000;
+    let endMs = Date.now() - cutMs;
+    const sessionStartRaw =
+      global.trackingManager?.sessionStartTime ||
+      global.currentSession?.start_time ||
+      null;
+    if (sessionStartRaw) {
+      const sessionStartMs = new Date(sessionStartRaw).getTime();
+      if (Number.isFinite(sessionStartMs) && endMs < sessionStartMs) {
+        endMs = sessionStartMs;
+      }
+    }
+    return new Date(endMs).toISOString();
   }
 
   hasActiveSessionToClose() {
@@ -290,19 +318,51 @@ class GracefulShutdownManager {
         return false;
       }
 
-      // FIX-8: Use endTimeOverride if available (idle auto-stop: typically now − 10m).
-      const endTime = global._stopEndTimeOverride || new Date().toISOString();
-      if (global._stopEndTimeOverride) {
-        console.log(`⏱️ [GRACEFUL-SHUTDOWN] Using endTimeOverride: ${endTime}`);
+      // ONLY authorized idle-alert cut (shown prompt timed out) may use now − 10m.
+      // All other stops: wall-clock now. Never silently eat time.
+      const cutSeconds = Math.max(0, Math.floor(Number(global._idlePromptTimeCutSeconds) || 0));
+      const authorizedIdleCut =
+        !!global._stopAuthorizedIdleCut && cutSeconds > 0;
+      let endTime;
+      if (authorizedIdleCut) {
+        endTime = this.resolveAuthorizedIdleCutEndTime(cutSeconds);
+        const overrideMs = global._stopEndTimeOverride
+          ? new Date(global._stopEndTimeOverride).getTime()
+          : NaN;
+        const cutEndMs = new Date(endTime).getTime();
+        if (Number.isFinite(overrideMs) && overrideMs < Date.now() - 30 * 1000) {
+          endTime = new Date(Math.min(overrideMs, cutEndMs)).toISOString();
+        }
+        console.log(`⏱️ [GRACEFUL-SHUTDOWN] Idle-alert cut ${cutSeconds}s → end_time ${endTime}`);
+      } else {
+        endTime = new Date().toISOString();
       }
+      const idleCutFlag = authorizedIdleCut;
+      global._stopEndTimeOverride = null;
+      global._stopAuthorizedIdleCut = false;
+      global._idlePromptTimeCutSeconds = 0;
       
       // Store pending close first (for recovery if this fails)
       this._storePendingClose(timeLogId, reason, endTime);
+
+      // Also mirror into tracking-manager offline queue when available
+      try {
+        if (global.trackingManager?._queueOfflineTimeLogUpdate) {
+          global.trackingManager._queueOfflineTimeLogUpdate({
+            id: timeLogId,
+            user_id: global.currentUserId || global.config?.user_id,
+            end_time: endTime,
+            status: 'completed',
+            ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
+          });
+        }
+      } catch (_) { /* ignore */ }
 
       if (useBackend) {
         await backendTimeLogs.updateTimeLog(timeLogId, {
           end_time: endTime,
           status: 'completed',
+          ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
         });
       } else {
         const { error } = await supabase
@@ -314,7 +374,7 @@ class GracefulShutdownManager {
           .eq('id', timeLogId);
 
         if (error) {
-          console.error('❌ [GRACEFUL-SHUTDOWN] Database update failed:', error.message);
+          console.error('❌ [GRACEFUL-SHUTDOWN] Database update failed — pending/offline queue retains hours:', error.message);
           return false;
         }
       }
@@ -323,7 +383,9 @@ class GracefulShutdownManager {
       
       // Clear pending close since we succeeded
       this._clearPendingClose(timeLogId);
-      global._stopEndTimeOverride = null;
+      try {
+        global.trackingManager?._clearSessionCheckpoint?.();
+      } catch (_) { /* ignore */ }
       
       return true;
 
@@ -570,24 +632,26 @@ class GracefulShutdownManager {
           0,
           Math.floor(Number(global._lastTodayTotalAtStop) || 0),
         );
-        // Authorized idle-prompt cut: freeze clock at tracked − 10m (only deduction).
+        // Only a shown idle-alert timeout may lower the frozen clock (exactly 10m).
         if (reason === 'idle_timeout' && timeCutSeconds > 0 && frozenTotalSeconds > 0) {
           frozenTotalSeconds = Math.max(0, frozenTotalSeconds - timeCutSeconds);
-          // Allow get-today-time-stats to accept this one intentional drop
-          // (otherwise the sync floor would hold the pre-cut total).
           global._idlePromptTimeCutAppliedPending = true;
           global._idlePromptTimeCutSecondsForFloor = timeCutSeconds;
+        } else {
+          global._idlePromptTimeCutAppliedPending = false;
+          global._idlePromptTimeCutSecondsForFloor = 0;
         }
         global.mainWindow.webContents.send('tracking-stopped', {
           reason: reason || 'manual',
           message: 'Time tracking stopped',
-          timestamp: global._stopEndTimeOverride || new Date().toISOString(),
+          timestamp: new Date().toISOString(),
           forceStop: true,
           frozenTotalSeconds,
-          timeCutSeconds,
+          timeCutSeconds: reason === 'idle_timeout' && timeCutSeconds > 0 ? timeCutSeconds : 0,
           timeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
         });
-        global._idlePromptTimeCutSeconds = 0;
+        // Don't clear _idlePromptTimeCutSeconds here before DB close — GSM DB path needs it.
+        // Cleared after DB update in updateDatabase.
         console.log('✅ [GRACEFUL-SHUTDOWN] Renderer notified');
         return true;
       }

@@ -176,6 +176,8 @@ describe('EnhancedIdleMonitor', () => {
       const expectedMax = after - 10 * 60 * 1000;
       expect(endMs).toBeGreaterThanOrEqual(expectedMin - 5);
       expect(endMs).toBeLessThanOrEqual(expectedMax + 5);
+      expect(options.authorizedIdleCut).toBe(true);
+      expect(options.timeCutSeconds).toBe(600);
     });
 
     test('_stopForIdle without allowCut does not subtract time', () => {
@@ -186,18 +188,16 @@ describe('EnhancedIdleMonitor', () => {
     });
 
     test('_stopForIdle with allowCut does not use idle-start (avoids cutting the countdown minute)', () => {
-      // Idle started 11 minutes ago (10m idle + 1m countdown)
       monitor._idlePromptIdleStart = Date.now() - 11 * 60 * 1000;
       monitor._stopForIdle('idle_timeout', { allowCut: true });
 
       const endMs = new Date(global.stopTracking.mock.calls[0][2].endTimeOverride).getTime();
       const elevenMinAgo = Date.now() - 11 * 60 * 1000;
-      // Must be ~10m cut, not ~11m (idle start)
       expect(Math.abs(endMs - (Date.now() - 10 * 60 * 1000))).toBeLessThan(2000);
       expect(endMs).toBeGreaterThan(elevenMinAgo + 30 * 1000);
     });
 
-    test('timeout after shown prompt cuts 10m; break stops without cut; unshown prompt does not cut', () => {
+    test('timeout after shown prompt cuts 10m and stops; break stops without cut; unshown prompt does not cut', () => {
       monitor._idlePromptActive = true;
       monitor._idlePromptShown = true;
       monitor._resolveIdlePrompt('timeout');
@@ -207,6 +207,7 @@ describe('EnhancedIdleMonitor', () => {
         expect.objectContaining({
           endTimeOverride: expect.any(String),
           timeCutSeconds: 600,
+          authorizedIdleCut: true,
         }),
       );
 
@@ -219,7 +220,7 @@ describe('EnhancedIdleMonitor', () => {
 
       global.stopTracking.mockClear();
       monitor._idlePromptActive = true;
-      monitor._idlePromptShown = false; // UI never appeared
+      monitor._idlePromptShown = false;
       monitor._resolveIdlePrompt('timeout');
       expect(global.stopTracking).not.toHaveBeenCalled();
     });

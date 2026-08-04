@@ -162,7 +162,7 @@ async function insertAppLogsBatch(logs, config = global.config) {
   const rows = (Array.isArray(logs) ? logs : [logs])
     .map((row) => normalizeAppLogRow(row, config))
     .filter((row) => row.user_id && row.app_name);
-  if (!rows.length) return { success: true, inserted: 0 };
+  if (!rows.length) return { success: true, inserted: 0, ids: [] };
   return callDesktopAction('insert_app_logs', { logs: rows }, config);
 }
 
@@ -170,8 +170,36 @@ async function insertUrlLogsBatch(logs, config = global.config) {
   const rows = (Array.isArray(logs) ? logs : [logs])
     .map((row) => normalizeUrlLogRow(row, config))
     .filter((row) => row.user_id && row.site_url);
-  if (!rows.length) return { success: true, inserted: 0 };
+  if (!rows.length) return { success: true, inserted: 0, ids: [] };
   return callDesktopAction('insert_url_logs', { logs: rows }, config);
+}
+
+/** Close open app focus session(s) — session model (not per-minute snapshots). */
+async function closeOpenAppLogs({ user_id, ended_at, app_name } = {}, config = global.config) {
+  const userId = requireTenantUserId(user_id);
+  return callDesktopAction(
+    'close_open_app_logs',
+    {
+      user_id: userId,
+      ended_at: ended_at || new Date().toISOString(),
+      app_name: app_name || null,
+    },
+    config,
+  );
+}
+
+/** Close open URL visit session(s). */
+async function closeOpenUrlLogs({ user_id, ended_at, site_url } = {}, config = global.config) {
+  const userId = requireTenantUserId(user_id);
+  return callDesktopAction(
+    'close_open_url_logs',
+    {
+      user_id: userId,
+      ended_at: ended_at || new Date().toISOString(),
+      site_url: site_url || null,
+    },
+    config,
+  );
 }
 
 async function insertIdleLog(log, config = global.config) {
@@ -196,5 +224,7 @@ module.exports = {
   listUserProjects,
   insertAppLogsBatch,
   insertUrlLogsBatch,
+  closeOpenAppLogs,
+  closeOpenUrlLogs,
   insertIdleLog,
 };

@@ -11,7 +11,7 @@ class PlatformManager {
     this.cache = {
       lastDetection: null,
       lastDetectionTime: 0,
-      cacheMs: Number(process.env.APP_DETECT_CACHE_MS) || 1800, // Default 1800ms cache (90% of 2s poll)
+      cacheMs: Number(process.env.APP_DETECT_CACHE_MS) || 10000, // Align with ~12s app poll
       adaptiveEnabled: process.env.APP_DETECT_ADAPTIVE_CACHE !== 'false',
       stableAppCount: 0,
       lastAppName: null

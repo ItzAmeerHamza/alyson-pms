@@ -548,13 +548,13 @@ class EnhancedIdleMonitor {
 
   /**
    * Stop tracking after the idle prompt's 1-min timer completed unanswered.
-   * Truncates exactly the idle-prompt threshold (default 10 minutes) from
-   * worked time — not "idle start → now" (which would also remove the countdown
-   * minute the user was shown).
+   * ONLY authorized deduction: when allowCut is true (prompt was shown and the
+   * 1-min timer finished unanswered), end the session at now − 10 minutes and stop.
+   * If allowCut is false, stop at now with no cut.
+   * After tracking has stopped, nothing else may cut time further.
    *
    * @param {string} reason
-   * @param {{ allowCut?: boolean }} [options] — cut only when allowCut is true
-   *   (prompt was shown and the 1-min timer finished).
+   * @param {{ allowCut?: boolean }} [options]
    */
   _stopForIdle(reason, options = {}) {
     const allowCut = options.allowCut === true;
@@ -564,6 +564,7 @@ class EnhancedIdleMonitor {
       console.log(
         `🛑 [IDLE-PROMPT] Stopping without time cut (${reason}) — prompt cut not authorized`,
       );
+      global._idlePromptTimeCutSeconds = 0;
       global.stopTracking?.(reason, null, {});
       return;
     }
@@ -586,11 +587,14 @@ class EnhancedIdleMonitor {
     const endTimeOverride = new Date(endMs).toISOString();
     const timeCutSeconds = Math.round(cutMs / 1000);
     console.log(
-      `⏱️ [IDLE-PROMPT] Cutting exactly ${Math.round(cutMs / 60000)}m from session end → ${endTimeOverride} (${reason})`,
+      `⏱️ [IDLE-PROMPT] Alert unanswered — cutting ${Math.round(cutMs / 60000)}m and stopping → ${endTimeOverride} (${reason})`,
     );
-    // Renderer may lower the forward-only high-water mark by this amount only.
     global._idlePromptTimeCutSeconds = timeCutSeconds;
-    global.stopTracking?.(reason, null, { endTimeOverride, timeCutSeconds });
+    global.stopTracking?.(reason, null, {
+      endTimeOverride,
+      timeCutSeconds,
+      authorizedIdleCut: true,
+    });
   }
 
   /**

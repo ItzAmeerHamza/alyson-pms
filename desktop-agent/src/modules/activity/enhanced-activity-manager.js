@@ -171,7 +171,7 @@ class EnhancedActivityManager {
       if (this.activityStats) this.activityStats.keystrokes++;
       if (this.periodActivityStats) this.periodActivityStats.keystrokes++;
     } else if (type === 'move') {
-      const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+      const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 750;
       if (now - (this._lastMoveCountAt || 0) < moveMinMs) {
         return;
       }

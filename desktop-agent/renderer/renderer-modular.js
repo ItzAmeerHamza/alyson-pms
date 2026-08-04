@@ -44,7 +44,7 @@ function formatSecondsAsHMS(totalSec) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-const TRAY_TICK_STALE_MS = 1500;
+const TRAY_TICK_STALE_MS = 2500;
 window.__trayTimerActive = false;
 window.__lastTrayTimerTickAt = 0;
 window.__lastTrayCumulativeSeconds = 0;
@@ -59,18 +59,91 @@ function getTrackerTimerElement() {
   return document.getElementById('trackerTime');
 }
 
-function _trackedHighWaterStorageKey() {
-  return `tf_tracked_highwater_${localDateIso()}`;
+function _trackedHighWaterStorageKey(dayKey = localDateIso()) {
+  return `tf_tracked_highwater_${dayKey}`;
+}
+
+function _nonEffectiveStorageKeyFor(dayKey = localDateIso()) {
+  return `tf_non_effective_${dayKey}`;
+}
+
+/** Wall-clock seconds since work-day midnight (Pacific). Tracked time cannot exceed this. */
+function secondsElapsedInWorkDay(nowMs = Date.now()) {
+  try {
+    const { startOfWorkDay } = require('../src/modules/utils/work-timezone');
+    const dayStart = startOfWorkDay(new Date(nowMs)).getTime();
+    if (!Number.isFinite(dayStart)) return Number.POSITIVE_INFINITY;
+    return Math.max(0, Math.floor((nowMs - dayStart) / 1000));
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+/** Hard cap for "tracked today" — you cannot have tracked more than the day has existed. */
+function maxPlausibleTrackedSecondsToday(nowMs = Date.now()) {
+  const elapsed = secondsElapsedInWorkDay(nowMs);
+  if (!Number.isFinite(elapsed)) return Number.POSITIVE_INFINITY;
+  // 2 minutes of clock-skew slack.
+  return elapsed + 120;
+}
+
+function clearTrackedHighWaterStorage(dayKey = localDateIso()) {
+  const key = _trackedHighWaterStorageKey(dayKey);
+  try { sessionStorage.removeItem(key); } catch (_) {}
+  try { localStorage.removeItem(key); } catch (_) {}
+}
+
+function clearNonEffectiveStorage(dayKey = localDateIso()) {
+  const key = _nonEffectiveStorageKeyFor(dayKey);
+  try { sessionStorage.removeItem(key); } catch (_) {}
+  try { localStorage.removeItem(key); } catch (_) {}
+}
+
+/** Drop high-water / non-effective keys for any work day other than keepDayKey. */
+function purgeStaleDayScopedStorage(keepDayKey = localDateIso()) {
+  const prefixes = ['tf_tracked_highwater_', 'tf_non_effective_'];
+  const sweep = (store) => {
+    try {
+      for (let i = store.length - 1; i >= 0; i--) {
+        const k = store.key(i);
+        if (!k) continue;
+        for (const prefix of prefixes) {
+          if (k.startsWith(prefix) && k !== `${prefix}${keepDayKey}`) {
+            store.removeItem(k);
+          }
+        }
+      }
+    } catch (_) { /* private mode / quota */ }
+  };
+  try { sweep(localStorage); } catch (_) {}
+  try { sweep(sessionStorage); } catch (_) {}
 }
 
 function hydrateTrackedHighWaterFromCache() {
   try {
-    let raw = sessionStorage.getItem(_trackedHighWaterStorageKey());
+    const todayKey = localDateIso();
+    purgeStaleDayScopedStorage(todayKey);
+    let raw = sessionStorage.getItem(_trackedHighWaterStorageKey(todayKey));
     if (raw == null || raw === '') {
-      raw = localStorage.getItem(_trackedHighWaterStorageKey());
+      raw = localStorage.getItem(_trackedHighWaterStorageKey(todayKey));
     }
     if (raw == null || raw === '') return;
-    const n = Math.max(0, Math.floor(Number(raw) || 0));
+    let n = Math.max(0, Math.floor(Number(raw) || 0));
+    const cap = maxPlausibleTrackedSecondsToday();
+    // Yesterday's total stuck in today's key (or never rolled) — discard.
+    if (Number.isFinite(cap) && n > cap) {
+      console.warn(
+        `⚠️ [TRACKER] Discarding impossible high-water ${n}s (cap ${cap}s since work midnight)`,
+      );
+      clearTrackedHighWaterStorage(todayKey);
+      window.__todayTrackedHighWaterSeconds = 0;
+      window.__todayTrackedSeconds = 0;
+      try {
+        const el = getTrackerTimerElement();
+        if (el) el.textContent = '00:00:00';
+      } catch (_) {}
+      return;
+    }
     window.__todayTrackedHighWaterSeconds = Math.max(
       n,
       Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
@@ -82,8 +155,21 @@ function hydrateTrackedHighWaterFromCache() {
   } catch (_) {}
 }
 
-function persistTrackedHighWater(seconds) {
-  const value = String(Math.max(0, Math.floor(Number(seconds) || 0)));
+function persistTrackedHighWater(seconds, { force = false } = {}) {
+  const cap = maxPlausibleTrackedSecondsToday();
+  const clamped = Math.min(
+    Math.max(0, Math.floor(Number(seconds) || 0)),
+    Number.isFinite(cap) ? cap : Number.MAX_SAFE_INTEGER,
+  );
+  const value = String(clamped);
+  const now = Date.now();
+  // Avoid localStorage write every second — major CPU/IO win for a smooth timer.
+  if (!force && now - (window.__lastHighWaterPersistAt || 0) < 30000) {
+    window.__pendingHighWaterPersist = value;
+    return;
+  }
+  window.__lastHighWaterPersistAt = now;
+  window.__pendingHighWaterPersist = null;
   try {
     sessionStorage.setItem(_trackedHighWaterStorageKey(), value);
   } catch (_) {}
@@ -91,6 +177,15 @@ function persistTrackedHighWater(seconds) {
     localStorage.setItem(_trackedHighWaterStorageKey(), value);
   } catch (_) {}
 }
+
+function flushPendingHighWaterPersist() {
+  const pending = window.__pendingHighWaterPersist;
+  if (pending == null) return;
+  window.__pendingHighWaterPersist = null;
+  window.__lastHighWaterPersistAt = 0;
+  persistTrackedHighWater(pending, { force: true });
+}
+window.flushPendingHighWaterPersist = flushPendingHighWaterPersist;
 
 function formatHmsCompact(totalSec) {
   const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
@@ -100,19 +195,25 @@ function formatHmsCompact(totalSec) {
   return `${m}m`;
 }
 
-function _nonEffectiveStorageKey() {
-  return `tf_non_effective_${localDateIso()}`;
+function _nonEffectiveStorageKey(dayKey = localDateIso()) {
+  return _nonEffectiveStorageKeyFor(dayKey);
 }
 
 function hydrateNonEffectiveFromCache() {
   try {
+    const todayKey = localDateIso();
     // Prefer sessionStorage (same app session), then localStorage (survives restart).
-    let raw = sessionStorage.getItem(_nonEffectiveStorageKey());
+    let raw = sessionStorage.getItem(_nonEffectiveStorageKey(todayKey));
     if (raw == null || raw === '') {
-      raw = localStorage.getItem(_nonEffectiveStorageKey());
+      raw = localStorage.getItem(_nonEffectiveStorageKey(todayKey));
     }
     if (raw == null || raw === '') return;
     const n = Math.max(0, Math.floor(Number(raw) || 0));
+    const cap = maxPlausibleTrackedSecondsToday();
+    if (Number.isFinite(cap) && n > cap) {
+      clearNonEffectiveStorage(todayKey);
+      return;
+    }
     // Cache may be 0 for a fully-effective day — still treat as hydrated.
     window.__todayNonEffectiveSeconds = n;
     window.__effectiveStatsReady = true;
@@ -133,19 +234,37 @@ function persistNonEffectiveCache(nonEff) {
 function applyTodayEffectiveStats(stats) {
   if (!stats || typeof stats !== 'object') return;
 
+  const todayKey = localDateIso();
+  const statsDay = stats.workDate || stats.date || null;
+  // Stale payload from yesterday must not reinflate today's clock.
+  if (statsDay && statsDay !== todayKey) {
+    console.warn(
+      `⚠️ [TRACKER] Ignoring today-stats for ${statsDay} (current work day ${todayKey})`,
+    );
+    return;
+  }
+
+  const cap = maxPlausibleTrackedSecondsToday();
+
   // Ignore incomplete responses that would flash "0 non-effective / all effective"
   // before idle + low-activity queries finish (common right after app launch).
   if (stats.effectiveStatsComputed === false) {
     if (typeof stats.totalTime === 'number' && stats.stale !== true) {
-      const incoming = Math.max(0, Math.floor(stats.totalTime));
+      let incoming = Math.max(0, Math.floor(stats.totalTime));
+      if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
       if (window.__lastTrackingStartTime && typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
         applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
         window.__todayTrackedSeconds =
           Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
           getTodayElapsedSeconds(window.__lastTrackingStartTime);
       } else if (!window.__lastTrackingStartTime) {
-        // Sync must never lower local recorded time.
-        const highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+        // Sync must never lower local recorded time — unless over work-day cap.
+        let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+        if (Number.isFinite(cap) && highWater > cap) {
+          highWater = 0;
+          window.__todayTrackedHighWaterSeconds = 0;
+          clearTrackedHighWaterStorage(todayKey);
+        }
         window.__todayTrackedSeconds = Math.max(incoming, highWater);
       }
     }
@@ -172,7 +291,8 @@ function applyTodayEffectiveStats(stats) {
     window.__effectiveStatsReady = true;
   }
   if (typeof stats.totalTime === 'number' && stats.stale !== true) {
-    const incoming = Math.max(0, Math.floor(stats.totalTime));
+    let incoming = Math.max(0, Math.floor(stats.totalTime));
+    if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
     // Live: closed base from DB+offline (ignore wipe-to-zero only).
     // Display ticks use wall clock so the timer neither races nor lags.
     // Stopped: trust DB + offline-queue merge.
@@ -182,13 +302,33 @@ function applyTodayEffectiveStats(stats) {
         Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
     } else {
-      // Stopped: keep high-water so a partial sync cannot rewind the clock.
-      const highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
-      window.__todayTrackedSeconds = Math.max(incoming, highWater);
+      // Stopped: keep high-water so a partial sync cannot rewind the clock —
+      // but drop a clearly inflated local cache (tray/DB are authoritative).
+      let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+      if (Number.isFinite(cap) && highWater > cap) {
+        highWater = 0;
+        window.__todayTrackedHighWaterSeconds = 0;
+        clearTrackedHighWaterStorage(todayKey);
+      }
+      if (incoming > 0 && highWater > incoming + 60) {
+        console.warn(
+          `⚠️ [TRACKER] Dropping inflated high-water ${highWater}s (DB ${incoming}s)`,
+        );
+        highWater = incoming;
+        window.__todayTrackedHighWaterSeconds = incoming;
+        clearTrackedHighWaterStorage(todayKey);
+        persistTrackedHighWater(incoming, { force: true });
+        setTrackerDisplaySeconds(incoming, { allowDecrease: true });
+      } else {
+        window.__todayTrackedSeconds = Math.max(incoming, highWater);
+      }
       if (typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
         applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: false });
       }
     }
+  }
+  if (Number.isFinite(cap) && window.__todayTrackedSeconds > cap) {
+    window.__todayTrackedSeconds = cap;
   }
   if (window.__effectiveStatsReady) {
     persistNonEffectiveCache(window.__todayNonEffectiveSeconds);
@@ -255,8 +395,10 @@ function readTrackerDisplaySeconds() {
  * and must never reduce this reading.
  *
  * Forward-only by default (never jumps backward on the same work day).
- * The ONLY intentional decrease is the authorized 10m idle-prompt cut
- * (alert was shown and user did not click "I'm working").
+ * Intentional decreases:
+ * - authorized 10m idle-prompt cut
+ * - Pacific midnight rollover
+ * - reconcile to live tray (base + elapsed) when high-water was inflated
  */
 function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}) {
   const el = getTrackerTimerElement();
@@ -267,19 +409,35 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
     window.__todayNonEffectiveSeconds = 0;
     window.__effectiveStatsReady = false;
     window.__todayTrackedHighWaterSeconds = 0;
-    try { sessionStorage.removeItem(_nonEffectiveStorageKey()); } catch (_) {}
-    try { sessionStorage.removeItem(_trackedHighWaterStorageKey()); } catch (_) {}
-    try { localStorage.removeItem(_trackedHighWaterStorageKey()); } catch (_) {}
+    // Delete the PREVIOUS day's keys (bug was deleting today's empty key).
+    clearTrackedHighWaterStorage(window.__trackerDisplayDayKey);
+    clearNonEffectiveStorage(window.__trackerDisplayDayKey);
+    clearTrackedHighWaterStorage(todayKey);
+    clearNonEffectiveStorage(todayKey);
+    purgeStaleDayScopedStorage(todayKey);
   }
   window.__trackerDisplayDayKey = todayKey;
 
-  const incomingTracked = Math.max(0, Math.floor(Number(trackedSeconds) || 0));
+  const cap = maxPlausibleTrackedSecondsToday();
+  let incomingTracked = Math.max(0, Math.floor(Number(trackedSeconds) || 0));
   const prevTracked = Math.max(
     0,
     Math.floor(Number(window.__todayTrackedSeconds) || 0),
     Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
     readTrackerDisplaySeconds(),
   );
+
+  // Impossible totals (yesterday glued onto today) — only then allow the display to drop.
+  if (Number.isFinite(cap) && prevTracked > cap) {
+    allowDecrease = true;
+    incomingTracked = Math.min(incomingTracked, cap);
+    console.warn(
+      `⚠️ [TRACKER] Clamping impossible tracked display (prev ${prevTracked}s > cap ${cap}s)`,
+    );
+  } else if (Number.isFinite(cap) && incomingTracked > cap) {
+    // Clamp inbound only — do not rewind an already-valid high-water mid-day.
+    incomingTracked = Math.min(incomingTracked, cap);
+  }
 
   let tracked;
   if (allowDecrease) {
@@ -292,12 +450,26 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
       tracked,
     );
   }
+  if (Number.isFinite(cap)) {
+    tracked = Math.min(tracked, cap);
+    window.__todayTrackedHighWaterSeconds = Math.min(
+      Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+      cap,
+    );
+  }
   window.__todayTrackedSeconds = tracked;
-  if (!allowDecrease && tracked > 0) {
-    persistTrackedHighWater(window.__todayTrackedHighWaterSeconds);
+  if (tracked > 0) {
+    // Force persist on authorized decrease / day change; otherwise throttle.
+    persistTrackedHighWater(window.__todayTrackedHighWaterSeconds, { force: allowDecrease });
+  } else {
+    clearTrackedHighWaterStorage(todayKey);
   }
 
-  el.textContent = formatSecondsAsHMS(tracked);
+  // Skip DOM write when the displayed second did not change (cuts layout thrash).
+  const nextText = formatSecondsAsHMS(tracked);
+  if (el.textContent !== nextText) {
+    el.textContent = nextText;
+  }
   updateTrackerEffectiveMeta();
   return tracked;
 }
@@ -316,24 +488,45 @@ try { updateTrackerEffectiveMeta(); } catch (_) {}
 function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
   const todayKey = localDateIso();
-  const floorFromStop = window.__trackerDisplayDayKey === todayKey
+  const sameDay = window.__trackerDisplayDayKey === todayKey;
+  const floorFromStop = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0))
     : 0;
-  const floorFromTracked = window.__trackerDisplayDayKey === todayKey
+  const floorFromTracked = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0))
     : 0;
-  const highWater = window.__trackerDisplayDayKey === todayKey
+  let highWater = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0))
     : 0;
-  // Sync / partial DB must never lower local recorded time. Idle cut already
-  // lowered high-water via allowDecrease when authorized.
-  const resolved = Math.max(
+  // Inflated local cache (app clock stuck ~50m ahead of tray/DB) — trust DB.
+  if (db > 0 && highWater > db + 60) {
+    console.warn(
+      `⚠️ [TRACKER] resolveStopped: dropping inflated high-water ${highWater}s vs DB ${db}s`,
+    );
+    highWater = db;
+    window.__todayTrackedHighWaterSeconds = db;
+    clearTrackedHighWaterStorage(todayKey);
+    persistTrackedHighWater(db, { force: true });
+  }
+  // Sync / partial DB must never lower local recorded time — except when the
+  // local floor is clearly inflated vs a real DB total.
+  let resolved = Math.max(
     db,
     floorFromTracked,
     floorFromStop,
     highWater,
     Math.max(0, Math.floor(Number(extraFloor) || 0)),
   );
+  if (db > 0 && resolved > db + 60) {
+    resolved = db;
+    window.__todayTrackedHighWaterSeconds = db;
+    window.__todayTrackedSeconds = db;
+  }
+  const cap = maxPlausibleTrackedSecondsToday();
+  if (Number.isFinite(cap) && resolved > cap) {
+    // Yesterday glued on — trust DB (clipped) only.
+    resolved = Math.min(db, cap);
+  }
   if (db > 0 && resolved === db) {
     window.__todayBaseAtLastStop = null;
   }
@@ -380,13 +573,22 @@ function getTodayElapsedSeconds(sessionStart) {
  * Base only moves forward on the same work day — never lower (DB lag must not rewind time).
  */
 function applyClosedBaseFromStats(rawBase, { live = false } = {}) {
-  const incoming = Math.max(0, Math.floor(Number(rawBase) || 0));
-  const prev = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  const cap = maxPlausibleTrackedSecondsToday();
+  let incoming = Math.max(0, Math.floor(Number(rawBase) || 0));
+  if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
+  let prev = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  // Discard yesterday glued onto today's closed base.
+  if (Number.isFinite(cap) && prev > cap) {
+    prev = 0;
+  }
   window.__todayBaseHydratedOnce = true;
   // Forward-only whether live or stopped — tracked time never goes backwards mid-day.
   window.__completedTodayBaseSeconds = Math.max(prev, incoming);
+  if (Number.isFinite(cap)) {
+    window.__completedTodayBaseSeconds = Math.min(window.__completedTodayBaseSeconds, cap);
+  }
   if (live && incoming <= 0 && prev > 60) {
-    return prev;
+    return window.__completedTodayBaseSeconds;
   }
   return window.__completedTodayBaseSeconds;
 }
@@ -399,6 +601,17 @@ function readLocalTrackingCumulativeSeconds() {
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
   return base + elapsed;
 }
+
+/**
+ * Authoritative tracked seconds while a session is live.
+ * Prefer wall-clock live (base + elapsed / tray). Never invent time by
+ * advancing an inflated high-water — that permanently desyncs tray vs app.
+ */
+function resolveTrackingDisplaySeconds(liveCumulative) {
+  window.__hwAdvanceAnchor = null;
+  return Math.max(0, Math.floor(Number(liveCumulative) || 0));
+}
+window.resolveTrackingDisplaySeconds = resolveTrackingDisplaySeconds;
 
 /** Tray IPC is preferred when fresh; both sides should show DB-base + live elapsed. */
 function isTrayTimerDrivingDisplay() {
@@ -414,6 +627,8 @@ function beginLocalTrackingClock(startTime) {
   window.__localTrackingClockActive = true;
   window.__trayTimerActive = false;
   window.__lastTrayTimerTickAt = 0;
+  window.__hwAdvanceAnchor = null;
+  window.__clearedSecondaryForTray = false;
   ensureTrackingDisplayWatchdog();
   updateRendererTrackingClock();
 }
@@ -424,26 +639,63 @@ function updateRendererTrackingClock() {
   const start = window.__lastTrackingStartTime;
   if (!start) return;
   const dashboardTimer = document.getElementById('sessionTime');
-  // Wall-clock session elapsed + closed base. Display is forward-only (high-water).
+  // Prefer the last tray cumulative when fresh — keeps big clock = menu bar.
+  const trayAge = Date.now() - (window.__lastTrayTimerTickAt || 0);
+  const trayCum = Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0);
   const elapsed = getTodayElapsedSeconds(start);
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  const cumulativeSec = base + elapsed;
-  window.__lastTrayCumulativeSeconds = Math.max(
-    Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0),
-    cumulativeSec,
-  );
+  const localLive = resolveTrackingDisplaySeconds(base + elapsed);
+  let cumulativeSec = localLive;
+  let allowDecrease = false;
+  if (trayCum > 0 && trayAge < 5000) {
+    cumulativeSec = trayCum;
+    const prevShown = Math.max(
+      0,
+      Math.floor(Number(window.__todayTrackedSeconds) || 0),
+      Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+      readTrackerDisplaySeconds(),
+    );
+    allowDecrease = cumulativeSec < prevShown - 1;
+  }
+  window.__lastTrayCumulativeSeconds = Math.max(trayCum, cumulativeSec);
   const sessionStr = formatSecondsAsHMS(elapsed);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  // Never allowDecrease while tracking — time only moves forward.
-  setTrackerDisplaySeconds(cumulativeSec);
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease });
 }
 
 function ensureTrackingDisplayWatchdog() {
   if (window.__trackingDisplayWatchdog) return;
+  // Failover only (2s): tray owns the smooth 1Hz clock while visible.
   window.__trackingDisplayWatchdog = setInterval(() => {
-    if (!window.__lastTrackingStartTime) return;
+    // Recover start time if main is tracking but renderer lost it (clock would freeze).
+    if (!window.__lastTrackingStartTime) {
+      const tracking =
+        !!(typeof moduleInstances !== 'undefined' && moduleInstances?.ipcManager?.isTracking) ||
+        !!window.__isTracking;
+      if (!tracking) return;
+      // One-shot async recover; interval keeps trying until start time is set.
+      if (!window.__recoverStartInFlight) {
+        window.__recoverStartInFlight = true;
+        Promise.resolve()
+          .then(() => moduleInstances?.ipcManager?.getTrackingState?.())
+          .then((mainState) => {
+            if (mainState?.isTracking && (mainState.sessionStartTime || mainState.startTime)) {
+              window.__lastTrackingStartTime = mainState.sessionStartTime || mainState.startTime;
+              window.__localTrackingClockActive = true;
+              updateRendererTrackingClock();
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            window.__recoverStartInFlight = false;
+          });
+      }
+      return;
+    }
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (isTrayTimerDrivingDisplay()) return;
     updateRendererTrackingClock();
-  }, 1000);
+  }, 2000);
   // Refresh idle/low-activity deductions periodically while the session is live.
   if (!window.__effectiveStatsRefresh) {
     window.__effectiveStatsRefresh = setInterval(() => {
@@ -453,7 +705,10 @@ function ensureTrackingDisplayWatchdog() {
       if (!tracking) return;
       void refreshTodayCompletedBaseSeconds().then(() => {
         if (window.__lastTrackingStartTime) {
-          updateRendererTrackingClock();
+          // Refresh cards / base only; clock keeps ticking from tray/failover.
+          if (!isTrayTimerDrivingDisplay()) {
+            updateRendererTrackingClock();
+          }
         } else if (typeof window.__todayTrackedSeconds === 'number') {
           setTrackerDisplaySeconds(window.__todayTrackedSeconds);
         }
@@ -468,6 +723,7 @@ function stopTrackingDisplayWatchdog() {
     window.__trackingDisplayWatchdog = null;
   }
   window.__localTrackingClockActive = false;
+  flushPendingHighWaterPersist();
 }
 
 /** Closed time_logs today (local day), excluding the current open session — for cumulative "worked today" UI. */
@@ -500,25 +756,71 @@ function parseHmsToSeconds(text) {
   return Math.max(0, parts[0] * 3600 + parts[1] * 60 + parts[2]);
 }
 
-function handleLocalDayRollover(isTracking) {
-  console.log('🌙 [RENDERER] Work-day rollover — resetting daily clock to 00:00:00');
+function _workDayKeyStorageKey() {
+  return 'tf_pacific_work_day_key';
+}
+
+function persistCurrentWorkDayKey(dayKey = localDateIso()) {
+  try { sessionStorage.setItem(_workDayKeyStorageKey(), dayKey); } catch (_) {}
+  try { localStorage.setItem(_workDayKeyStorageKey(), dayKey); } catch (_) {}
+}
+
+function readPersistedWorkDayKey() {
+  try {
+    let raw = sessionStorage.getItem(_workDayKeyStorageKey());
+    if (raw == null || raw === '') raw = localStorage.getItem(_workDayKeyStorageKey());
+    return raw || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function handleLocalDayRollover(isTracking, previousDayKeyOverride = null) {
+  console.log('🌙 [RENDERER] Pacific work-day rollover — resetting daily clock to 00:00:00');
+  const todayKey = localDateIso();
+  const previousDayKey =
+    previousDayKeyOverride ||
+    (window.__localDayKey && window.__localDayKey !== todayKey ? window.__localDayKey : null) ||
+    (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey
+      ? window.__trackerDisplayDayKey
+      : null) ||
+    readPersistedWorkDayKey();
   window.__todayBaseAtLastStop = null;
   window.__completedTodayBaseSeconds = 0;
   window.__lastTrayCumulativeSeconds = 0;
   window.__todayTrackedHighWaterSeconds = 0;
+  window.__todayTrackedSeconds = 0;
+  window.__todayNonEffectiveSeconds = 0;
+  window.__effectiveStatsReady = false;
   window.__todayBaseHydratedOnce = false;
-  window.__trackerDisplayDayKey = localDateIso();
+  window.__hwAdvanceAnchor = null;
+  window.__trackerDisplayDayKey = todayKey;
+  window.__localDayKey = todayKey;
+  persistCurrentWorkDayKey(todayKey);
   void ipcRenderer.invoke('clear-frozen-total-at-stop').catch(() => {});
-  try { sessionStorage.removeItem(_trackedHighWaterStorageKey()); } catch (_) {}
-  try { localStorage.removeItem(_trackedHighWaterStorageKey()); } catch (_) {}
+  // Must clear YESTERDAY's keys — deleting only today's key left Monday's
+  // high-water in localStorage and glued it onto the next session's clock.
+  if (previousDayKey && previousDayKey !== todayKey) {
+    clearTrackedHighWaterStorage(previousDayKey);
+    clearNonEffectiveStorage(previousDayKey);
+  }
+  clearTrackedHighWaterStorage(todayKey);
+  clearNonEffectiveStorage(todayKey);
+  purgeStaleDayScopedStorage(todayKey);
 
-  // Only midnight rollover may reset the clock backward.
+  // Only Pacific midnight rollover may reset the clock backward.
   setTrackerDisplaySeconds(0, { allowDecrease: true });
   const todayTimeElement = document.getElementById('todayTime');
   if (todayTimeElement) todayTimeElement.textContent = '0h 0m';
 
+  const effectiveEl = document.getElementById('trackerEffectiveValue');
+  const nonEffEl = document.getElementById('trackerNonEffectiveValue');
+  if (effectiveEl) effectiveEl.textContent = '0m';
+  if (nonEffEl) nonEffEl.textContent = '0m';
+
   if (isTracking) {
-    // Continue overnight session from work-day midnight so elapsed is today's portion only.
+    // Continue overnight session from Pacific midnight so elapsed is today's portion only.
+    // Yesterday's hours stay in DB under the previous Pacific date; today starts at 0.
     try {
       const { startOfWorkDay } = require('../src/modules/utils/work-timezone');
       window.__lastTrackingStartTime = startOfWorkDay().toISOString();
@@ -535,17 +837,56 @@ function handleLocalDayRollover(isTracking) {
     }
   }
   updateTrackerDailyRefreshHint();
+  scheduleNextWorkDayRollover();
+}
+
+function scheduleNextWorkDayRollover() {
+  if (window.__workDayRolloverTimeout) {
+    clearTimeout(window.__workDayRolloverTimeout);
+    window.__workDayRolloverTimeout = null;
+  }
+  try {
+    const nextMs = nextWorkDayMidnight().getTime();
+    // Fire 250ms after Pacific midnight so date-key math is firmly on the new day.
+    const delay = Math.max(250, nextMs - Date.now() + 250);
+    window.__workDayRolloverTimeout = setTimeout(() => {
+      window.__workDayRolloverTimeout = null;
+      const todayKey = localDateIso();
+      if (window.__localDayKey && window.__localDayKey !== todayKey) {
+        const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
+        handleLocalDayRollover(isTracking, window.__localDayKey);
+      } else {
+        // Still schedule the following midnight (clock skew / already rolled).
+        scheduleNextWorkDayRollover();
+      }
+    }, Math.min(delay, 2147483647));
+  } catch (err) {
+    console.warn('⚠️ [RENDERER] Failed to schedule Pacific midnight rollover:', err?.message || err);
+  }
 }
 
 function ensureLocalDayRolloverWatch() {
   if (window.__localDayRolloverWatch) return;
-  window.__localDayKey = localDateIso();
+  const todayKey = localDateIso();
+  const persisted = readPersistedWorkDayKey();
+  // App slept through Pacific midnight or restarted next day — force reset to 0.
+  if (persisted && persisted !== todayKey) {
+    console.log(`🌙 [RENDERER] Missed Pacific midnight while away (${persisted} → ${todayKey}) — resetting`);
+    window.__localDayKey = persisted;
+    window.__trackerDisplayDayKey = persisted;
+    const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
+    handleLocalDayRollover(isTracking, persisted);
+  } else {
+    window.__localDayKey = todayKey;
+    window.__trackerDisplayDayKey = window.__trackerDisplayDayKey || todayKey;
+    persistCurrentWorkDayKey(todayKey);
+  }
+  scheduleNextWorkDayRollover();
   window.__localDayRolloverWatch = setInterval(() => {
-    const todayKey = localDateIso();
-    if (window.__localDayKey && window.__localDayKey !== todayKey) {
+    const key = localDateIso();
+    if (window.__localDayKey && window.__localDayKey !== key) {
       const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
-      handleLocalDayRollover(isTracking);
-      window.__localDayKey = todayKey;
+      handleLocalDayRollover(isTracking, window.__localDayKey);
     }
   }, 1000);
 }
@@ -569,7 +910,7 @@ function updateTrackerDailyRefreshHint() {
     hour12: true,
   });
   const tzLabel = formatWorkTimezoneLabel(tz);
-  el.textContent = `Daily total resets at midnight ${tzLabel} (${datePart} at ${timePart}).`;
+  el.textContent = `Daily total resets at midnight ${tzLabel} (PST/PDT) — ${datePart} at ${timePart}.`;
 }
 
 window.updateTrackerDailyRefreshHint = updateTrackerDailyRefreshHint;
@@ -986,33 +1327,108 @@ function setupModuleCommunication() {
   // Main-process tray timer pushes elapsed time every second when the event loop is healthy.
   // Renderer-side watchdog takes over if tray ticks stall for >2.5s.
   ensureLocalDayRolloverWatch();
+  try {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        flushPendingHighWaterPersist();
+        return;
+      }
+      if (window.__lastTrackingStartTime) {
+        updateRendererTrackingClock();
+      }
+    });
+  } catch (_) { /* ignore */ }
   ipcRenderer.on('local-day-rollover', (_event, data) => {
-    window.__localDayKey = data?.date || localDateIso();
-    handleLocalDayRollover(!!data?.isTracking);
+    const todayKey = data?.date || localDateIso();
+    const previousDayKey =
+      data?.previousDate ||
+      (window.__localDayKey && window.__localDayKey !== todayKey ? window.__localDayKey : null) ||
+      (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey
+        ? window.__trackerDisplayDayKey
+        : null);
+    handleLocalDayRollover(!!data?.isTracking, previousDayKey);
   });
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
     window.__trayTimerActive = true;
     window.__lastTrayTimerTickAt = Date.now();
     window.__localTrackingClockActive = false;
+    window.__hwAdvanceAnchor = null;
+    // Tray owns the clock — drop redundant renderer 1Hz intervals (once).
+    if (!window.__clearedSecondaryForTray) {
+      window.__clearedSecondaryForTray = true;
+      try {
+        if (typeof window.clearSecondaryRendererTimers === 'function') {
+          window.clearSecondaryRendererTimers();
+        }
+        if (moduleInstances?.ipcManager?.sessionTimer) {
+          clearInterval(moduleInstances.ipcManager.sessionTimer);
+          moduleInstances.ipcManager.sessionTimer = null;
+        }
+      } catch (_) { /* ignore */ }
+    }
     const dashboardTimer = document.getElementById('sessionTime');
     if (data && (data.display || data.cumulativeDisplay)) {
       const sessionStr = data.display || formatSecondsAsHMS(data.sessionElapsedSeconds ?? 0);
+      const trayElapsed = Math.max(
+        0,
+        Math.floor(Number(data.sessionElapsedSeconds) || 0),
+        parseHmsToSeconds(data?.display),
+      );
       const trayCumulative = Math.max(
         0,
         Math.floor(Number(data.cumulativeSeconds) || 0),
         parseHmsToSeconds(data?.cumulativeDisplay),
       );
-      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+      // Cheap path: same second already on screen and not reconciling — skip work.
+      const shown = readTrackerDisplaySeconds();
+      if (
+        trayCumulative > 0 &&
+        trayCumulative === shown &&
+        trayCumulative === Math.floor(Number(window.__todayTrackedSeconds) || 0)
+      ) {
+        window.__lastTrayCumulativeSeconds = trayCumulative;
+        return;
+      }
       const start = window.__lastTrackingStartTime;
-      // Same formula everywhere: closed base + wall-clock session elapsed.
-      const cumulativeSec = start ? base + getTodayElapsedSeconds(start) : trayCumulative;
-      window.__lastTrayCumulativeSeconds = Math.max(
-        Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0),
-        cumulativeSec,
+      // Align closed base to tray so failover matches menu-bar time.
+      if (trayCumulative > 0 && trayElapsed >= 0) {
+        const trayBase = Math.max(0, trayCumulative - trayElapsed);
+        window.__completedTodayBaseSeconds = trayBase;
+      }
+      const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+      // Same formula as tray: closed base + wall-clock session elapsed.
+      let liveCumulative = start ? base + getTodayElapsedSeconds(start) : trayCumulative;
+      // Tray is source of truth while its ticks are fresh — keep app icon + big clock identical.
+      let cumulativeSec = trayCumulative > 0 ? trayCumulative : liveCumulative;
+      // If local wall-clock is within 2s of tray, prefer the higher (minor skew).
+      if (start && Math.abs(liveCumulative - trayCumulative) <= 2) {
+        cumulativeSec = Math.max(liveCumulative, trayCumulative);
+      }
+      const cap = maxPlausibleTrackedSecondsToday();
+      if (Number.isFinite(cap) && cumulativeSec > cap) {
+        cumulativeSec = cap;
+      }
+      window.__lastTrayCumulativeSeconds = cumulativeSec;
+      if (dashboardTimer && dashboardTimer.textContent !== sessionStr) {
+        dashboardTimer.textContent = sessionStr;
+      }
+      const prevShown = Math.max(
+        0,
+        Math.floor(Number(window.__todayTrackedSeconds) || 0),
+        Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+        readTrackerDisplaySeconds(),
       );
-      if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-      // Forward-only — never rewind the day's tracked clock from a tray tick.
-      setTrackerDisplaySeconds(cumulativeSec);
+      // Snap down when local high-water drifted ahead of real tray time (desync bug).
+      const allowDecrease = cumulativeSec < prevShown - 1;
+      if (allowDecrease) {
+        console.warn(
+          `⚠️ [TRACKER] Reconciling inflated clock ${formatSecondsAsHMS(prevShown)} → tray ${formatSecondsAsHMS(cumulativeSec)}`,
+        );
+        // Drop persisted inflated high-water so it cannot re-stick after reload.
+        clearTrackedHighWaterStorage(localDateIso());
+        window.__todayTrackedHighWaterSeconds = cumulativeSec;
+      }
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease });
     }
   });
 
@@ -1033,6 +1449,8 @@ function setupModuleCommunication() {
   });
 
   ipcRenderer.on('tracking-stopped', (_event, data) => {
+    window.__hwAdvanceAnchor = null;
+    window.__clearedSecondaryForTray = false;
     const cutSec = Math.max(0, Math.floor(Number(data?.timeCutSeconds) || 0));
     // Only the shown-idle-prompt timeout may lower tracked time (exactly 10m).
     const authorizedCut = data?.reason === 'idle_timeout' && cutSec > 0;
@@ -1050,6 +1468,7 @@ function setupModuleCommunication() {
       window.__todayBaseAtLastStop = hint;
       // allowDecrease only for the authorized 10m idle-prompt cut.
       setTrackerDisplaySeconds(hint, { allowDecrease: authorizedCut });
+      flushPendingHighWaterPersist();
       void ipcRenderer.invoke('set-frozen-total-at-stop', hint).catch(() => {});
     }
     void refreshTodayCompletedBaseSeconds().then(() => {
@@ -1098,14 +1517,12 @@ function setupModuleCommunication() {
     }
   });
 
-  // Manual timer update mechanism (fallback if IPC updates aren't sent)
+  // Manual timer update mechanism — failover only until tray ticks arrive.
   let timerUpdateInterval = null;
   // Store globally so IPC manager can clear it
   window.timerUpdateInterval = timerUpdateInterval;
-  
-  // Global cleanup function for all timers
-  window.clearAllTimers = function() {
-    console.log('🧹 [TIMER] Clearing all timer intervals...');
+
+  window.clearSecondaryRendererTimers = function clearSecondaryRendererTimers() {
     if (timerUpdateInterval) {
       clearInterval(timerUpdateInterval);
       timerUpdateInterval = null;
@@ -1114,7 +1531,14 @@ function setupModuleCommunication() {
       clearInterval(window.timerUpdateInterval);
       window.timerUpdateInterval = null;
     }
+  };
+  
+  // Global cleanup function for all timers
+  window.clearAllTimers = function() {
+    console.log('🧹 [TIMER] Clearing all timer intervals...');
+    window.clearSecondaryRendererTimers();
     stopTrackingDisplayWatchdog();
+    flushPendingHighWaterPersist();
     window.__lastTrackingStartTime = null;
     window.__trayTimerActive = false;
     console.log('✅ [TIMER] All timer intervals cleared');
@@ -1134,10 +1558,14 @@ function setupModuleCommunication() {
       console.log('⚡ [TIMER] Optimistic start — starting timer directly');
       const startTime = state.sessionStartTime || state.startTime || new Date();
       beginLocalTrackingClock(startTime);
-      if (timerUpdateInterval) clearInterval(timerUpdateInterval);
-      if (window.timerUpdateInterval) clearInterval(window.timerUpdateInterval);
+      window.clearSecondaryRendererTimers();
       void refreshTodayCompletedBaseSeconds().then(() => updateRendererTrackingClock());
+      // Temporary 1Hz until tray ticks arrive; cleared on first tray-timer-tick.
       timerUpdateInterval = setInterval(() => {
+        if (isTrayTimerDrivingDisplay()) {
+          window.clearSecondaryRendererTimers();
+          return;
+        }
         updateRendererTrackingClock();
       }, 1000);
       window.timerUpdateInterval = timerUpdateInterval;
@@ -1194,8 +1622,7 @@ function setupModuleCommunication() {
           console.log('⏱️ [TIMER] Starting manual timer updates with verified start time:', window.__lastTrackingStartTime);
           
           // Clear any existing interval
-          if (timerUpdateInterval) clearInterval(timerUpdateInterval);
-          if (window.timerUpdateInterval) clearInterval(window.timerUpdateInterval);
+          window.clearSecondaryRendererTimers();
 
           await refreshTodayCompletedBaseSeconds();
           
@@ -1217,7 +1644,12 @@ function setupModuleCommunication() {
           }
           
           window.__localTrackingClockActive = true;
+          // Temporary until tray owns the clock
           timerUpdateInterval = setInterval(() => {
+            if (isTrayTimerDrivingDisplay()) {
+              window.clearSecondaryRendererTimers();
+              return;
+            }
             updateRendererTrackingClock();
           }, 1000);
           // Store globally so IPC manager can clear it
@@ -1348,15 +1780,12 @@ function setupModuleCommunication() {
         updateLiveActivityDisplay(data.activity);
       }
       
-      // Update timer display if available
-      // FIX-6: Skip if tray timer is the authoritative source to prevent overwrites
+      // Update timer display if available — always via forward-only helper
       if (data.timer && data.timer.isTracking && !isTrayTimerDrivingDisplay()) {
-        const timerDisplay = document.getElementById('trackerTime');
-        // Only update if we have valid elapsed time to avoid overwriting
-        if (timerDisplay && data.timer.elapsed !== undefined && data.timer.elapsed !== null) {
+        if (data.timer.elapsed !== undefined && data.timer.elapsed !== null) {
           const elapsed = Math.floor(data.timer.elapsed / 1000);
           const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-          timerDisplay.textContent = formatSecondsAsHMS(base + elapsed);
+          setTrackerDisplaySeconds(base + elapsed);
         }
       }
       
@@ -1649,8 +2078,16 @@ async function handleProjectSelection() {
     }
   }
 
-  if (trackerStatus) trackerStatus.textContent = `Ready to track: ${projectName}`;
+  if (trackerStatus) {
+    trackerStatus.textContent = isCurrentlyTracking
+      ? `Tracking: ${projectName}`
+      : `Ready to track: ${projectName}`;
+  }
   if (selectedProjectName) selectedProjectName.textContent = projectName;
+  const bannerPrefix = document.getElementById('selectedProjectBannerPrefix');
+  if (bannerPrefix) {
+    bannerPrefix.textContent = isCurrentlyTracking ? 'Tracking: ' : 'Ready to track: ';
+  }
   if (selectedProjectInfo) {
     selectedProjectInfo.style.display = 'block';
   }

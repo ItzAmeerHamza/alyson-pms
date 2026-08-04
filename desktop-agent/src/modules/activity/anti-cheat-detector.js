@@ -81,30 +81,42 @@ class AntiCheatDetector {
     
     console.log('🕵️ Starting enhanced anti-cheat detection v2.0...');
     this.isMonitoring = true;
+
+    let patternMs = 60000;
+    let deepMs = 180000;
+    let processMs = 10 * 60 * 1000;
+    let usbMs = 15 * 60 * 1000;
+    try {
+      const { ANTI_CHEAT } = require('../utils/power-profile');
+      patternMs = ANTI_CHEAT.patternMs;
+      deepMs = ANTI_CHEAT.deepMs;
+      processMs = ANTI_CHEAT.processMs;
+      usbMs = ANTI_CHEAT.usbMs;
+    } catch (_) { /* defaults above */ }
     
-    // Monitor every 15 seconds for suspicious patterns
+    // Pattern scan — softened for battery (was 15s)
     this.monitoringInterval = setInterval(() => {
       if (this.isAnalyzing) return;
       this.analyzeActivity();
-    }, 15000);
+    }, patternMs);
     
-    // Deep analysis every 30 seconds
+    // Deep analysis — softened (was 30s)
     this.deepAnalysisInterval = setInterval(() => {
       if (this.isDeepAnalyzing) return;
       this.performDeepAnalysis();
-    }, 30000);
+    }, deepMs);
     
-    // Process scan every 5 minutes (lightweight)
+    // Process scan (lightweight)
     this.processScanInterval = setInterval(() => {
       if (this.isProcessScanning) return;
       this.scanForJigglerProcesses();
-    }, 5 * 60 * 1000);
+    }, processMs);
     
-    // USB scan every 10 minutes (very lightweight)
+    // USB scan (very lightweight)
     this.usbScanInterval = setInterval(() => {
       if (this.isUSBScanning) return;
       this.scanForJigglerUSBDevices();
-    }, 10 * 60 * 1000);
+    }, usbMs);
     
     // Clean old data every 5 minutes
     this.cleanupInterval = setInterval(() => {

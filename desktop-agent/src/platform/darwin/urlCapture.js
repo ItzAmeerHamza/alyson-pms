@@ -21,7 +21,7 @@ class DarwinUrlCapture {
     
     // CRITICAL FIX: URL result caching to reduce AppleScript calls
     this.urlResultCache = new Map(); // Cache full URL results by browser
-    this.urlCacheTTL = 5000; // Cache URLs for 5 seconds
+    this.urlCacheTTL = Number(process.env.URL_RESULT_CACHE_TTL_MS) || 10000;
   }
 
   /**
@@ -52,7 +52,9 @@ class DarwinUrlCapture {
 
     for (const nonBrowser of nonBrowserApps) {
       if (name.includes(nonBrowser)) {
-        console.log('[URL] BLOCKED: Non-browser app detected:', appName);
+        if (process.env.DEBUG_URL) {
+          console.log('[URL] BLOCKED: Non-browser app detected:', appName);
+        }
         return null; // Explicitly not a browser
       }
     }
@@ -98,7 +100,9 @@ class DarwinUrlCapture {
     // 🔧 MAC FIX: Block file extensions in title before accepting as browser
     const fileExtensions = /\.(md|txt|pdf|doc|docx|js|ts|json|xml|yaml|yml|html|css|jsx|tsx|py|java|cpp|c|h|hpp|rs|go|rb|php|swift|kt|sql|sh|bat|ps1|exe|dmg|zip|tar|gz|rar|7z|png|jpg|jpeg|gif|svg|ico|mp4|mp3|wav|avi|mov|csv|xls|xlsx|ppt|pptx)$/i;
     if (fileExtensions.test(titleLower)) {
-      console.log('[URL] BLOCKED: File extension in title:', title);
+      if (process.env.DEBUG_URL) {
+        console.log('[URL] BLOCKED: File extension in title:', title);
+      }
       return null; // Not a browser URL
     }
 
@@ -213,22 +217,21 @@ class DarwinUrlCapture {
       // CRITICAL: Always get fresh browser name, never from cache to prevent misattribution
       const browserName = this.getBrowserName(frontApp.name, frontApp.title);
       
-      // 🔍 DEBUG: Log browser name detection result
-      console.log('[URL] 🔍 BROWSER DETECTION:', { 
-        appName: frontApp.name, 
-        windowTitle: frontApp.title, 
-        detectedBrowser: browserName 
-      });
-
-      // 🔧 FIX: Gate debug logging behind DEBUG_URL environment variable
       if (process.env.DEBUG_URL) {
+        console.log('[URL] 🔍 BROWSER DETECTION:', {
+          appName: frontApp.name,
+          windowTitle: frontApp.title,
+          detectedBrowser: browserName
+        });
         console.log('[URL] DEBUG: Browser detected:', browserName);
+        console.log('[URL] DEBUG: App details:', { name: frontApp.name, title: frontApp.title, bundleId: frontApp.bundleId });
       }
-      console.log('[URL] DEBUG: App details:', { name: frontApp.name, title: frontApp.title, bundleId: frontApp.bundleId });
 
       // If not a browser, return null immediately - don't try to extract URLs from non-browser apps
       if (!browserName) {
-        console.log('[URL] DEBUG: Not a browser, skipping:', frontApp.name);
+        if (process.env.DEBUG_URL) {
+          console.log('[URL] DEBUG: Not a browser, skipping:', frontApp.name);
+        }
         return null;
       }
 
@@ -346,11 +349,13 @@ class DarwinUrlCapture {
       }
 
       if (!url) {
-        console.log('[URL] DEBUG: No URL found for', browserName);
+        if (process.env.DEBUG_URL) {
+          console.log('[URL] DEBUG: No URL found for', browserName);
+          console.log(`[URL] 🧹 Cleared cache for key: ${cacheKey} due to extraction failure`);
+        }
         // CRITICAL FIX: Clear the cache entry when URL extraction fails completely
         // This ensures we retry fresh on the next poll instead of returning stale cached data
         this.urlResultCache.delete(cacheKey);
-        console.log(`[URL] 🧹 Cleared cache for key: ${cacheKey} due to extraction failure`);
         return null;
       }
 

@@ -675,6 +675,14 @@ class IPCManager {
   startSessionTimer() {
     if (this.sessionTimer) {
       clearInterval(this.sessionTimer);
+      this.sessionTimer = null;
+    }
+
+    // Tray is the primary 1Hz clock while tracking — avoid a competing interval.
+    if (typeof window !== 'undefined' && typeof window.isTrayTimerDrivingDisplay === 'function') {
+      if (window.isTrayTimerDrivingDisplay()) {
+        return;
+      }
     }
     
     // Emit immediate update so UI doesn't wait 1s for first tick
@@ -685,6 +693,13 @@ class IPCManager {
     });
     
     this.sessionTimer = setInterval(() => {
+      try {
+        if (typeof window !== 'undefined' && window.isTrayTimerDrivingDisplay?.()) {
+          clearInterval(this.sessionTimer);
+          this.sessionTimer = null;
+          return;
+        }
+      } catch (_) { /* continue */ }
       this.emit('session-timer-update', {
         startTime: this.sessionStartTime,
         currentTime: new Date(),

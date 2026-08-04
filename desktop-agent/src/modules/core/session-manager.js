@@ -503,15 +503,13 @@ class SessionManager {
       
       console.log(`🧹 [CLEANUP] Found ${staleSessions.length} stale sessions to close`);
       
-      // Close each session at stop time (not start+1h — that inflated "worked today" in the UI)
+      // Close each session at stop time (not start+1h — that silently ate hours)
       const nowIso = new Date().toISOString();
       for (const session of staleSessions) {
-        const endTime = nowIso;
-        
         const { error: updateError } = await this.supabaseService
           .from('time_logs')
           .update({
-            end_time: endTime.toISOString(),
+            end_time: nowIso,
             status: 'completed'
           })
           .eq('id', session.id);

@@ -127,11 +127,11 @@ function startSessionHealthCheck() {
             try {
               const supabaseClose = resolveSupabaseClient();
               if (supabaseClose) {
-                const startTime = new Date(activeLog.start_time);
-                const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // start + 1 hour
+                // Close at NOW — never collapse to start+1h (that silently ate hours).
+                const endTime = new Date().toISOString();
                 await supabaseClose
                   .from('time_logs')
-                  .update({ end_time: endTime.toISOString(), status: 'auto_closed' })
+                  .update({ end_time: endTime, status: 'auto_closed' })
                   .eq('id', activeLog.id);
                 log.info({ step: 'SYNC_CLOSED_STALE', message: 'Closed stale session in database', ctx: { timeLogId: activeLog.id } });
               }
@@ -273,11 +273,11 @@ async function forceSyncSessionState() {
           ageHours: Math.round(sessionAge / (60 * 60 * 1000))
         }});
         try {
-          const startTime = new Date(activeLog.start_time);
-          const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+          // Close at NOW — never collapse to start+1h (that silently ate hours).
+          const endTime = new Date().toISOString();
           await supabase
             .from('time_logs')
-            .update({ end_time: endTime.toISOString(), status: 'auto_closed' })
+            .update({ end_time: endTime, status: 'auto_closed' })
             .eq('id', activeLog.id);
           log.info({ step: 'FORCE_SYNC_CLOSED_STALE', message: 'Closed stale session', ctx: { timeLogId: activeLog.id } });
         } catch (closeErr) {

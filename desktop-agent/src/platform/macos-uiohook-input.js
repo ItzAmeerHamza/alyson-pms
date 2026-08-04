@@ -69,7 +69,7 @@ class MacOSUiohookInput {
 
     const onMousemove = (event) => {
       const now = Date.now();
-      const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+      const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 750;
       if (this._lastMoveEmit && now - this._lastMoveEmit < moveMinMs) return;
       this._lastMoveEmit = now;
       this.emitEvent({

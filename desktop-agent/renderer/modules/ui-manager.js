@@ -3240,6 +3240,22 @@ class UIManager {
     this.updateTrackingButtons();
     this.updateDashboardTimeDisplays();
 
+    // Keep tracker page labels in sync with Tracking vs Ready.
+    try {
+      const trackerStatus = document.getElementById('trackerStatus');
+      const projectSelect = document.getElementById('projectSelect');
+      const selectedOption = projectSelect?.selectedOptions?.[0];
+      const projectName = selectedOption ? (selectedOption.textContent || '').trim() : '';
+      const bannerPrefix = document.getElementById('selectedProjectBannerPrefix');
+      if (projectName) {
+        const label = status === 'active' ? `Tracking: ${projectName}` : `Ready to track: ${projectName}`;
+        if (trackerStatus) trackerStatus.textContent = label;
+        if (bannerPrefix) {
+          bannerPrefix.textContent = status === 'active' ? 'Tracking: ' : 'Ready to track: ';
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     // Update header pill (#trackingStatus) to reflect current state
     try {
       const pill = document.getElementById('trackingStatus');
@@ -3355,7 +3371,14 @@ class UIManager {
               typeof window.resolveStoppedDisplaySeconds === 'function'
                 ? window.resolveStoppedDisplaySeconds(totalSec)
                 : totalSec;
-            window.setTrackerDisplaySeconds(trackedDisplay);
+            const prevShown = Math.max(
+              0,
+              Math.floor(Number(window.__todayTrackedSeconds) || 0),
+              Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+            );
+            window.setTrackerDisplaySeconds(trackedDisplay, {
+              allowDecrease: trackedDisplay < prevShown - 1,
+            });
             console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', trackedDisplay, 's');
           }
         }

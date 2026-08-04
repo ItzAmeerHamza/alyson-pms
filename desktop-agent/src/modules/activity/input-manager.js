@@ -377,7 +377,7 @@ class UnifiedInputManager extends EventEmitter {
         break;
 
       case 'move': {
-        const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
+        const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 750;
         if (now - (this._lastMoveEmitAt || 0) < moveMinMs) {
           break;
         }

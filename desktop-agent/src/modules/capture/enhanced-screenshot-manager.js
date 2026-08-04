@@ -70,23 +70,36 @@ class EnhancedScreenshotManager {
   }
 
   getConfiguredScreenshotIntervalMs() {
-    const minutes =
-      this.config?.screenshot_interval_minutes ??
-      this.config?.appSettings?.screenshot_interval_minutes;
-    const minutesNum = Number(minutes);
-    if (Number.isFinite(minutesNum) && minutesNum > 0) {
-      return Math.max(60, Math.round(minutesNum * 60)) * 1000;
-    }
+    // Product default: 1 screenshot / minute while tracking (unlocked).
+    // Never change this for "power saving" — use pause-on-lock instead.
+    try {
+      const { SCREENSHOT_INTERVAL_MS } = require('../utils/power-profile');
+      const minutes =
+        this.config?.screenshot_interval_minutes ??
+        this.config?.appSettings?.screenshot_interval_minutes;
+      const minutesNum = Number(minutes);
+      if (Number.isFinite(minutesNum) && minutesNum > 0) {
+        return Math.max(60, Math.round(minutesNum * 60)) * 1000;
+      }
 
-    const raw =
-      this.config?.screenshot_interval_seconds ??
-      this.config?.appSettings?.screenshot_interval_seconds ??
-      this.config?.appSettings?.screenshot_interval;
-    const num = Number(raw);
-    if (!Number.isFinite(num) || num <= 0) return 60 * 1000;
-    // `screenshot_interval` may be persisted in milliseconds in some paths.
-    const seconds = num >= 1000 ? Math.round(num / 1000) : num;
-    return Math.max(10, seconds) * 1000;
+      const raw =
+        this.config?.screenshot_interval_seconds ??
+        this.config?.appSettings?.screenshot_interval_seconds ??
+        this.config?.appSettings?.screenshot_interval;
+      const num = Number(raw);
+      if (!Number.isFinite(num) || num <= 0) return SCREENSHOT_INTERVAL_MS;
+      const seconds = num >= 1000 ? Math.round(num / 1000) : num;
+      return Math.max(10, seconds) * 1000;
+    } catch (_) {
+      const minutes =
+        this.config?.screenshot_interval_minutes ??
+        this.config?.appSettings?.screenshot_interval_minutes;
+      const minutesNum = Number(minutes);
+      if (Number.isFinite(minutesNum) && minutesNum > 0) {
+        return Math.max(60, Math.round(minutesNum * 60)) * 1000;
+      }
+      return 60 * 1000;
+    }
   }
 
   /**
@@ -1642,12 +1655,17 @@ if (uploadResult?.id) {
       clearInterval(this.screenshotTimerInterval);
     }
 
-    // Send timer updates every 5 seconds
+    // Send timer updates for UI countdown (not capture cadence)
+    let uiMs = 15000;
+    try {
+      const { IPC } = require('../utils/power-profile');
+      uiMs = IPC.screenshotTimerUiMs;
+    } catch (_) {}
     this.screenshotTimerInterval = setInterval(() => {
       this.sendNextScreenshotUpdate();
-    }, 5000);
+    }, uiMs);
 
-    log.info({ step: 'TIMER UPDATES STARTED' });
+    log.info({ step: 'TIMER UPDATES STARTED', ctx: { uiMs } });
   }
 
   /**

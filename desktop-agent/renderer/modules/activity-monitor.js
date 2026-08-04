@@ -115,7 +115,6 @@ class ActivityMonitor {
 
         this._ipcHandlers['timer-update'] = (_e, data) => {
           this.logIpcEvent('timer-update', data);
-          console.log('📡 [ActivityMonitor] timer-update', data);
           this._applyTimerPayload(data);
         };
 

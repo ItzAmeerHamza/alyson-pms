@@ -322,6 +322,14 @@ class EnhancedAppDetector {
         return;
       }
 
+      // Power: while idle, skip AppleScript — open app session stays open (no silent time cut)
+      try {
+        const { isUserIdle } = require('../utils/power-profile');
+        if (isUserIdle()) {
+          return;
+        }
+      } catch (_) { /* continue */ }
+
       if (process.env.DEBUG_APP) {
         logger.debug({ category: 'APP_DETECTION', step: 'REALTIME TICK', message: new Date().toISOString() });
       }
@@ -343,6 +351,8 @@ class EnhancedAppDetector {
           const appName = activeApp.name || activeApp.appName || activeApp.bundleId || 'Unknown';
           const rawTitle = activeApp.title || activeApp.windowTitle || '';
           const title = normalizeTitle(rawTitle, appName) || '';
+          // Session identity is app_name only — window title changes must NOT create new rows.
+          const sessionKey = String(appName).trim().toLowerCase();
           const key = `${appName}|${title}`;
           const monoNow = monotonicNow();
 
@@ -358,16 +368,20 @@ class EnhancedAppDetector {
           if (process.env.DEBUG_APP && Math.random() < 0.05) { // Sample 1 in 20 debug logs
             console.log('[DWELL-DEBUG] Enter tick', {
               key,
+              sessionKey,
               isIdle,
               trackingOn
             });
           }
 
-          // On switch → flush previous if met
-          if (!this.dwellState || this.dwellState.key !== key) {
+          // On app switch → close previous session, then start new dwell
+          if (!this.dwellState || this.dwellState.sessionKey !== sessionKey) {
+            // Close open DB session immediately (session model, not snapshots)
+            await this._closePreviousAppEntry(new Date().toISOString());
             await this._maybeFlushCurrentIfMet(monoNow);
             this.dwellState = {
               key,
+              sessionKey,
               appName,
               windowTitle: title,
               stable: false,
@@ -406,55 +420,39 @@ class EnhancedAppDetector {
               }
             } catch {}
             // Do not return; allow stabilization to proceed in the same tick
+          } else {
+            // Same app session: refresh window title only (no new DB row)
+            this.dwellState.windowTitle = title;
+            this.dwellState.key = key;
           }
 
-          // Same key path: stabilization then accumulate
+          // Same app path: stabilize once, then insert ONE session row (never per-minute snapshots)
           const requiredSamples = isBrowserApp(appName) ? this.stabilizeBrowser : this.stabilizeDefault;
           if (!this.dwellState.stable) {
             this.dwellState.sameCount += 1;
             if (this.dwellState.sameCount >= requiredSamples) {
               this.dwellState.stable = true;
-              // 🔧 CRITICAL FIX: For single-sample apps (requiredSamples: 1), save IMMEDIATELY
-              // Single-sample apps don't need dwell time for first save - just confirmation of detection
-              // This ensures apps like WhatsApp, Notebook, etc. are saved within ~5-10 seconds
-              if (requiredSamples === 1) {
-                // Start dwell accumulation for potential re-saves
-                this.dwellState.startMono = monoNow;
-                
-                const isFirstSave = !this.dwellState.lastSavedMono || this.dwellState.lastSavedMono === 0;
-                const gapOk = isFirstSave || (monoNow - (this.dwellState.lastSavedMono || 0)) >= this.minSaveGapMs;
-                
-                // 🔧 CRITICAL FIX: Add deduplication check
-                const isDuplicate = this._isDuplicateSave(key, appName, title);
-                
-                // For single-sample apps: save immediately on first detection (isFirstSave)
-                // or after gap period for re-saves - NO dwell threshold check for first save!
-                if (isFirstSave && !isDuplicate) {
-                  logger.info({ category: 'APP_DETECTION', step: 'SINGLE-SAMPLE SAVE', ctx: { key, requiredSamples, isFirstSave: true } });
+              this.dwellState.startMono = monoNow;
+
+              // Session model: first confirmed focus → one INSERT; stay on app → no more rows
+              if (!this.dwellState.saved) {
+                const isDuplicate = this._isDuplicateSave(sessionKey, appName, title);
+                if (!isDuplicate) {
+                  this._recordSave(sessionKey, appName, title);
+                  logger.info({ category: 'APP_DETECTION', step: 'SESSION START', ctx: { sessionKey, appName } });
                   await this._saveDwellApp(appName, title, Date.now());
                   this.dwellState.lastSavedMono = monoNow;
                   this.dwellState.saved = true;
-                  this._recordSave(key, appName, title); // Record successful save
-                  console.log(`✅ [APP-DWELL] Single-sample app saved immediately: ${appName}`);
-                } else if (gapOk && !isDuplicate && !this.dwellState.saved) {
-                  // Re-save after gap period if not already saved this session
-                  logger.info({ category: 'APP_DETECTION', step: 'SINGLE-SAMPLE RE-SAVE', ctx: { key, gapOk } });
-                  await this._saveDwellApp(appName, title, Date.now());
-                  this.dwellState.lastSavedMono = monoNow;
-                  this.dwellState.saved = true;
-                  this._recordSave(key, appName, title);
-                } else if (isDuplicate) {
-                  logger.debug({ category: 'APP_DETECTION', step: 'DWELL SKIPPED', message: 'Duplicate save prevented', ctx: { key, appName, title } });
+                  if (process.env.DEBUG_APP) {
+                    console.log(`✅ [APP-SESSION] Started: ${appName}`);
+                  }
                 }
-              } else {
-                // For multi-sample apps, use the traditional approach
-                this.dwellState.startMono = monoNow;
-                logger.info({ category: 'APP_DETECTION', step: 'DWELL START', ctx: { key, requiredSamples } });
               }
             }
-            if (process.env.DEBUG_APP && Math.random() < 0.1) { // Sample 1 in 10 stabilization logs
+            if (process.env.DEBUG_APP && Math.random() < 0.1) {
               console.log('[DWELL-DEBUG] Stabilizing', {
                 key,
+                sessionKey,
                 sameCount: this.dwellState.sameCount,
                 requiredSamples,
                 isBrowser: isBrowserApp(appName)
@@ -464,8 +462,7 @@ class EnhancedAppDetector {
 
           if (!this.dwellState.stable) return; // not yet stabilized
           if (isIdle || !trackingOn) {
-            // Do not accumulate while idle or tracking off; but allow flush if already met earlier
-            await this._maybeFlushCurrentIfMet(monoNow);
+            // Keep the open session row; duration closes on app switch or stop tracking.
             if (process.env.DEBUG_APP) {
               console.log('[DWELL-DEBUG] Gated (idle or tracking off)', {
                 key,
@@ -476,64 +473,23 @@ class EnhancedAppDetector {
             return;
           }
 
-          // 🔧 CRITICAL FIX: Fix elapsed time calculation - was always 0 for new apps!
           const startTime = this.dwellState.startMono;
           if (!startTime) {
-            // If startMono is not set, we can't calculate elapsed time yet
-            if (process.env.DEBUG_APP) {
-              console.log('[DWELL-DEBUG] No start time yet', { key, startMono: startTime });
-            }
-            return; // Wait for next cycle when startMono is set
+            return;
           }
           const elapsed = monoNow - startTime;
-          const reached = elapsed >= this.dwellThresholdMs;
-          // Allow initial save without enforcing min gap
-          const isFirstSave = !this.dwellState.lastSavedMono || this.dwellState.lastSavedMono === 0;
-          const gapOk = isFirstSave || (monoNow - (this.dwellState.lastSavedMono || 0)) >= this.minSaveGapMs;
           const capReached = elapsed >= this.maxRecordMs;
 
-          // 🔧 ENHANCED DEBUG: More detailed dwell logging
-          if (process.env.DEBUG_APP) {
-            console.log('[DWELL-DEBUG] Tick', {
-              key,
-              startMono: startTime,
-              monoNow,
-              elapsed: Math.floor(elapsed),
-              threshold: this.dwellThresholdMs,
-              reached,
-              gapOk,
-              isFirstSave,
-              capReached,
-              appName,
-              requiredSamples
-            });
-          }
-
-          if ((reached && gapOk) || capReached) {
-            // 🔧 CRITICAL FIX: Add deduplication check
-            const isDuplicate = this._isDuplicateSave(key, appName, title);
-            
-            if (!isDuplicate) {
-              // RACE CONDITION FIX: Record the save BEFORE the async _saveDwellApp call.
-              // When active-win times out, multiple callers resolve from cached-app-detection.js
-              // simultaneously. If we record after await, all callers pass _isDuplicateSave
-              // before any of them record, causing 6x duplicate saves. Recording first ensures
-              // only the first caller passes the dedup check.
-              this._recordSave(key, appName, title);
-              this.dwellState.lastSavedMono = monoNow;
-              this.dwellState.saved = true;
-              
-              logger.info({ category: 'APP_DETECTION', step: 'DWELL REACHED', ctx: { key, elapsed: Math.floor(elapsed), threshold: this.dwellThresholdMs, gapOk, capReached } });
-              await this._saveDwellApp(appName, title, Date.now());
-              
-              if (capReached) {
-                // roll record
-                this.dwellState.startMono = monoNow;
-                this.dwellState.sameCount = requiredSamples; // already stable
-              }
-            } else {
-              logger.debug({ category: 'APP_DETECTION', step: 'DWELL SKIPPED', message: 'Duplicate save prevented', ctx: { key, elapsed: Math.floor(elapsed), appName, title } });
-            }
+          // Optional 2h roll: close + open a fresh session for very long unbroken focus
+          if (capReached && this.dwellState.saved) {
+            logger.info({ category: 'APP_DETECTION', step: 'SESSION ROLL', ctx: { sessionKey, elapsed: Math.floor(elapsed) } });
+            await this._closePreviousAppEntry(new Date().toISOString());
+            this.dwellState.startMono = monoNow;
+            this.dwellState.saved = false;
+            this._recordSave(sessionKey, appName, title);
+            await this._saveDwellApp(appName, title, Date.now());
+            this.dwellState.lastSavedMono = monoNow;
+            this.dwellState.saved = true;
           }
         }
       } catch (error) {
@@ -597,7 +553,7 @@ class EnhancedAppDetector {
             this.heartbeatSampleRate = process.env.DEBUG_APP ? 1 : 3;
             
             if (global.platformManager?.cache) {
-              global.platformManager.cache.cacheMs = Number(process.env.APP_DETECT_CACHE_MS) || 1800;
+              global.platformManager.cache.cacheMs = Number(process.env.APP_DETECT_CACHE_MS) || 10000;
             }
             
             if (process.env.DEBUG_APP) {
@@ -608,10 +564,9 @@ class EnhancedAppDetector {
       } catch {}
     };
     
-    // 🔧 FIX: 5-second interval for responsive app detection
-    // Apps should be captured within ~5-10 seconds of use
-    // AppleScript detection takes 300-450ms but this is acceptable for accurate tracking
-    const baseInterval = 5000; // 5 seconds - responsive app detection
+    // App detection via AppleScript is CPU-heavy (~300–450ms).
+    // Fixed tick ~15s while active; idle/locked ticks no-op (see runDetectionWithJitter).
+    const baseInterval = Number(process.env.APP_DETECT_INTERVAL_MS) || 15000;
     
     // Initial run with random jitter
     const initialJitter = Math.random() * this.scheduleJitter * 2 - this.scheduleJitter; // ±jitter
@@ -629,13 +584,15 @@ class EnhancedAppDetector {
     }, Math.max(0, initialJitter));
     
     console.log('✅ [REALTIME-APP] Real-time app detection interval created with jitter (±' + this.scheduleJitter + 'ms)');
-    logger.info({ category: 'APP_DETECTION', step: 'REALTIME STARTED', message: '5s intervals (responsive detection)' });
+    logger.info({ category: 'APP_DETECTION', step: 'REALTIME STARTED', message: `${baseInterval}ms intervals` });
   }
 
   async handleRealTimeAppSwitch(appName, windowTitle, activeApp = {}) {
     try {
       // Log app switch event
-      console.log(`📱 [APP-SWITCH] New active app: "${appName}" | Window: "${windowTitle}"`);
+      if (process.env.DEBUG_APP) {
+        console.log(`📱 [APP-SWITCH] New active app: "${appName}" | Window: "${windowTitle}"`);
+      }
       
       // Update UI with new app (DB save handled by dwell logic)
       if (global.mainWindow && !global.mainWindow.isDestroyed()) {
@@ -1012,25 +969,38 @@ class EnhancedAppDetector {
       
       // Only update if we have a valid duration
       if (durationSeconds <= 0) {
-        console.log('⚠️ [DWELL] Skipping close - invalid duration:', durationSeconds);
+        if (process.env.DEBUG_APP) {
+          console.log('⚠️ [DWELL] Skipping close - invalid duration:', durationSeconds);
+        }
+        this.previousAppEntry = null;
         return;
       }
 
-      // Backend RDS mode owns the app_logs lifecycle: durations are derived
-      // server-side from consecutive started_at values, so there is no client-side
-      // row to close. The legacy Supabase fallback below would issue an update keyed
-      // on the tenant user id (an integer like "1202") against a UUID column, which
-      // fails with "invalid input syntax for type uuid". Skip it entirely in RDS mode.
+      const userId = (this.config && (this.config.user_id || this.config.userId)) || global.currentUserId || null;
+
+      // RDS / Nest path: close open sessions by user (+ optional app_name)
       try {
-        const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
-        if (isBackendTimeLogsEnabled(this.config || global.config)) {
+        const {
+          isBackendTimeLogsEnabled,
+          closeOpenAppLogs,
+        } = require('../utils/backend-time-logs');
+        if (isBackendTimeLogsEnabled(this.config || global.config) && userId) {
+          await closeOpenAppLogs({
+            user_id: userId,
+            ended_at: endedAt,
+            app_name: this.previousAppEntry.appName || null,
+          }, this.config || global.config);
+          if (process.env.DEBUG_APP) {
+            console.log(`✅ [DWELL] Closed app session via backend: ${this.previousAppEntry.appName} (${durationSeconds}s)`);
+          }
           this.previousAppEntry = null;
           return;
         }
-      } catch (_) { /* fall through to legacy path */ }
+      } catch (backendCloseErr) {
+        console.warn('⚠️ [DWELL] Backend close failed:', backendCloseErr?.message || backendCloseErr);
+      }
 
-      // Update via direct DB if we have the entry ID
-      // CRITICAL FIX: Only update ended_at - duration_seconds is a computed column
+      // Legacy Supabase fallback
       if (this.previousAppEntry.id) {
         const supabaseClient = await this.waitForSupabase();
         if (supabaseClient) {
@@ -1038,30 +1008,25 @@ class EnhancedAppDetector {
             .from('app_logs')
             .update({
               ended_at: endedAt
-              // duration_seconds is computed by DB from started_at and ended_at
             })
             .eq('id', this.previousAppEntry.id);
           
           if (error) {
             console.warn('⚠️ [DWELL] Failed to close previous app entry:', error.message);
-          } else {
+          } else if (process.env.DEBUG_APP) {
             console.log(`✅ [DWELL] Closed previous app: ${this.previousAppEntry.appName} (${durationSeconds}s)`);
           }
         }
       } else {
-        // If no ID, try to update based on user_id, app_name, and started_at
         const supabaseClient = await this.waitForSupabase();
-        const userId = (this.config && (this.config.user_id || this.config.userId)) || global.currentUserId || null;
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || ''));
 
         if (supabaseClient && userId && isUuid) {
           const previousStartedAt = new Date(this.previousAppEntry.startedAt).toISOString();
-          // CRITICAL FIX: Only update ended_at - duration_seconds is a computed column
           const { error } = await supabaseClient
             .from('app_logs')
             .update({
               ended_at: endedAt
-              // duration_seconds is computed by DB from started_at and ended_at
             })
             .eq('user_id', userId)
             .eq('app_name', this.previousAppEntry.appName)
@@ -1070,13 +1035,10 @@ class EnhancedAppDetector {
           
           if (error) {
             console.warn('⚠️ [DWELL] Failed to close previous app entry (fallback):', error.message);
-          } else {
-            console.log(`✅ [DWELL] Closed previous app (fallback): ${this.previousAppEntry.appName} (${durationSeconds}s)`);
           }
         }
       }
       
-      // Clear the previous entry
       this.previousAppEntry = null;
       
     } catch (error) {
@@ -1087,74 +1049,35 @@ class EnhancedAppDetector {
   async _maybeFlushCurrentIfMet(monoNow) {
     try {
       if (!this.dwellState) return;
-      
-      // 🔧 CRITICAL FIX: Construct the key from dwellState to avoid undefined variable
-      const key = `${this.dwellState.appName}|${this.dwellState.windowTitle}`;
-      
-      // If stable but didn't reach dwell threshold, save as transient
-      if (this.dwellState.stable && this.enableTransientTracking) {
-        const start = this.dwellState.startMono || monoNow;
-        const elapsed = monoNow - start;
-        
-        // 🔧 IMPROVED: Save as transient if < dwell threshold and > 500ms (reduced from 1s to catch more apps)
-        // Only save if we haven't already saved this app recently
-        if (elapsed < this.dwellThresholdMs && elapsed > 500 && !this.dwellState.saved) {
-          // 🔧 CRITICAL FIX: Add deduplication check for transient saves
-          const isDuplicate = this._isDuplicateSave(key, this.dwellState.appName, this.dwellState.windowTitle);
-          
-          if (!isDuplicate) {
-            try {
-              await this._saveDwellApp(this.dwellState.appName, this.dwellState.windowTitle, Date.now());
-              this.dwellState.lastSavedMono = monoNow;
-              this.dwellState.saved = true;
-              this._recordSave(key, this.dwellState.appName, this.dwellState.windowTitle); // Record successful save
-              console.log(`✅ [DWELL] Single-sample app saved immediately: ${this.dwellState.appName} (${Math.round(elapsed)}ms)`);
-            } catch (error) {
-              console.error(`❌ [DWELL] Failed to save single-sample app ${this.dwellState.appName}:`, error.message);
-            }
-          } else if (process.env.DEBUG_APP) {
-            console.log(`[DWELL-DEDUP] Skipping transient save for ${key}: duplicate within dedup window`);
-          }
-        }
-      }
-      
-      // Check if we should flush transient apps
-      if (this.enableTransientTracking && (Date.now() - this.lastTransientFlush) > this.transientFlushInterval) {
-        await this._flushTransientApps();
-      }
-      
+      // Session already written — never insert again until app switches
+      if (this.dwellState.saved) return;
       if (!this.dwellState.stable) return;
-      
+
+      const key = this.dwellState.sessionKey
+        || `${this.dwellState.appName}|${this.dwellState.windowTitle}`;
       const start = this.dwellState.startMono || monoNow;
       const elapsed = monoNow - start;
-      if (elapsed >= this.dwellThresholdMs) {
-        const gapOk = (monoNow - (this.dwellState.lastSavedMono || 0)) >= this.minSaveGapMs;
-        if (gapOk) {
+
+      // Persist brief focus as one session row when leaving the app
+      if (elapsed > 500) {
+        const isDuplicate = this._isDuplicateSave(
+          key,
+          this.dwellState.appName,
+          this.dwellState.windowTitle,
+        );
+        if (!isDuplicate) {
+          this._recordSave(key, this.dwellState.appName, this.dwellState.windowTitle);
           await this._saveDwellApp(this.dwellState.appName, this.dwellState.windowTitle, Date.now());
           this.dwellState.lastSavedMono = monoNow;
           this.dwellState.saved = true;
+          if (process.env.DEBUG_APP) {
+            console.log(`✅ [APP-SESSION] Flushed on switch: ${this.dwellState.appName} (${Math.round(elapsed)}ms)`);
+          }
         }
       }
-      
-      // 🔧 IMPROVED: Flush if we've been stable for a while but haven't saved
-      // This catches apps that stay active but don't reach dwell threshold
-      if (this.dwellState.stable && !this.dwellState.saved && elapsed > 5000) {
-        // 🔧 CRITICAL FIX: Add deduplication check for flush saves
-        const isDuplicate = this._isDuplicateSave(key, this.dwellState.appName, this.dwellState.windowTitle);
-        
-        if (!isDuplicate) {
-          try {
-            await this._saveDwellApp(this.dwellState.appName, this.dwellState.windowTitle, Date.now());
-            this.dwellState.lastSavedMono = monoNow;
-            this.dwellState.saved = true;
-            this._recordSave(key, this.dwellState.appName, this.dwellState.windowTitle); // Record successful save
-            console.log(`✅ [DWELL] App saved via flush: ${this.dwellState.appName} (${Math.round(elapsed)}ms)`);
-          } catch (error) {
-            console.error(`❌ [DWELL] Failed to save app via flush ${this.dwellState.appName}:`, error.message);
-          }
-        } else if (process.env.DEBUG_APP) {
-          console.log(`[DWELL-DEDUP] Skipping flush save for ${key}: duplicate within dedup window`);
-        }
+
+      if (this.enableTransientTracking && (Date.now() - this.lastTransientFlush) > this.transientFlushInterval) {
+        await this._flushTransientApps();
       }
     } catch (e) {
       logger.warn({ category: 'APP_DETECTION', step: 'DWELL FLUSH WARN', message: e?.message || String(e) });

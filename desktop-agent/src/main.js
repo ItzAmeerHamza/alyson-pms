@@ -822,11 +822,20 @@ if (isElectronMain) {
 
     const gracefulShutdownManager = require('./modules/core/graceful-shutdown-manager');
 
-    // FIX-8: Store endTimeOverride globally so gracefulShutdownManager and
-    // trackingManager can use it for the database update.
-    if (options?.endTimeOverride) {
+    // ONLY the shown idle-alert timeout may cut time (exactly 10m via endTimeOverride).
+    // Everything else stops at wall-clock now — never silently shorten sessions.
+    if (
+      options?.authorizedIdleCut === true &&
+      options?.endTimeOverride &&
+      Number(options.timeCutSeconds) > 0
+    ) {
       global._stopEndTimeOverride = options.endTimeOverride;
+      global._stopAuthorizedIdleCut = true;
+      global._idlePromptTimeCutSeconds = Math.floor(Number(options.timeCutSeconds));
     } else {
+      global._stopAuthorizedIdleCut = false;
+      global._idlePromptTimeCutSeconds = 0;
+      global._stopEndTimeOverride = null;
       gracefulShutdownManager.captureStopMoment();
     }
 
@@ -6035,23 +6044,46 @@ if (isElectronContext && ipcMain) {
     );
   };
 
+  const getWorkDayTrackedCapSeconds = () => {
+    try {
+      const { startOfWorkDay } = require('./modules/utils/work-timezone');
+      const dayStart = startOfWorkDay().getTime();
+      if (!Number.isFinite(dayStart)) return null;
+      return Math.max(0, Math.floor((Date.now() - dayStart) / 1000)) + 120;
+    } catch {
+      return null;
+    }
+  };
+
   /**
    * Sync / network / partial remote must never reduce recorded time on-device.
    * Same work-day totals only move forward, except the authorized idle-prompt cut.
+   * Impossible totals (exceeding wall-clock since work midnight) are always clamped.
    */
   const holdTodayTrackedFloor = (payload, { isTracking } = {}) => {
     if (!payload || typeof payload !== 'object') return payload;
     const last = global._lastGoodTodayStats;
     const workDate = payload.workDate || getLocalDateKey();
+    const cap = getWorkDayTrackedCapSeconds();
     let total = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
     let closed = Math.max(
       0,
       Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
 
-    // Also never sit below an explicit stop-floor (renderer freeze / idle cut freeze).
+    if (cap != null) {
+      if (total > cap) {
+        console.warn(
+          `⚠️ [TODAY-TIME-STATS] Clamping impossible total ${total}s → ${cap}s (since work midnight)`,
+        );
+        total = cap;
+      }
+      if (closed > cap) closed = cap;
+    }
+
+    // Never sit below an explicit stop-floor — unless that floor is itself impossible today.
     const frozenFloor = getFrozenTotalFloor();
-    if (!isTracking && frozenFloor > 0) {
+    if (!isTracking && frozenFloor > 0 && (cap == null || frozenFloor <= cap)) {
       total = Math.max(total, frozenFloor);
     }
 
@@ -6066,11 +6098,16 @@ if (isElectronContext && ipcMain) {
       return next;
     }
 
-    const lastTotal = Math.max(0, Math.floor(Number(last.totalTime) || 0));
-    const lastClosed = Math.max(
+    let lastTotal = Math.max(0, Math.floor(Number(last.totalTime) || 0));
+    let lastClosed = Math.max(
       0,
       Math.floor(Number(last.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
+    // Don't reinflate from a stale impossible last-good (missed day rollover).
+    if (cap != null) {
+      if (lastTotal > cap) lastTotal = cap;
+      if (lastClosed > cap) lastClosed = cap;
+    }
     const cutPending = !!global._idlePromptTimeCutAppliedPending;
     const cutSec = Math.max(0, Math.floor(Number(global._idlePromptTimeCutSecondsForFloor) || 0));
     const inPostSyncGrace = Date.now() < (Number(global._postOfflineSyncGraceUntil) || 0);
@@ -6109,6 +6146,11 @@ if (isElectronContext && ipcMain) {
       closed = Math.max(closed, lastClosed);
     }
 
+    if (cap != null) {
+      total = Math.min(total, cap);
+      closed = Math.min(closed, cap);
+    }
+
     const next = {
       ...payload,
       totalTime: total,
@@ -6128,6 +6170,7 @@ if (isElectronContext && ipcMain) {
     global._lastTodayTotalAtStop = null;
     global._rendererFrozenTotalAtStop = null;
     global._frozenTotalDate = getLocalDateKey();
+    global._lastGoodTodayStats = null;
     return { success: true };
   });
   ipcMain.handle('set-frozen-total-at-stop', async (_event, totalSeconds) => {

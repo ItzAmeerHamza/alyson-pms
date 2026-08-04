@@ -10,6 +10,8 @@ const {
   insertAppLogsBatch,
   insertUrlLogsBatch,
   insertIdleLog,
+  closeOpenAppLogs,
+  closeOpenUrlLogs,
 } = require('../utils/backend-time-logs');
 
 class EnhancedSyncManager {
@@ -84,13 +86,19 @@ class EnhancedSyncManager {
     if (this.activitySyncInterval) {
       clearInterval(this.activitySyncInterval);
     }
+
+    let syncMs = 30000;
+    try {
+      const { IPC } = require('../utils/power-profile');
+      syncMs = IPC.activitySyncMs;
+    } catch (_) {}
     
     this.activitySyncInterval = setInterval(() => {
       this.processActivityQueue();
-    }, 10000); // Every 10 seconds
+    }, syncMs);
     
     cleanupRegistry.registerInterval(this.activitySyncInterval, 'Activity Sync');
-    console.log('🔄 [ACTIVITY-SYNC] Started (10 second intervals)');
+    console.log(`🔄 [ACTIVITY-SYNC] Started (${Math.round(syncMs / 1000)}s intervals)`);
   }
 
   stopActivitySync() {
@@ -106,7 +114,9 @@ class EnhancedSyncManager {
       if (!this.isTracking) return;
       
       // Process queued activity data
-      console.log('🔄 [ACTIVITY-SYNC] Processing activity queue...');
+      if (process.env.DEBUG_SYNC) {
+        console.log('🔄 [ACTIVITY-SYNC] Processing activity queue...');
+      }
       
       // Send activity data to renderer safely
       this.sendActivityToRendererSafe();
@@ -169,6 +179,12 @@ class EnhancedSyncManager {
     if (this.consolidatedIPCInterval) {
       clearInterval(this.consolidatedIPCInterval);
     }
+
+    let ipcMs = 15000;
+    try {
+      const { IPC } = require('../utils/power-profile');
+      ipcMs = IPC.consolidatedMs;
+    } catch (_) {}
     
     this.consolidatedIPCInterval = setInterval(() => {
       if (!this.isTracking) return;
@@ -184,10 +200,10 @@ class EnhancedSyncManager {
       } catch (error) {
         console.log('❌ [IPC] Consolidated IPC error:', error.message);
       }
-    }, 5000); // Every 5 seconds
+    }, ipcMs);
     
     cleanupRegistry.registerInterval(this.consolidatedIPCInterval, 'Consolidated IPC');
-    console.log('📡 [IPC] Consolidated IPC started (5 second intervals)');
+    console.log(`📡 [IPC] Consolidated IPC started (${Math.round(ipcMs / 1000)}s intervals)`);
   }
 
   stopConsolidatedIPC() {
@@ -417,9 +433,22 @@ class EnhancedSyncManager {
     }
 
     if (isBackendTimeLogsEnabled(this.config)) {
+      // Session model: close any open URL visit before inserting the new one
+      try {
+        const userId = batch[0]?.user_id;
+        const startedAt = batch[0]?.started_at || batch[0]?.timestamp || new Date().toISOString();
+        if (userId) {
+          await closeOpenUrlLogs({
+            user_id: userId,
+            ended_at: startedAt,
+          }, this.config);
+        }
+      } catch (closeErr) {
+        console.warn('⚠️ [URL-SYNC] close_open_url_logs failed (non-fatal):', closeErr?.message || closeErr);
+      }
       await insertUrlLogsBatch(batch, this.config);
       this.clearDbBackoff();
-      console.log(`✅ [URL-SYNC] Inserted ${batch.length} URL logs via backend RDS`);
+      console.log(`✅ [URL-SYNC] Inserted ${batch.length} URL session(s) via backend RDS`);
       return;
     }
     
@@ -851,8 +880,20 @@ class EnhancedSyncManager {
       console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
 
       if (isBackendTimeLogsEnabled(this.config)) {
+        // Session model: close previous open app focus before new session insert
+        try {
+          const first = items[0];
+          if (first?.user_id && first?.started_at) {
+            await closeOpenAppLogs({
+              user_id: first.user_id,
+              ended_at: first.started_at,
+            }, this.config);
+          }
+        } catch (closeErr) {
+          console.warn('⚠️ [SYNC] close_open_app_logs failed (non-fatal):', closeErr?.message || closeErr);
+        }
         await insertAppLogsBatch(items, this.config);
-        console.log(`✅ [SYNC] Successfully inserted ${items.length} app logs via backend RDS`);
+        console.log(`✅ [SYNC] Successfully inserted ${items.length} app session(s) via backend RDS`);
         return;
       }
       

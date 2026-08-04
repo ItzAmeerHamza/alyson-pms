@@ -13,15 +13,13 @@ function getNumberEnv(name, fallback) {
 }
 
 const DEFAULTS = {
-  // 🔧 FIX: Apps should be saved quickly (within ~5-10 seconds of use)
-  // Dwell threshold: 5 seconds - app must be active for 5s before saving
+  // Session model: confirm focus briefly, then ONE row until the app switches
   DWELL_MS: getNumberEnv('APP_DETECT_DWELL_MS', 5000),
-  // Single sample stabilization for all apps - save on first confirmed detection
   STABILIZE_BROWSER: getNumberEnv('APP_DETECT_STABILIZE_SAMPLES_BROWSER', 1),
   STABILIZE_DEFAULT: getNumberEnv('APP_DETECT_STABILIZE_SAMPLES_DEFAULT', 1),
-  // Minimum gap between saves for same app: 15 seconds
-  MIN_SAVE_GAP_MS: getNumberEnv('APP_DETECT_MIN_SAVE_GAP_MS', 15000),
-  MAX_RECORD_MS: getNumberEnv('APP_DETECT_MAX_RECORD_MS', 2 * 60 * 60 * 1000), // 2h
+  // Kept for compatibility; session mode does not re-insert on this gap
+  MIN_SAVE_GAP_MS: getNumberEnv('APP_DETECT_MIN_SAVE_GAP_MS', 15 * 60 * 1000),
+  MAX_RECORD_MS: getNumberEnv('APP_DETECT_MAX_RECORD_MS', 2 * 60 * 60 * 1000), // 2h roll
 };
 
 module.exports = {
