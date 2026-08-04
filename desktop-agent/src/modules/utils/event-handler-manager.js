@@ -28,12 +28,11 @@ class EventHandlerManager {
     // State variables
     this.systemSleepStart = null;
     
-    // Grace period timers for display-sleep and screen-lock
-    // Instead of stopping tracking immediately, we pause and wait for a grace period.
-    // If the display wakes or screen unlocks within the grace window, tracking resumes.
+    // Legacy grace timers (cleared if present). Sleep/lock no longer stop tracking —
+    // only screenshots pause so the continuous timer matches Time Doctor.
     this._displaySleepGraceTimer = null;
     this._screenLockGraceTimer = null;
-    this.GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 minutes
+    this.GRACE_PERIOD_MS = 2 * 60 * 1000; // unused for stop; kept for compatibility
     
     console.log('✅ EventHandlerManager initialized');
   }
@@ -114,21 +113,22 @@ class EventHandlerManager {
         this.global.trayManager.onSystemSleep();
       }
       
-      // CRITICAL FIX: Use global.isTracking instead of this.isTracking (stale reference)
+      // Keep tracking through sleep (Time Doctor parity). Wall-clock elapsed
+      // (Date.now() - sessionStart) still counts sleep time on wake. Stopping
+      // here created multi-hour gaps vs other timers with no idle prompt shown.
       if (this.global.isTracking) {
-        // Stop tracking immediately when laptop is closed
-        this.console.log('🛑 Laptop closed - stopping tracking immediately');
-        this.console.log(`🔍 [DEBUG] Global tracking state: ${this.global.isTracking}, timestamp: ${new Date().toISOString()}`);
-        
-        // CRITICAL FIX: Use global.stopTracking instead of this.stopTracking
-        if (typeof this.global.stopTracking === 'function') {
-          this.global.stopTracking('system_sleep', 'Laptop closed - tracking stopped automatically');
-        } else {
-          this.console.error('❌ global.stopTracking is not a function!');
+        this.console.log('💤 Laptop sleep — keeping tracking active; pausing screenshots only');
+        try {
+          const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
+          if (screenshotMgr && typeof screenshotMgr.pauseScreenshotsOnly === 'function') {
+            screenshotMgr.pauseScreenshotsOnly();
+          }
+        } catch (e) {
+          this.console.log('⚠️ [SLEEP] Failed to pause screenshots:', e?.message);
         }
       }
       
-      // Stop all monitoring during sleep
+      // Pause anti-cheat during sleep (restart on resume if still tracking)
       if (this.antiCheatDetector) {
         this.antiCheatDetector.stopMonitoring();
       }
@@ -189,10 +189,17 @@ class EventHandlerManager {
               this.global.config.user_id = savedSession.id;
             }
             if (typeof this.global.showTrayNotification === 'function') {
-              this.global.showTrayNotification(
-                `Welcome back ${savedSession.email.split('@')[0]}! Click to start tracking when ready.`,
-                'info'
-              );
+              if (this.global.isTracking) {
+                this.global.showTrayNotification(
+                  `Welcome back ${savedSession.email.split('@')[0]}! Tracking continued through sleep.`,
+                  'info'
+                );
+              } else {
+                this.global.showTrayNotification(
+                  `Welcome back ${savedSession.email.split('@')[0]}! Click to start tracking when ready.`,
+                  'info'
+                );
+              }
             }
           } else {
             this.console.warn('⚠️ No saved session - user must log in before tracking');
@@ -237,12 +244,34 @@ class EventHandlerManager {
           }
         }
 
-        // Update tray to reflect stopped state (merged from system-initialization-manager)
+        // Resume screenshots + tray clock if tracking stayed active through sleep.
+        if (this.global.isTracking) {
+          try {
+            const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
+            if (screenshotMgr && typeof screenshotMgr.resumeScreenshotsOnly === 'function') {
+              screenshotMgr.resumeScreenshotsOnly();
+            }
+          } catch (e) {
+            this.console.warn('⚠️ [RESUME] Screenshot resume failed:', e?.message);
+          }
+          try {
+            if (this.global.trayManager?.startTrayTimer) {
+              this.global.trayManager.startTrayTimer();
+            }
+          } catch (e) {
+            this.console.warn('⚠️ [RESUME] Tray timer restart failed:', e?.message);
+          }
+        }
+
         if (typeof this.global.updateTrayMenuThrottled === 'function') {
           this.global.updateTrayMenuThrottled();
         }
         
-        this.console.log('🌅 System resumed - tracking remains stopped, user must manually start');
+        this.console.log(
+          this.global.isTracking
+            ? '🌅 System resumed — tracking still active (continuous timer)'
+            : '🌅 System resumed — tracking is stopped',
+        );
       } finally {
         this._resumeInProgress = false;
       }
@@ -265,64 +294,40 @@ class EventHandlerManager {
       }
     });
 
-    // Display sleep/wake events (with grace period to avoid false stops on Windows)
+    // Display sleep/wake — pause screenshots only; never stop the timer.
     this.powerMonitor.on('display-sleep', () => {
       this.console.log('🖥️ Display sleep detected');
       global.isScreenLocked = true; // Treat display sleep same as lock for all systems
       this.console.log(`🔍 [DEBUG] Global tracking state: ${this.global.isTracking}, timestamp: ${new Date().toISOString()}`);
       
       if (this.global.isTracking) {
-        // IMMEDIATELY pause screenshots to prevent black screen captures during sleep
+        // Pause screenshots to prevent black screen captures; keep timer running.
         try {
           const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
           if (screenshotMgr && typeof screenshotMgr.pauseScreenshotsOnly === 'function') {
             screenshotMgr.pauseScreenshotsOnly();
-            this.console.log('📸 [SLEEP] Screenshots paused immediately on display sleep');
+            this.console.log('📸 [SLEEP] Screenshots paused on display sleep (tracking continues)');
           }
         } catch (e) {
           this.console.log('⚠️ [SLEEP] Failed to pause screenshots:', e?.message);
         }
-
-        // Instead of stopping immediately, start a grace period.
-        // If the display wakes within 2 minutes, tracking continues uninterrupted.
+        // Cancel any legacy grace-stop timer from older builds still in memory.
         if (this._displaySleepGraceTimer) {
-          this.console.log('⏳ Display sleep grace timer already running, skipping');
-          return;
-        }
-        
-        this.console.log(`⏳ Display sleep - starting ${this.GRACE_PERIOD_MS / 1000}s grace period before stopping tracking`);
-        
-        if (typeof this.global.showTrayNotification === 'function') {
-          this.global.showTrayNotification('Display off - tracking will stop in 2 minutes if display stays off', 'info');
-        }
-        
-        this._displaySleepGraceTimer = setTimeout(() => {
+          clearTimeout(this._displaySleepGraceTimer);
           this._displaySleepGraceTimer = null;
-          // Grace period elapsed and display is still off - stop tracking
-          if (this.global.isTracking) {
-            this.console.log('🛑 Display sleep grace period elapsed - stopping tracking');
-            if (typeof this.global.stopTracking === 'function') {
-              this.global.stopTracking('display_sleep', 'Display turned off for 2+ minutes - tracking stopped automatically');
-            }
-            if (typeof this.global.showTrayNotification === 'function') {
-              this.global.showTrayNotification('Tracking stopped - display was off for 2+ minutes', 'warning');
-            }
-          }
-        }, this.GRACE_PERIOD_MS);
+        }
       }
     });
     
     this.powerMonitor.on('display-wake', () => {
       this.console.log('🌅 Display wake detected');
-      global.isScreenLocked = false; // Display is on, clear lock flag
-      
-      // Cancel the grace period timer - display woke up in time
+      global.isScreenLocked = false;
       if (this._displaySleepGraceTimer) {
         clearTimeout(this._displaySleepGraceTimer);
         this._displaySleepGraceTimer = null;
-        this.console.log('✅ Display wake - cancelled grace period, tracking continues');
-        
-        // Resume screenshots since tracking is still active
+      }
+
+      if (this.global.isTracking) {
         try {
           const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
           if (screenshotMgr && typeof screenshotMgr.resumeScreenshotsOnly === 'function') {
@@ -332,80 +337,42 @@ class EventHandlerManager {
         } catch (e) {
           this.console.log('⚠️ [WAKE] Failed to resume screenshots:', e?.message);
         }
-        
-        if (typeof this.global.showTrayNotification === 'function') {
-          this.global.showTrayNotification('Display awake - tracking continues', 'info');
-        }
-      } else {
-        // Display woke after tracking was already stopped
-        if (typeof this.global.showTrayNotification === 'function') {
-          this.global.showTrayNotification('Display awake - click to start tracking when ready', 'info');
-        }
       }
     });
 
-    // Screen lock/unlock events (with grace period to avoid false stops)
+    // Screen lock/unlock — pause screenshots only; never stop the timer.
     this.powerMonitor.on('lock-screen', () => {
       this.console.log('🔒 Screen locked');
-      // Set global flag so URL/app/sync systems can skip work during lock
       global.isScreenLocked = true;
       this.console.log(`🔍 [DEBUG] Global tracking state: ${this.global.isTracking}, timestamp: ${new Date().toISOString()}`);
       
       if (this.global.isTracking) {
-        // IMMEDIATELY pause screenshots to prevent black screen captures during lock
         try {
-          if (this.global.enhancedScreenshotManager && typeof this.global.enhancedScreenshotManager.pauseScreenshotsOnly === 'function') {
-            this.global.enhancedScreenshotManager.pauseScreenshotsOnly();
-            this.console.log('📸 [LOCK] Screenshots paused immediately on screen lock');
-          } else if (global.enhancedScreenshotManager && typeof global.enhancedScreenshotManager.pauseScreenshotsOnly === 'function') {
-            global.enhancedScreenshotManager.pauseScreenshotsOnly();
-            this.console.log('📸 [LOCK] Screenshots paused immediately on screen lock (via global)');
+          const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
+          if (screenshotMgr && typeof screenshotMgr.pauseScreenshotsOnly === 'function') {
+            screenshotMgr.pauseScreenshotsOnly();
+            this.console.log('📸 [LOCK] Screenshots paused on screen lock (tracking continues)');
           }
         } catch (e) {
           this.console.log('⚠️ [LOCK] Failed to pause screenshots:', e?.message);
         }
-
-        // Instead of stopping immediately, start a grace period.
-        // If the screen unlocks within 2 minutes, tracking continues uninterrupted.
         if (this._screenLockGraceTimer) {
-          this.console.log('⏳ Screen lock grace timer already running, skipping');
-          return;
-        }
-        
-        this.console.log(`⏳ Screen locked - starting ${this.GRACE_PERIOD_MS / 1000}s grace period before stopping tracking`);
-        
-        if (typeof this.global.showTrayNotification === 'function') {
-          this.global.showTrayNotification('Screen locked - tracking will stop in 2 minutes if screen stays locked', 'info');
-        }
-        
-        this._screenLockGraceTimer = setTimeout(() => {
+          clearTimeout(this._screenLockGraceTimer);
           this._screenLockGraceTimer = null;
-          // Grace period elapsed and screen is still locked - stop tracking
-          if (this.global.isTracking) {
-            this.console.log('🛑 Screen lock grace period elapsed - stopping tracking');
-            if (typeof this.global.stopTracking === 'function') {
-              this.global.stopTracking('screen_lock', 'Screen locked for 2+ minutes - tracking stopped automatically');
-            }
-            if (typeof this.global.showTrayNotification === 'function') {
-              this.global.showTrayNotification('Tracking stopped - screen was locked for 2+ minutes', 'warning');
-            }
-          }
-        }, this.GRACE_PERIOD_MS);
+        }
       }
     });
     
     this.powerMonitor.on('unlock-screen', () => {
       this.console.log('🔓 Screen unlocked');
-      // Clear global lock flag so URL/app/sync systems resume
       global.isScreenLocked = false;
       
-      // Cancel the grace period timer - screen unlocked in time
       if (this._screenLockGraceTimer) {
         clearTimeout(this._screenLockGraceTimer);
         this._screenLockGraceTimer = null;
-        this.console.log('✅ Screen unlocked - cancelled grace period, tracking continues');
-        
-        // Resume screenshots since tracking is still active
+      }
+
+      if (this.global.isTracking) {
         try {
           const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
           if (screenshotMgr && typeof screenshotMgr.resumeScreenshotsOnly === 'function') {
@@ -415,13 +382,8 @@ class EventHandlerManager {
         } catch (e) {
           this.console.log('⚠️ [UNLOCK] Failed to resume screenshots:', e?.message);
         }
-        
-        if (typeof this.global.showTrayNotification === 'function') {
-          this.global.showTrayNotification('Screen unlocked - tracking continues', 'info');
-        }
       } else {
-        // Screen unlocked after tracking was already stopped
-        // Fire any deferred auto-stop notification now that the user can see it
+        // Fire any deferred auto-stop notification from older builds
         const trayManager = global.trayManager;
         if (trayManager && trayManager._pendingAutoStopReason) {
           const reason = trayManager._pendingAutoStopReason;
@@ -431,7 +393,7 @@ class EventHandlerManager {
           this.console.log(`🔔 [UNLOCK] Firing deferred auto-stop notification: ${reason}`);
           setTimeout(() => {
             trayManager.showAutoStopNotification(reason, message);
-          }, 1500); // Short delay so OS notification system is ready
+          }, 1500);
         }
       }
     });

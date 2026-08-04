@@ -653,13 +653,14 @@ class SyncManager {
         this.queue.timeLogs.splice(i, 1);
         logger.info({ category: 'SYNC', step: 'TIME LOG SYNCED' });
       } catch (error) {
-        logData.retries++;
-        logger.warn({ category: 'SYNC', step: 'TIME LOG RETRY', message: error.message, ctx: { retry: logData.retries } });
-        
-        if (logData.retries >= 5) {
-          this.queue.timeLogs.splice(i, 1);
-          logger.warn({ category: 'SYNC', step: 'TIME LOG DROPPED', message: 'Removed after 5 retries' });
-        }
+        logData.retries = (logData.retries || 0) + 1;
+        // PAYROLL CRITICAL: never drop time logs — retry forever (same as offline-time-logs.json).
+        logger.warn({
+          category: 'SYNC',
+          step: 'TIME LOG RETRY',
+          message: error.message,
+          ctx: { retry: logData.retries },
+        });
       }
     }
   }

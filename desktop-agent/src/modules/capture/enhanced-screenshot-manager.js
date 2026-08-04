@@ -89,6 +89,19 @@ class EnhancedScreenshotManager {
     return Math.max(10, seconds) * 1000;
   }
 
+  /**
+   * Seconds attributed to each low-activity screenshot for effective-time math.
+   * Matches the live capture schedule (fixed interval OR 3 shots / 10-min window).
+   */
+  getEffectiveLowActivityIntervalSeconds() {
+    if (this.usesFixedScreenshotIntervalMode()) {
+      return Math.max(10, Math.round(this.getConfiguredScreenshotIntervalMs() / 1000));
+    }
+    const windowMs = Number(this.windowDurationMs) || 10 * 60 * 1000;
+    const shots = Math.max(1, Number(this.windowShots) || 3);
+    return Math.max(60, Math.round(windowMs / shots / 1000));
+  }
+
   usesFixedScreenshotIntervalMode() {
     if (this.config?.screenshot_interval_from_database) {
       return true;

@@ -562,18 +562,32 @@ class GracefulShutdownManager {
     
     try {
       if (global.mainWindow && !global.mainWindow.isDestroyed()) {
-        const frozenTotalSeconds = Math.max(
+        const timeCutSeconds = Math.max(
+          0,
+          Math.floor(Number(global._idlePromptTimeCutSeconds) || 0),
+        );
+        let frozenTotalSeconds = Math.max(
           0,
           Math.floor(Number(global._lastTodayTotalAtStop) || 0),
         );
+        // Authorized idle-prompt cut: freeze clock at tracked − 10m (only deduction).
+        if (reason === 'idle_timeout' && timeCutSeconds > 0 && frozenTotalSeconds > 0) {
+          frozenTotalSeconds = Math.max(0, frozenTotalSeconds - timeCutSeconds);
+          // Allow get-today-time-stats to accept this one intentional drop
+          // (otherwise the sync floor would hold the pre-cut total).
+          global._idlePromptTimeCutAppliedPending = true;
+          global._idlePromptTimeCutSecondsForFloor = timeCutSeconds;
+        }
         global.mainWindow.webContents.send('tracking-stopped', {
           reason: reason || 'manual',
           message: 'Time tracking stopped',
           timestamp: global._stopEndTimeOverride || new Date().toISOString(),
           forceStop: true,
           frozenTotalSeconds,
+          timeCutSeconds,
           timeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
         });
+        global._idlePromptTimeCutSeconds = 0;
         console.log('✅ [GRACEFUL-SHUTDOWN] Renderer notified');
         return true;
       }

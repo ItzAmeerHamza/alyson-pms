@@ -3,11 +3,13 @@
 /**
  * Idle-confirmation prompt.
  *
- * Replaces the previous silent idle auto-stop. When the user has had no
- * keyboard/mouse input for a while, the main tracking window is brought to the
- * foreground and an in-app overlay is shown with a countdown and two choices:
+ * Idle-confirmation prompt.
+ * When the user has had no keyboard/mouse input for a while, the main tracking
+ * window is brought forward with a countdown and two choices:
  *   - "I'm working"                 -> keep tracking (resolves 'working')
- *   - "On break — stop Time Doctor" -> stop tracking (resolves 'break')
+ *   - "On break — stop Time Doctor" -> stop now, no 10m cut (resolves 'break')
+ *   - countdown finishes unanswered -> stop + deduct 10m (resolves 'timeout')
+ *     ONLY if this overlay was actually shown.
  *
  * This renders inside the existing tracking window (no separate window). The
  * main process owns the authoritative countdown; this manager only surfaces the

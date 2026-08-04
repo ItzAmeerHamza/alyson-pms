@@ -288,8 +288,40 @@ function mergeRemoteAndOfflineLogs(remoteLogs, offlineLogs, currentTimeLogId) {
   return [...byId.values()];
 }
 
+/**
+ * When remote fetch fails mid-session, still count the live session from local
+ * tracking-manager state so a 10–15 min outage never zeros ongoing time.
+ */
+function ensureLiveSessionRow(timeLogs, currentTimeLogId, isTracking) {
+  const list = Array.isArray(timeLogs) ? [...timeLogs] : [];
+  if (!isTracking || !currentTimeLogId) return list;
+  if (list.some((l) => String(l?.id) === String(currentTimeLogId))) return list;
+
+  try {
+    const tm = global.trackingManager;
+    const start =
+      tm?.sessionStartTime ||
+      global.sessionStartTime ||
+      tm?.currentSession?.start_time ||
+      global.currentSession?.start_time ||
+      null;
+    if (!start) return list;
+    list.push({
+      id: currentTimeLogId,
+      start_time: start instanceof Date ? start.toISOString() : String(start),
+      end_time: null,
+      status: 'active',
+      _fromLocalSession: true,
+    });
+  } catch (_) {
+    /* ignore */
+  }
+  return list;
+}
+
 function finalizeTodayAggregate(timeLogs, currentTimeLogId, isTracking, offlineCount = 0) {
-  const overlapping = logsOverlappingLocalDay(timeLogs);
+  const withLive = ensureLiveSessionRow(timeLogs, currentTimeLogId, isTracking);
+  const overlapping = logsOverlappingLocalDay(withLive);
   const agg = aggregateTimeLogRows(overlapping, currentTimeLogId, isTracking);
   return {
     ...agg,
@@ -323,9 +355,11 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
         timeLogs = await getTodayTimeLogs(userId);
       } catch (fetchErr) {
         console.warn(
-          '⚠️ [TODAY-TIME-LOG-STATS] Backend fetch failed — using offline queue:',
+          '⚠️ [TODAY-TIME-LOG-STATS] Backend fetch failed — using offline queue + local session:',
           fetchErr?.message || fetchErr,
         );
+        // Keep recording from local Start + any queued rows; sync failure must not
+        // wipe ongoing time while the employee is still tracking.
         return finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount);
       }
       const overlapping = logsOverlappingLocalDay(timeLogs);

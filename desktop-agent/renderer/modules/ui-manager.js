@@ -1283,6 +1283,24 @@ class UIManager {
           console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring wipe-to-zero response');
           return prev;
         }
+        // Live tracking: reject mid-range sync drops (network blip / partial remote).
+        if (
+          trackingLive &&
+          prev &&
+          !prev.error &&
+          prevTotal > 60 &&
+          incomingTotal + 15 < prevTotal &&
+          !result?.floorHeld
+        ) {
+          console.warn(
+            `⚠️ [TODAY-TIME] Keeping cached ${prevTotal}s; ignoring sync drop to ${incomingTotal}s while tracking`,
+          );
+          return {
+            ...prev,
+            ongoingCurrentSessionSeconds: result?.ongoingCurrentSessionSeconds ?? prev.ongoingCurrentSessionSeconds,
+            offlinePendingCount: result?.offlinePendingCount ?? prev.offlinePendingCount,
+          };
+        }
         if (result && !result.error) {
           this._todayStatsCache = result;
           this._todayStatsCacheTime = Date.now();
@@ -1510,15 +1528,21 @@ class UIManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(today);
               }
-              const base = Math.max(
-                0,
-                Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
-              );
-              window.__completedTodayBaseSeconds = base;
+              if (typeof window.applyClosedBaseFromStats === 'function') {
+                window.applyClosedBaseFromStats(
+                  today?.completedTodayBeforeCurrentSessionSeconds,
+                  { live: true },
+                );
+              } else {
+                window.__completedTodayBaseSeconds = Math.max(
+                  Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+                  Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
+                );
+              }
+              const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                // DB closed-base + live elapsed — allow decrease when DB corrects down.
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+                window.setTrackerDisplaySeconds(totalSec);
               }
             } catch {
               // Keep prior effective display; don't flash session-only time into the big clock.
@@ -1540,13 +1564,20 @@ class UIManager {
                   ? window.resolveStoppedDisplaySeconds(today.totalTime)
                   : Math.max(0, Math.floor(today.totalTime));
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
+                window.setTrackerDisplaySeconds(trackedSec);
               }
               if (typeof today.completedTodayBeforeCurrentSessionSeconds === 'number') {
-                window.__completedTodayBaseSeconds = Math.max(
-                  0,
-                  Math.floor(today.completedTodayBeforeCurrentSessionSeconds),
-                );
+                if (typeof window.applyClosedBaseFromStats === 'function') {
+                  window.applyClosedBaseFromStats(
+                    today.completedTodayBeforeCurrentSessionSeconds,
+                    { live: false },
+                  );
+                } else {
+                  window.__completedTodayBaseSeconds = Math.max(
+                    Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+                    Math.floor(today.completedTodayBeforeCurrentSessionSeconds),
+                  );
+                }
               }
             }
           } catch { /* keep default */ }
@@ -3313,18 +3344,18 @@ class UIManager {
         }
         if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
           if (trackingLive) {
-            // Live session owns the big clock; wall-clock base + elapsed.
+            // Live session owns the big clock; forward-only high-water paint.
             if (typeof window.updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
               window.updateRendererTrackingClock();
             } else {
-              window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+              window.setTrackerDisplaySeconds(totalSec);
             }
           } else {
             const trackedDisplay =
               typeof window.resolveStoppedDisplaySeconds === 'function'
                 ? window.resolveStoppedDisplaySeconds(totalSec)
                 : totalSec;
-            window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: true });
+            window.setTrackerDisplaySeconds(trackedDisplay);
             console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', trackedDisplay, 's');
           }
         }
@@ -3641,14 +3672,21 @@ class UIManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(today);
               }
-              const base = Math.max(
-                0,
-                Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
-              );
-              window.__completedTodayBaseSeconds = base;
+              if (typeof window.applyClosedBaseFromStats === 'function') {
+                window.applyClosedBaseFromStats(
+                  today?.completedTodayBeforeCurrentSessionSeconds,
+                  { live: true },
+                );
+              } else {
+                window.__completedTodayBaseSeconds = Math.max(
+                  Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+                  Math.floor(Number(today?.completedTodayBeforeCurrentSessionSeconds) || 0),
+                );
+              }
+              const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
               const totalSec = base + elapsed;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+                window.setTrackerDisplaySeconds(totalSec);
               }
             } catch (err) {
               console.warn('⚠️ [TIMER-REFRESH] Effective clock refresh failed:', err?.message || err);
@@ -3694,19 +3732,12 @@ class UIManager {
                       ? window.resolveStoppedDisplaySeconds(today.totalTime)
                       : Math.max(0, Math.floor(today.totalTime));
                   if (typeof window.setTrackerDisplaySeconds === 'function') {
-                    window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
+                    window.setTrackerDisplaySeconds(trackedSec);
                   }
-                } else if (typeof window.setTrackerDisplaySeconds === 'function') {
-                  window.setTrackerDisplaySeconds(0, { allowDecrease: true });
-                } else {
-                  timerElement.textContent = '00:00:00';
                 }
+                // Never wipe the day's clock to 0 on a missing/failed stats fetch.
               } catch {
-                if (typeof window.setTrackerDisplaySeconds === 'function') {
-                  window.setTrackerDisplaySeconds(0, { allowDecrease: true });
-                } else {
-                  timerElement.textContent = '00:00:00';
-                }
+                /* keep high-water display */
               }
             }
             
@@ -3771,17 +3802,18 @@ class UIManager {
     this.hideAllAppShellsForUpdate();
     this.showUpdateModal(updateInfo);
 
-    if (updateInfo.manualInstallRequired || updateInfo.dmgInstallReady) {
+    // Mac DMG-only path (rare) — still keep Retry Update visible.
+    if (updateInfo.dmgInstallReady && updateInfo.manualInstallRequired) {
       this.showManualInstallFallback(updateInfo);
       return;
     }
 
-    if (updateInfo.updateDownloaded) {
+    if (updateInfo.updateDownloaded || updateInfo.windowsInstallerReady) {
       this.showInstallReady();
       return;
     }
 
-    // Begin download immediately so the user only needs to tap Install & Restart.
+    // Begin download immediately so existing users update in-app (no re-download).
     setTimeout(() => {
       if (window.__updateGateActive) {
         this.handleUpdateButtonClick().catch((err) => {
@@ -3794,17 +3826,27 @@ class UIManager {
   showManualInstallFallback(updateInfo = {}) {
     const updateBtn = document.getElementById('updateNowBtn');
     const btnText = document.getElementById('updateBtnText');
+    const btnSpinner = document.getElementById('updateBtnSpinner');
     const manualBtn = document.getElementById('manualUpdateBtn');
     const progressContainer = document.getElementById('updateProgressContainer');
 
     if (progressContainer) progressContainer.classList.remove('visible');
-    if (updateBtn) updateBtn.style.display = 'none';
-    if (btnText) btnText.textContent = updateInfo.dmgInstallReady ? 'Download Update' : 'Install Manually';
+    // Keep Retry Update as the primary action — never hide it behind manual-only.
+    if (updateBtn) {
+      updateBtn.style.display = 'flex';
+      updateBtn.disabled = false;
+    }
+    if (btnSpinner) btnSpinner.style.display = 'none';
+    if (btnText) {
+      btnText.textContent = updateInfo.dmgInstallReady ? 'Retry Update' : 'Retry Update';
+    }
     if (manualBtn) {
       manualBtn.style.display = 'flex';
       const manualLabel = manualBtn.querySelector('span');
       if (manualLabel) {
-        manualLabel.textContent = updateInfo.dmgInstallReady ? 'Download Installer' : 'Download Installer Manually';
+        manualLabel.textContent = updateInfo.dmgInstallReady
+          ? 'Download Installer'
+          : 'Download Installer Manually';
       }
       if (!manualBtn._manualHandlerAttached) {
         manualBtn._manualHandlerAttached = true;
@@ -3813,15 +3855,15 @@ class UIManager {
     }
 
     const rawVersion = updateInfo.newVersion || updateInfo.version || '';
-    const versionPrefix = rawVersion ? `Version ${rawVersion} is ready. ` : 'The new version is ready. ';
+    const versionPrefix = rawVersion ? `Version ${rawVersion} is ready. ` : '';
     let message = updateInfo.message;
     if (!message) {
       if (updateInfo.dmgInstallReady) {
-        message = `${versionPrefix}Click Download Installer, open the DMG, drag Alyson PM to Applications to replace the old copy, then reopen the app.`;
-      } else if (updateInfo.windowsInstaller) {
-        message = `${versionPrefix}Click Download Installer Manually, run the Setup file, then reopen Alyson PM. If Windows shows a SmartScreen warning, choose More info → Run anyway.`;
+        message = `${versionPrefix}Click Retry Update to install automatically. If that fails, use Download Installer and drag Alyson PM to Applications.`;
+      } else if (updateInfo.windowsInstaller || updateInfo.showManualDownloadOption || updateInfo.fallbackToWindowsInstaller) {
+        message = `${versionPrefix}Click Retry Update — Alyson PM will download and install automatically. Use Download Installer Manually only if Retry keeps failing.`;
       } else {
-        message = 'Automatic install could not complete. Download the installer, run it, then reopen the app.';
+        message = `${versionPrefix}Click Retry Update to continue the automatic install.`;
       }
     }
     this.showUpdateError(message);
@@ -3959,15 +4001,23 @@ class UIManager {
         return;
       }
 
-      // Windows: browser fallback after Node download also failed
-      if (result.fallbackToWindowsInstaller || (result.manualInstallRequired && process.platform !== 'darwin' && !result.dmgInstallReady)) {
+      // Windows: download hiccup — keep Retry Update primary (not manual-only trap).
+      if (
+        result.fallbackToWindowsInstaller ||
+        result.showManualDownloadOption ||
+        (result.manualInstallRequired && process.platform !== 'darwin' && !result.dmgInstallReady)
+      ) {
         this.showManualInstallFallback({
           dmgInstallReady: false,
           windowsInstaller: true,
+          showManualDownloadOption: true,
           newVersion: result.version,
           manualDownloadUrl: result.manualDownloadUrl,
           message: result.message,
         });
+        if (updateBtn) updateBtn.disabled = false;
+        if (btnText) btnText.textContent = 'Retry Update';
+        if (btnSpinner) btnSpinner.style.display = 'none';
         return;
       }
 
@@ -4044,7 +4094,7 @@ class UIManager {
     const progressBar = document.getElementById('updateProgressBar');
     
     if (progressBar) progressBar.style.width = '100%';
-    if (progressText) progressText.textContent = 'Download complete!';
+    if (progressText) progressText.textContent = 'Download complete — installing…';
     if (btnSpinner) btnSpinner.style.display = 'none';
     if (btnText) btnText.textContent = 'Install & Restart';
     if (updateBtn) {
@@ -4052,6 +4102,22 @@ class UIManager {
       
       // Replace click handler for install
       updateBtn.onclick = () => this.handleInstallButtonClick();
+    }
+
+    // Auto-install shortly after download so users aren't stuck on a manual step
+    // (especially Windows silent NSIS — no wizard, no "Download Installer Manually").
+    if (!this._autoInstallScheduled) {
+      this._autoInstallScheduled = true;
+      setTimeout(() => {
+        if (window.__updateGateActive || document.getElementById('updateModal')?.classList.contains('visible')) {
+          this.handleInstallButtonClick().catch((err) => {
+            console.warn('⚠️ [UI-MANAGER] Auto-install failed:', err?.message || err);
+            this._autoInstallScheduled = false;
+          });
+        } else {
+          this._autoInstallScheduled = false;
+        }
+      }, 800);
     }
   }
 
@@ -4422,7 +4488,8 @@ class UIManager {
    */
   async loadMonthlyReport(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
-    const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+    // Short TTL: effective/non-effective must stay aligned with Today's cards.
+    const CACHE_TTL_MS = 60 * 1000;
     const now = Date.now();
 
     // Check cache — if valid, re-render from cached data instead of fetching.
@@ -4570,9 +4637,10 @@ class UIManager {
 
   /** Render the summary stat cards (Total / Non-effective / Effective) */
   _renderMonthlyReportSummary(reportData) {
-    const totalSeconds = reportData?.totalSeconds || 0;
-    const nonEffectiveSeconds = reportData?.nonEffectiveSeconds || 0;
-    const effectiveSeconds = reportData?.effectiveSeconds ?? Math.max(0, totalSeconds - nonEffectiveSeconds);
+    const aligned = this._alignMonthlySummaryWithLiveToday(reportData);
+    const totalSeconds = aligned.totalSeconds;
+    const nonEffectiveSeconds = aligned.nonEffectiveSeconds;
+    const effectiveSeconds = aligned.effectiveSeconds;
     const activeDays = reportData?.activeDays || 1;
 
     const totalHoursEl = document.getElementById('mrTotalHours');
@@ -4588,6 +4656,83 @@ class UIManager {
     if (avgPerDayEl) {
       const avgSecondsPerDay = activeDays > 0 ? Math.floor(effectiveSeconds / activeDays) : 0;
       avgPerDayEl.textContent = this.formatReportDuration(avgSecondsPerDay);
+    }
+
+    // Tracked floor only — never overwrite Today's effective split from Month
+    // (Month historically used a 3× interval and would corrupt the cards).
+    this._raiseTodayTrackedFloorFromMonthly(reportData);
+  }
+
+  /**
+   * Rebuild Month summary so today's slice matches the live Today cards.
+   * Guarantees: effective + non-effective === total (for the displayed numbers).
+   */
+  _alignMonthlySummaryWithLiveToday(reportData) {
+    let totalSeconds = Math.max(0, Math.floor(Number(reportData?.totalSeconds) || 0));
+    let nonEffectiveSeconds = Math.max(0, Math.floor(Number(reportData?.nonEffectiveSeconds) || 0));
+
+    try {
+      const todayStr = typeof this._localDateStr === 'function' ? this._localDateStr() : null;
+      const todayRow =
+        todayStr && Array.isArray(reportData?.dailyBreakdown)
+          ? reportData.dailyBreakdown.find((d) => d && d.date === todayStr)
+          : null;
+
+      if (todayRow) {
+        const rowTotal = Math.max(0, Math.floor(Number(todayRow.totalSeconds) || 0));
+        const rowNonEff = Math.max(0, Math.floor(Number(todayRow.nonEffectiveSeconds) || 0));
+        const liveTracked = Math.max(
+          0,
+          Math.floor(Number(window.__todayTrackedSeconds) || 0),
+          Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+        );
+        const liveNonEff = Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0));
+        const liveReady = !!window.__effectiveStatsReady;
+
+        const todayTracked = Math.max(liveTracked, rowTotal);
+        const todayNonEff = liveReady
+          ? Math.min(todayTracked, liveNonEff)
+          : Math.min(todayTracked, rowNonEff);
+
+        const monthWithoutTodayTotal = Math.max(0, totalSeconds - rowTotal);
+        const monthWithoutTodayNonEff = Math.max(0, nonEffectiveSeconds - rowNonEff);
+        totalSeconds = monthWithoutTodayTotal + todayTracked;
+        nonEffectiveSeconds = Math.min(
+          totalSeconds,
+          monthWithoutTodayNonEff + todayNonEff,
+        );
+
+        // Keep cached today row in sync so chart/hover stays consistent.
+        todayRow.totalSeconds = todayTracked;
+        todayRow.nonEffectiveSeconds = todayNonEff;
+        todayRow.effectiveSeconds = Math.max(0, todayTracked - todayNonEff);
+      }
+    } catch (_) {
+      /* keep report totals */
+    }
+
+    nonEffectiveSeconds = Math.min(totalSeconds, nonEffectiveSeconds);
+    const effectiveSeconds = Math.max(0, totalSeconds - nonEffectiveSeconds);
+    return { totalSeconds, nonEffectiveSeconds, effectiveSeconds };
+  }
+
+  /**
+   * Month/DB may raise Today's tracked floor; never lower the clock or overwrite
+   * Today's effective / non-effective split.
+   */
+  _raiseTodayTrackedFloorFromMonthly(reportData) {
+    try {
+      const todayStr = typeof this._localDateStr === 'function' ? this._localDateStr() : null;
+      if (!todayStr || !Array.isArray(reportData?.dailyBreakdown)) return;
+      const todayRow = reportData.dailyBreakdown.find((d) => d && d.date === todayStr);
+      if (!todayRow || typeof todayRow.totalSeconds !== 'number') return;
+
+      const rowTotal = Math.max(0, Math.floor(Number(todayRow.totalSeconds) || 0));
+      if (rowTotal > 0 && typeof window.setTrackerDisplaySeconds === 'function') {
+        window.setTrackerDisplaySeconds(rowTotal);
+      }
+    } catch (err) {
+      console.warn('⚠️ [MONTHLY-REPORT] Could not raise today tracked floor:', err?.message || err);
     }
   }
 

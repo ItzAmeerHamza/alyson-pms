@@ -713,9 +713,9 @@ class TrayManager {
       const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
       const prevBase = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
       const nextBase = Math.max(0, Math.floor(Number(agg.completedClosedSeconds) || 0));
-      // Exact closed base for 1:1 wall-clock ticks. Keep prev only on wipe-to-zero.
-      if (!isTracking || nextBase > 0 || prevBase <= 0) {
-        this._cumulativeBaseSeconds = nextBase;
+      // Forward-only base — never rewind tray cumulative on the same work day.
+      if (nextBase > 0 || prevBase <= 0) {
+        this._cumulativeBaseSeconds = Math.max(prevBase, nextBase);
       }
       console.log('⏱️ [TRAY] Cumulative base synced from DB+offline:', this._cumulativeBaseSeconds, 's');
     } catch (e) {
@@ -771,11 +771,18 @@ class TrayManager {
     // Force re-sync after a short delay so macOS has fully restored the menu bar
     setTimeout(() => {
       try {
-        if (!globalTracking && this.tray && !this.tray.isDestroyed()) {
+        if (!this.tray || this.tray.isDestroyed()) return;
+        if (!globalTracking) {
           console.log('⏱️ [TRAY] Force-clearing stale timer on resume (global.isTracking=false)');
           this.isTracking = false;
           this.stopTrayTimer();
           this._trackingStartTime = null;
+          this.updateMenu();
+        } else {
+          // Tracking stayed active through sleep — restart interval ticks (they freeze in suspend).
+          console.log('⏱️ [TRAY] Tracking still active after sleep — restarting tray timer');
+          this.isTracking = true;
+          this.startTrayTimer();
           this.updateMenu();
         }
       } catch (e) {

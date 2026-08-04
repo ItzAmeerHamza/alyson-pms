@@ -6034,6 +6034,96 @@ if (isElectronContext && ipcMain) {
       Math.floor(Number(global._rendererFrozenTotalAtStop) || 0),
     );
   };
+
+  /**
+   * Sync / network / partial remote must never reduce recorded time on-device.
+   * Same work-day totals only move forward, except the authorized idle-prompt cut.
+   */
+  const holdTodayTrackedFloor = (payload, { isTracking } = {}) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    const last = global._lastGoodTodayStats;
+    const workDate = payload.workDate || getLocalDateKey();
+    let total = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
+    let closed = Math.max(
+      0,
+      Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
+    );
+
+    // Also never sit below an explicit stop-floor (renderer freeze / idle cut freeze).
+    const frozenFloor = getFrozenTotalFloor();
+    if (!isTracking && frozenFloor > 0) {
+      total = Math.max(total, frozenFloor);
+    }
+
+    if (!last || last.workDate !== workDate) {
+      const next = { ...payload, totalTime: total, completedTodayBeforeCurrentSessionSeconds: closed, workDate };
+      if (typeof next.nonEffectiveSeconds === 'number') {
+        next.nonEffectiveSeconds = Math.min(total, Math.max(0, Math.floor(next.nonEffectiveSeconds)));
+        next.effectiveSeconds = Math.max(0, total - next.nonEffectiveSeconds);
+      } else if (next.effectiveStatsComputed !== true) {
+        next.effectiveSeconds = total;
+      }
+      return next;
+    }
+
+    const lastTotal = Math.max(0, Math.floor(Number(last.totalTime) || 0));
+    const lastClosed = Math.max(
+      0,
+      Math.floor(Number(last.completedTodayBeforeCurrentSessionSeconds) || 0),
+    );
+    const cutPending = !!global._idlePromptTimeCutAppliedPending;
+    const cutSec = Math.max(0, Math.floor(Number(global._idlePromptTimeCutSecondsForFloor) || 0));
+    const inPostSyncGrace = Date.now() < (Number(global._postOfflineSyncGraceUntil) || 0);
+    let floorHeld = false;
+
+    if (cutPending && cutSec > 0 && !isTracking) {
+      const maxDrop = cutSec + 30;
+      if (total > 0 && total < lastTotal && (lastTotal - total) <= maxDrop) {
+        global._idlePromptTimeCutAppliedPending = false;
+        global._idlePromptTimeCutSecondsForFloor = 0;
+      } else if (total <= 0) {
+        total = Math.max(0, lastTotal - cutSec);
+        closed = Math.max(closed, Math.max(0, lastClosed - cutSec));
+        floorHeld = true;
+      } else if (total < lastTotal) {
+        // Drop larger than authorized cut → treat as sync failure.
+        console.warn(
+          `⚠️ [TODAY-TIME-STATS] Holding floor ${lastTotal}s (computed ${total}s) — sync must not reduce recorded time`,
+        );
+        total = lastTotal;
+        closed = Math.max(closed, lastClosed);
+        floorHeld = true;
+      } else {
+        total = Math.max(total, lastTotal);
+        closed = Math.max(closed, lastClosed);
+      }
+    } else if (total < lastTotal) {
+      console.warn(
+        `⚠️ [TODAY-TIME-STATS] Holding floor ${lastTotal}s (computed ${total}s)` +
+          (isTracking || inPostSyncGrace ? ' — offline/sync must not reduce recorded time' : ''),
+      );
+      total = lastTotal;
+      closed = Math.max(closed, lastClosed);
+      floorHeld = true;
+    } else {
+      closed = Math.max(closed, lastClosed);
+    }
+
+    const next = {
+      ...payload,
+      totalTime: total,
+      completedTodayBeforeCurrentSessionSeconds: closed,
+      workDate,
+      floorHeld: floorHeld || !!payload.floorHeld,
+    };
+    if (typeof next.nonEffectiveSeconds === 'number') {
+      next.nonEffectiveSeconds = Math.min(total, Math.max(0, Math.floor(next.nonEffectiveSeconds)));
+      next.effectiveSeconds = Math.max(0, total - next.nonEffectiveSeconds);
+    } else if (next.effectiveStatsComputed !== true) {
+      next.effectiveSeconds = total;
+    }
+    return next;
+  };
   ipcMain.handle('clear-frozen-total-at-stop', async () => {
     global._lastTodayTotalAtStop = null;
     global._rendererFrozenTotalAtStop = null;
@@ -6095,14 +6185,17 @@ if (isElectronContext && ipcMain) {
             try {
               if (global.trayManager && isTracking) {
                 const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
-                // Exact closed base — only skip wipe-to-zero so tray does not jump.
+                // Forward-only closed base — never rewind tray cumulative mid-day.
                 if (completedClosedSeconds > 0 || prevBase <= 0) {
-                  global.trayManager._cumulativeBaseSeconds = completedClosedSeconds;
+                  global.trayManager._cumulativeBaseSeconds = Math.max(
+                    prevBase,
+                    completedClosedSeconds,
+                  );
                 }
               }
             } catch (_) { /* ignore */ }
             const today = new Date();
-            const payload = {
+            const payload = holdTodayTrackedFloor({
               totalTime,
               completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
               ongoingCurrentSessionSeconds: offlineAgg.ongoingCurrentSessionSeconds,
@@ -6117,7 +6210,7 @@ if (isElectronContext && ipcMain) {
               workDate: workDateKey(today),
               date: workDateKey(today),
               offlineOnly: true,
-            };
+            }, { isTracking });
             global._lastGoodTodayStats = payload;
             return payload;
           }
@@ -6150,18 +6243,21 @@ if (isElectronContext && ipcMain) {
         if (global.trayManager && isTracking) {
           const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
           if (completedClosedSeconds > 0 || prevBase <= 0) {
-            global.trayManager._cumulativeBaseSeconds = completedClosedSeconds;
+            global.trayManager._cumulativeBaseSeconds = Math.max(
+              prevBase,
+              completedClosedSeconds,
+            );
           }
         }
       } catch (_) { /* ignore */ }
 
-      // Only ignore a collapse to ~0 when we previously had real time (failed fetch).
-      // Do NOT block legitimate DB corrections that are lower than a stale UI total.
+      // Sync / network / empty DB must never erase known local time.
       const lastGood = global._lastGoodTodayStats;
+      const todayKey = workDateKey(today);
       if (
         lastGood &&
         typeof lastGood.totalTime === 'number' &&
-        lastGood.workDate === workDateKey(today) &&
+        lastGood.workDate === todayKey &&
         lastGood.totalTime > 60 &&
         totalTime < 30 &&
         (agg.timeLogsCount || 0) === 0
@@ -6169,7 +6265,7 @@ if (isElectronContext && ipcMain) {
         console.warn(
           `⚠️ [TODAY-TIME-STATS] Ignoring empty total ${totalTime}s (last good ${lastGood.totalTime}s)`,
         );
-        return lastGood;
+        return { ...lastGood, stale: true, floorHeld: true };
       }
 
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: totalTime, completed_closed: completedClosedSeconds } }); } catch { }
@@ -6196,7 +6292,7 @@ if (isElectronContext && ipcMain) {
         console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
       }
 
-      const payload = {
+      let payload = {
         totalTime,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
@@ -6208,9 +6304,13 @@ if (isElectronContext && ipcMain) {
         lowActivitySeconds,
         effectiveStatsComputed,
         userId,
-        workDate: workDateKey(today),
-        date: workDateKey(today),
+        workDate: todayKey,
+        date: todayKey,
       };
+
+      // Monotonic same-day floor: partial sync after offline must not lower the clock.
+      // Only the authorized idle-prompt cut may drop totals (once).
+      payload = holdTodayTrackedFloor(payload, { isTracking });
       global._lastGoodTodayStats = payload;
       return payload;
     } catch (error) {

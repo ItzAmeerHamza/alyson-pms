@@ -83,14 +83,16 @@ class EnhancedIdleMonitor {
     
     this.AUTO_STOP_THRESHOLD = idleThresholdMinutes * 60;
 
-    // Idle-confirmation prompt (replaces the silent idle auto-stop).
+    // Idle-confirmation prompt.
     // Policy (product):
     //   1) OS idle for 10 straight minutes → show "still working?" with a 1-min timer
-    //   2) If that 1-min timer completes with no response → cut exactly 10 minutes
-    //      from the session end, stop tracking; user must press Start again
-    //   3) Never silently subtract idle time without having shown that prompt
-    //   4) "I'm working" → keep tracking (no cut); "On break" → stop (no 10m cut;
-    //      they chose to stop during the visible prompt)
+    //   2) If that timer finishes with NO click on "I'm working" → stop and deduct
+    //      exactly 10 minutes from tracked time (ONLY authorized deduction)
+    //   3) Non-effective (idle/low activity) is DISPLAY ONLY — never reduces the
+    //      main tracked clock except via (2)
+    //   4) "I'm working" → keep tracking (no cut); "On break" → stop now (no 10m cut)
+    //   5) Never cut/stop if the prompt UI was not actually shown
+    //   6) Sleep / screen lock must NOT stop tracking (Windows/macOS) — continuous clock
     this._idlePromptActive = false;
     this._idlePromptShown = false; // true only after UI successfully displayed
     this._idlePromptTimeout = null;
@@ -471,7 +473,7 @@ class EnhancedIdleMonitor {
       this._idlePromptTimeout = null;
       if (this._idlePromptActive) {
         console.log(
-          '⏱️ [IDLE-PROMPT] 1-min timer completed with no response — cutting 10m and stopping (assumed away)',
+          '⏱️ [IDLE-PROMPT] 1-min timer completed with no "I\'m working" — applying authorized 10m cut + stop',
         );
         this._resolveIdlePrompt('timeout');
       }
@@ -492,31 +494,32 @@ class EnhancedIdleMonitor {
     } catch (_) {}
 
     if (choice === 'working') {
-      console.log('✅ [IDLE-PROMPT] User is working — continuing tracking, idle time counted as worked');
+      console.log('✅ [IDLE-PROMPT] User is working — continuing tracking (no cut)');
       this._idlePromptIdleStart = null;
       this._discardCurrentIdleAndResume();
       return;
     }
 
     if (choice === 'break') {
-      // User saw the prompt and chose to stop — end at now (no silent 10m cut).
+      // User saw the prompt and chose to stop — end at now (no 10m cut).
       console.log('🛑 [IDLE-PROMPT] User on break — stopping tracking at now (no 10m cut)');
       this._idlePromptIdleStart = null;
       global.stopTracking?.('on_break', null, {});
       return;
     }
 
-    // choice === 'timeout': 1-min countdown finished with no response
+    // choice === 'timeout': ONLY authorized tracked-time deduction — and only if
+    // the employee actually saw the alert and did not click "I'm working".
     if (!promptWasShown) {
       console.warn(
-        '⚠️ [IDLE-PROMPT] Timeout without a shown prompt — stopping at now without 10m cut',
+        '⚠️ [IDLE-PROMPT] Timeout without a shown prompt — continuing tracking (no cut, no stop)',
       );
       this._idlePromptIdleStart = null;
-      global.stopTracking?.('idle_timeout', null, {});
+      this._discardCurrentIdleAndResume();
       return;
     }
 
-    console.log('🛑 [IDLE-PROMPT] No response after 1-min timer — cutting 10m and stopping (idle_timeout)');
+    console.log('🛑 [IDLE-PROMPT] No "I\'m working" after shown alert — cutting 10m and stopping');
     this._stopForIdle('idle_timeout', { allowCut: true });
   }
 
@@ -581,10 +584,13 @@ class EnhancedIdleMonitor {
     }
 
     const endTimeOverride = new Date(endMs).toISOString();
+    const timeCutSeconds = Math.round(cutMs / 1000);
     console.log(
       `⏱️ [IDLE-PROMPT] Cutting exactly ${Math.round(cutMs / 60000)}m from session end → ${endTimeOverride} (${reason})`,
     );
-    global.stopTracking?.(reason, null, { endTimeOverride });
+    // Renderer may lower the forward-only high-water mark by this amount only.
+    global._idlePromptTimeCutSeconds = timeCutSeconds;
+    global.stopTracking?.(reason, null, { endTimeOverride, timeCutSeconds });
   }
 
   /**

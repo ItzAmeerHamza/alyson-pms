@@ -2393,12 +2393,13 @@ try {
         console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
       }
 
-      // After any successful sync, refresh UI totals from portal so the clock
-      // matches web once offline hours land remotely.
+      // After any successful sync, refresh UI totals — but NEVER clear last-good.
+      // Partial remote reads right after flush used to wipe the floor and drop
+      // the local clock (sync must never reduce recorded time on-device).
       if (hadItems && syncedCount > 0) {
         try {
           global._todayStatsInFlight = null;
-          global._lastGoodTodayStats = null;
+          global._postOfflineSyncGraceUntil = Date.now() + 90 * 1000;
         } catch (_) { /* ignore */ }
         try {
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {

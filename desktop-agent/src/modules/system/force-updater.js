@@ -251,6 +251,8 @@ class ForceUpdater {
 
   /**
    * Detect a prior failed install (downloaded update but app version unchanged).
+   * Never sticky-block auto-update after one failure — existing users must be
+   * able to retry in-app (GitHub NSIS / Mac ZIP). Manual download is secondary.
    */
   recoverFromInstallLoop() {
     const saved = this.loadUpdateState();
@@ -264,13 +266,16 @@ class ForceUpdater {
     this.pendingVersion = pending;
     this.isUpdateAvailable = true;
     this.isUpdateRequired = true;
-    this.isUpdateDownloaded = !!saved.isUpdateDownloaded;
+    // Clear sticky manual from older builds that set it after a single failure.
+    this.manualInstallRequired = false;
 
     if (this.installAttempts >= 1) {
-      console.log(`⚠️ [FORCE-UPDATER] Install loop detected (${this.installAttempts} attempts, still on ${current})`);
-      this.manualInstallRequired = true;
+      console.log(
+        `⚠️ [FORCE-UPDATER] Prior install did not apply (attempt ${this.installAttempts}, still on ${current}) — will auto-retry in-app`,
+      );
       this.clearPendingUpdateCache();
       this.isUpdateDownloaded = false;
+      this.windowsInstallerPath = null;
       this.saveUpdateState();
     }
   }
@@ -803,17 +808,15 @@ class ForceUpdater {
       };
     }
 
-    if ((this.manualInstallRequired || this.shouldUseMacDmgInstall()) && this.pendingVersion) {
-      console.log('📦 [FORCE-UPDATER] DMG/manual install required for:', this.pendingVersion);
-      return {
-        updateAvailable: true,
-        updateDownloaded: false,
-        manualInstallRequired: true,
-        dmgInstallReady: this.shouldUseMacDmgInstall(),
-        manualDownloadUrl: this.getManualDownloadUrl(this.pendingVersion),
-        currentVersion: this.currentVersion,
-        newVersion: this.pendingVersion,
-      };
+    // Never short-circuit on a sticky manual flag — that trapped Windows users
+    // on "Download Installer Manually" forever. Always re-query and auto-download.
+    if (this.manualInstallRequired && this.pendingVersion) {
+      console.log(
+        '📦 [FORCE-UPDATER] Clearing sticky manualInstallRequired — retrying auto update for',
+        this.pendingVersion,
+      );
+      this.manualInstallRequired = false;
+      this.saveUpdateState();
     }
 
     // Do NOT short-circuit on a remembered pendingVersion from disk. That left
@@ -1081,26 +1084,29 @@ class ForceUpdater {
   }
 
   /**
-   * Last-resort Windows path when in-app download cannot complete.
-   * Do NOT auto-open the browser — that made every slow-network failure look like
-   * "auto update never works". Offer Retry + an optional manual URL instead.
+   * Soft fallback when in-app download cannot complete yet.
+   * Keep Retry Update as the primary action — do NOT sticky-lock users into
+   * manual-only mode (that produced the permanent "Automatic install could not
+   * complete" / Download Installer Manually trap).
    */
   _windowsManualInstallFallback(reason) {
     const url = this.getManualDownloadUrl(this.pendingVersion);
-    this.manualInstallRequired = true;
+    // Offer manual URL but keep auto-retry enabled on the next Update Now click.
+    this.manualInstallRequired = false;
     this.isUpdateDownloaded = false;
     this.saveUpdateState();
-    console.log(`🔧 [FORCE-UPDATER] Windows manual fallback ready (browser NOT opened): ${url} (${reason || 'unknown'})`);
+    console.log(`🔧 [FORCE-UPDATER] Windows download soft-fallback (auto-retry kept): ${url} (${reason || 'unknown'})`);
     const friendly = this.isTransientNetworkUpdateError(reason)
-      ? 'Could not reach the update server from the app. Click Retry Update. If it keeps failing, use Download Installer Manually.'
-      : 'Automatic download failed. Click Retry Update. If it keeps failing, use Download Installer Manually.';
+      ? 'Could not reach the update server. Click Retry Update — the app will download and install automatically. Manual download is only if Retry keeps failing.'
+      : 'Download interrupted. Click Retry Update — Alyson PM will download and install automatically. Use Download Installer only if Retry keeps failing.';
     return {
       success: false,
       error: reason || 'download_failed',
       fallbackToWindowsInstaller: true,
-      manualInstallRequired: true,
+      // Soft flag for UI: show Retry + optional manual, not manual-only.
+      manualInstallRequired: false,
+      showManualDownloadOption: true,
       manualDownloadUrl: url,
-      // UI can open browser only when the user clicks the manual button.
       openBrowser: false,
       version: this.pendingVersion,
       message: friendly,
@@ -1391,6 +1397,7 @@ class ForceUpdater {
 
   /**
    * Launch a previously downloaded Windows Setup.exe and quit so NSIS can replace files.
+   * Silent /S — users should not need to run the installer manually.
    */
   launchWindowsInstaller(installerPath) {
     const { spawn } = require('child_process');
@@ -1399,13 +1406,17 @@ class ForceUpdater {
       return { success: false, error: 'Windows installer file not found' };
     }
 
-    console.log(`🚀 [FORCE-UPDATER] Launching Windows installer: ${exePath}`);
+    console.log(`🚀 [FORCE-UPDATER] Launching Windows silent installer: ${exePath}`);
     global.isInstallingUpdate = true;
     this.recordInstallAttempt();
+    // Clear sticky manual so a relaunch that somehow stays on the old build still auto-retries.
+    this.manualInstallRequired = false;
+    this.saveUpdateState();
 
     try {
       // Detached so NSIS keeps running after we exit.
-      // /S = silent oneClick NSIS reinstall (no wizard). UAC may still prompt.
+      // /S = silent oneClick NSIS reinstall (no wizard). UAC may still prompt once.
+      // installer.nsh kills "Alyson PM.exe" so file locks don't block the replace.
       const child = spawn(exePath, ['/S'], {
         detached: true,
         stdio: 'ignore',
@@ -1415,7 +1426,6 @@ class ForceUpdater {
     } catch (err) {
       global.isInstallingUpdate = false;
       console.error('❌ [FORCE-UPDATER] Failed to spawn Windows installer:', err.message);
-      // Last resort: open in Explorer / default handler
       try {
         if (shell?.openPath) {
           shell.openPath(exePath);
@@ -1427,6 +1437,7 @@ class ForceUpdater {
       }
     }
 
+    // Quit promptly so NSIS customInit can replace files (app must release locks).
     setTimeout(() => {
       try {
         if (app) {
@@ -1435,13 +1446,13 @@ class ForceUpdater {
       } catch (_) {
         process.exit(0);
       }
-    }, 800);
+    }, 1200);
 
     return {
       success: true,
       installing: true,
       via: 'windows-setup-exe',
-      message: 'Installer started. Follow the prompts, then reopen Alyson PM.',
+      message: 'Updating Alyson PM… The app will close and reopen on the new version.',
     };
   }
 
@@ -1821,18 +1832,19 @@ open "$TARGET"
       } catch (quitErr) {
         console.error('❌ [FORCE-UPDATER] quitAndInstall() error:', quitErr.message);
         global.isInstallingUpdate = false;
-        if (this.installAttempts >= 1) {
-          this.manualInstallRequired = true;
-          this.clearPendingUpdateCache();
-          this.isUpdateDownloaded = false;
-          this.saveUpdateState();
-          this.sendToRenderer('manual-update-required', {
-            version: this.pendingVersion,
-            currentVersion: this.currentVersion,
-            manualDownloadUrl: this.getManualDownloadUrl(),
-            error: quitErr.message,
-          });
-        }
+        // Keep auto-retry available — do not sticky-lock into manual-only.
+        this.manualInstallRequired = false;
+        this.clearPendingUpdateCache();
+        this.isUpdateDownloaded = false;
+        this.saveUpdateState();
+        this.sendToRenderer('update-error', {
+          version: this.pendingVersion,
+          currentVersion: this.currentVersion,
+          manualDownloadUrl: this.getManualDownloadUrl(),
+          showManualDownloadOption: true,
+          error: quitErr.message,
+          message: 'Install could not finish. Click Retry Update to try again automatically.',
+        });
         if (app) {
           app.relaunch();
           app.exit(0);

@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.220",
+  "version": "1.0.221",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",
@@ -125,6 +125,8 @@
         }
       ],
       "extendInfo": {
+        "CFBundleIdentifier": "com.alyson.work-time-agent",
+        "CFBundleName": "Alyson PM",
         "NSCameraUsageDescription": "Alyson PM needs camera access for screenshot monitoring",
         "NSMicrophoneUsageDescription": "Alyson PM needs microphone access for activity detection",
         "NSScreenCaptureDescription": "Alyson PM needs screen recording permission for productivity monitoring",
@@ -151,7 +153,8 @@
       "runAfterFinish": true,
       "allowElevation": true,
       "perMachine": false,
-      "include": "installer.nsh"
+      "include": "installer.nsh",
+      "artifactName": "Alyson.PM.Setup.${version}.${ext}"
     },
     "linux": {
       "target": [

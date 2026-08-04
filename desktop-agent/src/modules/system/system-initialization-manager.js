@@ -78,27 +78,14 @@ class SystemInitializationManager {
    * Setup screen lock/unlock event handlers
    */
   setupScreenLockHandlers() {
+    // Defensive: EventHandlerManager owns lock/unlock. Never stop the timer here —
+    // that created silent multi-hour gaps vs Time Doctor with no idle prompt shown.
     this.powerMonitor.on('lock-screen', () => {
-      console.log('🔒 Screen locked');
-      // Treat screen lock the same as laptop closure - stop tracking completely
-      // Use global.isTracking to avoid stale local state
-      if (this.global.isTracking) {
-        console.log('🛑 Screen locked - stopping tracking (same as laptop closure)');
-        if (typeof this.global.stopTracking === 'function') {
-          this.global.stopTracking('screen_lock', 'Screen locked - tracking stopped automatically');
-        } else if (this.stopTracking) {
-          this.stopTracking('screen_lock', 'Screen locked - tracking stopped automatically');
-        }
-      }
+      console.log('🔒 Screen locked (sys-init) — tracking continues; screenshots handled by EventHandlerManager');
     });
 
     this.powerMonitor.on('unlock-screen', () => {
-      console.log('🔓 Screen unlocked');
-      // Don't auto-resume tracking on unlock - user must manually start
-      console.log('⏸️ Screen unlocked - tracking remains stopped (manual restart required)');
-      if (this.showTrayNotification) {
-        this.showTrayNotification('Screen unlocked - click to resume tracking', 'info');
-      }
+      console.log('🔓 Screen unlocked (sys-init) — no stop/start from this handler');
     });
   }
 

@@ -5,19 +5,14 @@
  *   effective     = total - non_effective
  */
 
-const { computeEffectiveSeconds } = require('./effective-time');
+const {
+  computeEffectiveSeconds,
+  resolveScreenshotIntervalSeconds,
+  resolveScreenshotIntervalMinutes,
+} = require('./effective-time');
 const { normalizeTenantUserId } = require('./tenant-user-id');
 
 const LOW_ACTIVITY_PERCENT = 10;
-
-function resolveIntervalMinutes(config = global.config) {
-  const fromSettings =
-    config?.screenshot_interval_minutes ??
-    config?.screenshotIntervalMinutes ??
-    global?.appSettings?.screenshot_interval_minutes ??
-    global?.enhancedScreenshotManager?.screenshotIntervalMinutes;
-  return Math.max(1, Number(fromSettings) || 3);
-}
 
 function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
   let idle = 0;
@@ -38,8 +33,14 @@ function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
   return idle;
 }
 
-function sumLowActivitySecondsFromScreenshots(screenshots, intervalMinutes, dayStartMs, dayEndMs) {
-  const lowSecondsPerShot = Math.max(1, intervalMinutes) * 60;
+/**
+ * @param {object[]} screenshots
+ * @param {number} intervalSeconds — exact capture interval in seconds
+ * @param {number} dayStartMs
+ * @param {number} dayEndMs
+ */
+function sumLowActivitySecondsFromScreenshots(screenshots, intervalSeconds, dayStartMs, dayEndMs) {
+  const lowSecondsPerShot = Math.max(10, Math.floor(Number(intervalSeconds) || 60));
   let low = 0;
   for (const shot of screenshots || []) {
     const pct = Number(shot.activity_percent);
@@ -82,7 +83,7 @@ async function computeTodayEffectiveStats(opts = {}) {
 
   let idleSeconds = 0;
   let lowActivitySeconds = 0;
-  const intervalMinutes = resolveIntervalMinutes(config);
+  const intervalSeconds = resolveScreenshotIntervalSeconds(config);
 
   try {
     const { isBackendRdsEnabled, getTimeLogsInRange } = require('./backend-rds-reads');
@@ -107,27 +108,33 @@ async function computeTodayEffectiveStats(opts = {}) {
   }
 
   try {
-    const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('./backend-screenshots');
-    let screenshots = [];
-    if (usesBackendScreenshots(config)) {
-      screenshots = await fetchScreenshotsFromBackend(userId, config, {
-        startIso: dayStartIso,
-        endIso: dayEndIso,
-        limit: 500,
-      }) || [];
-    } else if (opts.supabase) {
-      const { data } = await opts.supabase
-        .from('screenshots')
-        .select('captured_at, activity_percent')
-        .eq('user_id', userId)
-        .gte('captured_at', dayStartIso)
-        .lt('captured_at', dayEndIso)
-        .limit(500);
-      screenshots = data || [];
+    // Prefer screenshots already loaded by the caller (monthly report) so Today
+    // and Month never diverge from different fetch/limit results.
+    let screenshots = Array.isArray(opts.screenshots) ? opts.screenshots : null;
+    if (!screenshots) {
+      const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('./backend-screenshots');
+      const { isBackendRdsEnabled } = require('./backend-rds-reads');
+      screenshots = [];
+      if (usesBackendScreenshots(config) || isBackendRdsEnabled(config)) {
+        screenshots = await fetchScreenshotsFromBackend(userId, config, {
+          startIso: dayStartIso,
+          endIso: dayEndIso,
+          limit: 500,
+        }) || [];
+      } else if (opts.supabase) {
+        const { data } = await opts.supabase
+          .from('screenshots')
+          .select('captured_at, activity_percent')
+          .eq('user_id', userId)
+          .gte('captured_at', dayStartIso)
+          .lt('captured_at', dayEndIso)
+          .limit(500);
+        screenshots = data || [];
+      }
     }
     lowActivitySeconds = sumLowActivitySecondsFromScreenshots(
       screenshots,
-      intervalMinutes,
+      intervalSeconds,
       dayStartMs,
       dayEndMs,
     );
@@ -140,6 +147,7 @@ async function computeTodayEffectiveStats(opts = {}) {
     ...eff,
     idleSeconds,
     lowActivitySeconds,
+    intervalSeconds,
   };
 }
 
@@ -148,4 +156,5 @@ module.exports = {
   sumIdleSecondsFromLogs,
   sumLowActivitySecondsFromScreenshots,
   LOW_ACTIVITY_PERCENT,
+  resolveScreenshotIntervalMinutes,
 };

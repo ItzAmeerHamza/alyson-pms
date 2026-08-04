@@ -197,14 +197,17 @@ describe('EnhancedIdleMonitor', () => {
       expect(endMs).toBeGreaterThan(elevenMinAgo + 30 * 1000);
     });
 
-    test('timeout after shown prompt cuts 10m; break stops without cut', () => {
+    test('timeout after shown prompt cuts 10m; break stops without cut; unshown prompt does not cut', () => {
       monitor._idlePromptActive = true;
       monitor._idlePromptShown = true;
       monitor._resolveIdlePrompt('timeout');
       expect(global.stopTracking).toHaveBeenCalledWith(
         'idle_timeout',
         null,
-        expect.objectContaining({ endTimeOverride: expect.any(String) }),
+        expect.objectContaining({
+          endTimeOverride: expect.any(String),
+          timeCutSeconds: 600,
+        }),
       );
 
       global.stopTracking.mockClear();
@@ -213,6 +216,12 @@ describe('EnhancedIdleMonitor', () => {
       monitor._resolveIdlePrompt('break');
       expect(global.stopTracking).toHaveBeenCalledWith('on_break', null, {});
       expect(global.stopTracking.mock.calls[0][2]?.endTimeOverride).toBeUndefined();
+
+      global.stopTracking.mockClear();
+      monitor._idlePromptActive = true;
+      monitor._idlePromptShown = false; // UI never appeared
+      monitor._resolveIdlePrompt('timeout');
+      expect(global.stopTracking).not.toHaveBeenCalled();
     });
   });
 

@@ -357,6 +357,8 @@ class IPCManager {
     // This ensures Recent Sessions / Top Projects refresh with the latest data
     this.ipcRenderer.on('session-data-updated', (event, data) => {
       console.log('🔄 [IPC] Session data updated (post-DB save):', data);
+      const cutSec = Math.max(0, Math.floor(Number(data?.timeCutSeconds) || 0));
+      const authorizedCut = data?.reason === 'idle_timeout' && cutSec > 0;
       const frozenFloor = Math.max(
         0,
         Math.floor(Number(data?.frozenTotalSeconds) || 0),
@@ -371,14 +373,15 @@ class IPCManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(s);
               }
-              const trackedSec = Math.max(
-                Math.max(0, Math.floor(s.totalTime)),
-                frozenFloor,
-                Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0)),
-              );
+              const dbSec = Math.max(0, Math.floor(s.totalTime));
+              const liveSec = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+              // Non-effective never lowers the clock. Only authorized idle-prompt cut may.
+              const trackedSec = authorizedCut
+                ? Math.max(dbSec, frozenFloor)
+                : Math.max(dbSec, frozenFloor, liveSec);
               window.__todayBaseAtLastStop = trackedSec;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: true });
+                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: authorizedCut });
               }
             }
           });
@@ -1123,7 +1126,7 @@ class IPCManager {
       );
       if (frozenTracked > 0) {
         window.__todayBaseAtLastStop = frozenTracked;
-        window.setTrackerDisplaySeconds?.(frozenTracked, { allowDecrease: true });
+        window.setTrackerDisplaySeconds?.(frozenTracked);
         void this.ipcRenderer.invoke('set-frozen-total-at-stop', frozenTracked).catch(() => {});
       }
       this.stopSessionTimer();
