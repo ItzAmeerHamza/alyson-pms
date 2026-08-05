@@ -38,10 +38,10 @@ function isTrackingActive() {
  * session switches; idle/locked back off hard.
  */
 function getUrlPollDelayMs() {
-  if (!isTrackingActive()) return envMs('POWER_URL_POLL_INACTIVE_MS', 15000);
-  if (isScreenLocked()) return envMs('POWER_URL_POLL_LOCKED_MS', 60000);
-  if (isUserIdle()) return envMs('POWER_URL_POLL_IDLE_MS', 30000);
-  return envMs('POWER_URL_POLL_ACTIVE_MS', 10000);
+  if (!isTrackingActive()) return envMs('POWER_URL_POLL_INACTIVE_MS', 30000);
+  if (isScreenLocked()) return envMs('POWER_URL_POLL_LOCKED_MS', 90000);
+  if (isUserIdle()) return envMs('POWER_URL_POLL_IDLE_MS', 45000);
+  return envMs('POWER_URL_POLL_ACTIVE_MS', 15000);
 }
 
 /**
@@ -49,9 +49,9 @@ function getUrlPollDelayMs() {
  * `shouldSkipAppDetection()` is true.
  */
 function getAppDetectIntervalMs() {
-  if (isScreenLocked()) return envMs('POWER_APP_DETECT_LOCKED_MS', 60000);
-  if (isUserIdle()) return envMs('POWER_APP_DETECT_IDLE_MS', 30000);
-  return envMs('POWER_APP_DETECT_ACTIVE_MS', 15000);
+  if (isScreenLocked()) return envMs('POWER_APP_DETECT_LOCKED_MS', 90000);
+  if (isUserIdle()) return envMs('POWER_APP_DETECT_IDLE_MS', 45000);
+  return envMs('POWER_APP_DETECT_ACTIVE_MS', 20000);
 }
 
 function shouldSkipAppDetection() {
@@ -63,16 +63,16 @@ function shouldSkipUrlCapture() {
 }
 
 const ANTI_CHEAT = {
-  patternMs: envMs('POWER_ANTI_CHEAT_PATTERN_MS', 60000),
-  deepMs: envMs('POWER_ANTI_CHEAT_DEEP_MS', 180000),
-  processMs: envMs('POWER_ANTI_CHEAT_PROCESS_MS', 10 * 60 * 1000),
-  usbMs: envMs('POWER_ANTI_CHEAT_USB_MS', 15 * 60 * 1000),
+  patternMs: envMs('POWER_ANTI_CHEAT_PATTERN_MS', 120000),
+  deepMs: envMs('POWER_ANTI_CHEAT_DEEP_MS', 300000),
+  processMs: envMs('POWER_ANTI_CHEAT_PROCESS_MS', 15 * 60 * 1000),
+  usbMs: envMs('POWER_ANTI_CHEAT_USB_MS', 20 * 60 * 1000),
 };
 
 const IPC = {
-  consolidatedMs: envMs('POWER_IPC_CONSOLIDATED_MS', 15000),
-  activitySyncMs: envMs('POWER_ACTIVITY_SYNC_MS', 30000),
-  screenshotTimerUiMs: envMs('POWER_SCREENSHOT_TIMER_UI_MS', 15000),
+  consolidatedMs: envMs('POWER_IPC_CONSOLIDATED_MS', 30000),
+  activitySyncMs: envMs('POWER_ACTIVITY_SYNC_MS', 60000),
+  screenshotTimerUiMs: envMs('POWER_SCREENSHOT_TIMER_UI_MS', 30000),
 };
 
 /** Fixed screenshot cadence — product requirement: 1/min while unlocked + tracking. */

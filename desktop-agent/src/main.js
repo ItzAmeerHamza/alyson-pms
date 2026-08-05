@@ -4512,8 +4512,8 @@ if (isElectronContext && ipcMain) {
       }
 
       // === PERFORMANCE MONITOR + CPU USAGE LOGS ===
-      // Always on (cheap 60s CPU samples → userData/logs/performance/).
-      // Set PERF_MONITOR=0 to disable the full monitor; PERF_CPU_LOG=0 disables CPU files only.
+      // Lightweight by default: CPU samples every 5m → userData/logs/performance/.
+      // PERF_MONITOR=0 disables; PERF_CPU_LOG=0 disables CPU files; PERF_FULL=1 enables report flush.
       if (process.env.PERF_MONITOR !== '0') {
         try {
           try {

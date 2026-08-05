@@ -397,7 +397,7 @@ class OptimizedIntervalManager {
       } catch (error) {
         console.error('❌ Error in resource monitor:', error.message);
       }
-    }, 30000); // 30 seconds
+    }, 5 * 60 * 1000); // 5 minutes — avoid burning CPU just to measure CPU
     
     this.intervals.set('RESOURCE_MONITOR', interval);
   }

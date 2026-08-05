@@ -18,8 +18,12 @@
 !macroend
 
 !macro customInstall
-  ; Verify critical DLLs exist after installation
-  ; ffmpeg.dll is required by Electron runtime
+  ; Interactive installs use runAfterFinish. Silent /S (in-app update) skips the
+  ; finish page, so we must relaunch ourselves or Windows stays closed.
+  IfSilent 0 alyson_pm_skip_silent_relaunch
+    Sleep 1500
+    Exec '"$INSTDIR\Alyson PM.exe"'
+  alyson_pm_skip_silent_relaunch:
 !macroend
 
 !macro customUnInstall

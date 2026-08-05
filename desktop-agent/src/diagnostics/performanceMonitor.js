@@ -66,19 +66,28 @@ class PerformanceMonitor {
     // PERFORMANCE FIX: Removed startEventLoopMonitoring() - 100ms polling causes battery drain
     // Event loop monitoring is now disabled by default. Enable manually if needed for debugging.
 
-    // Auto-flush reports periodically for live diagnostics
+    // Auto-flush full JSON reports — off by default (disk churn). Set PERF_FLUSH_MS
+    // or PERF_FULL=1 for diagnostics. Default when PERF_FULL=1: every 10 minutes.
     try {
-      const defaultFlushMs = 60 * 1000; // 1 minute
-      this.flushIntervalMs = Number(process.env.PERF_FLUSH_MS) || defaultFlushMs;
-      this.autoFlushInterval = setInterval(() => {
-        try { this.saveReport(); } catch {}
-      }, this.flushIntervalMs);
-      if (typeof this.autoFlushInterval.unref === 'function') {
-        this.autoFlushInterval.unref();
+      const flushEnabled =
+        process.env.PERF_FULL === '1' ||
+        (process.env.PERF_FLUSH_MS && process.env.PERF_FLUSH_MS !== '0');
+      if (flushEnabled) {
+        const defaultFlushMs = 10 * 60 * 1000;
+        this.flushIntervalMs = Math.max(
+          60_000,
+          Number(process.env.PERF_FLUSH_MS) || defaultFlushMs,
+        );
+        this.autoFlushInterval = setInterval(() => {
+          try { this.saveReport(); } catch {}
+        }, this.flushIntervalMs);
+        if (typeof this.autoFlushInterval.unref === 'function') {
+          this.autoFlushInterval.unref();
+        }
       }
     } catch {}
 
-    // Periodic CPU + memory lines in the normal app log stream (cheap; default 60s).
+    // Periodic CPU + memory samples (default 5 min — cheap process.cpuUsage only).
     try {
       this.startCpuUsageLogging();
     } catch {}
@@ -366,18 +375,21 @@ class PerformanceMonitor {
     const mainCpuPercent =
       Math.round(((diff.user + diff.system) / (elapsedMs * 1000)) * 1000) / 10;
 
+    // getAppMetrics() walks all Electron processes — skip unless explicitly enabled.
     let electronCpuPercent = null;
     let processCount = null;
-    try {
-      const { app } = require('electron');
-      if (app && typeof app.getAppMetrics === 'function') {
-        const metrics = app.getAppMetrics() || [];
-        processCount = metrics.length;
-        electronCpuPercent = Math.round(
-          metrics.reduce((sum, m) => sum + (Number(m?.cpu?.percentCPUUsage) || 0), 0) * 10,
-        ) / 10;
-      }
-    } catch (_) { /* non-Electron / early boot */ }
+    if (process.env.PERF_CPU_APP_METRICS === '1') {
+      try {
+        const { app } = require('electron');
+        if (app && typeof app.getAppMetrics === 'function') {
+          const metrics = app.getAppMetrics() || [];
+          processCount = metrics.length;
+          electronCpuPercent = Math.round(
+            metrics.reduce((sum, m) => sum + (Number(m?.cpu?.percentCPUUsage) || 0), 0) * 10,
+          ) / 10;
+        }
+      } catch (_) { /* non-Electron / early boot */ }
+    }
 
     const mem = process.memoryUsage();
     const sample = {
@@ -441,8 +453,8 @@ class PerformanceMonitor {
     if (process.env.PERF_CPU_NDJSON !== '0') {
       this.persistCpuUsageSample(s);
     }
-    // Also append to time_doctor.time_log_events via backend (best-effort).
-    if (process.env.PERF_CPU_DB !== '0') {
+    // DB samples are opt-in (network). Set PERF_CPU_DB=1 to enable.
+    if (process.env.PERF_CPU_DB === '1') {
       void this.persistCpuUsageToTimeLogEvents(s);
     }
     return s;
@@ -533,8 +545,8 @@ class PerformanceMonitor {
     if (this._cpuLogInterval) return;
 
     const intervalMs = Math.max(
-      15_000,
-      Number(process.env.PERF_CPU_LOG_MS) || 60_000,
+      60_000,
+      Number(process.env.PERF_CPU_LOG_MS) || 5 * 60_000,
     );
 
     // Prime baseline so the first logged sample is a real delta.

@@ -1398,9 +1398,12 @@ class ForceUpdater {
   /**
    * Launch a previously downloaded Windows Setup.exe and quit so NSIS can replace files.
    * Silent /S — users should not need to run the installer manually.
+   * Chains a relaunch: NSIS silent mode skips runAfterFinish, so without this
+   * the app would stay closed after update.
    */
   launchWindowsInstaller(installerPath) {
     const { spawn } = require('child_process');
+    const os = require('os');
     const exePath = installerPath || this.windowsInstallerPath;
     if (!exePath || !fs.existsSync(exePath)) {
       return { success: false, error: 'Windows installer file not found' };
@@ -1414,15 +1417,27 @@ class ForceUpdater {
     this.saveUpdateState();
 
     try {
-      // Detached so NSIS keeps running after we exit.
-      // /S = silent oneClick NSIS reinstall (no wizard). UAC may still prompt once.
-      // installer.nsh kills "Alyson PM.exe" so file locks don't block the replace.
-      const child = spawn(exePath, ['/S'], {
+      // Batch: wait for silent Setup, then start the same exe path (per-user install).
+      // Detached so it survives app.quit().
+      const appExe = process.execPath;
+      const batPath = path.join(os.tmpdir(), `alyson-pm-relaunch-${Date.now()}.bat`);
+      const bat = [
+        '@echo off',
+        `start /wait "" "${exePath.replace(/"/g, '')}" /S`,
+        'timeout /t 5 /nobreak >nul',
+        `start "" "${appExe.replace(/"/g, '')}"`,
+        `del "%~f0" >nul 2>&1`,
+        '',
+      ].join('\r\n');
+      fs.writeFileSync(batPath, bat, 'utf8');
+
+      const child = spawn('cmd.exe', ['/c', batPath], {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
       });
       child.unref();
+      console.log(`🚀 [FORCE-UPDATER] Windows update bat staged (will relaunch): ${batPath}`);
     } catch (err) {
       global.isInstallingUpdate = false;
       console.error('❌ [FORCE-UPDATER] Failed to spawn Windows installer:', err.message);
@@ -1446,7 +1461,7 @@ class ForceUpdater {
       } catch (_) {
         process.exit(0);
       }
-    }, 1200);
+    }, 800);
 
     return {
       success: true,
