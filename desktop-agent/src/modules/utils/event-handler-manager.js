@@ -103,31 +103,24 @@ class EventHandlerManager {
       return;
     }
 
-    // System suspend event
+    // System suspend event (fires on lid close and manual sleep)
     this.powerMonitor.on('suspend', () => {
       this.console.log('💤 System suspended (laptop closed/sleep mode)');
       this.systemSleepStart = Date.now();
-      
+
       // Notify tray manager so it can defer notifications
       if (this.global.trayManager) {
         this.global.trayManager.onSystemSleep();
       }
-      
-      // Keep tracking through sleep (Time Doctor parity). Wall-clock elapsed
-      // (Date.now() - sessionStart) still counts sleep time on wake. Stopping
-      // here created multi-hour gaps vs other timers with no idle prompt shown.
+
+      // Lid close / sleep stops tracking outright, same as system shutdown.
       if (this.global.isTracking) {
-        this.console.log('💤 Laptop sleep — keeping tracking active; pausing screenshots only');
-        try {
-          const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
-          if (screenshotMgr && typeof screenshotMgr.pauseScreenshotsOnly === 'function') {
-            screenshotMgr.pauseScreenshotsOnly();
-          }
-        } catch (e) {
-          this.console.log('⚠️ [SLEEP] Failed to pause screenshots:', e?.message);
+        this.console.log('🛑 Laptop lid closed / system sleep - stopping tracking automatically');
+        if (typeof this.global.stopTracking === 'function') {
+          this.global.stopTracking('system_sleep');
         }
       }
-      
+
       // Pause anti-cheat during sleep (restart on resume if still tracking)
       if (this.antiCheatDetector) {
         this.antiCheatDetector.stopMonitoring();

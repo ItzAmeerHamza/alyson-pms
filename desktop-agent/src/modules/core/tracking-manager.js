@@ -238,8 +238,70 @@ try {
       // Close any existing unclosed sessions for THIS DEVICE before creating a new one.
       // Uses device-scoped close so other devices' sessions are not affected.
       const deviceId = getDeviceId();
-      console.log(`🔒 [TRACKING-MANAGER] Pre-insert cleanup for user ${effectiveUserId}, device ${deviceId}`);
-      await this._forceCloseActiveSessions(effectiveUserId, deviceId);
+      console.log(`🔒 [TRACKING-MANAGER] Pre-insert inspect for user ${effectiveUserId}, device ${deviceId}`);
+      const localCheckpoint = this._readSessionCheckpoint?.() || null;
+      let recoveredSession = null;
+      if (useBackendTimeLogs) {
+        try {
+          const inspect = await backendTimeLogs.reconcileOpenSessions(
+            effectiveUserId,
+            deviceId,
+            this.config,
+            {
+              prefer_recover: true,
+              client_last_seen_at: localCheckpoint?.checkpointAt || null,
+              freshness_minutes: 15,
+            },
+          );
+          if (inspect?.recovered?.id) {
+            recoveredSession = inspect.recovered;
+            console.log(
+              `♻️ [TRACKING-MANAGER] Recovered fresh open session ${recoveredSession.id} (ageSec=${recoveredSession.age_seconds})`,
+            );
+          } else if (inspect?.flagged_count > 0) {
+            const flagged = inspect.flagged || [];
+            console.warn(
+              `🚩 [TRACKING-MANAGER] Flagged ${inspect.flagged_count} stale open session(s) — will not auto-close from heartbeat`,
+            );
+            // Only close when we have a local durable checkpoint for that session.
+            for (const stale of flagged) {
+              const checkpointMatches =
+                localCheckpoint?.checkpointAt &&
+                (!localCheckpoint.timeLogId ||
+                  String(localCheckpoint.timeLogId) === String(stale.id));
+              if (checkpointMatches && localCheckpoint.checkpointAt) {
+                try {
+                  await backendTimeLogs.confirmStaleSessionClose(
+                    {
+                      user_id: effectiveUserId,
+                      time_log_id: stale.id,
+                      end_time: localCheckpoint.checkpointAt,
+                      confirm_with_local_checkpoint: true,
+                    },
+                    this.config,
+                  );
+                  console.log(
+                    `✅ [TRACKING-MANAGER] Confirmed close of ${stale.id} at local checkpoint ${localCheckpoint.checkpointAt}`,
+                  );
+                } catch (closeErr) {
+                  console.warn(
+                    '⚠️ [TRACKING-MANAGER] Confirmed checkpoint close failed:',
+                    closeErr?.message || closeErr,
+                  );
+                }
+              } else {
+                console.warn(
+                  `⚠️ [TRACKING-MANAGER] Stale session ${stale.id} needs employee/admin confirmation (no matching local checkpoint). Leaving open; not using heartbeat as end_time.`,
+                );
+              }
+            }
+          }
+        } catch (recErr) {
+          console.warn('⚠️ [TRACKING-MANAGER] inspect_open_sessions failed:', recErr?.message || recErr);
+        }
+      } else {
+        await this._forceCloseActiveSessions(effectiveUserId, deviceId);
+      }
 
       if (global.sessionManager && global.sessionManager.closeExistingSessionsBeforeStart) {
         const cleanupResult = await global.sessionManager.closeExistingSessionsBeforeStart();
@@ -249,7 +311,7 @@ try {
       }
 
       const finalProjectId = projectId || global.currentProjectId || this.config.project_id || null;
-      const startTimeIso = new Date().toISOString();
+      const startTimeIso = recoveredSession?.start_time || new Date().toISOString();
 
       const timeLogData = {
         user_id: effectiveUserId,
@@ -265,13 +327,25 @@ try {
 
       let timeLog, error;
 
-      if (useBackendTimeLogs) {
+      if (recoveredSession?.id) {
+        timeLog = {
+          id: recoveredSession.id,
+          user_id: recoveredSession.user_id || effectiveUserId,
+          project_id: recoveredSession.project_id || finalProjectId,
+          start_time: recoveredSession.start_time || startTimeIso,
+          status: 'active',
+          device_id: deviceId,
+          recovered: true,
+        };
+        error = null;
+        console.log('✅ [TRACKING-MANAGER] Resuming recovered time log:', timeLog.id);
+      } else if (useBackendTimeLogs) {
         try {
           const orgId =
             global.currentOrganizationId ||
             this.config.organization_id ||
             null;
-          await backendTimeLogs.closeActiveSessions(effectiveUserId, deviceId, this.config);
+          // Orphans are flagged / confirmed-closed above — never close at NOW from heartbeat.
           const newId = crypto.randomUUID();
           timeLog = await backendTimeLogs.createTimeLog(
             {
@@ -1563,6 +1637,23 @@ try {
         { status: 'active' },
         this.config,
       );
+      // Durable server liveness (independent of screenshots which may pause).
+      const userId = this.config?.user_id || global.currentUserId;
+      if (userId) {
+        await backendTimeLogs.upsertSessionHeartbeat(
+          {
+            user_id: userId,
+            time_log_id: timeLogId,
+            device_id: getDeviceId(),
+            organization_id: global.currentOrganizationId || this.config?.organization_id || null,
+            last_seen_at: nowIso,
+            reason: 'checkpoint',
+            agent_version: this.config?.version || global.appVersion || null,
+            meta: { is_tracking: true },
+          },
+          this.config,
+        );
+      }
     } catch (err) {
       console.warn('⚠️ [TRACKING-MANAGER] Time log checkpoint failed:', err?.message || err);
     }
@@ -2133,10 +2224,32 @@ try {
       if (!userId) return;
 
       if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
-        const result = await backendTimeLogs.closeActiveSessions(userId, deviceId, this.config);
-        const closed = result?.closed ?? 0;
+        const checkpoint = this._readSessionCheckpoint?.() || null;
+        // Inspect/flag only unless we have a local durable checkpoint to confirm.
+        if (checkpoint?.checkpointAt && checkpoint?.timeLogId) {
+          try {
+            await backendTimeLogs.confirmStaleSessionClose(
+              {
+                user_id: userId,
+                time_log_id: checkpoint.timeLogId,
+                end_time: checkpoint.checkpointAt,
+                confirm_with_local_checkpoint: true,
+              },
+              this.config,
+            );
+            console.log(
+              `🔒 [TRACKING-MANAGER] Confirmed close via local checkpoint for ${checkpoint.timeLogId}`,
+            );
+          } catch (err) {
+            console.warn('⚠️ [TRACKING-MANAGER] Checkpoint confirmed close failed:', err?.message || err);
+          }
+        }
+        const result = await backendTimeLogs.closeActiveSessions(userId, deviceId, this.config, {
+          prefer_recover: false,
+          client_last_seen_at: checkpoint?.checkpointAt || null,
+        });
         console.log(
-          `🔒 [TRACKING-MANAGER] RDS close_active_sessions: closed ${closed} session(s) for ${userId} device=${deviceId || 'all'}`,
+          `🚩 [TRACKING-MANAGER] Open-session inspect: recovered=${!!result?.recovered} flagged=${result?.flagged_count || 0}`,
         );
         return;
       }

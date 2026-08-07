@@ -15,8 +15,8 @@ export class ScreenshotAiController {
   ) {}
 
   private ensureAdmin(user: { role?: string; is_super_admin?: boolean }) {
-    if (!(user?.is_super_admin || user?.role === 'admin' || user?.role === 'manager')) {
-      throw new ForbiddenException('Admin or manager role required');
+    if (!(user?.is_super_admin || user?.role === 'admin')) {
+      throw new ForbiddenException('Admin role required');
     }
   }
 

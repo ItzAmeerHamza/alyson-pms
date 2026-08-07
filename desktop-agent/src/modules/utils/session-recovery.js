@@ -1,6 +1,7 @@
 /**
  * Session Recovery Utility
- * Handles session synchronization issues between database and desktop app
+ * Syncs open RDS sessions with the desktop agent using heartbeat/evidence liveness.
+ * Stale orphans are closed at last trustworthy timestamp — never at NOW.
  */
 
 const { createFeatureLogger } = require('./logger');
@@ -13,6 +14,92 @@ function resolveSupabaseClient() {
   if (typeof svc.from === 'function') return svc;
   if (svc.client && typeof svc.client.from === 'function') return svc.client;
   return null;
+}
+
+function readLocalCheckpointAt() {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const userDataDir =
+      process.env.APPDATA ||
+      (process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support')
+        : path.join(os.homedir(), '.config'));
+    const filePath = path.join(userDataDir, 'Alyson Work Time', 'session-checkpoint.json');
+    if (!fs.existsSync(filePath)) return null;
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return parsed?.checkpointAt || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyRecoveredSession(activeLog) {
+  global.currentTimeLogId = activeLog.id;
+  global.currentProjectId = activeLog.project_id;
+  global.isTracking = true;
+  global.isPaused = false;
+
+  const sessionForRecovery = global.currentSession || {
+    id: activeLog.id,
+    user_id: activeLog.user_id,
+    project_id: activeLog.project_id,
+    start_time: activeLog.start_time,
+    recovered: true,
+  };
+  global.currentSession = sessionForRecovery;
+  global.sessionStartTime = activeLog.start_time;
+
+  if (global.trackingManager) {
+    global.trackingManager.isTracking = true;
+    global.trackingManager.isPaused = false;
+    global.trackingManager.currentTimeLogId = activeLog.id;
+    global.trackingManager.currentProjectId = activeLog.project_id;
+    global.trackingManager.currentSession = sessionForRecovery;
+    global.trackingManager.sessionStartTime = activeLog.start_time;
+    log.info({ step: 'SYNC_TRACKING_MANAGER', message: 'TrackingManager state synced from recovery' });
+  }
+
+  if (global.enhancedScreenshotManager) {
+    global.enhancedScreenshotManager.updateTrackingState(true, sessionForRecovery);
+  }
+  if (global.urlCaptureManager) {
+    global.urlCaptureManager.setTrackingState(true);
+  }
+  if (global.enhancedAppDetector) {
+    global.enhancedAppDetector.setTrackingState(true);
+  }
+
+  log.info({
+    step: 'SYNC_RESTORED',
+    message: 'Tracking state restored from database',
+    ctx: {
+      timeLogId: activeLog.id,
+      liveness: activeLog.liveness_source,
+      ageSeconds: activeLog.age_seconds,
+    },
+  });
+}
+
+/**
+ * Reconcile device open sessions via Nest (heartbeat / evidence based).
+ */
+async function reconcileDeviceSessions({ preferRecover = true } = {}) {
+  const backendTimeLogs = require('./backend-time-logs');
+  if (!backendTimeLogs.isBackendTimeLogsEnabled() || !global.currentUserId) {
+    return null;
+  }
+  return backendTimeLogs.reconcileOpenSessions(
+    global.currentUserId,
+    getDeviceId(),
+    global.config,
+    {
+      prefer_recover: preferRecover,
+      client_last_seen_at: readLocalCheckpointAt(),
+      freshness_minutes: 15,
+    },
+  );
 }
 
 /**
@@ -28,180 +115,122 @@ function startSessionHealthCheck() {
         return;
       }
 
-      // Check if we have active tracking but no session sync
       if (global.isTracking && global.currentTimeLogId) {
         log.debug({
-          step: 'HEALTH_CHECK_OK', ctx: {
+          step: 'HEALTH_CHECK_OK',
+          ctx: {
             userId: global.currentUserId,
             timeLogId: global.currentTimeLogId,
-            isTracking: global.isTracking
-          }
+            isTracking: global.isTracking,
+          },
         });
         return;
       }
 
-      // Check if database has active sessions for THIS DEVICE but desktop thinks it's not tracking
-      if (!global.isTracking && global.sessionManager) {
-        log.info({ step: 'HEALTH_CHECK_SYNC', message: 'Checking database for active sessions on this device' });
+      if (!global.isTracking) {
+        log.info({
+          step: 'HEALTH_CHECK_SYNC',
+          message: 'Checking database for active sessions on this device',
+        });
 
-        const supabase = resolveSupabaseClient();
+        if (global.isStopping) {
+          log.info({ step: 'SYNC_SKIP_STOPPING', message: 'Skipping session recovery - stop in progress' });
+          return;
+        }
+
+        const preferRecover = !global.userExplicitlyStopped;
         const backendTimeLogs = require('./backend-time-logs');
-        const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
-        if (!supabase && !useBackend) {
+
+        if (backendTimeLogs.isBackendTimeLogsEnabled()) {
+          const result = await reconcileDeviceSessions({ preferRecover });
+          if (!preferRecover) {
+            log.info({
+              step: 'SYNC_FLAGGED_STALE',
+              message: 'User stopped — flagged open sessions (no auto-close from heartbeat)',
+              ctx: { flagged: result?.flagged_count || 0 },
+            });
+            return;
+          }
+          if (result?.recovered?.id) {
+            applyRecoveredSession(result.recovered);
+            return;
+          }
+          if (result?.flagged_count) {
+            log.info({
+              step: 'SYNC_FLAGGED_STALE',
+              message: 'Flagged stale orphan session(s); awaiting confirmation to close',
+              ctx: { flagged: result.flagged_count, details: result.flagged },
+            });
+          }
+          return;
+        }
+
+        // Legacy Supabase path — still avoid close-at-NOW when possible
+        const supabase = resolveSupabaseClient();
+        if (!supabase) {
           log.warn({ step: 'HEALTH_CHECK_NO_CLIENT' });
           return;
         }
 
         const deviceId = getDeviceId();
-        let activeLog = null;
+        let query = supabase
+          .from('time_logs')
+          .select('*')
+          .eq('user_id', global.currentUserId)
+          .is('end_time', null)
+          .eq('status', 'active')
+          .limit(1);
+        if (deviceId) query = query.eq('device_id', deviceId);
+        const { data: activeLogs } = await query;
+        const activeLog = activeLogs?.[0] ?? null;
+        if (!activeLog) return;
 
-        try {
-          if (useBackend) {
-            activeLog = await backendTimeLogs.getActiveTimeLog(
-              global.currentUserId,
-              deviceId,
-            );
-          }
-        } catch (backendErr) {
-          log.warn({ step: 'HEALTH_CHECK_BACKEND', message: backendErr.message });
-        }
-
-        if (!activeLog && supabase) {
-          let query = supabase
+        if (global.userExplicitlyStopped) {
+          const checkpointAt = readLocalCheckpointAt();
+          const endTime = checkpointAt || activeLog.start_time;
+          await supabase
             .from('time_logs')
-            .select('*')
-            .eq('user_id', global.currentUserId)
-            .is('end_time', null)
-            .eq('status', 'active')
-            .limit(1);
-          if (deviceId) {
-            query = query.eq('device_id', deviceId);
-          }
-          const { data: activeLogs } = await query;
-          activeLog = activeLogs?.[0] ?? null;
+            .update({ end_time: endTime, status: 'auto_closed' })
+            .eq('id', activeLog.id);
+          log.info({
+            step: 'SYNC_CLOSED_STALE',
+            message: 'Closed session at checkpoint/start (legacy)',
+            ctx: { timeLogId: activeLog.id, endTime },
+          });
+          return;
         }
 
-        if (activeLog) {
-          
-          // CRITICAL FIX: Don't restore tracking if we're in the middle of stopping
-          if (global.isStopping) {
-            log.info({ step: 'SYNC_SKIP_STOPPING', message: 'Skipping session recovery - stop in progress' });
-            return;
-          }
-          
-          // CRITICAL FIX: Don't auto-recover if user explicitly stopped tracking
-          // This prevents the health check from restarting screenshots after manual stop
-          if (global.userExplicitlyStopped) {
-            log.info({ step: 'SYNC_SKIP_USER_STOPPED', message: 'Skipping session recovery - user explicitly stopped tracking', ctx: { timeLogId: activeLog.id } });
-            try {
-              const backendTimeLogs = require('./backend-time-logs');
-              if (backendTimeLogs.isBackendTimeLogsEnabled()) {
-                await backendTimeLogs.closeActiveSessions(
-                  global.currentUserId,
-                  getDeviceId(),
-                );
-              } else {
-                const supabaseClose = resolveSupabaseClient();
-                if (supabaseClose) {
-                  await supabaseClose
-                    .from('time_logs')
-                    .update({ end_time: new Date().toISOString(), status: 'completed' })
-                    .eq('id', activeLog.id);
-                }
-              }
-              log.info({ step: 'SYNC_CLOSED_STALE', message: 'Closed stale session in database', ctx: { timeLogId: activeLog.id } });
-            } catch (closeErr) {
-              log.warn({ step: 'SYNC_CLOSE_ERROR', message: 'Failed to close stale session: ' + closeErr.message });
-            }
-            return;
-          }
-          
-          // Don't restore stale sessions (older than 24 hours) -- close them instead
-          const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
-          const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 hours in ms
-          if (sessionAge > MAX_SESSION_AGE) {
-            log.info({ step: 'SYNC_CLOSING_STALE', message: 'Closing stale session (>24h) instead of recovering', ctx: { 
-              sessionId: activeLog.id, 
-              ageHours: Math.round(sessionAge / (60 * 60 * 1000))
-            }});
-            try {
-              const supabaseClose = resolveSupabaseClient();
-              if (supabaseClose) {
-                // Close at NOW — never collapse to start+1h (that silently ate hours).
-                const endTime = new Date().toISOString();
-                await supabaseClose
-                  .from('time_logs')
-                  .update({ end_time: endTime, status: 'auto_closed' })
-                  .eq('id', activeLog.id);
-                log.info({ step: 'SYNC_CLOSED_STALE', message: 'Closed stale session in database', ctx: { timeLogId: activeLog.id } });
-              }
-            } catch (closeErr) {
-              log.warn({ step: 'SYNC_CLOSE_ERROR', message: 'Failed to close stale session: ' + closeErr.message });
-            }
-            return;
-          }
-          
-          log.warn({ step: 'SYNC_MISMATCH', message: 'Found active session in DB but not tracking locally', ctx: { timeLogId: activeLog.id } });
-
-          // Restore tracking state
-          global.currentTimeLogId = activeLog.id;
-          global.currentProjectId = activeLog.project_id;
-          global.isTracking = true;
-          global.isPaused = false;
-
-          // CRITICAL FIX: Construct session object from recovery data if global.currentSession is undefined
-          // This ensures screenshot capture can restart properly
-          const sessionForRecovery = global.currentSession || {
-            id: activeLog.id,
-            user_id: activeLog.user_id,
-            project_id: activeLog.project_id,
-            start_time: activeLog.start_time,
-            recovered: true
-          };
-          global.currentSession = sessionForRecovery;
-
-          // CRITICAL FIX: Sync TrackingManager state to prevent state mismatch
-          // Without this, global.isTracking and trackingManager.isTracking could desync
-          if (global.trackingManager) {
-            global.trackingManager.isTracking = true;
-            global.trackingManager.isPaused = false;
-            global.trackingManager.currentTimeLogId = activeLog.id;
-            global.trackingManager.currentProjectId = activeLog.project_id;
-            global.trackingManager.currentSession = sessionForRecovery;
-            global.trackingManager.sessionStartTime = activeLog.start_time;
-            log.info({ step: 'SYNC_TRACKING_MANAGER', message: 'TrackingManager state synced from recovery' });
-          }
-
-          // Notify components
-          if (global.enhancedScreenshotManager) {
-            global.enhancedScreenshotManager.updateTrackingState(true, sessionForRecovery);
-          }
-          if (global.urlCaptureManager) {
-            global.urlCaptureManager.setTrackingState(true);
-          }
-          if (global.enhancedAppDetector) {
-            global.enhancedAppDetector.setTrackingState(true);
-          }
-
-          log.info({ step: 'SYNC_RESTORED', message: 'Tracking state restored from database', ctx: { hasSession: !!sessionForRecovery } });
+        const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
+        const MAX_FRESH_MS = 15 * 60 * 1000;
+        if (sessionAge > MAX_FRESH_MS) {
+          const checkpointAt = readLocalCheckpointAt();
+          const endTime = checkpointAt || activeLog.start_time;
+          await supabase
+            .from('time_logs')
+            .update({ end_time: endTime, status: 'auto_closed' })
+            .eq('id', activeLog.id);
+          log.info({
+            step: 'SYNC_CLOSED_STALE',
+            message: 'Closed stale session at last checkpoint (legacy)',
+            ctx: { timeLogId: activeLog.id, endTime },
+          });
+          return;
         }
+
+        applyRecoveredSession(activeLog);
       }
     } catch (error) {
       log.warn({ step: 'HEALTH_CHECK_ERROR', message: error.message });
     }
   };
 
-  // Run initial check after 30 seconds
   setTimeout(healthCheck, 30000);
-
-  // Then run every 5 minutes
   const interval = setInterval(healthCheck, HEALTH_CHECK_INTERVAL);
 
-  // Register for cleanup
   if (global.cleanupRegistry) {
     global.cleanupRegistry.registerResource({
       name: 'sessionHealthCheck',
-      cleanup: () => clearInterval(interval)
+      cleanup: () => clearInterval(interval),
     });
   }
 
@@ -213,9 +242,33 @@ function startSessionHealthCheck() {
  */
 async function forceSyncSessionState() {
   try {
-    // Never restore tracking after an intentional stop (manual, idle, sleep, lock, shutdown)
     if (global.userExplicitlyStopped) {
-      log.info({ step: 'FORCE_SYNC_BLOCKED', message: 'Blocked by userExplicitlyStopped — intentional stop in effect' });
+      log.info({
+        step: 'FORCE_SYNC_BLOCKED',
+        message: 'Blocked by userExplicitlyStopped — intentional stop in effect',
+      });
+      return false;
+    }
+
+    if (global.isStopping) {
+      log.info({ step: 'FORCE_SYNC_SKIP_STOPPING', message: 'Skipping force sync - stop in progress' });
+      return false;
+    }
+
+    const backendTimeLogs = require('./backend-time-logs');
+    if (backendTimeLogs.isBackendTimeLogsEnabled() && global.currentUserId) {
+      const result = await reconcileDeviceSessions({ preferRecover: true });
+      if (result?.recovered?.id) {
+        applyRecoveredSession(result.recovered);
+        return true;
+      }
+      if (result?.flagged_count) {
+        log.info({
+          step: 'FORCE_SYNC_FLAGGED_STALE',
+          message: 'Flagged stale orphans; no auto-close from heartbeat',
+          ctx: { flagged: result.flagged_count },
+        });
+      }
       return false;
     }
 
@@ -237,11 +290,9 @@ async function forceSyncSessionState() {
       return false;
     }
 
-    // Update all globals
     global.currentUserId = session.id;
     if (global.config) global.config.user_id = session.id;
 
-    // Check for active tracking on THIS DEVICE only
     const deviceId = getDeviceId();
     let activeQuery = supabase
       .from('time_logs')
@@ -250,65 +301,31 @@ async function forceSyncSessionState() {
       .is('end_time', null)
       .eq('status', 'active')
       .limit(1);
-    if (deviceId) {
-      activeQuery = activeQuery.eq('device_id', deviceId);
-    }
+    if (deviceId) activeQuery = activeQuery.eq('device_id', deviceId);
     const { data: activeLogs } = await activeQuery;
 
     if (activeLogs && activeLogs.length > 0) {
       const activeLog = activeLogs[0];
-
-      // CRITICAL FIX: Don't restore tracking if we're in the middle of stopping
-      if (global.isStopping) {
-        log.info({ step: 'FORCE_SYNC_SKIP_STOPPING', message: 'Skipping force sync - stop in progress' });
-        return false;
-      }
-      
-      // Don't restore stale sessions (older than 24 hours) -- close them instead
       const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
-      const MAX_SESSION_AGE = 24 * 60 * 60 * 1000; // 24 hours in ms
-      if (sessionAge > MAX_SESSION_AGE) {
-        log.info({ step: 'FORCE_SYNC_CLOSING_STALE', message: 'Closing stale session (>24h) instead of recovering', ctx: {
-          sessionId: activeLog.id,
-          ageHours: Math.round(sessionAge / (60 * 60 * 1000))
-        }});
-        try {
-          // Close at NOW — never collapse to start+1h (that silently ate hours).
-          const endTime = new Date().toISOString();
-          await supabase
-            .from('time_logs')
-            .update({ end_time: endTime, status: 'auto_closed' })
-            .eq('id', activeLog.id);
-          log.info({ step: 'FORCE_SYNC_CLOSED_STALE', message: 'Closed stale session', ctx: { timeLogId: activeLog.id } });
-        } catch (closeErr) {
-          log.warn({ step: 'FORCE_SYNC_CLOSE_ERROR', message: closeErr.message });
-        }
+      if (sessionAge > 15 * 60 * 1000) {
+        const endTime = readLocalCheckpointAt() || activeLog.start_time;
+        await supabase
+          .from('time_logs')
+          .update({ end_time: endTime, status: 'auto_closed' })
+          .eq('id', activeLog.id);
+        log.info({
+          step: 'FORCE_SYNC_CLOSED_STALE',
+          message: 'Closed stale session at checkpoint',
+          ctx: { timeLogId: activeLog.id, endTime },
+        });
         return false;
       }
-
-      global.currentTimeLogId = activeLog.id;
-      global.currentProjectId = activeLog.project_id;
-      global.isTracking = true;
-      global.isPaused = false;
-
-      // CRITICAL FIX: Sync TrackingManager state to prevent state mismatch
-      if (global.trackingManager) {
-        global.trackingManager.isTracking = true;
-        global.trackingManager.isPaused = false;
-        global.trackingManager.currentTimeLogId = activeLog.id;
-        global.trackingManager.currentProjectId = activeLog.project_id;
-        global.trackingManager.sessionStartTime = activeLog.start_time;
-        log.info({ step: 'FORCE_SYNC_TRACKING_MANAGER', message: 'TrackingManager state synced' });
-      }
-
-      log.info({ step: 'FORCE_SYNC_SUCCESS', ctx: { timeLogId: activeLog.id } });
+      applyRecoveredSession(activeLog);
       return true;
     }
-
-    log.info({ step: 'FORCE_SYNC_NO_ACTIVE', message: 'No active tracking sessions found' });
     return false;
   } catch (error) {
-    log.error({ step: 'FORCE_SYNC_ERROR', message: error.message });
+    log.warn({ step: 'FORCE_SYNC_ERROR', message: error.message });
     return false;
   }
 }
@@ -316,5 +333,6 @@ async function forceSyncSessionState() {
 module.exports = {
   startSessionHealthCheck,
   forceSyncSessionState,
-  resolveSupabaseClient
+  resolveSupabaseClient,
+  reconcileDeviceSessions,
 };

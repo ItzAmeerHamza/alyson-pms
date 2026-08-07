@@ -78,6 +78,17 @@ Parameters:
   SqsVpcEndpointDnsName:
     Type: String
     Description: Regional VPC endpoint DNS hostname (vpce-*.sqs.REGION.vpce.amazonaws.com). Required for VPC Lambdas when PrivateDnsEnabled is false.
+  LambdaEndpointSubnetId:
+    Type: String
+    Description: Subnet for the Lambda interface VPC endpoint (PrivateDnsEnabled stays false). Used so the API can Invoke the Cognito admin worker without NAT.
+  EmailFrom:
+    Type: String
+    Default: hamza@cintara.ai
+    Description: Default SES From address (bare email; no display-name — SAM param parsing)
+  EmailSenders:
+    Type: String
+    Default: hamza@cintara.ai,mohita@cintara.ai
+    Description: Comma-separated allowlisted SES From addresses for Email Reporting picker
 
 Conditions:
   ScreenshotAiEnabled: !Equals [!Ref ScreenshotAiEnabled, 'true']
@@ -93,9 +104,11 @@ Globals:
 
 Resources:
   # --- Screenshot AI pipeline (SQS + worker + backfill cron) ---
-  # No NAT: worker Lambda runs outside VPC (DeepSeek + S3). API/backfill use SQS VPC endpoint + RDS in VPC.
-  # Private DNS disabled — do not hijack sqs.REGION.amazonaws.com for the shared VPC; SDK uses SQS_VPC_ENDPOINT_URL.
-  # No Cognito VPC endpoint — breaks Palisade EC2 login (ManagedLogin + PrivateLink).
+  # No NAT: AI worker + Cognito admin run outside VPC (public AWS APIs). API/backfill use
+  # SQS/Lambda VPC endpoints + RDS in VPC.
+  # NEVER enable PrivateDnsEnabled on shared-VPC endpoints — that hijacks regional DNS for all apps.
+  # SDK-only: SQS_VPC_ENDPOINT_URL / LAMBDA_VPC_ENDPOINT_URL point at vpce-*.vpce.amazonaws.com hostnames.
+  # Cognito IDP PrivateLink is NOT used: Managed Login / user-pool domains reject AdminCreateUser over it.
 
   SqsEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -124,6 +137,94 @@ Resources:
       Tags:
         - Key: team
           Value: Alyson PM
+
+  # Lambda Invoke for Cognito admin worker (Team Management). Private DNS MUST stay false.
+  LambdaEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Alyson Time Doctor - Lambda VPC endpoint (SDK hostname only; no Private DNS)
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: team
+          Value: Alyson PM
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Select [0, !Ref VpcSecurityGroupIds]
+          Description: HTTPS from Alyson Time Doctor Lambda SG only
+
+  LambdaVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.lambda
+      VpcId: !Ref VpcId
+      SubnetIds:
+        - !Ref LambdaEndpointSubnetId
+      SecurityGroupIds:
+        - !Ref LambdaEndpointSecurityGroup
+      PrivateDnsEnabled: false
+      Tags:
+        - Key: team
+          Value: Alyson PM
+        - Key: Name
+          Value: !Sub 'alyson-time-doctor-lambda-${EnvironmentName}'
+
+  # Outside VPC: public Cognito AdminCreateUser (Managed Login pools block cognito-idp PrivateLink).
+  CognitoAdminFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-cognito-admin-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/cognito-admin-handler.handler
+      Timeout: 29
+      MemorySize: 256
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          COGNITO_REGION: !Ref CognitoRegion
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminDeleteUser
+              Resource: !Sub 'arn:aws:cognito-idp:${CognitoRegion}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
+
+  # Outside VPC: public SES SendEmail (API Lambda has no NAT; do not add SES VPC endpoints).
+  SesEmailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-ses-email-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/ses-email-handler.handler
+      Timeout: 29
+      MemorySize: 256
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          EMAIL_FROM: !Ref EmailFrom
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: '*'
 
   ScreenshotAiDLQ:
     Type: AWS::SQS::Queue
@@ -263,6 +364,20 @@ Resources:
           COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
           COGNITO_CLIENT_ID: !Ref CognitoClientId
+          # Non-VPC Cognito admin worker + Lambda Invoke over VPC endpoint (PrivateDnsEnabled=false).
+          # DnsEntries GetAtt entries are "HostedZoneId:DnsName".
+          COGNITO_ADMIN_FUNCTION_NAME: !Ref CognitoAdminFunction
+          SES_EMAIL_FUNCTION_NAME: !Ref SesEmailFunction
+          EMAIL_FROM: !Ref EmailFrom
+          EMAIL_SENDERS: !Ref EmailSenders
+          LAMBDA_VPC_ENDPOINT_URL: !Join
+            - ''
+            - - 'https://'
+              - !Select
+                - 1
+                - !Split
+                  - ':'
+                  - !Select [0, !GetAtt LambdaVpcEndpoint.DnsEntries]
           DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
           SCREENSHOT_AI_QUEUE_URL: !Ref ScreenshotAiQueue
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
@@ -283,6 +398,15 @@ Resources:
                 - ec2:DescribeNetworkInterfaces
                 - ec2:DeleteNetworkInterface
               Resource: '*'
+        # Invoke non-VPC workers (Cognito admin + SES email) via Lambda VPC endpoint.
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource:
+                - !GetAtt CognitoAdminFunction.Arn
+                - !GetAtt SesEmailFunction.Arn
       Events:
         ProxyApi:
           Type: HttpApi
@@ -338,3 +462,16 @@ Outputs:
   SqsVpcEndpointDnsName:
     Description: Regional SQS VPC endpoint DNS (Private DNS disabled — app SDK only)
     Value: !Ref SqsVpcEndpointDnsName
+  CognitoAdminFunctionArn:
+    Description: Non-VPC Cognito AdminCreateUser/AdminDeleteUser worker
+    Value: !GetAtt CognitoAdminFunction.Arn
+  SesEmailFunctionArn:
+    Description: Non-VPC SES SendEmail worker (low-hours / transactional)
+    Value: !GetAtt SesEmailFunction.Arn
+  LambdaVpcEndpointDnsName:
+    Description: Lambda VPC endpoint DNS (Private DNS disabled — app SDK only)
+    Value: !Select
+      - 1
+      - !Split
+        - ':'
+        - !Select [0, !GetAtt LambdaVpcEndpoint.DnsEntries]

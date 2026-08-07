@@ -72,6 +72,47 @@ if [[ -z "$SQS_VPC_ENDPOINT_DNS" ]]; then
 fi
 echo "==> SQS VPC endpoint DNS: ${SQS_VPC_ENDPOINT_DNS} (Private DNS disabled; SDK-only)"
 
+# Lambda Invoke endpoint: pick a Lambda subnet whose AZ offers the service (Private DNS stays false).
+LAMBDA_ENDPOINT_SUBNET_ID="${LAMBDA_ENDPOINT_SUBNET_ID:-${COGNITO_IDP_SUBNET_ID:-}}"
+if [[ -z "$LAMBDA_ENDPOINT_SUBNET_ID" ]]; then
+  LAMBDA_AZS="$(aws ec2 describe-vpc-endpoint-services \
+    --region "$AWS_REGION" \
+    --service-names "com.amazonaws.${AWS_REGION}.lambda" \
+    --query 'ServiceDetails[0].AvailabilityZones' \
+    --output text 2>/dev/null | tr '\t' ' ' || true)"
+  IFS=',' read -r -a _subnet_arr <<< "${VPC_SUBNET_IDS}"
+  for _sn in "${_subnet_arr[@]}"; do
+    _sn="$(echo "$_sn" | xargs)"
+    [[ -z "$_sn" ]] && continue
+    _az="$(aws ec2 describe-subnets --region "$AWS_REGION" --subnet-ids "$_sn" \
+      --query 'Subnets[0].AvailabilityZone' --output text 2>/dev/null || true)"
+    if [[ -n "$_az" ]] && echo " ${LAMBDA_AZS} " | grep -Fq " ${_az} "; then
+      LAMBDA_ENDPOINT_SUBNET_ID="$_sn"
+      break
+    fi
+  done
+fi
+if [[ -z "$LAMBDA_ENDPOINT_SUBNET_ID" ]]; then
+  echo "ERROR: No VPC_SUBNET_IDS entry is in an AZ that supports lambda VPC endpoints."
+  echo "Supported AZs: ${LAMBDA_AZS:-unknown}. Set LAMBDA_ENDPOINT_SUBNET_ID in deploy.env."
+  exit 1
+fi
+echo "==> Lambda VPC endpoint subnet: ${LAMBDA_ENDPOINT_SUBNET_ID} (Private DNS disabled; SDK-only)"
+
+# Bare address only — SAM --parameter-overrides splits on spaces/<> and truncates display names.
+DEFAULT_EMAIL_FROM='hamza@cintara.ai'
+EMAIL_FROM_PARAM="${EMAIL_FROM:-$DEFAULT_EMAIL_FROM}"
+if [[ "$EMAIL_FROM_PARAM" == *" "* || "$EMAIL_FROM_PARAM" == *"<"* ]]; then
+  echo "WARN: EMAIL_FROM contains spaces or <>; using bare address for SAM params."
+  EMAIL_FROM_PARAM="$(echo "$EMAIL_FROM_PARAM" | sed -n 's/.*<\([^>]*\)>.*/\1/p')"
+  EMAIL_FROM_PARAM="${EMAIL_FROM_PARAM:-hamza@cintara.ai}"
+fi
+EMAIL_SENDERS_PARAM="${EMAIL_SENDERS:-hamza@cintara.ai,mohita@cintara.ai}"
+# Strip spaces so SAM --parameter-overrides does not split the list.
+EMAIL_SENDERS_PARAM="${EMAIL_SENDERS_PARAM// /}"
+echo "==> EMAIL_FROM: ${EMAIL_FROM_PARAM}"
+echo "==> EMAIL_SENDERS: ${EMAIL_SENDERS_PARAM}"
+
 sam deploy \
   --stack-name "$STACK_NAME" \
   --template-file template.yaml \
@@ -98,7 +139,10 @@ sam deploy \
     "ScreenshotAiEnabled=${SCREENSHOT_AI_ENABLED:-false}" \
     "ScreenshotAiBackfillBatchSize=${SCREENSHOT_AI_BACKFILL_BATCH_SIZE:-100}" \
     "EnvironmentName=${ENVIRONMENT_NAME:-dev}" \
-    "SqsVpcEndpointDnsName=${SQS_VPC_ENDPOINT_DNS}"
+    "SqsVpcEndpointDnsName=${SQS_VPC_ENDPOINT_DNS}" \
+    "LambdaEndpointSubnetId=${LAMBDA_ENDPOINT_SUBNET_ID}" \
+    "EmailFrom=${EMAIL_FROM_PARAM}" \
+    "EmailSenders=${EMAIL_SENDERS_PARAM}"
 
 echo "==> Stack outputs"
 aws cloudformation describe-stacks \

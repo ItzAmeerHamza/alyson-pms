@@ -107,7 +107,7 @@ export class AuthService {
     if (!user) {
       this.logger.warn(`No RDS user for Cognito sub=${payload.sub}`);
       throw new UnauthorizedException(
-        'Account not found. Ask your admin to add you or link your Cognito user.',
+        'Account not found. Ask your admin to add you in Alyson Pulse.',
       );
     }
 

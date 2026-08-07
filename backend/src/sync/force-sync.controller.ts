@@ -182,6 +182,231 @@ export class ForceSyncController {
     return trimmed;
   }
 
+  /**
+   * Inspect liveness for an open session (telemetry + optional local checkpoint).
+   * Heartbeat is NEVER used alone as an automatic hard stop for end_time.
+   */
+  private async inspectSessionLiveness(
+    timeLogId: string,
+    startTimeIso: string,
+    clientLastSeenAt?: string | null,
+  ): Promise<{
+    last_heartbeat_at: string | null;
+    last_evidence_at: string | null;
+    evidence_source: string | null;
+    client_checkpoint_at: string | null;
+    suggested_end_at: string | null;
+    suggested_end_source: string | null;
+    age_seconds: number | null;
+  }> {
+    const result = await this.db.query<{
+      heartbeat_at: Date | string | null;
+      shot_at: Date | string | null;
+      app_at: Date | string | null;
+      url_at: Date | string | null;
+      idle_at: Date | string | null;
+    }>(
+      `SELECT
+         (SELECT MAX(h.seen_at) FROM time_doctor.session_heartbeats h
+           WHERE h.time_log_id = $1) AS heartbeat_at,
+         (SELECT MAX(s.captured_at) FROM time_doctor.screenshots s
+           WHERE s.time_log_id = $1) AS shot_at,
+         (SELECT MAX(COALESCE(a.ended_at, a.started_at, a.timestamp))
+           FROM time_doctor.app_logs a WHERE a.time_log_id = $1) AS app_at,
+         (SELECT MAX(COALESCE(u.ended_at, u.started_at))
+           FROM time_doctor.url_logs u WHERE u.time_log_id = $1) AS url_at,
+         (SELECT MAX(COALESCE(i.idle_end, i.idle_start))
+           FROM time_doctor.idle_logs i WHERE i.time_log_id = $1) AS idle_at`,
+      [timeLogId],
+    );
+    const row = result.rows[0] || {};
+    const toMs = (raw: unknown): number | null => {
+      if (raw == null) return null;
+      const ms = new Date(raw as string | Date).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    };
+    const heartbeatMs = toMs(row.heartbeat_at);
+    const evidence: Array<{ at: number; source: string }> = [];
+    const push = (raw: unknown, source: string) => {
+      const ms = toMs(raw);
+      if (ms != null) evidence.push({ at: ms, source });
+    };
+    push(row.shot_at, 'screenshot');
+    push(row.app_at, 'app_log');
+    push(row.url_at, 'url_log');
+    push(row.idle_at, 'idle_log');
+    evidence.sort((a, b) => b.at - a.at);
+    const bestEvidence = evidence[0] || null;
+    const clientMs = toMs(clientLastSeenAt);
+
+    // Suggested end for confirmation UI / confirmed close:
+    // ONLY local durable checkpoint (or later admin-chosen time). Not heartbeat.
+    let suggestedEndAt: string | null = null;
+    let suggestedEndSource: string | null = null;
+    if (clientMs != null) {
+      const startMs = new Date(startTimeIso).getTime();
+      const minMs = Number.isFinite(startMs) ? startMs + 30_000 : clientMs;
+      const clamped = Math.min(Date.now(), Math.max(minMs, clientMs));
+      suggestedEndAt = new Date(clamped).toISOString();
+      suggestedEndSource = 'client_checkpoint';
+    }
+
+    const freshnessAnchor = Math.max(
+      heartbeatMs ?? 0,
+      bestEvidence?.at ?? 0,
+      clientMs ?? 0,
+      new Date(startTimeIso).getTime() || 0,
+    );
+    const ageSeconds =
+      freshnessAnchor > 0 ? Math.max(0, Math.round((Date.now() - freshnessAnchor) / 1000)) : null;
+
+    return {
+      last_heartbeat_at: heartbeatMs != null ? new Date(heartbeatMs).toISOString() : null,
+      last_evidence_at: bestEvidence ? new Date(bestEvidence.at).toISOString() : null,
+      evidence_source: bestEvidence?.source ?? null,
+      client_checkpoint_at: clientMs != null ? new Date(clientMs).toISOString() : null,
+      suggested_end_at: suggestedEndAt,
+      suggested_end_source: suggestedEndSource,
+      age_seconds: ageSeconds,
+    };
+  }
+
+  private async flagStaleSession(
+    timeLogId: string,
+    meta: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.db.query(
+        `INSERT INTO time_doctor.time_log_events
+          (user_id, time_log_id, workspace_id, action, source, device_id, meta, shortened)
+         SELECT t.user_id, t.id, t.workspace_id, 'stale_session_flagged', 'inspect_open_sessions',
+                t.device_id, $2::jsonb, FALSE
+         FROM time_doctor.time_logs t
+         WHERE t.id = $1`,
+        [timeLogId, JSON.stringify({ reason: 'stale_session_flagged', ...meta })],
+      );
+    } catch (err) {
+      this.logger.warn(
+        `stale_session_flagged event insert failed for ${timeLogId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Inspect open sessions. Recover if fresh. Flag if stale.
+   * Does NOT mutate time_logs.end_time from heartbeat.
+   * Confirmed close (local checkpoint / admin) is a separate action.
+   */
+  private async inspectOpenSessionsInternal(opts: {
+    userId: number;
+    deviceId?: string | null;
+    clientLastSeenAt?: string | null;
+    freshnessMinutes: number;
+    preferRecover: boolean;
+    flagStale: boolean;
+  }): Promise<{
+    success: true;
+    recovered: Record<string, unknown> | null;
+    flagged: Array<Record<string, unknown>>;
+    flagged_count: number;
+    open: Array<Record<string, unknown>>;
+    closed: [];
+    closed_count: 0;
+  }> {
+    const params: unknown[] = [opts.userId];
+    let deviceClause = '';
+    if (opts.deviceId) {
+      params.push(opts.deviceId);
+      deviceClause = ` AND device_id = $${params.length}`;
+    }
+
+    const openRows = await this.db.query<{
+      id: string;
+      user_id: number;
+      project_id: string | null;
+      workspace_id: number | null;
+      start_time: Date | string;
+      status: string;
+      device_id: string | null;
+      idle_seconds: number;
+      deducted_seconds: number;
+    }>(
+      `SELECT id, user_id, project_id, workspace_id, start_time, status, device_id,
+              idle_seconds, deducted_seconds
+       FROM time_doctor.time_logs
+       WHERE user_id = $1
+         AND end_time IS NULL
+         ${deviceClause}
+       ORDER BY start_time DESC`,
+      params,
+    );
+
+    const freshnessMs = opts.freshnessMinutes * 60_000;
+    const flagged: Array<Record<string, unknown>> = [];
+    const open: Array<Record<string, unknown>> = [];
+    let recovered: Record<string, unknown> | null = null;
+
+    for (const row of openRows.rows) {
+      const startIso = new Date(row.start_time).toISOString();
+      const live = await this.inspectSessionLiveness(row.id, startIso, opts.clientLastSeenAt);
+      const ageMs = (live.age_seconds ?? 0) * 1000;
+      const isFresh = live.age_seconds != null && ageMs <= freshnessMs;
+      const base = {
+        id: row.id,
+        user_id: String(row.user_id),
+        project_id: row.project_id,
+        workspace_id: row.workspace_id,
+        start_time: startIso,
+        status: row.status,
+        device_id: row.device_id,
+        idle_seconds: row.idle_seconds,
+        deducted_seconds: row.deducted_seconds,
+        ...live,
+        is_fresh: isFresh,
+      };
+      open.push(base);
+
+      if (opts.preferRecover && isFresh && !recovered) {
+        recovered = base;
+        this.logger.log(
+          `inspect_open_sessions: recover ${row.id} ageSec=${live.age_seconds}`,
+        );
+        continue;
+      }
+
+      if (!isFresh) {
+        if (opts.flagStale) {
+          await this.flagStaleSession(row.id, {
+            age_seconds: live.age_seconds,
+            last_heartbeat_at: live.last_heartbeat_at,
+            last_evidence_at: live.last_evidence_at,
+            evidence_source: live.evidence_source,
+            client_checkpoint_at: live.client_checkpoint_at,
+            suggested_end_at: live.suggested_end_at,
+            suggested_end_source: live.suggested_end_source,
+            note: 'Flagged only — time_logs not modified. Close requires confirmation.',
+          });
+        }
+        flagged.push(base);
+        this.logger.log(
+          `inspect_open_sessions: flagged stale ${row.id} ageSec=${live.age_seconds} (no auto-close)`,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      recovered,
+      flagged,
+      flagged_count: flagged.length,
+      open,
+      closed: [],
+      closed_count: 0,
+    };
+  }
+
   @Post('force-url-insert')
   async forceUrlInsert(@Body() urlLog: any) {
     try {
@@ -597,52 +822,221 @@ export class ForceSyncController {
         const uid = parseUserIdParam(userId);
         const deviceId = data?.device_id || null;
         const explicitEnd = data?.end_time || null;
+
+        // Without an explicit end_time: inspect/flag only — never mutate from heartbeat.
+        if (!explicitEnd) {
+          return this.inspectOpenSessionsInternal({
+            userId: uid,
+            deviceId,
+            clientLastSeenAt: data?.client_last_seen_at || null,
+            freshnessMinutes: Math.max(5, Number(data?.freshness_minutes) || 15),
+            preferRecover: data?.prefer_recover === true,
+            flagStale: true,
+          });
+        }
+
+        // Mutating close requires confirmation (local durable checkpoint or admin),
+        // OR allow_unconfirmed_end for intentional desktop stop cleanup with a known end.
+        const confirmed =
+          data?.confirm_with_local_checkpoint === true ||
+          data?.admin_confirmed === true ||
+          data?.allow_unconfirmed_end === true;
+        if (!confirmed) {
+          throw new HttpException(
+            'Closing open sessions with end_time requires confirm_with_local_checkpoint, admin_confirmed, or allow_unconfirmed_end',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const closeReason =
+          data?.admin_confirmed === true
+            ? 'admin_confirmed_close'
+            : data?.confirm_with_local_checkpoint === true
+              ? 'local_checkpoint_confirmed_close'
+              : 'confirmed_close';
+        const status =
+          data?.admin_confirmed === true || data?.confirm_with_local_checkpoint === true
+            ? 'auto_closed'
+            : 'completed';
+
         const params: unknown[] = [uid];
         let deviceClause = '';
         if (deviceId) {
           params.push(deviceId);
-          deviceClause = ` AND device_id = $${params.length}`;
+          deviceClause = ` AND t.device_id = $${params.length}`;
         }
-
-        // Wall-clock close. Never shorten an existing end_time.
-        // Screenshots pause during sleep/lock while tracking stays on — evidence
-        // capping previously ate multi-hour gaps with no idle prompt.
-        let result;
-        if (explicitEnd) {
-          params.push(explicitEnd);
-          result = await this.db.query<{ id: string }>(
-            `UPDATE time_doctor.time_logs t
-             SET end_time = GREATEST(
-                   COALESCE(t.end_time, t.start_time),
-                   t.start_time + interval '30 seconds',
-                   $${params.length}::timestamptz
-                 ),
-                 status = 'completed',
-                 updated_at = NOW()
-             WHERE t.user_id = $1
-               AND t.end_time IS NULL
-               ${deviceClause.replace(/device_id/g, 't.device_id')}
-             RETURNING t.id AS id`,
-            params,
-          );
-        } else {
-          result = await this.db.query<{ id: string }>(
-            `UPDATE time_doctor.time_logs t
-             SET end_time = GREATEST(
-                   COALESCE(t.end_time, t.start_time),
-                   t.start_time + interval '30 seconds',
-                   NOW()
-                 ),
-                 status = 'completed',
-                 updated_at = NOW()
-             WHERE t.user_id = $1
-               AND (t.end_time IS NULL OR t.status = 'active')
-               ${deviceClause.replace(/device_id/g, 't.device_id')}
-             RETURNING t.id AS id`,
-            params,
+        params.push(explicitEnd);
+        params.push(status);
+        const closeResult = await this.db.query<{ id: string }>(
+          `UPDATE time_doctor.time_logs t
+           SET end_time = GREATEST(
+                 COALESCE(t.end_time, t.start_time),
+                 t.start_time + interval '30 seconds',
+                 LEAST($${params.length - 1}::timestamptz, NOW())
+               ),
+               status = $${params.length},
+               updated_at = NOW()
+           WHERE t.user_id = $1
+             AND t.end_time IS NULL
+             ${deviceClause}
+           RETURNING t.id AS id`,
+          params,
+        );
+        for (const row of closeResult.rows) {
+          try {
+            await this.db.query(
+              `INSERT INTO time_doctor.time_log_events
+                (user_id, time_log_id, workspace_id, action, source, device_id, meta,
+                 new_end_time, new_status, shortened)
+               SELECT t.user_id, t.id, t.workspace_id, $2, 'confirmed_session_close',
+                      t.device_id, $3::jsonb, t.end_time, t.status, TRUE
+               FROM time_doctor.time_logs t WHERE t.id = $1`,
+              [
+                row.id,
+                closeReason,
+                JSON.stringify({
+                  confirmed_end: explicitEnd,
+                  confirm_with_local_checkpoint: !!data?.confirm_with_local_checkpoint,
+                  admin_confirmed: !!data?.admin_confirmed,
+                  allow_unconfirmed_end: !!data?.allow_unconfirmed_end,
+                }),
+              ],
+            );
+          } catch (_) {
+            /* ignore audit failure */
+          }
+        }
+        return {
+          success: true,
+          closed: closeResult.rowCount ?? closeResult.rows.length,
+          closed_ids: closeResult.rows.map((r) => r.id),
+          reason: closeReason,
+        };
+      }
+      case 'inspect_open_sessions':
+      case 'reconcile_open_sessions': {
+        // Alias kept for older desktop builds. Flag-only — never auto-closes from heartbeat.
+        const userId = data?.user_id;
+        if (!userId) {
+          throw new HttpException('Missing user_id', HttpStatus.BAD_REQUEST);
+        }
+        return this.inspectOpenSessionsInternal({
+          userId: parseUserIdParam(userId),
+          deviceId: data?.device_id || null,
+          clientLastSeenAt: data?.client_last_seen_at || null,
+          freshnessMinutes: Math.max(5, Number(data?.freshness_minutes) || 15),
+          preferRecover: data?.prefer_recover !== false,
+          flagStale: data?.flag_stale !== false,
+        });
+      }
+      case 'confirm_stale_session_close': {
+        // Employee/admin confirmation with an explicit end_time (local checkpoint or chosen).
+        const userId = parseUserIdParam(data?.user_id);
+        const timeLogId = await this.resolveTimeLogId(data?.time_log_id);
+        const endTime = data?.end_time;
+        if (!timeLogId || !endTime) {
+          throw new HttpException('Missing time_log_id or end_time', HttpStatus.BAD_REQUEST);
+        }
+        if (data?.confirm_with_local_checkpoint !== true && data?.admin_confirmed !== true) {
+          throw new HttpException(
+            'confirm_with_local_checkpoint or admin_confirmed required',
+            HttpStatus.BAD_REQUEST,
           );
         }
-        return { success: true, closed: result.rowCount ?? result.rows.length };
+        const endMs = new Date(endTime).getTime();
+        if (!Number.isFinite(endMs)) {
+          throw new HttpException('Invalid end_time', HttpStatus.BAD_REQUEST);
+        }
+        const status =
+          data?.admin_confirmed === true || data?.confirm_with_local_checkpoint === true
+            ? 'auto_closed'
+            : 'completed';
+        const reason =
+          data?.admin_confirmed === true
+            ? 'admin_confirmed_close'
+            : 'local_checkpoint_confirmed_close';
+        const updated = await this.db.query<{ id: string; end_time: Date | string }>(
+          `UPDATE time_doctor.time_logs t
+           SET end_time = GREATEST(
+                 COALESCE(t.end_time, t.start_time),
+                 t.start_time + interval '30 seconds',
+                 LEAST($2::timestamptz, NOW())
+               ),
+               status = $3,
+               updated_at = NOW()
+           WHERE t.id = $1
+             AND t.user_id = $4
+             AND t.end_time IS NULL
+           RETURNING t.id, t.end_time`,
+          [timeLogId, new Date(endMs).toISOString(), status, userId],
+        );
+        if (!updated.rows[0]) {
+          return { success: false, closed: 0, error: 'session_not_open_or_not_found' };
+        }
+        try {
+          await this.db.query(
+            `INSERT INTO time_doctor.time_log_events
+              (user_id, time_log_id, workspace_id, action, source, device_id, meta,
+               new_end_time, new_status, shortened)
+             SELECT t.user_id, t.id, t.workspace_id, $2, 'confirm_stale_session_close',
+                    t.device_id, $3::jsonb, t.end_time, t.status, TRUE
+             FROM time_doctor.time_logs t WHERE t.id = $1`,
+            [
+              timeLogId,
+              reason,
+              JSON.stringify({
+                confirmed_end: new Date(endMs).toISOString(),
+                confirm_with_local_checkpoint: !!data?.confirm_with_local_checkpoint,
+                admin_confirmed: !!data?.admin_confirmed,
+              }),
+            ],
+          );
+        } catch (_) {
+          /* ignore */
+        }
+        return {
+          success: true,
+          closed: 1,
+          time_log_id: timeLogId,
+          end_time: updated.rows[0].end_time,
+          reason,
+        };
+      }
+      case 'insert_session_heartbeat':
+      case 'upsert_session_heartbeat': {
+        // Append-only telemetry. Alias upsert_* kept for desktop builds already calling it.
+        const userId = parseUserIdParam(data?.user_id);
+        const timeLogId = await this.resolveTimeLogId(data?.time_log_id);
+        if (!timeLogId) {
+          throw new HttpException('Missing or unknown time_log_id', HttpStatus.BAD_REQUEST);
+        }
+        const seenRaw = data?.seen_at || data?.last_seen_at || new Date().toISOString();
+        const seenMs = new Date(seenRaw).getTime();
+        if (!Number.isFinite(seenMs)) {
+          throw new HttpException('Invalid seen_at', HttpStatus.BAD_REQUEST);
+        }
+        const seenAt = new Date(Math.min(Date.now() + 120_000, seenMs)).toISOString();
+        const workspaceId = await this.resolveWorkspaceId(userId, data?.organization_id);
+        const meta =
+          data?.meta && typeof data.meta === 'object' && !Array.isArray(data.meta)
+            ? data.meta
+            : {};
+        await this.db.query(
+          `INSERT INTO time_doctor.session_heartbeats
+             (time_log_id, user_id, device_id, workspace_id, seen_at, reason, agent_version, meta)
+           VALUES ($1,$2,$3,$4,$5::timestamptz,$6,$7,$8::jsonb)`,
+          [
+            timeLogId,
+            userId,
+            data?.device_id ? String(data.device_id).slice(0, 128) : null,
+            workspaceId,
+            seenAt,
+            data?.reason ? String(data.reason).slice(0, 64) : 'interval',
+            data?.agent_version ? String(data.agent_version).slice(0, 64) : null,
+            JSON.stringify(meta),
+          ],
+        );
+        return { success: true, time_log_id: timeLogId, seen_at: seenAt };
       }
       case 'reconcile_inflated_time_logs': {
         // No-op for duration: never shorten employee time.

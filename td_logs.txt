@@ -1,0 +1,248 @@
+=== TimeFlow Diagnostic Report ===
+Timestamp: 2026-07-27T15:31:23.132Z
+App Version: 1.0.211
+Platform: win32 (x64)
+OS: Windows_NT 10.0.26200
+Node: 18.18.2
+Electron: 28.3.3
+
+--- Health Check ---
+Overall: healthy
+Can Start Timer: true
+
+--- Check Details ---
+permissions: pass - All win32 permissions granted
+database: pass - Database configuration and connectivity verified
+screenshot: pass - Screenshot capture available
+appDetection: pass - App detection supported
+urlDetection: pass - URL detection supported
+idleDetection: pass - Idle detection available
+inputDetection: pass - Input detection available (Python monitor)
+resources: pass - System resources healthy
+
+--- Python Diagnostics ---
+Found Path: C:\Users\garim\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+Version: Python 3.11.9
+Python Disabled: false
+Failure Count: 0
+Max Retries: 4
+Provisioner Result: success
+
+--- Input Detection ---
+Input Manager Active: true
+Activity Stats: clicks=187, keys=931, moves=1093
+Last Activity Update: 2026-07-27T15:31:22.607Z
+
+--- Tracking State ---
+Is Tracking: true
+Current Time Log ID: af60c688-3db2-4678-b7a2-3ba332fa67d1
+Current Project ID: 05dedd52-90ae-4679-98e3-08b8d6ae2cb9
+
+--- System Resources ---
+CPU Cores: 12
+Total Memory: 16 GB
+Free Memory: 3.2 GB
+Heap Used: 20 MB
+
+--- Recent Logs (last 200) ---
+[2026-07-27T15:30:48.213Z] [] [JSON] {"ts":"2026-07-27T15:30:48.213Z","level":"info","category":"SCREEN","step":"S3_UPLOAD_OK","ctx":{"adapter":"storage","id":"86a96f9f-4bb9-4998-afa2-57fb3cd2eca0","s3_key":"alyson-td-screenshots/2026/07/27/organization_511/user_1224/86a96f9f-4bb9-4998-afa2-57fb3cd2eca0.jpg"}}
+[2026-07-27T15:30:48.213Z] [] [SCREEN] SAVED_STORAGE {"id":"86a96f9f-4bb9-4998-afa2-57fb3cd2eca0"}
+[2026-07-27T15:30:48.213Z] [] [JSON] {"ts":"2026-07-27T15:30:48.213Z","level":"info","category":"SCREEN","step":"SAVED_STORAGE","ctx":{"id":"86a96f9f-4bb9-4998-afa2-57fb3cd2eca0"}}
+[2026-07-27T15:30:48.213Z] [] ✅ [SCREENSHOT-UPLOAD] SUCCESS! Screenshot uploaded: 86a96f9f-4bb9-4998-afa2-57fb3cd2eca0
+[2026-07-27T15:30:48.213Z] [] 📊 [SCREENSHOT-UPLOAD] Uploaded with activity: C:6 K:0 M:64 Focus:49.266666666666666%
+[2026-07-27T15:30:48.213Z] [] [SYSTEM] SCREENSHOT RESET {"clicks":0,"keys":0,"moves":0}
+[2026-07-27T15:30:48.213Z] [] [SCREEN] NEXT SCREENSHOT IN {"minutes":1,"time":"9:01:48 pm"}
+[2026-07-27T15:30:48.213Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":0,"lastUpdate":1785166248213}
+[2026-07-27T15:30:48.213Z] [] [SCREEN] TIMER UPDATE SENT (ACTIVITY UNCHANGED)
+[2026-07-27T15:30:48.255Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:30:48.540Z] [] [URL] DIAG:cpu_budget_backoff {"totalCpu":537,"maxCpu":500,"overBudgetRatio":1.1,"newPollDelay":5000}
+[2026-07-27T15:30:49.133Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:30:49.883Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:30:49.883Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5010
+[2026-07-27T15:30:49.991Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:30:49.991Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:30:49.991Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166249883}
+[2026-07-27T15:30:49.991Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:30:49.991Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:30:49.991Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:30:49.991Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:30:50.107Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":0,"lastUpdate":1785166248255}
+[2026-07-27T15:30:50.107Z] [] [SCREEN] TIMER UPDATE SENT (ACTIVITY UNCHANGED)
+[2026-07-27T15:30:51.314Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:30:51.314Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:30:52.214Z] [] 🔄 [ACTIVITY-SYNC] Processing activity queue...
+[2026-07-27T15:30:52.215Z] [] [SCREEN] Dashboard: DATA LOAD START {"source":"get-today-time-stats"}
+[2026-07-27T15:30:52.386Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:30:52.386Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 2503
+[2026-07-27T15:30:52.529Z] [] [SCREEN] Dashboard: DATA LOAD END {"source":"get-today-time-stats","total_seconds":17551,"completed_closed":15358}
+[2026-07-27T15:30:52.790Z] [] 🔍 [DEBUG] Screenshot DB fetch: {"user_id":"1224","date":"2026-07-27","activity_filter":"all","limit":9}
+[2026-07-27T15:30:53.262Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-07-27T15:30:53.262Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-07-27T15:30:53.433Z] [] ✅ [ENHANCED-SCREENSHOTS] Backend/RDS: 9 rows for 2026-07-27
+[2026-07-27T15:30:53.542Z] [] [URL] DIAG:cpu_budget_recover {"totalCpu":0,"restoredPollDelay":2500}
+[2026-07-27T15:30:53.542Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 6971
+[2026-07-27T15:30:53.805Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:30:53.805Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:30:53.878Z] [] ✓ [WINDOWS-APP] Native success: chrome
+[2026-07-27T15:30:53.879Z] [] [WINDOWS-APP] Native API succeeded: Google Chrome
+[2026-07-27T15:30:53.879Z] [] [WINDOWS-APP] Saved external app: Google Chrome
+[2026-07-27T15:30:54.139Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:30:54.893Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:30:54.893Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5010
+[2026-07-27T15:30:55.005Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:30:55.005Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:30:55.005Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166254893}
+[2026-07-27T15:30:55.005Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:30:55.005Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:30:55.005Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:30:55.005Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:30:55.108Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":9,"lastUpdate":1785166255057}
+[2026-07-27T15:30:55.108Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:30:55.108Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":0,"keys":0,"moves":9}
+[2026-07-27T15:30:55.136Z] [] [APP-CACHE] Cache miss (age: 10000ms) - detecting...
+[2026-07-27T15:30:55.137Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:30:56.333Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:30:56.334Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:30:56.639Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 3097
+[2026-07-27T15:30:57.983Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-07-27T15:30:58.000Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:30:58.000Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 3107
+[2026-07-27T15:30:58.271Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:30:58.555Z] [] [URL] DIAG:cpu_budget_backoff {"totalCpu":588,"maxCpu":500,"overBudgetRatio":1.2,"newPollDelay":5000}
+[2026-07-27T15:30:59.154Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:30:59.906Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:30:59.906Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5013
+[2026-07-27T15:31:00.014Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:00.014Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:00.014Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166259906}
+[2026-07-27T15:31:00.014Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:31:00.014Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:31:00.014Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:31:00.014Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:31:00.114Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":1,"keys":0,"moves":13,"lastUpdate":1785166258272}
+[2026-07-27T15:31:00.114Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:00.114Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":1,"keys":0,"moves":13}
+[2026-07-27T15:31:00.139Z] [] [APP-CACHE] Cache hit (220 hits, 220 misses, 50% hit rate)
+[2026-07-27T15:31:00.140Z] [] [APP_DETECTION] DWELL REACHED {"key":"Google Chrome|Alyson","elapsed":15003,"threshold":5000,"gapOk":true,"capReached":false}
+[2026-07-27T15:31:00.140Z] [] [JSON] {"ts":"2026-07-27T15:31:00.139Z","level":"info","category":"APP_DETECTION","step":"DWELL REACHED","ctx":{"key":"Google Chrome|Alyson","elapsed":15003,"threshold":5000,"gapOk":true,"capReached":false}}
+[2026-07-27T15:31:00.140Z] [] ✅ [DWELL] App queued via enhanced sync manager: Google Chrome
+[2026-07-27T15:31:01.149Z] [] 📱 [SYNC] Inserting 1 app logs to database
+[2026-07-27T15:31:02.091Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:31:02.091Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:31:02.123Z] [] ✅ [SYNC] Successfully inserted 1 app logs via backend RDS
+[2026-07-27T15:31:02.123Z] [] ✅ [BATCH-FLUSH] Flushed 1 app logs
+[2026-07-27T15:31:02.220Z] [] 🔄 [ACTIVITY-SYNC] Processing activity queue...
+[2026-07-27T15:31:02.413Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:02.414Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 2508
+[2026-07-27T15:31:03.273Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-07-27T15:31:03.273Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-07-27T15:31:03.565Z] [] [URL] DIAG:cpu_budget_recover {"totalCpu":0,"restoredPollDelay":2500}
+[2026-07-27T15:31:03.565Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 10023
+[2026-07-27T15:31:03.820Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:03.820Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:03.897Z] [] ✓ [WINDOWS-APP] Native success: chrome
+[2026-07-27T15:31:03.897Z] [] [WINDOWS-APP] Native API succeeded: Google Chrome
+[2026-07-27T15:31:03.897Z] [] [WINDOWS-APP] Saved external app: Google Chrome
+[2026-07-27T15:31:04.168Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:04.922Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:04.922Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5016
+[2026-07-27T15:31:05.034Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:05.035Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:05.035Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166264922}
+[2026-07-27T15:31:05.035Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:31:05.035Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:31:05.035Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:31:05.035Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:31:05.122Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":2,"keys":0,"moves":17,"lastUpdate":1785166263897}
+[2026-07-27T15:31:05.122Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:05.122Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":2,"keys":0,"moves":17}
+[2026-07-27T15:31:05.202Z] [] [APP-CACHE] Cache miss (age: 10065ms) - detecting...
+[2026-07-27T15:31:05.202Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:31:06.445Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:31:06.445Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:31:06.623Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 3058
+[2026-07-27T15:31:06.972Z] [] 🔧 [FIX-ACTIVITY] Syncing activity data for screenshots...
+[2026-07-27T15:31:06.972Z] [] ✅ [FIX-ACTIVITY] Got data from enhancedActivityManager: {"clicks":2,"keys":0,"moves":18}
+[2026-07-27T15:31:06.972Z] [] ✅ [FIX-ACTIVITY] Activity data synced: {"between":{"clicks":2,"keys":0,"moves":18},"manager":{"clicks":2,"keys":0,"moves":18}}
+[2026-07-27T15:31:07.373Z] [] [SCREEN] HEARTBEAT {"timersActive":0,"backboneActive":false,"nextScreenshotTime":"2026-07-27T15:31:48.213Z","secondsToNext":41,"paused":false,"sinceLastScreenshotMs":0,"consecutiveFailures":0}
+[2026-07-27T15:31:07.984Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-07-27T15:31:08.039Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:08.039Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 3117
+[2026-07-27T15:31:08.286Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:31:08.583Z] [] [URL] DIAG:cpu_budget_backoff {"totalCpu":552,"maxCpu":500,"overBudgetRatio":1.1,"newPollDelay":5000}
+[2026-07-27T15:31:09.170Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:09.850Z] [] 🔔 [MONITORING] Checking notifications...
+[2026-07-27T15:31:09.939Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:09.940Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5018
+[2026-07-27T15:31:10.040Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:10.040Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:10.040Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166269940}
+[2026-07-27T15:31:10.040Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:31:10.040Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:31:10.040Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:31:10.040Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:31:10.128Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":2,"keys":0,"moves":21,"lastUpdate":1785166270027}
+[2026-07-27T15:31:10.128Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:10.128Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":2,"keys":0,"moves":21}
+[2026-07-27T15:31:12.222Z] [] 🔄 [ACTIVITY-SYNC] Processing activity queue...
+[2026-07-27T15:31:12.447Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:12.447Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 2507
+[2026-07-27T15:31:12.959Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:31:12.959Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:31:13.290Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-07-27T15:31:13.290Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-07-27T15:31:13.588Z] [] [URL] DIAG:cpu_budget_recover {"totalCpu":0,"restoredPollDelay":2500}
+[2026-07-27T15:31:13.588Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 10023
+[2026-07-27T15:31:13.838Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:13.839Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:13.854Z] [] ✓ [WINDOWS-APP] Native success: chrome
+[2026-07-27T15:31:13.854Z] [] [WINDOWS-APP] Native API succeeded: Google Chrome
+[2026-07-27T15:31:13.854Z] [] [WINDOWS-APP] Saved external app: Google Chrome
+[2026-07-27T15:31:14.185Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:14.956Z] [] 🔧 [URL-FIX] Processing URL event: https://Alyson.AI
+[2026-07-27T15:31:14.956Z] [] [URL] DEDUPED_ALLOW (time passed): https://Alyson.AI timeSinceLast: 5016
+[2026-07-27T15:31:15.056Z] [] [APP-CACHE] Cache miss (age: 9854ms) - detecting...
+[2026-07-27T15:31:15.056Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:31:15.057Z] [] [URL] PER_TICK_SUPPRESS: https://Alyson.AI
+[2026-07-27T15:31:15.057Z] [] [URL] EMIT: https://Alyson.AI unknown
+[2026-07-27T15:31:15.057Z] [] 🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER: {"url":"https://Alyson.AI","source":"unknown","ts":1785166274956}
+[2026-07-27T15:31:15.057Z] [] 🌐 [URL] PROCESSING PAYLOAD: {"domain":"alyson.ai","browser":"chrome","hasUserId":true}
+[2026-07-27T15:31:15.057Z] [] 🔍 [URL] DEBUG - Available services: {"enhancedSyncManager":true,"enhancedSyncManagerAddToQueue":true,"supabaseService":true,"supabaseServiceFrom":true,"trackingManager":true,"currentTimeLogId":"af60c688-3db2-4678-b7a2-3ba332fa67d1"}
+[2026-07-27T15:31:15.057Z] [] 🌐 [URL] Using enhancedSyncManager.addToQueue
+[2026-07-27T15:31:15.057Z] [] 🌐 [URL] Queued via enhancedSyncManager: alyson.ai
+[2026-07-27T15:31:15.134Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":3,"keys":0,"moves":29,"lastUpdate":1785166275002}
+[2026-07-27T15:31:15.134Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:15.134Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":3,"keys":0,"moves":29}
+[2026-07-27T15:31:16.365Z] [] ✅ [URL-SYNC] Inserted 1 URL logs via backend RDS
+[2026-07-27T15:31:16.365Z] [] ✅ [BATCH-FLUSH] Flushed 1 URL logs
+[2026-07-27T15:31:16.695Z] [] [URL] DEDUPED_SUPPRESS: https://Alyson.AI timeSinceLast: 3107
+[2026-07-27T15:31:17.178Z] [] [SCREEN] Dashboard: DATA LOAD START {"source":"get-today-time-stats"}
+[2026-07-27T15:31:17.477Z] [] [SCREEN] Dashboard: DATA LOAD END {"source":"get-today-time-stats","total_seconds":17575,"completed_closed":15358}
+[2026-07-27T15:31:17.987Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-07-27T15:31:18.300Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-07-27T15:31:18.604Z] [] [URL] DIAG:cpu_budget_backoff {"totalCpu":606,"maxCpu":500,"overBudgetRatio":1.2,"newPollDelay":5000}
+[2026-07-27T15:31:19.196Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:20.067Z] [] [APP_DETECTION] DWELL REACHED {"key":"Google Chrome|Alyson","elapsed":34930,"threshold":5000,"gapOk":true,"capReached":false}
+[2026-07-27T15:31:20.067Z] [] [JSON] {"ts":"2026-07-27T15:31:20.067Z","level":"info","category":"APP_DETECTION","step":"DWELL REACHED","ctx":{"key":"Google Chrome|Alyson","elapsed":34930,"threshold":5000,"gapOk":true,"capReached":false}}
+[2026-07-27T15:31:20.067Z] [] ✅ [DWELL] App queued via enhanced sync manager: Google Chrome
+[2026-07-27T15:31:20.146Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":5,"keys":0,"moves":37,"lastUpdate":1785166278853}
+[2026-07-27T15:31:20.146Z] [] [IPC] activity-update: SENT
+[2026-07-27T15:31:20.146Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":5,"keys":0,"moves":37}
+[2026-07-27T15:31:20.808Z] [] [INPUT] SUMMARY – Aggregated input metrics {"mouse_clicks":186,"keystrokes":931,"mouse_movements":1103,"last_activity_iso":"2026-07-27T15:31:18.853Z"}
+[2026-07-27T15:31:20.809Z] [] [JSON] {"ts":"2026-07-27T15:31:20.808Z","level":"info","category":"INPUT","step":"SUMMARY","message":"Aggregated input metrics","ctx":{"mouse_clicks":186,"keystrokes":931,"mouse_movements":1103,"last_activity_iso":"2026-07-27T15:31:18.853Z"}}
+[2026-07-27T15:31:20.809Z] [] [INPUT] EXTERNAL SUMMARY – 65% (39/60s) {"platform":"windows"}
+[2026-07-27T15:31:20.809Z] [] [JSON] {"ts":"2026-07-27T15:31:20.809Z","level":"info","category":"INPUT","step":"EXTERNAL SUMMARY","message":"65% (39/60s)","ctx":{"platform":"windows"}}
+[2026-07-27T15:31:21.069Z] [] 📱 [SYNC] Inserting 1 app logs to database
+[2026-07-27T15:31:21.373Z] [] ✅ [SYNC] Successfully inserted 1 app logs via backend RDS
+[2026-07-27T15:31:21.374Z] [] ✅ [BATCH-FLUSH] Flushed 1 app logs
+[2026-07-27T15:31:22.227Z] [] 🔄 [ACTIVITY-SYNC] Processing activity queue...
+[2026-07-27T15:31:22.229Z] [] [SCREEN] Dashboard: DATA LOAD START {"source":"get-today-time-stats"}
+[2026-07-27T15:31:22.521Z] [] [SCREEN] Dashboard: DATA LOAD END {"source":"get-today-time-stats","total_seconds":17581,"completed_closed":15358}
+[2026-07-27T15:31:22.833Z] [] 📝 External Python event (windows): mouse_debug
+[2026-07-27T15:31:22.836Z] [] 🏥 [SYSTEM-MONITOR] Starting comprehensive health check...
+[2026-07-27T15:31:22.836Z] [] [HEALTH-CHECK] WIN32 Permissions: Screen=authorized, Accessibility=true, InputMonitoring=true
+[2026-07-27T15:31:23.122Z] [] [HEALTH-CHECK] ✅ Python available (provisioner confirmed): C:\Users\garim\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+[2026-07-27T15:31:23.122Z] [] [HEALTH-CHECK] Input detection: ✅ PASS - Input detection available (Python monitor)
+[2026-07-27T15:31:23.132Z] [] 📊 [HEALTH] Health check completed: HEALTHY
+[2026-07-27T15:31:23.132Z] [] 📊 [HEALTH] ✅ 8 checks passed
+

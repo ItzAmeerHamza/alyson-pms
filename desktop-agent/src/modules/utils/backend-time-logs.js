@@ -80,10 +80,74 @@ async function updateTimeLog(id, updates, config = global.config) {
   return callDesktopAction('update_time_log', { id, updates }, config);
 }
 
-async function closeActiveSessions(userId, deviceId = null, config = global.config) {
+async function closeActiveSessions(userId, deviceId = null, config = global.config, options = {}) {
   return callDesktopAction(
     'close_active_sessions',
-    { user_id: requireTenantUserId(userId), device_id: deviceId },
+    {
+      user_id: requireTenantUserId(userId),
+      device_id: deviceId,
+      // Without end_time → inspect/flag only (does not mutate time_logs).
+      end_time: options.end_time || null,
+      confirm_with_local_checkpoint: options.confirm_with_local_checkpoint === true,
+      admin_confirmed: options.admin_confirmed === true,
+      allow_unconfirmed_end: options.allow_unconfirmed_end === true,
+      prefer_recover: options.prefer_recover === true,
+      client_last_seen_at: options.client_last_seen_at || null,
+      freshness_minutes: options.freshness_minutes || 15,
+    },
+    config,
+  );
+}
+
+/**
+ * Inspect open sessions: recover if fresh, flag if stale.
+ * Does NOT auto-close from heartbeat.
+ */
+async function reconcileOpenSessions(userId, deviceId = null, config = global.config, options = {}) {
+  return callDesktopAction(
+    'inspect_open_sessions',
+    {
+      user_id: requireTenantUserId(userId),
+      device_id: deviceId,
+      prefer_recover: options.prefer_recover !== false,
+      client_last_seen_at: options.client_last_seen_at || null,
+      freshness_minutes: options.freshness_minutes || 15,
+      flag_stale: options.flag_stale !== false,
+    },
+    config,
+  );
+}
+
+/**
+ * Confirmed close using local durable checkpoint (or admin). Never heartbeat-alone.
+ */
+async function confirmStaleSessionClose(payload, config = global.config) {
+  return callDesktopAction(
+    'confirm_stale_session_close',
+    {
+      user_id: requireTenantUserId(payload.user_id),
+      time_log_id: payload.time_log_id,
+      end_time: payload.end_time,
+      confirm_with_local_checkpoint: payload.confirm_with_local_checkpoint === true,
+      admin_confirmed: payload.admin_confirmed === true,
+    },
+    config,
+  );
+}
+
+async function upsertSessionHeartbeat(payload, config = global.config) {
+  return callDesktopAction(
+    'insert_session_heartbeat',
+    {
+      user_id: requireTenantUserId(payload.user_id),
+      time_log_id: payload.time_log_id,
+      device_id: payload.device_id || null,
+      organization_id: payload.organization_id || null,
+      seen_at: payload.last_seen_at || payload.seen_at || new Date().toISOString(),
+      reason: payload.reason || 'interval',
+      agent_version: payload.agent_version || null,
+      meta: payload.meta || {},
+    },
     config,
   );
 }
@@ -232,6 +296,9 @@ module.exports = {
   createTimeLog,
   updateTimeLog,
   closeActiveSessions,
+  reconcileOpenSessions,
+  confirmStaleSessionClose,
+  upsertSessionHeartbeat,
   reconcileInflatedTimeLogs,
   getTodayTimeLogs,
   getActiveTimeLog,

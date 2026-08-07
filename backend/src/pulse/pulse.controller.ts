@@ -12,7 +12,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
-import { isPulseAdmin } from '../database/time-doctor-sql';
+import {
+  canAccessPulseTeamReports,
+  canManagePulseUsers,
+  canViewPulseTeam,
+  isPulseOrgAdmin,
+} from '../database/time-doctor-sql';
 import { PulseService } from './pulse.service';
 
 @Controller('pulse')
@@ -20,9 +25,27 @@ import { PulseService } from './pulse.service';
 export class PulseController {
   constructor(private readonly pulse: PulseService) {}
 
-  private ensureAdmin(user: { role?: string; is_super_admin?: boolean }) {
-    if (!isPulseAdmin(user)) {
+  private ensureOrgAdmin(user: { role?: string; is_super_admin?: boolean }) {
+    if (!isPulseOrgAdmin(user)) {
+      throw new ForbiddenException('Admin role required');
+    }
+  }
+
+  private async ensureTeamReports(user: any) {
+    if (canAccessPulseTeamReports(user)) return;
+    if (await this.pulse.hasDelegatedAccess(user)) return;
+    throw new ForbiddenException('Insufficient permissions for team reports');
+  }
+
+  private ensureCanManageUsers(user: { role?: string; is_super_admin?: boolean }) {
+    if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Admin or manager role required');
+    }
+  }
+
+  private ensureCanViewTeam(user: { role?: string; is_super_admin?: boolean }) {
+    if (!canViewPulseTeam(user)) {
+      throw new ForbiddenException('Insufficient permissions to view team');
     }
   }
 
@@ -32,12 +55,12 @@ export class PulseController {
     @Req() req: { user: any },
     @Query('days') days?: string,
   ) {
-    this.ensureAdmin(req.user);
+    this.ensureOrgAdmin(req.user);
     const n = days ? Math.min(Math.max(Number(days), 1), 90) : 7;
     return this.pulse.getDashboard(req.user, n);
   }
 
-  /** Employee × day hours grid for Daily Hours page (admins) or self (employees). */
+  /** Employee × day hours grid — org-wide for admin, granted targets for delegates, else self. */
   @Get('daily-hours')
   async dailyHours(
     @Req() req: { user: any },
@@ -47,10 +70,39 @@ export class PulseController {
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
-    if (isPulseAdmin(req.user)) {
+    if (
+      canAccessPulseTeamReports(req.user) ||
+      (await this.pulse.hasDelegatedAccess(req.user))
+    ) {
       return this.pulse.getDailyHours(req.user, start, end);
     }
     return this.pulse.getDailyHours(req.user, start, end, req.user.id);
+  }
+
+  /** Hours by project for the period — same visibility as daily-hours. */
+  @Get('project-hours')
+  async projectHours(
+    @Req() req: { user: any },
+    @Query('start') start: string,
+    @Query('end') end: string,
+    @Query('userId') userId?: string,
+  ) {
+    if (!start || !end) {
+      throw new BadRequestException('start and end query params are required');
+    }
+    const canSeeTeam =
+      canAccessPulseTeamReports(req.user) ||
+      (await this.pulse.hasDelegatedAccess(req.user));
+    if (userId) {
+      if (!canSeeTeam && String(userId) !== String(req.user.id)) {
+        throw new ForbiddenException('Insufficient permissions for this user');
+      }
+      return this.pulse.getProjectHours(req.user, start, end, userId);
+    }
+    if (canSeeTeam) {
+      return this.pulse.getProjectHours(req.user, start, end);
+    }
+    return this.pulse.getProjectHours(req.user, start, end, req.user.id);
   }
 
   /** Activity levels ranked by engagement (no AI — input events ÷ tracked time). */
@@ -60,7 +112,7 @@ export class PulseController {
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
-    this.ensureAdmin(req.user);
+    await this.ensureTeamReports(req.user);
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
@@ -74,7 +126,7 @@ export class PulseController {
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
-    this.ensureAdmin(req.user);
+    await this.ensureTeamReports(req.user);
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
@@ -88,7 +140,7 @@ export class PulseController {
     @Query('start') start: string,
     @Query('end') end: string,
   ) {
-    this.ensureAdmin(req.user);
+    await this.ensureTeamReports(req.user);
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
@@ -101,48 +153,106 @@ export class PulseController {
     @Req() req: { user: any },
     @Query('date') date?: string,
   ) {
-    this.ensureAdmin(req.user);
+    await this.ensureTeamReports(req.user);
     return this.pulse.getNotTracking(req.user, date);
   }
 
   /** Team directory: leads and direct reports with weekly hours. */
   @Get('team')
   async team(@Req() req: { user: any }) {
-    this.ensureAdmin(req.user);
+    this.ensureCanViewTeam(req.user);
     return this.pulse.getTeam(req.user);
   }
 
   /** Org settings (hours threshold, etc.). */
   @Get('settings')
   async settings(@Req() req: { user: any }) {
-    this.ensureAdmin(req.user);
+    this.ensureOrgAdmin(req.user);
     return this.pulse.getOrgSettings(req.user);
   }
 
-  /** Employees below hours threshold for a given date. */
+  /**
+   * Employees below hours / pace threshold.
+   * period=pace (default): month + week_index (cumulative target through that week).
+   * period=week: single Mon–Fri week. period=day: one day.
+   */
   @Get('low-hours')
   async lowHours(
     @Req() req: { user: any },
-    @Query('date') date: string,
+    @Query('date') date?: string,
+    @Query('week_start') weekStart?: string,
+    @Query('month') month?: string,
+    @Query('week_index') weekIndex?: string,
+    @Query('period') period?: string,
+    @Query('hours_threshold') hoursThreshold?: string,
+    @Query('pace_percent') pacePercent?: string,
   ) {
-    this.ensureAdmin(req.user);
-    if (!date) throw new BadRequestException('date query param is required (YYYY-MM-DD)');
-    return this.pulse.getLowHours(req.user, date);
+    this.ensureOrgAdmin(req.user);
+    const resolvedPeriod = (period || 'pace').toLowerCase();
+    if (resolvedPeriod === 'pace') {
+      if (!month && !weekStart && !date) {
+        throw new BadRequestException('month (YYYY-MM) or week_start is required for pace');
+      }
+    } else if (resolvedPeriod === 'week') {
+      if (!weekStart && !date && !(month && weekIndex)) {
+        throw new BadRequestException(
+          'week_start/date or month + week_index is required for week',
+        );
+      }
+    } else if (!date && !weekStart) {
+      throw new BadRequestException('week_start or date is required (YYYY-MM-DD)');
+    }
+    return this.pulse.getLowHours(req.user, {
+      period: resolvedPeriod,
+      date,
+      week_start: weekStart,
+      month,
+      week_index: weekIndex,
+      hours_threshold: hoursThreshold,
+      pace_percent: pacePercent,
+    });
   }
 
-  /** Send low-hours notification emails. */
+  /** Allowlisted SES From addresses for Email Reporting. */
+  @Get('low-hours/senders')
+  async lowHoursSenders(@Req() req: { user: any }) {
+    this.ensureOrgAdmin(req.user);
+    return this.pulse.getEmailSenders();
+  }
+
+  /** Send low-hours / pace notification emails. */
   @Post('low-hours/send')
   async sendLowHours(
     @Req() req: { user: any },
     @Body()
     body: {
-      date: string;
+      date?: string;
+      week_start?: string;
+      month?: string;
+      week_index?: number;
+      period?: string;
       employee_ids?: string[];
       notify_manager?: boolean;
+      hours_threshold?: number;
+      pace_percent?: number;
+      from?: string;
     },
   ) {
-    this.ensureAdmin(req.user);
-    if (!body?.date) throw new BadRequestException('date is required');
+    this.ensureOrgAdmin(req.user);
+    const resolvedPeriod = (body?.period || 'pace').toLowerCase();
+    if (resolvedPeriod === 'pace') {
+      if (!body?.month && !body?.week_start && !body?.date) {
+        throw new BadRequestException('month or week_start is required for pace');
+      }
+    } else if (resolvedPeriod === 'week') {
+      if (!body?.week_start && !body?.date && !(body?.month && body?.week_index)) {
+        throw new BadRequestException(
+          'week_start/date or month + week_index is required for week',
+        );
+      }
+    } else if (!body?.date && !body?.week_start) {
+      throw new BadRequestException('week_start or date is required');
+    }
     return this.pulse.sendLowHoursEmails(req.user, body);
   }
 
@@ -152,14 +262,14 @@ export class PulseController {
     @Req() req: { user: any },
     @Query('limit') limit?: string,
   ) {
-    this.ensureAdmin(req.user);
+    this.ensureOrgAdmin(req.user);
     return this.pulse.getLowHoursHistory(
       req.user,
       limit ? Number(limit) : 50,
     );
   }
 
-  /** Update employee fields for Team Management. */
+  /** Update employee fields for Team Management (admin/manager). */
   @Patch('users/:id')
   async updateUser(
     @Req() req: { user: any },
@@ -174,7 +284,7 @@ export class PulseController {
       is_active?: boolean;
     },
   ) {
-    this.ensureAdmin(req.user);
+    this.ensureCanManageUsers(req.user);
     const updated = await this.pulse.updateUser(req.user, id, body);
     if (!updated) throw new BadRequestException('User not found or update failed');
     return updated;

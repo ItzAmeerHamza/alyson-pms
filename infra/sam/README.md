@@ -32,6 +32,7 @@ Do not use TimeFlow, Pulse, or timeflow names for new infra resources.
 - RDS + **RDS Proxy** in the same VPC as the Lambda
 - Cognito User Pool ID (JWT validated in Nest)
 - S3 bucket for screenshots (private)
+- **Prod DB:** apply schema/grants/bootstrap from [`db/prod/README.md`](../../db/prod/README.md) before pointing a prod stack at the database. Env template: [`deploy.env.prod.example`](deploy.env.prod.example).
 
 ## Build and deploy
 

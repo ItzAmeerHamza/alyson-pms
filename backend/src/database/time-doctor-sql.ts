@@ -19,10 +19,12 @@ export const TRACKABLE_PULSE_ROLES = [
 
 export const TRACKABLE_PULSE_ROLES_SQL = `ext.pulse_role IN ('employee', 'team_leader', 'admin', 'manager')`;
 
+/**
+ * Org-wide Pulse dashboards/reports access.
+ * Admin only — managers may manage users but do not get org report access.
+ */
 export function isPulseAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>): boolean {
-  return Boolean(
-    user.is_super_admin || user.role === 'admin' || user.role === 'manager',
-  );
+  return Boolean(user.is_super_admin || user.role === 'admin');
 }
 
 /** Admin or super-admin — org-wide Pulse access (all employees). */
@@ -30,20 +32,61 @@ export function isPulseOrgAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_ad
   return Boolean(user.is_super_admin || user.role === 'admin');
 }
 
-/** Manager or team lead — may view direct reports. */
+/** Manager or team lead — may view direct reports (time/progress, not screenshots). */
 export function isPulseTeamManager(user: Pick<ScopedAuthUser, 'role'>): boolean {
   return user.role === 'manager' || user.role === 'team_leader';
 }
 
-/** Non-admins may only access their own tenant.user id. */
+/** Admin or manager — may add/remove/update team members. */
+export function canManagePulseUsers(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+): boolean {
+  return Boolean(
+    user.is_super_admin || user.role === 'admin' || user.role === 'manager',
+  );
+}
+
+/**
+ * Org-wide / team time-progress reports.
+ * Admin only — team leads see their own report only; managers manage users only.
+ */
+export function canAccessPulseTeamReports(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+): boolean {
+  return isPulseOrgAdmin(user);
+}
+
+/**
+ * Who may view the team directory (roster).
+ * Admin/manager: full org. Team lead: their own team only (service-scoped).
+ */
+export function canViewPulseTeam(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+): boolean {
+  return Boolean(
+    user.is_super_admin ||
+      user.role === 'admin' ||
+      user.role === 'manager' ||
+      user.role === 'team_leader',
+  );
+}
+
+/** Only org admins may view other employees' screenshots. */
+export function canViewOrgScreenshots(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+): boolean {
+  return isPulseOrgAdmin(user);
+}
+
+/**
+ * Resolve which user id a caller is asking for.
+ * Authorization (role / access grant) is enforced separately via canAccessUserData.
+ */
 export function scopedPulseUserId(
   user: ScopedAuthUser,
   requestedUserId?: string,
 ): string {
-  if (isPulseAdmin(user)) {
-    return requestedUserId ?? user.id;
-  }
-  return user.id;
+  return requestedUserId ?? user.id;
 }
 
 /** Scope queries to a workspace (organization_id in JWT = tenant.workspace.id). */
@@ -94,7 +137,7 @@ export const EMPLOYEE_USER_SELECT = `
     trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS full_name,
     coalesce(ext.pulse_role, 'employee') AS role,
     u.image_uri AS avatar_url,
-    true AS is_active,
+    (ext.paused_at IS NULL) AS is_active,
     ext.paused_at,
     ext.paused_by::text AS paused_by,
     ext.pause_reason,

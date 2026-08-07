@@ -1,0 +1,24 @@
+aws cognito-idp initiate-auth \
+  --region us-west-2 \
+  --client-id 5fdarb439hjqap23ssk5kh345g \
+  --auth-flow USER_PASSWORD_AUTH \
+  --auth-parameters USERNAME=hamza@cintara.ai,PASSWORD=Revcloud123@!
+
+
+PostgreSQL 16, db.t4g.small, 30 GB gp3, Single-AZ
+DB name: timeflow
+Region: us-west-2 (same as Cognito)
+Lock security group to your API + your IP for migrations
+
+Supabase: Revcloud_Secure123
+RDS username: postgres
+RDS password: ])Z6Fzev[PzhJ!)7bhp8!cG.a?P0
+
+
+psql "host=alyson-time-doctor.ck4yiduvahj7.us-west-2.rds.amazonaws.com port=5432 dbname=postgres user=postgres password=])Z6Fzev[PzhJ!)7bhp8!cG.a?P0 sslmode=require" -f schema.sql
+
+export PGPASSWORD='])Z6Fzev[PzhJ!)7bhp8!cG.a?P0'
+
+
+
+n#)o>RuWZpje.WRHoQ3)9WDfwQE6

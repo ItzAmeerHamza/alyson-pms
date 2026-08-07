@@ -550,10 +550,13 @@ class SessionManager {
         try {
           const { getDeviceId } = require('../utils/device-id');
           const deviceId = getDeviceId();
-          const result = await closeActiveSessions(userId, deviceId);
-          const closed = result?.closed ?? 0;
-          console.log(`🔒 [SESSION] RDS close_active_sessions: closed ${closed} session(s)`);
-          return { success: true, closedCount: closed };
+          // Inspect/flag only — never invent end_time from heartbeat.
+          const result = await closeActiveSessions(userId, deviceId, global.config, {
+            prefer_recover: false,
+          });
+          const flagged = result?.flagged_count ?? 0;
+          console.log(`🚩 [SESSION] RDS inspect/flag open sessions: flagged=${flagged}`);
+          return { success: true, closedCount: 0, flaggedCount: flagged };
         } catch (rdsErr) {
           console.warn('⚠️ [SESSION] RDS close failed:', rdsErr.message || rdsErr);
           if (isTenantUserId(userId)) {

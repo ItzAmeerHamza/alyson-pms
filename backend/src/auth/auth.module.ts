@@ -30,4 +30,4 @@ import { DatabaseModule } from '../database/database.module';
   providers: [AuthService, AuthGuard, TdAuthGuard, ApiKeyGuard, RolesGuard, CognitoService],
   exports: [AuthService, AuthGuard, TdAuthGuard, RolesGuard, CognitoService, ApiKeyGuard],
 })
-export class AuthModule {} 
+export class AuthModule {}
