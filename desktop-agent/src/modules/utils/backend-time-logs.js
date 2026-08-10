@@ -42,20 +42,46 @@ function resolveSyncUrl(config = global.config) {
     : `${base.replace(/\/$/, '')}/sync/desktop-action`;
 }
 
-async function callDesktopAction(action, data, config = global.config) {
+async function callDesktopAction(action, data, config = global.config, options = {}) {
   const { key } = resolveBackendCredentials(config);
   if (!key) {
     throw new Error('Missing INTERNAL_API_KEY for backend time logs');
   }
 
-  const response = await fetch(resolveSyncUrl(config), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-    },
-    body: JSON.stringify({ action, data }),
-  });
+  // Low-internet / RDS blips must fail fast so the agent can continue offline.
+  // Default 12s; start-critical paths pass a shorter timeout.
+  const timeoutMs = Math.max(
+    2000,
+    Number(options.timeoutMs ?? config?.backend_api_timeout_ms ?? 12_000) || 12_000,
+  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch (_) { /* ignore */ }
+  }, timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(resolveSyncUrl(config), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+      },
+      body: JSON.stringify({ action, data }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const aborted = err?.name === 'AbortError' || controller.signal.aborted;
+    throw new Error(
+      aborted
+        ? `Backend sync timeout after ${timeoutMs}ms (${action})`
+        : err?.message || `Backend sync network error (${action})`,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   let body = {};
   try {
@@ -71,13 +97,33 @@ async function callDesktopAction(action, data, config = global.config) {
   return body;
 }
 
-async function createTimeLog(payload, config = global.config) {
-  const result = await callDesktopAction('create_time_log', { log: payload }, config);
+async function createTimeLog(payload, config = global.config, options = {}) {
+  const result = await callDesktopAction(
+    'create_time_log',
+    { log: payload },
+    config,
+    options,
+  );
   return result.time_log || result;
 }
 
-async function updateTimeLog(id, updates, config = global.config) {
-  return callDesktopAction('update_time_log', { id, updates }, config);
+async function updateTimeLog(id, updates, config = global.config, options = {}) {
+  const result = await callDesktopAction(
+    'update_time_log',
+    { id, updates },
+    config,
+    options,
+  );
+  // Backend may return 200 with updated:0 when the row does not exist.
+  if (result && result.success === false) {
+    const reason = result.reason || 'update_failed';
+    throw new Error(
+      reason === 'no_row'
+        ? `update_time_log no rows for ${id}`
+        : `update_time_log failed (${reason}) for ${id}`,
+    );
+  }
+  return result;
 }
 
 async function closeActiveSessions(userId, deviceId = null, config = global.config, options = {}) {
@@ -96,6 +142,7 @@ async function closeActiveSessions(userId, deviceId = null, config = global.conf
       freshness_minutes: options.freshness_minutes || 15,
     },
     config,
+    { timeoutMs: options.timeoutMs },
   );
 }
 
@@ -115,13 +162,14 @@ async function reconcileOpenSessions(userId, deviceId = null, config = global.co
       flag_stale: options.flag_stale !== false,
     },
     config,
+    { timeoutMs: options.timeoutMs },
   );
 }
 
 /**
  * Confirmed close using local durable checkpoint (or admin). Never heartbeat-alone.
  */
-async function confirmStaleSessionClose(payload, config = global.config) {
+async function confirmStaleSessionClose(payload, config = global.config, options = {}) {
   return callDesktopAction(
     'confirm_stale_session_close',
     {
@@ -132,6 +180,7 @@ async function confirmStaleSessionClose(payload, config = global.config) {
       admin_confirmed: payload.admin_confirmed === true,
     },
     config,
+    { timeoutMs: options.timeoutMs },
   );
 }
 
@@ -279,6 +328,21 @@ async function insertIdleLog(log, config = global.config) {
  * Append-only events into time_doctor.time_log_events (CPU samples, diagnostics).
  * @param {Array<object>|object} events
  */
+/** Presigned PUT URL for a diagnostic log file (one per user per day). */
+async function getLogUploadUrl(payload, config = global.config) {
+  return callDesktopAction(
+    'log_upload_init',
+    {
+      user_id: requireTenantUserId(payload.user_id),
+      device_id: payload.device_id || null,
+      agent_version: payload.agent_version || null,
+      log_date: payload.log_date,
+      organization_id: payload.organization_id || null,
+    },
+    config,
+  );
+}
+
 async function insertTimeLogEvents(events, config = global.config) {
   const list = Array.isArray(events) ? events : events ? [events] : [];
   if (!list.length) return { success: true, inserted: 0 };
@@ -309,4 +373,5 @@ module.exports = {
   closeOpenUrlLogs,
   insertIdleLog,
   insertTimeLogEvents,
+  getLogUploadUrl,
 };

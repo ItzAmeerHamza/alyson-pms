@@ -126,6 +126,57 @@ export class S3Service {
     );
   }
 
+  /** Put an arbitrary object (Athena exports, watermarks). Not limited to screenshot keys. */
+  async putObject(
+    key: string,
+    body: string | Buffer,
+    contentType: string,
+  ): Promise<void> {
+    if (!this.client || !this.bucket) {
+      throw new Error('S3 is not configured');
+    }
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+  }
+
+  /** Read a UTF-8 object body. Returns null on missing key. */
+  async getObjectText(key: string, maxBytes = 1 * 1024 * 1024): Promise<string | null> {
+    if (!this.client || !this.bucket) {
+      throw new Error('S3 is not configured');
+    }
+    try {
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const stream = response.Body;
+      if (!stream) return null;
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of stream as AsyncIterable<Uint8Array>) {
+        total += chunk.length;
+        if (total > maxBytes) {
+          throw new Error(`S3 object exceeds maxBytes (${maxBytes})`);
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks).toString('utf8');
+    } catch (err: unknown) {
+      const name = err && typeof err === 'object' && 'name' in err ? String((err as { name: string }).name) : '';
+      const status =
+        err && typeof err === 'object' && '$metadata' in err
+          ? (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+          : undefined;
+      if (name === 'NoSuchKey' || status === 404) return null;
+      throw err;
+    }
+  }
+
   /** Best-effort delete of a screenshot object. Returns false if S3 is off or key is invalid. */
   async deleteObject(key: string | null | undefined): Promise<boolean> {
     if (!this.client || !this.bucket) return false;

@@ -44,7 +44,7 @@ class IPCEventMap {
 
   registerHandlers() {
     // Timer controls
-    this.registerHandler('start-timer', async (event, projectId = null) => {
+    this.registerHandler('start-timer', async (event, projectId = null, options = {}) => {
       console.log('🎬 [IPC] Start timer requested from renderer');      
       // FORCE UPDATE CHECK: Block timer if update is required
       if (global.forceUpdater && global.forceUpdater.shouldBlockTimer()) {
@@ -68,6 +68,17 @@ class IPCEventMap {
           error: 'Project required to start timer',
           message: 'Please select a project before starting the timer'
         };
+      }
+
+      // Renderer localStorage high-water survives reboot; main in-memory floors do not.
+      const floor = Math.max(0, Math.floor(Number(options?.todayFloorSeconds) || 0));
+      if (floor > 0) {
+        global._rendererTodayFloorSeconds = floor;
+        global._trayTodayHighWaterSeconds = Math.max(
+          Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
+          floor,
+        );
+        global._trayTodayHighWaterDate = new Date().toDateString();
       }
       
       const result = global.trackingManager?.startTracking

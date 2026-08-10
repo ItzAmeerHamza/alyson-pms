@@ -152,6 +152,11 @@ function hydrateTrackedHighWaterFromCache() {
       Math.floor(Number(window.__todayTrackedSeconds) || 0),
       window.__todayTrackedHighWaterSeconds,
     );
+    // Do NOT fold high-water into __completedTodayBaseSeconds here.
+    // HW includes previously painted live time; treating it as "closed base"
+    // freezes the big clock when tray/DB later report the real lower total
+    // (forward-only Math.max sticks on the inflated HW). beginLocalTrackingClock
+    // seeds carefully on Start; DB stats set the real closed base.
   } catch (_) {}
 }
 
@@ -261,9 +266,9 @@ function applyTodayEffectiveStats(stats) {
         // Sync must never lower local recorded time — unless over work-day cap.
         let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
         if (Number.isFinite(cap) && highWater > cap) {
-          highWater = 0;
-          window.__todayTrackedHighWaterSeconds = 0;
-          clearTrackedHighWaterStorage(todayKey);
+          highWater = cap;
+          window.__todayTrackedHighWaterSeconds = cap;
+          persistTrackedHighWater(cap, { force: true });
         }
         window.__todayTrackedSeconds = Math.max(incoming, highWater);
       }
@@ -302,26 +307,16 @@ function applyTodayEffectiveStats(stats) {
         Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
     } else {
-      // Stopped: keep high-water so a partial sync cannot rewind the clock —
-      // but drop a clearly inflated local cache (tray/DB are authoritative).
+      // Stopped: PAYROLL CRITICAL — never rewind the clock because DB/API is
+      // behind (connection timeout, offline queue not flushed yet, partial sync).
+      // Only the work-day wall-clock cap may clamp an impossible local total.
       let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
       if (Number.isFinite(cap) && highWater > cap) {
-        highWater = 0;
-        window.__todayTrackedHighWaterSeconds = 0;
-        clearTrackedHighWaterStorage(todayKey);
+        highWater = cap;
+        window.__todayTrackedHighWaterSeconds = cap;
+        persistTrackedHighWater(cap, { force: true });
       }
-      if (incoming > 0 && highWater > incoming + 60) {
-        console.warn(
-          `⚠️ [TRACKER] Dropping inflated high-water ${highWater}s (DB ${incoming}s)`,
-        );
-        highWater = incoming;
-        window.__todayTrackedHighWaterSeconds = incoming;
-        clearTrackedHighWaterStorage(todayKey);
-        persistTrackedHighWater(incoming, { force: true });
-        setTrackerDisplaySeconds(incoming, { allowDecrease: true });
-      } else {
-        window.__todayTrackedSeconds = Math.max(incoming, highWater);
-      }
+      window.__todayTrackedSeconds = Math.max(incoming, highWater);
       if (typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
         applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: false });
       }
@@ -395,10 +390,10 @@ function readTrackerDisplaySeconds() {
  * and must never reduce this reading.
  *
  * Forward-only by default (never jumps backward on the same work day).
- * Intentional decreases:
+ * Intentional decreases only:
  * - authorized 10m idle-prompt cut
- * - Pacific midnight rollover
- * - reconcile to live tray (base + elapsed) when high-water was inflated
+ * - Pacific / work-day midnight rollover
+ * Network/DB failures must NEVER lower this reading.
  */
 function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}) {
   const el = getTrackerTimerElement();
@@ -495,21 +490,11 @@ function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
   const floorFromTracked = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0))
     : 0;
-  let highWater = sameDay
+  const highWater = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0))
     : 0;
-  // Inflated local cache (app clock stuck ~50m ahead of tray/DB) — trust DB.
-  if (db > 0 && highWater > db + 60) {
-    console.warn(
-      `⚠️ [TRACKER] resolveStopped: dropping inflated high-water ${highWater}s vs DB ${db}s`,
-    );
-    highWater = db;
-    window.__todayTrackedHighWaterSeconds = db;
-    clearTrackedHighWaterStorage(todayKey);
-    persistTrackedHighWater(db, { force: true });
-  }
-  // Sync / partial DB must never lower local recorded time — except when the
-  // local floor is clearly inflated vs a real DB total.
+  // PAYROLL CRITICAL: DB/API lag must never lower local recorded time.
+  // Prefer the max of DB + all local floors. Only the work-day cap may clamp.
   let resolved = Math.max(
     db,
     floorFromTracked,
@@ -517,15 +502,9 @@ function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
     highWater,
     Math.max(0, Math.floor(Number(extraFloor) || 0)),
   );
-  if (db > 0 && resolved > db + 60) {
-    resolved = db;
-    window.__todayTrackedHighWaterSeconds = db;
-    window.__todayTrackedSeconds = db;
-  }
   const cap = maxPlausibleTrackedSecondsToday();
   if (Number.isFinite(cap) && resolved > cap) {
-    // Yesterday glued on — trust DB (clipped) only.
-    resolved = Math.min(db, cap);
+    resolved = cap;
   }
   if (db > 0 && resolved === db) {
     window.__todayBaseAtLastStop = null;
@@ -629,6 +608,28 @@ function beginLocalTrackingClock(startTime) {
   window.__lastTrayTimerTickAt = 0;
   window.__hwAdvanceAnchor = null;
   window.__clearedSecondaryForTray = false;
+  // PAYROLL / UX: never start live clock from 0 when today's high-water is known
+  // (common after reboot — DB/tray floors are in-memory and wiped).
+  // If this is a recovered session (start already in the past), only seed the
+  // *closed* portion: highWater - elapsed, so we don't double-count.
+  // Never seed when HW is far above known closed base (inflated / corrupt HW).
+  const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+  const closedKnown = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  if (hw > 0) {
+    const elapsedNow = getTodayElapsedSeconds(startTime);
+    const closedSeed = Math.max(0, hw - elapsedNow);
+    // If HW is >2 min above known closed base with no live elapsed yet, treat as
+    // inflated and do not raise the closed base (clock would freeze on tray ticks).
+    const hwInflated =
+      closedKnown > 0 && elapsedNow < 5 && closedSeed > closedKnown + 120;
+    if (!hwInflated) {
+      window.__completedTodayBaseSeconds = Math.max(closedKnown, closedSeed);
+    } else {
+      console.warn(
+        `⚠️ [TRACKER] Ignoring inflated high-water seed ${hw}s (closed base ${closedKnown}s)`,
+      );
+    }
+  }
   ensureTrackingDisplayWatchdog();
   updateRendererTrackingClock();
 }
@@ -643,24 +644,36 @@ function updateRendererTrackingClock() {
   const trayAge = Date.now() - (window.__lastTrayTimerTickAt || 0);
   const trayCum = Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0);
   const elapsed = getTodayElapsedSeconds(start);
-  const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  const localLive = resolveTrackingDisplaySeconds(base + elapsed);
-  let cumulativeSec = localLive;
-  let allowDecrease = false;
+  const highWater = Math.max(
+    0,
+    Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+    Math.floor(Number(window.__todayTrackedSeconds) || 0),
+  );
+  // Closed base only — do NOT fold live high-water into base here or
+  // base+elapsed double-counts as the session grows.
+  let base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  let localLive = resolveTrackingDisplaySeconds(base + elapsed);
+  // PAYROLL RED LINE: never lower the employee-visible total.
+  // If high-water / prior paint is ahead of tray (DB lag, overlap cleanup),
+  // raise closed base so the clock stays at that floor and keeps advancing.
+  if (highWater > localLive + 1) {
+    base = Math.max(base, highWater - elapsed);
+    window.__completedTodayBaseSeconds = base;
+    localLive = base + elapsed;
+  }
+  let cumulativeSec = Math.max(localLive, highWater);
   if (trayCum > 0 && trayAge < 5000) {
-    cumulativeSec = trayCum;
-    const prevShown = Math.max(
-      0,
-      Math.floor(Number(window.__todayTrackedSeconds) || 0),
-      Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-      readTrackerDisplaySeconds(),
-    );
-    allowDecrease = cumulativeSec < prevShown - 1;
+    if (trayCum + 1 < highWater) {
+      // Tray behind painted total — do not rewind; keep floor and advance.
+      cumulativeSec = Math.max(localLive, highWater);
+    } else {
+      cumulativeSec = Math.max(trayCum, localLive, highWater);
+    }
   }
   window.__lastTrayCumulativeSeconds = Math.max(trayCum, cumulativeSec);
   const sessionStr = formatSecondsAsHMS(elapsed);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease });
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -1412,23 +1425,29 @@ function setupModuleCommunication() {
       if (dashboardTimer && dashboardTimer.textContent !== sessionStr) {
         dashboardTimer.textContent = sessionStr;
       }
-      const prevShown = Math.max(
+      // PAYROLL RED LINE: never drop the painted total when tray/DB is briefly
+      // behind. If high-water is ahead, raise closed base so the clock keeps
+      // advancing from that floor (fixes freeze without eating time).
+      const hw = Math.max(
         0,
-        Math.floor(Number(window.__todayTrackedSeconds) || 0),
         Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+        Math.floor(Number(window.__todayTrackedSeconds) || 0),
         readTrackerDisplaySeconds(),
       );
-      // Snap down when local high-water drifted ahead of real tray time (desync bug).
-      const allowDecrease = cumulativeSec < prevShown - 1;
-      if (allowDecrease) {
-        console.warn(
-          `⚠️ [TRACKER] Reconciling inflated clock ${formatSecondsAsHMS(prevShown)} → tray ${formatSecondsAsHMS(cumulativeSec)}`,
+      if (start && hw > cumulativeSec + 1) {
+        const elapsedNow = getTodayElapsedSeconds(start);
+        window.__completedTodayBaseSeconds = Math.max(
+          Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+          hw - elapsedNow,
         );
-        // Drop persisted inflated high-water so it cannot re-stick after reload.
-        clearTrackedHighWaterStorage(localDateIso());
-        window.__todayTrackedHighWaterSeconds = cumulativeSec;
+        cumulativeSec = Math.max(
+          hw,
+          Math.floor(Number(window.__completedTodayBaseSeconds) || 0) + elapsedNow,
+        );
+      } else {
+        cumulativeSec = Math.max(hw, cumulativeSec);
       }
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease });
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
     }
   });
 
@@ -2979,6 +2998,46 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
             console.log(`  ${i}: ${s.image_url} (captured: ${s.captured_at})`);
         });
     }
+
+    /**
+     * Map screenshot AI fields to a Productive / Non-productive badge
+     * (aligned with web portal category + is_work_related signals).
+     */
+    function resolveProductivityBadge(shot) {
+      const status = String(shot?.ai_analysis_status || '').toLowerCase();
+      if (!status || status === 'pending' || status === 'queued' || status === 'processing') {
+        return { label: 'Analyzing', bg: '#94a3b8' };
+      }
+      if (status === 'failed' || status === 'skipped') {
+        return { label: 'Unanalyzed', bg: '#cbd5e1' };
+      }
+      const cat = String(shot?.category || '').toLowerCase();
+      const work = shot?.is_work_related === true;
+      const distraction = Math.max(0, Math.floor(Number(shot?.distraction_score) || 0));
+      const confidence = Math.max(0, Math.floor(Number(shot?.confidence_score) || 0));
+      const nonProdCats = new Set([
+        'distraction',
+        'entertainment',
+        'social_media',
+        'gaming',
+        'shopping',
+        'unproductive',
+      ]);
+      if (nonProdCats.has(cat) || (work === false && distraction >= 40)) {
+        return { label: 'Non-productive', bg: '#ef4444' };
+      }
+      if (
+        cat === 'productive' ||
+        (work && confidence > 50) ||
+        (work && distraction < 30)
+      ) {
+        return { label: 'Productive', bg: '#059669' };
+      }
+      if (cat === 'neutral' || cat === 'news') {
+        return { label: 'Neutral', bg: '#f59e0b' };
+      }
+      return { label: 'Neutral', bg: '#64748b' };
+    }
     
     const screenshotsPage = document.getElementById('screenshotsPage');
     console.log('🔍 [DEBUG] screenshotsPage element found:', !!screenshotsPage);
@@ -3110,6 +3169,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
             let activityLevel = 'High';
             if (activityPercent < 10) { activityColor = '#ef4444'; activityLevel = 'Low'; }
             else if (activityPercent < 70) { activityColor = '#f59e0b'; activityLevel = 'Medium'; }
+            const productivity = resolveProductivityBadge(screenshot);
             
                         screenshotHTML += `
                 <div class="screenshot-item" style="
@@ -3153,10 +3213,16 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                                 Focus: ${focusPercent}% · Clicks: ${screenshot.mouse_clicks || 0} · Keys: ${screenshot.keystrokes || 0} · Moves: ${screenshot.mouse_movements || 0}
                             </div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: ${activityColor}; color: white;">
-                                ${activityLevel}
-                            </span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+                              <span style="display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: ${activityColor}; color: white;">
+                                  ${activityLevel}
+                              </span>
+                              <span title="Screenshot AI classification"
+                                    style="display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; background: ${productivity.bg}; color: white;">
+                                  ${productivity.label}
+                              </span>
+                            </div>
                             <button onclick="event.stopPropagation(); requestDeleteScreenshot('${screenshot.id}')"
                                     title="Delete screenshot (time will be deducted)"
                                     style="background: transparent; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px; cursor: pointer; color: #94a3b8; transition: all 0.2s;"

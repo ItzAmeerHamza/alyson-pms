@@ -391,6 +391,13 @@ class TrayManager {
       global._frozenTotalDate = todayKey;
       // Drop yesterday's floor so get-today-time-stats cannot reinflate the clock.
       global._lastGoodTodayStats = null;
+      // These two are keyed by machine-local date (toDateString), not the work
+      // timezone — on a non-Pacific machine they otherwise survive past this
+      // rollover and silently reinflate today's total back to yesterday's via
+      // the Math.max() floor in holdTodayTrackedFloor().
+      global._trayTodayHighWaterSeconds = 0;
+      global._trayTodayHighWaterDate = null;
+      global._rendererTodayFloorSeconds = 0;
     }
 
     if (this.isTracking && this.tray && !this.tray.isDestroyed()) {
@@ -593,9 +600,23 @@ class TrayManager {
         const elapsed = this._getSessionElapsedSeconds();
         const display = this._formatElapsed(elapsed);
         const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
-        const cumulativeSeconds = Math.max(0, baseSec + elapsed);
+        // Forward-only cumulative — never let a tick show less than last painted second.
+        const rawCumulative = Math.max(0, baseSec + elapsed);
+        const lastCum = Math.max(0, Math.floor(Number(this._lastCumulativeSeconds) || 0));
+        const cumulativeSeconds = Math.max(rawCumulative, lastCum);
         const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
         this._lastCumulativeSeconds = cumulativeSeconds;
+        // Persist a main-process floor so renderer/DB lag cannot erase today's peak.
+        try {
+          if (typeof global.holdTodayTrackedFloor === 'function') {
+            /* optional */
+          }
+          global._trayTodayHighWaterSeconds = Math.max(
+            Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
+            cumulativeSeconds,
+          );
+          global._trayTodayHighWaterDate = new Date().toDateString();
+        } catch (_) { /* ignore */ }
 
         if (process.platform === 'darwin' && cumulativeDisplay !== this._lastTrayTitle) {
           // Only touch the menu bar when the second string changes.
@@ -794,7 +815,12 @@ class TrayManager {
     }
     if (extra.completedTodayBeforeSessionSeconds !== undefined) {
       const n = Number(extra.completedTodayBeforeSessionSeconds);
-      this._cumulativeBaseSeconds = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+      // Forward-only: Start must never wipe a known base with 0 (reboot race).
+      this._cumulativeBaseSeconds = Math.max(
+        Math.floor(Number(this._cumulativeBaseSeconds) || 0),
+        next,
+      );
     }
     if (extra.projectList !== undefined) this._projectList = extra.projectList;
 

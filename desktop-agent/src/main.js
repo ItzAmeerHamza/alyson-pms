@@ -5833,6 +5833,55 @@ if (isElectronContext && ipcMain) {
       isCleanupInProgress = true;
       event.preventDefault();
       console.log('🔄 App shutting down - waiting for cleanup...');
+
+      // PAYROLL: sync durable close to disk BEFORE async stop (quit can kill mid-await).
+      try {
+        if (global.isTracking || global.trackingManager?.isTracking) {
+          const tm = global.trackingManager;
+          const timeLogId = tm?.currentTimeLogId || global.currentTimeLogId;
+          const endTime = new Date().toISOString();
+          global._stopEndTimeOverride = global._stopEndTimeOverride || endTime;
+          if (tm?._captureStopTodayTotalSnapshot) tm._captureStopTodayTotalSnapshot();
+          if (timeLogId && tm) {
+            const startTime =
+              tm.sessionStartTime || tm.currentSession?.start_time || endTime;
+            const userId = tm.config?.user_id || global.currentUserId;
+            tm._storeSessionCheckpoint?.({
+              timeLogId,
+              startTime,
+              checkpointAt: endTime,
+              userId,
+              projectId: tm.currentProjectId,
+              reason: 'quit',
+            });
+            tm._storePendingSessionClose?.(timeLogId, endTime, userId);
+            tm._queueOfflineTimeLogUpdate?.({
+              id: timeLogId,
+              user_id: userId,
+              start_time: startTime,
+              end_time: endTime,
+              status: 'completed',
+              project_id: tm.currentProjectId || null,
+              _quit_armed: true,
+            });
+            tm._appendTimeLedger?.({
+              event: 'quit_arm_close',
+              id: timeLogId,
+              start_time: startTime,
+              end_time: endTime,
+              status: 'completed',
+            });
+          }
+          try {
+            const { markUserExplicitlyStopped } = require('./modules/utils/session-recovery');
+            markUserExplicitlyStopped({ reason: 'quit', timeLogId });
+          } catch (_) {
+            global.userExplicitlyStopped = true;
+          }
+        }
+      } catch (armErr) {
+        console.warn('⚠️ [QUIT] Durable arm failed:', armErr?.message || armErr);
+      }
       
       // CRITICAL FIX v1.0.136: Wrap cleanup in timeout to prevent zombie processes on Windows
       const CLEANUP_TIMEOUT_MS = 5000;
@@ -5860,6 +5909,15 @@ if (isElectronContext && ipcMain) {
 
         // CRITICAL: Wait for stopTracking to complete (closes time_log in database)
         await global.stopTracking('quit', 'Application closed — session saved');
+
+        // Best-effort: ship today's (partial) diagnostic log so it isn't stuck
+        // on-device until tomorrow's rotation. Never blocks quit on failure.
+        try {
+          const { uploadTodayLogOnShutdown } = require('./modules/utils/log-uploader');
+          await uploadTodayLogOnShutdown();
+        } catch (err) {
+          console.warn('⚠️ [LOG-UPLOAD] Shutdown upload failed:', err?.message || err);
+        }
 
         // AGGRESSIVE INTERVAL CLEANUP TO PREVENT MEMORY LEAKS
         console.log('🧹 Performing aggressive cleanup...');
@@ -6091,6 +6149,16 @@ if (isElectronContext && ipcMain) {
       0,
       Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
+
+    // Live tray high-water (wall-clock) — DB/network lag must never pull the
+    // reported total below what the employee already saw on the menu bar.
+    try {
+      const trayHwDate = global._trayTodayHighWaterDate;
+      const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
+      if (trayHw > 0 && trayHwDate === new Date().toDateString()) {
+        total = Math.max(total, trayHw);
+      }
+    } catch (_) { /* ignore */ }
 
     if (cap != null) {
       if (total > cap) {

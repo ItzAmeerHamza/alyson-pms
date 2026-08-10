@@ -339,6 +339,56 @@ Resources:
             Enabled: !If [ScreenshotAiEnabled, true, false]
             Description: Alyson Time Doctor - enqueue pending screenshots for AI analysis
 
+  # Incremental export of time_doctor.time_logs → S3 NDJSON (Athena).
+  # Path: s3://{S3BucketName}/tracked-time/time_logs/dt=YYYY-MM-DD/*.ndjson
+  TimeLogsExportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-time-logs-export-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/time-logs-export-handler.handler
+      Timeout: 300
+      MemorySize: 1024
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DATABASE_HOST: !Ref DatabaseHost
+          DATABASE_NAME: !Ref DatabaseName
+          DATABASE_USER: !Ref DatabaseUser
+          DATABASE_PASSWORD: !Ref DatabasePassword
+          DATABASE_SSL: 'true'
+          DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+          DATABASE_POOL_MAX: '2'
+          AWS_S3_SCREENSHOTS_BUCKET: !Ref S3BucketName
+          TRACKED_TIME_LOGS_S3_PREFIX: tracked-time/time_logs
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref S3BucketName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: '*'
+      Events:
+        TimeLogsExportSchedule:
+          Type: Schedule
+          Properties:
+            Name: !Sub 'alyson-time-doctor-time-logs-export-schedule-${EnvironmentName}'
+            Schedule: rate(15 minutes)
+            Enabled: true
+            Description: Alyson Time Doctor - export time_logs to S3 NDJSON for Athena
+
   AlysonTimeDoctorApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -459,6 +509,9 @@ Outputs:
   ScreenshotAiBackfillFunctionArn:
     Description: Screenshot AI backfill Lambda ARN
     Value: !GetAtt ScreenshotAiBackfillFunction.Arn
+  TimeLogsExportFunctionArn:
+    Description: Scheduled time_logs → S3 NDJSON export Lambda ARN
+    Value: !GetAtt TimeLogsExportFunction.Arn
   SqsVpcEndpointDnsName:
     Description: Regional SQS VPC endpoint DNS (Private DNS disabled — app SDK only)
     Value: !Ref SqsVpcEndpointDnsName

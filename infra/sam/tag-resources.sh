@@ -99,7 +99,7 @@ done
 
 echo "==> Lambda + API Gateway + Screenshot AI (from stack resources)"
 if aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
-  for logical_id in AlysonTimeDoctorApiFunction ScreenshotAiWorkerFunction ScreenshotAiBackfillFunction; do
+  for logical_id in AlysonTimeDoctorApiFunction ScreenshotAiWorkerFunction ScreenshotAiBackfillFunction TimeLogsExportFunction; do
     LAMBDA_NAME=$(aws cloudformation describe-stack-resource \
       --stack-name "$STACK_NAME" \
       --logical-resource-id "$logical_id" \

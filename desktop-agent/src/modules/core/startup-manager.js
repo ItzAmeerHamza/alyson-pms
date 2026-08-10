@@ -4,7 +4,8 @@
  */
 
 // Session recovery for database synchronization
-const { startSessionHealthCheck } = require('../utils/session-recovery');
+const { startSessionHealthCheck, loadUserExplicitlyStoppedFromDisk } = require('../utils/session-recovery');
+const { startLogUploadSchedule } = require('../utils/log-uploader');
 
 class StartupManager {
   constructor(electronModules, dependencies = {}) {
@@ -696,8 +697,12 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       }
 
       // Start session health monitoring for database synchronization
+      loadUserExplicitlyStoppedFromDisk();
       startSessionHealthCheck();
-      
+
+      // Ship yesterday's diagnostic log to S3 and start watching for the next rotation
+      startLogUploadSchedule();
+
       // Check permissions via consolidated system monitor
       if (global.systemMonitor) {
         console.log('🔐 [STARTUP-MANAGER] Running consolidated permission check...');

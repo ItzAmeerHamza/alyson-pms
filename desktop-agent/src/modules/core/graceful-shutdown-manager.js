@@ -121,8 +121,38 @@ class GracefulShutdownManager {
     // FREEZE FIX: Set global shutdown flag early so app detection, URL polling,
     // and other subsystems skip expensive work immediately during shutdown.
     global.isShuttingDown = true;
-    // Prevent health check from auto-recovering stale sessions after system sleep/shutdown
-    global.userExplicitlyStopped = true;
+
+    // Sleep/suspend is NOT an explicit employee stop — arm wake auto-resume.
+    // Manual/idle/shutdown remain explicit so health-check won't re-adopt orphans.
+    const isAutoSleepStop = reason === 'system_sleep' || reason === 'suspend';
+    if (isAutoSleepStop) {
+      global.userExplicitlyStopped = false;
+      try {
+        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+        clearUserExplicitlyStopped();
+      } catch (_) { /* ignore */ }
+      global._resumeTrackingAfterWake = {
+        projectId:
+          global.trackingManager?.currentProjectId ||
+          global.currentProjectId ||
+          global.config?.project_id ||
+          null,
+        stoppedAt: Date.now(),
+        reason,
+      };
+      console.log('💤 [GRACEFUL-SHUTDOWN] Sleep stop — wake auto-resume armed');
+    } else {
+      try {
+        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+        markUserExplicitlyStopped({
+          reason,
+          timeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId,
+        });
+      } catch (_) {
+        global.userExplicitlyStopped = true;
+      }
+      global._resumeTrackingAfterWake = null;
+    }
 
     console.log(`🛑 [GRACEFUL-SHUTDOWN] Starting graceful stop (reason: ${reason})`);
     const startTime = Date.now();
@@ -216,9 +246,32 @@ class GracefulShutdownManager {
     };
 
     try {
-      // CRITICAL: Capture timeLogId BEFORE clearing local state
-      // Otherwise _updateDatabase won't have the ID to close
+      // CRITICAL: Capture session fields BEFORE clearing local state
+      // Otherwise _updateDatabase won't have the ID / start_time to close or re-create.
       this._capturedTimeLogId = global.trackingManager?.currentTimeLogId || global.currentTimeLogId;
+      this._capturedSessionMeta = {
+        start_time:
+          global.trackingManager?.sessionStartTime ||
+          global.sessionStartTime ||
+          global.currentSession?.start_time ||
+          global.trackingManager?.currentSession?.start_time ||
+          null,
+        user_id:
+          global.currentUserId ||
+          global.config?.user_id ||
+          global.currentSession?.user_id ||
+          null,
+        project_id:
+          global.trackingManager?.currentProjectId ||
+          global.currentProjectId ||
+          global.currentSession?.project_id ||
+          global.config?.project_id ||
+          null,
+        device_id:
+          global.currentSession?.device_id ||
+          global.trackingManager?.currentSession?.device_id ||
+          null,
+      };
 
       // Notify renderer immediately so the clock freezes at click-time (not after slow DB I/O).
       results.renderer = this._notifyRenderer(reason);
@@ -348,9 +401,25 @@ class GracefulShutdownManager {
       // Also mirror into tracking-manager offline queue when available
       try {
         if (global.trackingManager?._queueOfflineTimeLogUpdate) {
+          const meta = this._capturedSessionMeta || {};
+          let startTime =
+            meta.start_time ||
+            null;
+          // Fall back to local checkpoint if capture raced with clear.
+          if (!startTime) {
+            try {
+              const cp = global.trackingManager._readSessionCheckpoint?.();
+              if (cp?.startTime && String(cp.timeLogId || '') === String(timeLogId)) {
+                startTime = cp.startTime;
+              }
+            } catch (_) { /* ignore */ }
+          }
           global.trackingManager._queueOfflineTimeLogUpdate({
             id: timeLogId,
-            user_id: global.currentUserId || global.config?.user_id,
+            user_id: meta.user_id || global.currentUserId || global.config?.user_id,
+            project_id: meta.project_id || null,
+            device_id: meta.device_id || null,
+            start_time: startTime,
             end_time: endTime,
             status: 'completed',
             ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
@@ -386,6 +455,31 @@ class GracefulShutdownManager {
       try {
         global.trackingManager?._clearSessionCheckpoint?.();
       } catch (_) { /* ignore */ }
+
+      // Belt-and-suspenders: close any other still-open rows on this device
+      // (duplicate orphans) using the same end time.
+      if (useBackend && reason !== 'system_sleep' && reason !== 'suspend') {
+        try {
+          const { normalizeTenantUserId } = require('../utils/tenant-user-id');
+          const { getDeviceId } = require('../utils/device-id');
+          const { closeOpenSessionsAfterExplicitStop } = require('../utils/session-recovery');
+          const userId = normalizeTenantUserId(
+            global.currentUserId || global.config?.user_id || global.config?.userId,
+          );
+          if (userId) {
+            await closeOpenSessionsAfterExplicitStop({
+              userId,
+              deviceId: getDeviceId(),
+              end_time: endTime,
+            });
+          }
+        } catch (extraCloseErr) {
+          console.warn(
+            '⚠️ [GRACEFUL-SHUTDOWN] Extra orphan close after stop failed:',
+            extraCloseErr?.message || extraCloseErr,
+          );
+        }
+      }
       
       return true;
 
@@ -411,10 +505,14 @@ class GracefulShutdownManager {
       
       const pendingFile = path.join(pendingDir, `${timeLogId}.json`);
       const tmpFile = `${pendingFile}.tmp`;
+      const meta = this._capturedSessionMeta || {};
       const payload = JSON.stringify({
         timeLogId,
         endTime: endTime || new Date().toISOString(),
-        userId: global.config?.user_id || global.currentUserId,
+        startTime: meta.start_time || null,
+        projectId: meta.project_id || null,
+        deviceId: meta.device_id || null,
+        userId: meta.user_id || global.config?.user_id || global.currentUserId,
         reason,
         createdAt: new Date().toISOString()
       });
@@ -835,8 +933,18 @@ class GracefulShutdownManager {
         try {
           const { getDeviceId } = require('../utils/device-id');
           const deviceId = getDeviceId();
-          await backendTimeLogs.closeActiveSessions(userId, deviceId);
-          console.log('✅ [GRACEFUL-SHUTDOWN] Reconciled remaining open time_logs via RDS');
+          // After pending closes: any leftover open row on this device must be closed.
+          // (closeActiveSessions without end_time only inspected/flagged — that left orphans.)
+          const {
+            closeOpenSessionsAfterExplicitStop,
+            resolveExplicitStopEndTime,
+          } = require('../utils/session-recovery');
+          await closeOpenSessionsAfterExplicitStop({
+            userId,
+            deviceId,
+            end_time: resolveExplicitStopEndTime(),
+          });
+          console.log('✅ [GRACEFUL-SHUTDOWN] Closed remaining open time_logs via RDS');
           const reconcileResult = await backendTimeLogs.reconcileInflatedTimeLogs(
             userId,
             deviceId,

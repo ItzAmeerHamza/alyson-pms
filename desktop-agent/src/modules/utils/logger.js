@@ -3,6 +3,159 @@
 
 const DEFAULT_LEVEL = process.env.TIMEFLOW_LOG_LEVEL || process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug');
 
+/**
+ * Local log file sink — buffered, best-effort, never throws.
+ * One file per calendar day so it can be rotated + uploaded to S3 (see log-uploader.js).
+ */
+function resolveLogDir() {
+  try {
+    const path = require('path');
+    const os = require('os');
+    const userDataDir =
+      process.env.APPDATA ||
+      (process.platform === 'darwin'
+        ? path.join(os.homedir(), 'Library', 'Application Support')
+        : path.join(os.homedir(), '.config'));
+    return path.join(userDataDir, 'Alyson Work Time', 'logs');
+  } catch (_) {
+    return null;
+  }
+}
+
+function todayDateStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+const fileSink = {
+  dir: resolveLogDir(),
+  buffer: [],
+  jsonlBuffer: [],
+  flushTimer: null,
+  ensureDir() {
+    if (!this.dir) return false;
+    try {
+      const fs = require('fs');
+      if (!fs.existsSync(this.dir)) fs.mkdirSync(this.dir, { recursive: true });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  },
+  currentFilePath(dateStr = todayDateStr()) {
+    if (!this.dir) return null;
+    const path = require('path');
+    return path.join(this.dir, `${dateStr}.log`);
+  },
+  currentJsonlPath(dateStr = todayDateStr()) {
+    if (!this.dir) return null;
+    const path = require('path');
+    return path.join(this.dir, `${dateStr}.jsonl`);
+  },
+  append(line) {
+    if (!this.dir) return;
+    this.buffer.push(line);
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flush(), 2000);
+      if (this.flushTimer.unref) this.flushTimer.unref();
+    }
+  },
+  appendJsonl(obj) {
+    if (!this.dir || !obj) return;
+    try {
+      this.jsonlBuffer.push(JSON.stringify(obj));
+    } catch (_) {
+      return;
+    }
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flush(), 2000);
+      if (this.flushTimer.unref) this.flushTimer.unref();
+    }
+  },
+  flush() {
+    this.flushTimer = null;
+    const lines = this.buffer;
+    const jsonlLines = this.jsonlBuffer;
+    this.buffer = [];
+    this.jsonlBuffer = [];
+    if (!this.ensureDir()) return;
+    try {
+      const fs = require('fs');
+      if (lines.length > 0) {
+        fs.appendFile(this.currentFilePath(), lines.join('\n') + '\n', () => {});
+      }
+      if (jsonlLines.length > 0) {
+        fs.appendFile(this.currentJsonlPath(), jsonlLines.join('\n') + '\n', () => {});
+      }
+    } catch (_) { /* best-effort only */ }
+  },
+};
+
+/**
+ * The app logs almost entirely via raw console.* calls scattered across every module,
+ * not the structured Logger below — tee those into the same file sink so the log file
+ * (and what ends up in S3) actually reflects what's happening, not just the ~5% of
+ * lines that go through createFeatureLogger.
+ */
+function stringifyConsoleArgs(args) {
+  return args
+    .map((a) => {
+      if (typeof a === 'string') return a;
+      try {
+        return JSON.stringify(a);
+      } catch (_) {
+        return String(a);
+      }
+    })
+    .join(' ');
+}
+
+function installConsoleFileTee() {
+  if (console.__alysonFileTeeInstalled) return;
+  console.__alysonFileTeeInstalled = true;
+
+  ['log', 'info', 'warn', 'error', 'debug'].forEach((method) => {
+    const original = console[method].bind(console);
+    const level = method === 'log' ? 'info' : method;
+    console[method] = (...args) => {
+      original(...args);
+      try {
+        const message = stringifyConsoleArgs(args);
+        fileSink.append(`${new Date().toISOString()} [${level.toUpperCase()}] ${message}`);
+        // Structured JSONL for S3 / Athena — identity fields when available.
+        let userId = null;
+        let deviceId = null;
+        let workspaceId = null;
+        let agentVersion = null;
+        try {
+          userId = global.currentUserId || global.config?.user_id || null;
+          workspaceId =
+            global.currentOrganizationId ||
+            global.config?.organization_id ||
+            global.config?.workspace_id ||
+            null;
+          agentVersion = global.config?.version || global.appVersion || null;
+        } catch (_) { /* ignore */ }
+        try {
+          const { getDeviceId } = require('./device-id');
+          deviceId = getDeviceId();
+        } catch (_) { /* ignore */ }
+        fileSink.appendJsonl({
+          ts: new Date().toISOString(),
+          level,
+          message,
+          user_id: userId != null ? String(userId) : null,
+          device_id: deviceId,
+          workspace_id: workspaceId != null ? String(workspaceId) : null,
+          agent_version: agentVersion,
+          category: 'console',
+        });
+      } catch (_) { /* best-effort only */ }
+    };
+  });
+}
+
+installConsoleFileTee();
+
 const LEVELS = {
   debug: 10,
   info: 20,
@@ -78,7 +231,7 @@ class Logger {
 
     const line = `${prefix}${entry.ctx ? ' ' + safeStringify(entry.ctx) : ''}`;
 
-    // Route to appropriate console method
+    // Route to appropriate console method (file sink is fed via the console.* tee below)
     /* eslint-disable no-console */
     switch (level) {
       case 'debug':
@@ -242,6 +395,12 @@ module.exports = {
   LEVELS,
   createFeatureLogger,
   safeConsole,
+  logFile: {
+    dir: () => fileSink.dir,
+    pathFor: (dateStr) => fileSink.currentFilePath(dateStr),
+    jsonlPathFor: (dateStr) => fileSink.currentJsonlPath(dateStr),
+    flush: () => fileSink.flush(),
+  },
 };
 
 

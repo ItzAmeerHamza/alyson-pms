@@ -18,6 +18,7 @@ import {
   DAILY_EFFECTIVE_TARGET_HOURS,
 } from './low-hours-email-templates';
 import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
+import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
   eachWorkDateKey,
   sqlWorkDate,
@@ -435,6 +436,7 @@ export class PulseService {
            s.activity_percent IS NOT NULL
            AND s.activity_percent < $${thresholdIdx}
            AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
+           AND NOT ${SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL}
          ) AS is_low
        FROM time_doctor.screenshots s
        JOIN tenant."user" u ON u.id = s.user_id

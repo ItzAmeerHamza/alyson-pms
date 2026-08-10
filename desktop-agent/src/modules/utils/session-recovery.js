@@ -1,7 +1,10 @@
 /**
  * Session Recovery Utility
  * Syncs open RDS sessions with the desktop agent using heartbeat/evidence liveness.
- * Stale orphans are closed at last trustworthy timestamp — never at NOW.
+ *
+ * Intentional Stop: when the employee stops Time Doctor, any remaining open
+ * session on this device MUST be closed (pending end / checkpoint / NOW) —
+ * flag-only left orphans that kept accruing until admin intervention.
  */
 
 const { createFeatureLogger } = require('./logger');
@@ -16,23 +19,186 @@ function resolveSupabaseClient() {
   return null;
 }
 
-function readLocalCheckpointAt() {
+function appDataDir() {
+  const path = require('path');
+  const os = require('os');
+  const userDataDir =
+    process.env.APPDATA ||
+    (process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : path.join(os.homedir(), '.config'));
+  return path.join(userDataDir, 'Alyson Work Time');
+}
+
+function readLocalCheckpoint() {
   try {
     const fs = require('fs');
     const path = require('path');
-    const os = require('os');
-    const userDataDir =
-      process.env.APPDATA ||
-      (process.platform === 'darwin'
-        ? path.join(os.homedir(), 'Library', 'Application Support')
-        : path.join(os.homedir(), '.config'));
-    const filePath = path.join(userDataDir, 'Alyson Work Time', 'session-checkpoint.json');
+    const filePath = path.join(appDataDir(), 'session-checkpoint.json');
     if (!fs.existsSync(filePath)) return null;
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parsed?.checkpointAt || null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (_) {
     return null;
   }
+}
+
+function readLocalCheckpointAt() {
+  return readLocalCheckpoint()?.checkpointAt || null;
+}
+
+/** Newest end_time from pending_sessions/*.json (intentional stop that may not have synced). */
+function readPendingSessionEndTime() {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(appDataDir(), 'pending_sessions');
+    if (!fs.existsSync(dir)) return null;
+    let best = null;
+    let bestMs = 0;
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+        const end = data?.endTime || data?.end_time;
+        const ms = end ? new Date(end).getTime() : NaN;
+        if (Number.isFinite(ms) && ms >= bestMs) {
+          bestMs = ms;
+          best = new Date(ms).toISOString();
+        }
+      } catch (_) { /* skip corrupt */ }
+    }
+    return best;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Best durable end_time for closing after an intentional stop.
+ * Prefer pending close → checkpoint → caller fallback (usually NOW).
+ */
+function resolveExplicitStopEndTime(fallbackIso = null) {
+  return (
+    readPendingSessionEndTime() ||
+    readLocalCheckpointAt() ||
+    fallbackIso ||
+    new Date().toISOString()
+  );
+}
+
+function explicitStopFlagPath() {
+  const path = require('path');
+  return path.join(appDataDir(), 'explicit-stop.json');
+}
+
+/** Persist intentional stop so relaunch does not re-adopt orphans as "tracking". */
+function markUserExplicitlyStopped(meta = {}) {
+  global.userExplicitlyStopped = true;
+  try {
+    const fs = require('fs');
+    const dir = appDataDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      explicitStopFlagPath(),
+      JSON.stringify({
+        stoppedAt: new Date().toISOString(),
+        timeLogId: meta.timeLogId || global.currentTimeLogId || null,
+        reason: meta.reason || 'manual',
+      }),
+      'utf8',
+    );
+  } catch (err) {
+    log.warn({ step: 'EXPLICIT_STOP_PERSIST_FAILED', message: err?.message || String(err) });
+  }
+}
+
+function clearUserExplicitlyStopped() {
+  global.userExplicitlyStopped = false;
+  try {
+    const fs = require('fs');
+    const p = explicitStopFlagPath();
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) { /* ignore */ }
+}
+
+/** Load durable stop flag on startup (before health-check / recovery). */
+function loadUserExplicitlyStoppedFromDisk() {
+  try {
+    const fs = require('fs');
+    const p = explicitStopFlagPath();
+    if (!fs.existsSync(p)) return false;
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (parsed?.stoppedAt) {
+      global.userExplicitlyStopped = true;
+      log.info({
+        step: 'EXPLICIT_STOP_LOADED',
+        message: 'Prior intentional stop in effect — will close open sessions, not recover',
+        ctx: { stoppedAt: parsed.stoppedAt, timeLogId: parsed.timeLogId || null },
+      });
+      return true;
+    }
+  } catch (_) { /* ignore */ }
+  return false;
+}
+
+/**
+ * Close all still-open sessions on this device after an intentional Stop.
+ * Uses allow_unconfirmed_end so Nest mutates (inspect/flag alone left orphans).
+ */
+async function closeOpenSessionsAfterExplicitStop(options = {}) {
+  const backendTimeLogs = require('./backend-time-logs');
+  const userId = options.userId || global.currentUserId || global.config?.user_id;
+  if (!userId) {
+    log.warn({ step: 'EXPLICIT_STOP_CLOSE_SKIP', message: 'No user_id' });
+    return { success: false, closed: 0, reason: 'no_user' };
+  }
+  const deviceId = options.deviceId !== undefined ? options.deviceId : getDeviceId();
+  const endTime = resolveExplicitStopEndTime(options.end_time || null);
+
+  if (!backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
+    // Legacy Supabase: close open rows for this device at endTime.
+    const supabase = resolveSupabaseClient();
+    if (!supabase) return { success: false, closed: 0, reason: 'no_client' };
+    let query = supabase
+      .from('time_logs')
+      .update({ end_time: endTime, status: 'completed' })
+      .eq('user_id', userId)
+      .is('end_time', null);
+    if (deviceId) query = query.eq('device_id', deviceId);
+    const { data, error } = await query.select('id');
+    if (error) throw error;
+    const closed = data?.length || 0;
+    log.info({
+      step: 'EXPLICIT_STOP_CLOSED_LEGACY',
+      message: 'Closed open sessions after intentional stop',
+      ctx: { closed, endTime, deviceId },
+    });
+    return { success: true, closed, closed_ids: (data || []).map((r) => r.id), end_time: endTime };
+  }
+
+  const result = await backendTimeLogs.closeActiveSessions(
+    userId,
+    deviceId,
+    options.config || global.config,
+    {
+      end_time: endTime,
+      allow_unconfirmed_end: true,
+      prefer_recover: false,
+      client_last_seen_at: readLocalCheckpointAt(),
+      timeoutMs: options.timeoutMs || 12000,
+    },
+  );
+  log.info({
+    step: 'EXPLICIT_STOP_CLOSED',
+    message: 'Closed open sessions after intentional stop',
+    ctx: {
+      closed: result?.closed ?? 0,
+      closed_ids: result?.closed_ids || [],
+      endTime,
+      deviceId,
+    },
+  });
+  return result;
 }
 
 function applyRecoveredSession(activeLog) {
@@ -141,31 +307,49 @@ function startSessionHealthCheck() {
         const preferRecover = !global.userExplicitlyStopped;
         const backendTimeLogs = require('./backend-time-logs');
 
-        if (backendTimeLogs.isBackendTimeLogsEnabled()) {
-          const result = await reconcileDeviceSessions({ preferRecover });
-          if (!preferRecover) {
-            log.info({
-              step: 'SYNC_FLAGGED_STALE',
-              message: 'User stopped — flagged open sessions (no auto-close from heartbeat)',
-              ctx: { flagged: result?.flagged_count || 0 },
-            });
-            return;
-          }
-          if (result?.recovered?.id) {
-            applyRecoveredSession(result.recovered);
-            return;
-          }
-          if (result?.flagged_count) {
-            log.info({
-              step: 'SYNC_FLAGGED_STALE',
-              message: 'Flagged stale orphan session(s); awaiting confirmation to close',
-              ctx: { flagged: result.flagged_count, details: result.flagged },
+        // Intentional Stop → close remaining open sessions (do not leave orphans).
+        if (global.userExplicitlyStopped) {
+          try {
+            await closeOpenSessionsAfterExplicitStop();
+          } catch (closeErr) {
+            log.warn({
+              step: 'EXPLICIT_STOP_CLOSE_FAILED',
+              message: closeErr?.message || String(closeErr),
             });
           }
           return;
         }
 
-        // Legacy Supabase path — still avoid close-at-NOW when possible
+        if (backendTimeLogs.isBackendTimeLogsEnabled()) {
+          const result = await reconcileDeviceSessions({ preferRecover });
+          if (result?.recovered?.id) {
+            applyRecoveredSession(result.recovered);
+            return;
+          }
+          if (result?.flagged_count) {
+            // Not tracking + stale open = orphan. Close at suggested/checkpoint/NOW.
+            log.info({
+              step: 'SYNC_CLOSING_STALE_ORPHANS',
+              message: 'Not tracking — closing flagged orphan session(s)',
+              ctx: { flagged: result.flagged_count, details: result.flagged },
+            });
+            try {
+              const suggested =
+                result.flagged?.[0]?.suggested_end_at ||
+                result.flagged?.[0]?.client_checkpoint_at ||
+                null;
+              await closeOpenSessionsAfterExplicitStop({ end_time: suggested || undefined });
+            } catch (closeErr) {
+              log.warn({
+                step: 'ORPHAN_CLOSE_FAILED',
+                message: closeErr?.message || String(closeErr),
+              });
+            }
+          }
+          return;
+        }
+
+        // Legacy Supabase path
         const supabase = resolveSupabaseClient();
         if (!supabase) {
           log.warn({ step: 'HEALTH_CHECK_NO_CLIENT' });
@@ -184,21 +368,6 @@ function startSessionHealthCheck() {
         const { data: activeLogs } = await query;
         const activeLog = activeLogs?.[0] ?? null;
         if (!activeLog) return;
-
-        if (global.userExplicitlyStopped) {
-          const checkpointAt = readLocalCheckpointAt();
-          const endTime = checkpointAt || activeLog.start_time;
-          await supabase
-            .from('time_logs')
-            .update({ end_time: endTime, status: 'auto_closed' })
-            .eq('id', activeLog.id);
-          log.info({
-            step: 'SYNC_CLOSED_STALE',
-            message: 'Closed session at checkpoint/start (legacy)',
-            ctx: { timeLogId: activeLog.id, endTime },
-          });
-          return;
-        }
 
         const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
         const MAX_FRESH_MS = 15 * 60 * 1000;
@@ -244,9 +413,14 @@ async function forceSyncSessionState() {
   try {
     if (global.userExplicitlyStopped) {
       log.info({
-        step: 'FORCE_SYNC_BLOCKED',
-        message: 'Blocked by userExplicitlyStopped — intentional stop in effect',
+        step: 'FORCE_SYNC_EXPLICIT_STOP',
+        message: 'Intentional stop in effect — closing open sessions instead of recovering',
       });
+      try {
+        await closeOpenSessionsAfterExplicitStop();
+      } catch (err) {
+        log.warn({ step: 'FORCE_SYNC_CLOSE_FAILED', message: err?.message || String(err) });
+      }
       return false;
     }
 
@@ -264,10 +438,19 @@ async function forceSyncSessionState() {
       }
       if (result?.flagged_count) {
         log.info({
-          step: 'FORCE_SYNC_FLAGGED_STALE',
-          message: 'Flagged stale orphans; no auto-close from heartbeat',
+          step: 'FORCE_SYNC_CLOSING_STALE',
+          message: 'Closing flagged orphan session(s)',
           ctx: { flagged: result.flagged_count },
         });
+        try {
+          const suggested =
+            result.flagged?.[0]?.suggested_end_at ||
+            result.flagged?.[0]?.client_checkpoint_at ||
+            null;
+          await closeOpenSessionsAfterExplicitStop({ end_time: suggested || undefined });
+        } catch (err) {
+          log.warn({ step: 'FORCE_SYNC_ORPHAN_CLOSE_FAILED', message: err?.message || String(err) });
+        }
       }
       return false;
     }
@@ -335,4 +518,10 @@ module.exports = {
   forceSyncSessionState,
   resolveSupabaseClient,
   reconcileDeviceSessions,
+  closeOpenSessionsAfterExplicitStop,
+  markUserExplicitlyStopped,
+  clearUserExplicitlyStopped,
+  loadUserExplicitlyStoppedFromDisk,
+  resolveExplicitStopEndTime,
+  readLocalCheckpointAt,
 };

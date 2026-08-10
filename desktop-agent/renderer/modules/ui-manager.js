@@ -3371,14 +3371,9 @@ class UIManager {
               typeof window.resolveStoppedDisplaySeconds === 'function'
                 ? window.resolveStoppedDisplaySeconds(totalSec)
                 : totalSec;
-            const prevShown = Math.max(
-              0,
-              Math.floor(Number(window.__todayTrackedSeconds) || 0),
-              Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-            );
-            window.setTrackerDisplaySeconds(trackedDisplay, {
-              allowDecrease: trackedDisplay < prevShown - 1,
-            });
+            // PAYROLL RED LINE: never allowDecrease from a stats refresh.
+            // Only idle-cut / day-rollover may lower the clock.
+            window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: false });
             console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', trackedDisplay, 's');
           }
         }
@@ -4439,6 +4434,7 @@ class UIManager {
 
       const clicks = screenshot.mouse_clicks || 0;
       const keys = screenshot.keystrokes || 0;
+      const productivity = this._resolveScreenshotProductivityBadge(screenshot);
 
       html += `
         <div class="tracker-screenshot-card" onclick="window.open('${screenshot.image_url}', '_blank')">
@@ -4451,7 +4447,10 @@ class UIManager {
             <div class="tracker-screenshot-meta">
               Clicks: ${clicks} · Keys: ${keys} · Activity: ${activityPercent}%
             </div>
-            <span class="tracker-screenshot-badge" style="background: ${activityColor};">${activityLabel}</span>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+              <span class="tracker-screenshot-badge" style="background: ${activityColor};">${activityLabel}</span>
+              <span class="tracker-screenshot-badge" style="background: ${productivity.bg};" title="Screenshot AI classification">${productivity.label}</span>
+            </div>
           </div>
         </div>
       `;
@@ -4460,6 +4459,42 @@ class UIManager {
     gridEl.innerHTML = html;
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
+  _resolveScreenshotProductivityBadge(shot) {
+    const status = String(shot?.ai_analysis_status || '').toLowerCase();
+    if (!status || status === 'pending' || status === 'queued' || status === 'processing') {
+      return { label: 'Analyzing', bg: '#94a3b8' };
+    }
+    if (status === 'failed' || status === 'skipped') {
+      return { label: 'Unanalyzed', bg: '#cbd5e1' };
+    }
+    const cat = String(shot?.category || '').toLowerCase();
+    const work = shot?.is_work_related === true;
+    const distraction = Math.max(0, Math.floor(Number(shot?.distraction_score) || 0));
+    const confidence = Math.max(0, Math.floor(Number(shot?.confidence_score) || 0));
+    const nonProdCats = new Set([
+      'distraction',
+      'entertainment',
+      'social_media',
+      'gaming',
+      'shopping',
+      'unproductive',
+    ]);
+    if (nonProdCats.has(cat) || (work === false && distraction >= 40)) {
+      return { label: 'Non-productive', bg: '#ef4444' };
+    }
+    if (
+      cat === 'productive' ||
+      (work && confidence > 50) ||
+      (work && distraction < 30)
+    ) {
+      return { label: 'Productive', bg: '#059669' };
+    }
+    if (cat === 'neutral' || cat === 'news') {
+      return { label: 'Neutral', bg: '#f59e0b' };
+    }
+    return { label: 'Neutral', bg: '#64748b' };
   }
 
   _setupTrackerScreenshotListeners() {

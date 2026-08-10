@@ -113,11 +113,24 @@ class EventHandlerManager {
         this.global.trayManager.onSystemSleep();
       }
 
-      // Lid close / sleep stops tracking outright, same as system shutdown.
-      if (this.global.isTracking) {
-        this.console.log('🛑 Laptop lid closed / system sleep - stopping tracking automatically');
+      // PAYROLL CRITICAL: write checkpoint + pending close + offline queue to disk
+      // SYNCHRONOUSLY before async stop — OS may freeze mid-stopTracking.
+      if (this.global.isTracking || this.global.trackingManager?.isTracking) {
+        this.console.log('🛑 Laptop lid closed / system sleep - durable arm then stop');
+        try {
+          if (typeof this.global.trackingManager?.armDurableSleepStop === 'function') {
+            this.global.trackingManager.armDurableSleepStop('system_sleep');
+          }
+        } catch (armErr) {
+          this.console.warn('⚠️ [SLEEP] Durable arm failed:', armErr?.message || armErr);
+        }
+        try {
+          const gsm = this.global.gracefulShutdownManager;
+          if (gsm?.captureStopMoment) gsm.captureStopMoment();
+        } catch (_) { /* ignore */ }
         if (typeof this.global.stopTracking === 'function') {
-          this.global.stopTracking('system_sleep');
+          // Fire-and-forget: durable state is already on disk.
+          void this.global.stopTracking('system_sleep');
         }
       }
 
@@ -181,7 +194,70 @@ class EventHandlerManager {
             if (this.global.config) {
               this.global.config.user_id = savedSession.id;
             }
-            if (typeof this.global.showTrayNotification === 'function') {
+            // PAYROLL CRITICAL: sleep auto-stops tracking; auto-resume on wake so
+            // post-wake work is never silently untracked.
+            const resumeAfterWake = this.global._resumeTrackingAfterWake;
+            if (
+              resumeAfterWake &&
+              !this.global.isTracking &&
+              typeof this.global.startTracking === 'function'
+            ) {
+              // Sleep stop must never be treated as an explicit user stop.
+              try {
+                const { clearUserExplicitlyStopped } = require('./session-recovery');
+                clearUserExplicitlyStopped();
+              } catch (_) {
+                this.global.userExplicitlyStopped = false;
+              }
+              try {
+                this.console.log('▶️ [RESUME] Auto-starting tracking after sleep stop');
+                this.global._resumeTrackingAfterWake = null;
+                await Promise.race([
+                  this.global.startTracking(resumeAfterWake.projectId || null),
+                  new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('auto-resume timed out')), RESUME_TIMEOUT_MS),
+                  ),
+                ]);
+                if (typeof this.global.showTrayNotification === 'function') {
+                  this.global.showTrayNotification(
+                    `Welcome back ${savedSession.email.split('@')[0]}! Tracking resumed after sleep.`,
+                    'info'
+                  );
+                }
+              } catch (resumeErr) {
+                this.console.warn(
+                  '⚠️ [RESUME] Auto-start after sleep failed:',
+                  resumeErr?.message || resumeErr
+                );
+                this.global._resumeTrackingAfterWake = resumeAfterWake;
+                try {
+                  const { clearUserExplicitlyStopped } = require('./session-recovery');
+                  clearUserExplicitlyStopped();
+                } catch (_) {
+                  this.global.userExplicitlyStopped = false;
+                }
+                if (typeof this.global.showTrayNotification === 'function') {
+                  this.global.showTrayNotification(
+                    `Welcome back ${savedSession.email.split('@')[0]}! Click to start tracking — auto-resume failed.`,
+                    'warning'
+                  );
+                }
+              }
+            } else if (
+              resumeAfterWake &&
+              this.global.userExplicitlyStopped
+            ) {
+              // Defensive: older builds set explicit-stop on sleep; clear and retry once.
+              this.console.warn(
+                '⚠️ [RESUME] Clearing stale userExplicitlyStopped for sleep auto-resume',
+              );
+              try {
+                const { clearUserExplicitlyStopped } = require('./session-recovery');
+                clearUserExplicitlyStopped();
+              } catch (_) {
+                this.global.userExplicitlyStopped = false;
+              }
+            } else if (typeof this.global.showTrayNotification === 'function') {
               if (this.global.isTracking) {
                 this.global.showTrayNotification(
                   `Welcome back ${savedSession.email.split('@')[0]}! Tracking continued through sleep.`,

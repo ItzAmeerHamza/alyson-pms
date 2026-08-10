@@ -156,6 +156,9 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
 
   const projectMap = {};
   const sessions = [];
+  // Per-day intervals so overlapping sessions are not double-counted
+  // (same merge rule as the big "Tracked Time Today" clock).
+  const dayIntervals = Array.from({ length: daysInMonth }, () => []);
 
   timeLogs.forEach((log) => {
     if (!log.start_time) return;
@@ -180,11 +183,13 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
 
     for (let d = 1; d <= daysInMonth; d++) {
       const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
-      const sec = Math.floor(clamp(startMs, endMs, dayStartMs, dayEndMs) / 1000);
-      if (sec > 0) {
-        dailyBreakdown[d - 1].totalSeconds += sec;
+      const sliceStart = Math.max(startMs, dayStartMs);
+      const sliceEnd = Math.min(endMs, dayEndMs);
+      if (sliceEnd > sliceStart) {
+        dayIntervals[d - 1].push({ startMs: sliceStart, endMs: sliceEnd });
         // Approximate idle share for the day from session idle_seconds.
-        if (clampedSeconds > 0 && logIdle > 0) {
+        const sec = Math.floor((sliceEnd - sliceStart) / 1000);
+        if (clampedSeconds > 0 && logIdle > 0 && sec > 0) {
           dailyBreakdown[d - 1].idleSeconds =
             (dailyBreakdown[d - 1].idleSeconds || 0) +
             Math.floor((logIdle * sec) / clampedSeconds);
@@ -208,32 +213,13 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     });
   });
 
+  const { mergeIntervalsSeconds, computeTodayTimeLogSeconds } = require('./today-time-log-stats');
+  for (let i = 0; i < daysInMonth; i++) {
+    dailyBreakdown[i].totalSeconds = mergeIntervalsSeconds(dayIntervals[i]);
+  }
+
   const projectBreakdown = Object.values(projectMap)
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
-
-  const totalSeconds = dailyBreakdown.reduce((sum, d) => sum + d.totalSeconds, 0);
-
-  const weeklyBreakdown = [];
-  if (dailyBreakdown.length > 0) {
-    let weekStart = dailyBreakdown[0].date;
-    let weekTotal = 0;
-    dailyBreakdown.forEach((day, idx) => {
-      weekTotal += day.totalSeconds;
-      const isSunday = day.dayName === 'Sun';
-      const isLast = idx === dailyBreakdown.length - 1;
-      if (isSunday || isLast) {
-        weeklyBreakdown.push({
-          weekStart,
-          weekEnd: day.date,
-          totalTime: weekTotal,
-        });
-        if (!isLast) {
-          weekStart = dailyBreakdown[idx + 1].date;
-          weekTotal = 0;
-        }
-      }
-    });
-  }
 
   let avgActivityPercent = 0;
   if (screenshots.length > 0) {
@@ -260,16 +246,40 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     }
   }
 
-  // TODAY must use the identical helper + screenshot set as the top tracker cards.
+  // TODAY must use the identical helper as the big tracker clock.
   const todayKey = workDateKey(today);
   const todayIdx = dailyBreakdown.findIndex((d) => d.date === todayKey);
   try {
     if (todayIdx >= 0) {
+      // Align chart "today" to the same helper as the big clock, then take the
+      // MAX so we never paint Month below what the employee already sees (or vice versa).
+      const todayAgg = await computeTodayTimeLogSeconds(
+        supabaseService,
+        userId,
+        currentTimeLogId,
+        isTracking,
+      );
+      const fromTodayHelper = Math.max(
+        0,
+        Math.floor(
+          Number(
+            isTracking
+              ? todayAgg.totalTime
+              : todayAgg.completedClosedSeconds,
+          ) || 0,
+        ),
+      );
+      // Never lower today's bar vs the merged day total already computed.
+      const todayTotal = Math.max(
+        fromTodayHelper,
+        Math.floor(Number(dailyBreakdown[todayIdx].totalSeconds) || 0),
+      );
+      dailyBreakdown[todayIdx].totalSeconds = todayTotal;
+
       const { computeTodayEffectiveStats } = require('./today-effective-stats');
-      // Include live session seconds already in dailyBreakdown[todayIdx].totalSeconds
       const todayEff = await computeTodayEffectiveStats({
         userId,
-        totalSeconds: dailyBreakdown[todayIdx].totalSeconds,
+        totalSeconds: todayTotal,
         config: config || global.config,
         supabase: supabaseService,
         screenshots, // same rows Month already fetched — no second divergent query
@@ -281,9 +291,34 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     }
   } catch (todayAlignErr) {
     console.warn(
-      '⚠️ [MONTHLY-REPORT] Could not align today with tracker effective stats:',
+      '⚠️ [MONTHLY-REPORT] Could not align today with tracker clock:',
       todayAlignErr?.message || todayAlignErr,
     );
+  }
+
+  // Recompute month total after today/merge alignment.
+  const totalSeconds = dailyBreakdown.reduce((sum, d) => sum + d.totalSeconds, 0);
+
+  const weeklyBreakdown = [];
+  if (dailyBreakdown.length > 0) {
+    let weekStart = dailyBreakdown[0].date;
+    let weekTotal = 0;
+    dailyBreakdown.forEach((day, idx) => {
+      weekTotal += day.totalSeconds;
+      const isSunday = day.dayName === 'Sun';
+      const isLast = idx === dailyBreakdown.length - 1;
+      if (isSunday || isLast) {
+        weeklyBreakdown.push({
+          weekStart,
+          weekEnd: day.date,
+          totalTime: weekTotal,
+        });
+        if (!isLast) {
+          weekStart = dailyBreakdown[idx + 1].date;
+          weekTotal = 0;
+        }
+      }
+    });
   }
 
   let idleSecondsTotal = 0;

@@ -980,12 +980,22 @@ class IPCManager {
             })
           : Promise.resolve();
       
+      // Seed main/tray with renderer durable floor (survives reboot via localStorage).
+      const todayFloorSeconds = Math.max(
+        0,
+        Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+        Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+        Math.floor(Number(window.__todayTrackedSeconds) || 0),
+      );
+
       // T1: Before IPC invoke
       console.time('T1-T2: IPC invoke time');
       console.log('📡 [IPC-MANAGER] T1: Before IPC invoke:', new Date().toISOString());
       
       // Now do the IPC call in the background
-      const result = await this.ipcRenderer.invoke('start-timer', projectId);
+      const result = await this.ipcRenderer.invoke('start-timer', projectId, {
+        todayFloorSeconds,
+      });
       // Let base refresh finish when it can; don't block start confirmation on it.
       void baseRefreshPromise.then(() => {
         if (this.isTracking && typeof window.updateRendererTrackingClock === 'function') {
@@ -1093,6 +1103,15 @@ class IPCManager {
       
     } catch (error) {
       console.error('❌ Failed to start tracking:', error);
+
+      // If main already confirmed tracking (tracking-started / timeLogId), do not roll back.
+      if (this.isTracking && this.currentTimeLogId && !this.optimisticMode) {
+        console.warn(
+          '⚠️ [IPC-MANAGER] Start IPC error ignored — tracking already confirmed locally',
+        );
+        this.startInProgress = false;
+        return { success: true, timeLogId: this.currentTimeLogId, warning: error.message };
+      }
       
       // Rollback optimistic update
       if (this.optimisticMode) {
@@ -1115,7 +1134,7 @@ class IPCManager {
       
       // FIXED: Reset button state on error
       const startBtn = document.getElementById('trackerStartBtn');
-      if (startBtn) {
+      if (startBtn && !this.isTracking) {
         startBtn.disabled = false;
         startBtn.innerHTML = '<i data-lucide="play" style="width: 20px; height: 20px;"></i><span>Start</span>';
       }

@@ -6,6 +6,7 @@ import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
 import { ScreenshotAiBackfillService } from '../screenshot-ai/screenshot-ai-backfill.service';
 import { buildScreenshotS3Key } from '../lib/screenshot-s3-key';
+import { buildLogS3Key } from '../lib/log-s3-key';
 import {
   parseTenantUserId as parseTenantUserIdStrict,
   parseWorkspaceId,
@@ -745,8 +746,8 @@ export class ForceSyncController {
         const clientEnd = updates.end_time || null;
         const authorizedIdleCut = updates.authorized_idle_cut === true;
         // - authorized_idle_cut: allow exactly the alert timeout cut (now − 10m) while completing
-        // - once status is already completed: freeze end_time (no further cuts or sync rewrites)
-        // - otherwise: end_time only moves forward
+        // - otherwise: end_time only moves FORWARD, including when already completed
+        //   (offline/pending recovery must be able to extend a premature short close)
         const endTimeSql = authorizedIdleCut
           ? `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
@@ -754,11 +755,10 @@ export class ForceSyncController {
                END`
           : `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
-                 WHEN t.status = 'completed' THEN t.end_time
                  WHEN t.end_time IS NULL THEN GREATEST(t.start_time + interval '30 seconds', $2::timestamptz)
                  ELSE GREATEST(t.end_time, t.start_time + interval '30 seconds', $2::timestamptz)
                END`;
-        await this.db.query(
+        const result = await this.db.query(
           `UPDATE time_doctor.time_logs t
            SET end_time = ${endTimeSql},
                status = CASE
@@ -771,7 +771,12 @@ export class ForceSyncController {
            WHERE t.id = $1`,
           [id, clientEnd, updates.status || null, updates.idle_seconds ?? null, updates.deducted_seconds ?? null],
         );
-        return { success: true, id };
+        const rowCount = Number(result?.rowCount || 0);
+        if (rowCount === 0) {
+          // Caller must fall back to create — pretending success drops offline hours.
+          return { success: false, id, updated: 0, reason: 'no_row' };
+        }
+        return { success: true, id, updated: rowCount };
       }
       case 'create_time_log': {
         const log = data?.log;
@@ -782,6 +787,8 @@ export class ForceSyncController {
         const userId = parseUserIdParam(log.user_id);
         const workspaceId = await this.resolveWorkspaceId(log.user_id, log.organization_id);
         const projectId = await this.resolveProjectId(log.project_id);
+        // Idempotent: client retries after RDS/API timeout must not insert a second row
+        // or fail forever. Same id → return existing row (preserve completed end_time).
         const result = await this.db.query<{
           id: string;
           user_id: number;
@@ -794,6 +801,18 @@ export class ForceSyncController {
           `INSERT INTO time_doctor.time_logs
             (id, user_id, project_id, start_time, end_time, status, device_id, workspace_id, updated_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             updated_at = NOW(),
+             end_time = CASE
+               WHEN EXCLUDED.end_time IS NULL THEN time_doctor.time_logs.end_time
+               WHEN time_doctor.time_logs.end_time IS NULL THEN EXCLUDED.end_time
+               ELSE GREATEST(time_doctor.time_logs.end_time, EXCLUDED.end_time)
+             END,
+             status = CASE
+               WHEN time_doctor.time_logs.status = 'completed' THEN 'completed'
+               WHEN EXCLUDED.status = 'completed' THEN 'completed'
+               ELSE COALESCE(EXCLUDED.status, time_doctor.time_logs.status)
+             END
            RETURNING id, user_id, project_id, start_time, end_time, status, device_id`,
           [
             id,
@@ -1263,6 +1282,27 @@ export class ForceSyncController {
         const uploadUrl = await this.s3.getPresignedPutUrl(s3Key, contentType);
         return { success: true, id: screenshotId, s3_key: s3Key, upload_url: uploadUrl, content_type: contentType };
       }
+      case 'log_upload_init': {
+        // Desktop-agent diagnostic JSONL — Hive-partitioned for Athena; PUT directly to S3.
+        if (!this.s3.isEnabled()) {
+          throw new HttpException('S3 is not configured on the API', HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        const userId = parseUserIdParam(data?.user_id);
+        const logDate = typeof data?.log_date === 'string' ? data.log_date : null;
+        if (!logDate || !/^\d{4}-\d{2}-\d{2}$/.test(logDate)) {
+          throw new HttpException('Missing or invalid log_date (YYYY-MM-DD)', HttpStatus.BAD_REQUEST);
+        }
+        const workspaceId = await this.resolveWorkspaceId(userId, data?.organization_id);
+        const s3Key = buildLogS3Key({
+          workspaceId,
+          userId,
+          deviceId: typeof data?.device_id === 'string' ? data.device_id : null,
+          agentVersion: typeof data?.agent_version === 'string' ? data.agent_version : null,
+          logDate,
+        });
+        const uploadUrl = await this.s3.getPresignedPutUrl(s3Key, 'application/x-ndjson');
+        return { success: true, s3_key: s3Key, upload_url: uploadUrl, content_type: 'application/x-ndjson' };
+      }
       case 'list_screenshots': {
         const userId = data?.user_id;
         if (!userId) {
@@ -1284,7 +1324,9 @@ export class ForceSyncController {
         const result = await this.db.query(
           `SELECT s.id, s.user_id::text AS user_id, s.time_log_id, s.s3_key, s.file_path, s.file_size,
                   s.captured_at, s.activity_percent, s.focus_percent, s.mouse_clicks,
-                  s.keystrokes, s.mouse_movements, s.app_name, s.window_title
+                  s.keystrokes, s.mouse_movements, s.app_name, s.window_title,
+                  s.ai_analysis_status, s.category, s.is_work_related,
+                  s.confidence_score, s.distraction_score
            FROM time_doctor.screenshots s
            WHERE ${filters.join(' AND ')}
            ORDER BY s.captured_at DESC

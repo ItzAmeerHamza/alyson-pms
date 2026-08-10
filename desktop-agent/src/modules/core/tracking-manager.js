@@ -37,6 +37,9 @@ class TrackingManager extends EventEmitter {
     this.lastSuccessfulScreenshotTime = 0;
     this.screenshotFailureStart = null;
     this._timeLogCheckpointInterval = null;
+    this._localSessionArmed = false;
+    this._offlineResumeHooksBound = false;
+    this._wasOfflineForSync = false;
     
     console.log('✅ TrackingManager initialized');
   }
@@ -54,10 +57,13 @@ class TrackingManager extends EventEmitter {
 
     // Resume syncing any hours queued while the device was offline
     try {
+      this._rehydrateOfflineQueueFromLedger();
+      // Always bind reconnect hooks so restores flush immediately.
+      this.startOfflineSync();
       const pending = this.getOfflineQueue();
       if (pending.length > 0) {
-        console.log(`📶 [TRACKING-MANAGER] Found ${pending.length} offline time log(s) — starting sync`);
-        this.startOfflineSync();
+        console.log(`📶 [TRACKING-MANAGER] Found ${pending.length} offline time log(s) — syncing`);
+        void this.processOfflineQueue();
       }
     } catch (_) {}
     
@@ -99,11 +105,17 @@ try {
       // Safety net: if user is starting tracking, the screen is clearly not locked
       global.isScreenLocked = false;
       // Clear the explicit stop flag so session recovery works again
-      global.userExplicitlyStopped = false;
+      try {
+        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+        clearUserExplicitlyStopped();
+      } catch (_) {
+        global.userExplicitlyStopped = false;
+      }
       global._windowCloseHandled = false;
       global._stopEndTimeOverride = null;
+      this._localSessionArmed = false;
 
-      await this._waitForPriorStopToFinish();
+      await this._waitForPriorStopToFinish(8000);
 
       debugLogger.init('tracking', 'Starting tracking session', {
         projectId: projectId,
@@ -113,12 +125,32 @@ try {
         currentTimeLogId: this.currentTimeLogId
       });
 
-      // SYNCHRONOUS HEALTH CHECK: Block timer start if permissions are missing
+      // SYNCHRONOUS HEALTH CHECK: Block timer start if permissions are missing.
+      // Race with a short timeout — low internet DB probes must not stall Start.
       if (global.systemMonitor) {
         console.log('🔒 [TRACKING-MANAGER] Performing permission check before starting timer...');
         
           try {
-            const healthCheck = await global.systemMonitor.performComprehensiveHealthCheck();
+            const healthCheck = await Promise.race([
+              global.systemMonitor.performComprehensiveHealthCheck(),
+              new Promise((resolve) =>
+                setTimeout(
+                  () =>
+                    resolve({
+                      canStartTimer: true,
+                      overall: 'degraded',
+                      issues: [],
+                      timedOut: true,
+                    }),
+                  3000,
+                ),
+              ),
+            ]);
+            if (healthCheck?.timedOut) {
+              console.warn(
+                '⚠️ [TRACKING-MANAGER] Health check timed out (3s) — continuing Start (offline-capable)',
+              );
+            }
             
             if (!healthCheck.canStartTimer) {
             console.error('🚫 [TRACKING-MANAGER] Cannot start timer - permission issues detected:', {
@@ -156,19 +188,12 @@ try {
             }
           
           } catch (error) {
-          console.error('❌ [TRACKING-MANAGER] Health check failed:', error);
-          // BLOCK timer start on health check failure
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send('permission-required', {
-              issues: ['Health check system failure: ' + error.message],
-              message: 'Cannot start timer - system check failed. Please copy logs and send to IT support.'
-            });
-          }
-          return {
-            success: false,
-            error: 'health_check_failed',
-            message: 'Cannot start timer - system check failed: ' + error.message
-          };
+          // PAYROLL CRITICAL: health-check exceptions (incl. slow DB probes) must not
+          // block Start — permissions are the only hard gate, handled above.
+          console.warn(
+            '⚠️ [TRACKING-MANAGER] Health check errored — continuing Start (offline-capable):',
+            error?.message || error,
+          );
           }
       } else {
         console.warn('⚠️ [TRACKING-MANAGER] System monitor not available - skipping health check');
@@ -243,6 +268,7 @@ try {
       let recoveredSession = null;
       if (useBackendTimeLogs) {
         try {
+          // Fail fast on low internet — Start must not hang waiting for inspect.
           const inspect = await backendTimeLogs.reconcileOpenSessions(
             effectiveUserId,
             deviceId,
@@ -251,6 +277,7 @@ try {
               prefer_recover: true,
               client_last_seen_at: localCheckpoint?.checkpointAt || null,
               freshness_minutes: 15,
+              timeoutMs: 5000,
             },
           );
           if (inspect?.recovered?.id) {
@@ -261,52 +288,69 @@ try {
           } else if (inspect?.flagged_count > 0) {
             const flagged = inspect.flagged || [];
             console.warn(
-              `🚩 [TRACKING-MANAGER] Flagged ${inspect.flagged_count} stale open session(s) — will not auto-close from heartbeat`,
+              `🚩 [TRACKING-MANAGER] Flagged ${inspect.flagged_count} stale open session(s) — closing before Start`,
             );
-            // Only close when we have a local durable checkpoint for that session.
-            for (const stale of flagged) {
-              const checkpointMatches =
-                localCheckpoint?.checkpointAt &&
-                (!localCheckpoint.timeLogId ||
-                  String(localCheckpoint.timeLogId) === String(stale.id));
-              if (checkpointMatches && localCheckpoint.checkpointAt) {
-                try {
-                  await backendTimeLogs.confirmStaleSessionClose(
-                    {
-                      user_id: effectiveUserId,
-                      time_log_id: stale.id,
-                      end_time: localCheckpoint.checkpointAt,
-                      confirm_with_local_checkpoint: true,
-                    },
-                    this.config,
-                  );
-                  console.log(
-                    `✅ [TRACKING-MANAGER] Confirmed close of ${stale.id} at local checkpoint ${localCheckpoint.checkpointAt}`,
-                  );
-                } catch (closeErr) {
-                  console.warn(
-                    '⚠️ [TRACKING-MANAGER] Confirmed checkpoint close failed:',
-                    closeErr?.message || closeErr,
-                  );
-                }
-              } else {
-                console.warn(
-                  `⚠️ [TRACKING-MANAGER] Stale session ${stale.id} needs employee/admin confirmation (no matching local checkpoint). Leaving open; not using heartbeat as end_time.`,
-                );
-              }
+            // Close orphans before creating a new session (prefer checkpoint / suggested end).
+            try {
+              const {
+                closeOpenSessionsAfterExplicitStop,
+              } = require('../utils/session-recovery');
+              const suggested =
+                flagged[0]?.suggested_end_at ||
+                flagged[0]?.client_checkpoint_at ||
+                localCheckpoint?.checkpointAt ||
+                null;
+              await closeOpenSessionsAfterExplicitStop({
+                userId: effectiveUserId,
+                deviceId,
+                end_time: suggested || undefined,
+                config: this.config,
+                timeoutMs: 5000,
+              });
+            } catch (closeErr) {
+              console.warn(
+                '⚠️ [TRACKING-MANAGER] Orphan close before Start failed:',
+                closeErr?.message || closeErr,
+              );
             }
           }
         } catch (recErr) {
           console.warn('⚠️ [TRACKING-MANAGER] inspect_open_sessions failed:', recErr?.message || recErr);
         }
       } else {
-        await this._forceCloseActiveSessions(effectiveUserId, deviceId);
+        try {
+          await Promise.race([
+            this._forceCloseActiveSessions(effectiveUserId, deviceId),
+            new Promise((resolve) => setTimeout(resolve, 5000)),
+          ]);
+        } catch (closeErr) {
+          console.warn(
+            '⚠️ [TRACKING-MANAGER] Pre-start force-close failed (non-fatal):',
+            closeErr?.message || closeErr,
+          );
+        }
       }
 
       if (global.sessionManager && global.sessionManager.closeExistingSessionsBeforeStart) {
-        const cleanupResult = await global.sessionManager.closeExistingSessionsBeforeStart();
-        if (cleanupResult && !cleanupResult.success) {
-          console.warn('⚠️ [TRACKING-MANAGER] SessionManager cleanup also reported failure (non-critical, RPC already ran)');
+        try {
+          const cleanupResult = await Promise.race([
+            global.sessionManager.closeExistingSessionsBeforeStart(),
+            new Promise((resolve) =>
+              setTimeout(() => resolve({ success: false, timedOut: true }), 5000),
+            ),
+          ]);
+          if (cleanupResult?.timedOut) {
+            console.warn(
+              '⚠️ [TRACKING-MANAGER] Session cleanup timed out (5s) — continuing offline Start',
+            );
+          } else if (cleanupResult && !cleanupResult.success) {
+            console.warn('⚠️ [TRACKING-MANAGER] SessionManager cleanup also reported failure (non-critical, RPC already ran)');
+          }
+        } catch (cleanupErr) {
+          console.warn(
+            '⚠️ [TRACKING-MANAGER] Session cleanup error (non-fatal):',
+            cleanupErr?.message || cleanupErr,
+          );
         }
       }
 
@@ -340,13 +384,16 @@ try {
         error = null;
         console.log('✅ [TRACKING-MANAGER] Resuming recovered time log:', timeLog.id);
       } else if (useBackendTimeLogs) {
+        // Stable id chosen before the network call so a timeout-after-commit
+        // + offline retry cannot insert a second row.
+        const newId = crypto.randomUUID();
+        timeLogData.id = newId;
         try {
           const orgId =
             global.currentOrganizationId ||
             this.config.organization_id ||
             null;
           // Orphans are flagged / confirmed-closed above — never close at NOW from heartbeat.
-          const newId = crypto.randomUUID();
           timeLog = await backendTimeLogs.createTimeLog(
             {
               id: newId,
@@ -354,6 +401,7 @@ try {
               organization_id: orgId,
             },
             this.config,
+            { timeoutMs: 8000 },
           );
           error = null;
           console.log('✅ [TRACKING-MANAGER] RDS time log created:', timeLog.id);
@@ -364,11 +412,17 @@ try {
         }
       } else {
         try {
-          const resp = await this.supabaseService
-            .from('time_logs')
-            .insert([timeLogData])
-            .select()
-            .single();
+          // Low internet: never hang forever on Supabase insert.
+          const resp = await Promise.race([
+            this.supabaseService
+              .from('time_logs')
+              .insert([timeLogData])
+              .select()
+              .single(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Supabase create_time_log timeout after 8000ms')), 8000),
+            ),
+          ]);
           timeLog = resp.data;
           error = resp.error;
         } catch (e) {
@@ -508,6 +562,8 @@ try {
       }
 
       // Update internal state
+      // Once armed, outer catch must NOT report Start failure / undo tracking —
+      // that caused Start→auto-Stop on low internet when a later subsystem threw.
       this.isTracking = true;
       this.isPaused = false;
       this.currentTimeLogId = timeLog.id;
@@ -523,6 +579,7 @@ try {
         isActive: true,
         ...(timeLog._offline ? { _offline: true } : {})
       };
+      this._localSessionArmed = true;
 
       __phase('DB insert + state setup done');
       // Propagate to global for legacy guards
@@ -555,25 +612,130 @@ try {
       // for subsystem init (screenshot, input, app detection can take 10+ seconds)
       if (global.trayManager) {
         const projectName = this.currentSession?.projectName || null;
-        let completedTodayBeforeSessionSeconds = 0;
-        try {
-          const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
-          const supabase = global.supabaseClient || this.supabaseService || global.supabaseService || global.supabase;
-          if (effectiveUserId && timeLog?.id && (supabase || isBackendTimeLogsEnabled())) {
-            const agg = await computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id, true);
-            completedTodayBeforeSessionSeconds = this._resolveTodayBaseSeconds(agg.completedClosedSeconds);
-          }
-        } catch (aggErr) {
-          console.warn('⚠️ [TRACKING-MANAGER] Could not load today cumulative base:', aggErr?.message || aggErr);
-        }
+        // PAYROLL CRITICAL: never block Start on today-stats network fetch.
+        // Use last-known local floor immediately; refresh base in background.
+        let completedTodayBeforeSessionSeconds = Math.max(
+          0,
+          Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
+          Math.floor(Number(global._rendererTodayFloorSeconds) || 0),
+          Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
+          Math.floor(Number(global._lastGoodTodayStats?.totalTime) || 0),
+          Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+        );
         global.trayManager.updateState(true, false, {
           projectName,
           projectId: this.currentProjectId,
           startTime: this.sessionStartTime,
-          completedTodayBeforeSessionSeconds
+          completedTodayBeforeSessionSeconds,
         });
         console.log('✅ [TRAY] Icon updated immediately after state set');
+        // Background reconcile — must not affect isTracking / Start success.
+        setTimeout(() => {
+          void (async () => {
+            try {
+              if (!global.isTracking) return;
+              const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
+              const supabase =
+                global.supabaseClient ||
+                this.supabaseService ||
+                global.supabaseService ||
+                global.supabase;
+              if (!(effectiveUserId && timeLog?.id && (supabase || isBackendTimeLogsEnabled()))) {
+                return;
+              }
+              const agg = await Promise.race([
+                computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id, true),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('today stats timeout')), 8000),
+                ),
+              ]);
+              const nextBase = this._resolveTodayBaseSeconds(agg.completedClosedSeconds);
+              if (global.trayManager && global.isTracking && nextBase > 0) {
+                const prev = Math.max(
+                  0,
+                  Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0),
+                );
+                global.trayManager._cumulativeBaseSeconds = Math.max(prev, nextBase);
+              }
+            } catch (aggErr) {
+              console.warn(
+                '⚠️ [TRACKING-MANAGER] Background today base refresh failed:',
+                aggErr?.message || aggErr,
+              );
+            }
+          })();
+        }, 0);
       }
+
+      // Notify renderer immediately — Start must succeed without waiting on
+      // screenshots/input/app detection (those can be slow on weak machines/networks).
+      try {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('tracking-started', this.currentSession);
+        }
+      } catch {}
+
+      this._startTimeLogCheckpoint();
+
+      const startResult = {
+        success: true,
+        timeLogId: this.currentTimeLogId,
+        projectId: this.currentProjectId,
+        startTime: this.sessionStartTime,
+        isTracking: true,
+        offline: !!(this.currentSession?._offline || String(this.currentTimeLogId || '').startsWith('temp-')),
+      };
+
+      // Fire-and-forget subsystem bring-up (never blocks Start IPC / UI confirm).
+      setImmediate(() => {
+        void this._bringUpTrackingSubsystems(effectiveUserId).catch((err) => {
+          console.warn(
+            '⚠️ [TRACKING-MANAGER] Background subsystem bring-up error (tracking still active):',
+            err?.message || err,
+          );
+        });
+      });
+
+      __phase('Local session armed — returning Start success');
+      console.log(
+        `✅ [TRACKING-MANAGER] Tracking started with time log ID: ${this.currentTimeLogId}` +
+          (startResult.offline ? ' (offline — will sync)' : ''),
+      );
+      return startResult;
+    } catch (error) {
+      console.error('❌ [TRACKING-MANAGER] Failed to start tracking:', error);
+      // If local session already armed, keep tracking and report success so the
+      // renderer does not roll back optimistic Start on a late subsystem error.
+      if (this._localSessionArmed && this.currentTimeLogId && (this.isTracking || global.isTracking)) {
+        console.warn(
+          '⚠️ [TRACKING-MANAGER] Post-arm error ignored — tracking stays active (will sync later):',
+          error?.message || error,
+        );
+        global.isTracking = true;
+        this.isTracking = true;
+        return {
+          success: true,
+          timeLogId: this.currentTimeLogId,
+          projectId: this.currentProjectId,
+          startTime: this.sessionStartTime,
+          isTracking: true,
+          offline: true,
+          warning: error?.message || String(error),
+        };
+      }
+      this.isTracking = false;
+      this.isPaused = false;
+      this._localSessionArmed = false;
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Bring up capture/sync subsystems after Start has already succeeded locally.
+   * Must never stop tracking on failure.
+   */
+  async _bringUpTrackingSubsystems(effectiveUserId) {
+    if (!this.isTracking && !global.isTracking) return;
 
       // Update URL manager with current time log ID and start URL capture (idempotent inside manager)
       if (global.browserUrlManager && global.browserUrlManager.setCurrentTimeLogId) {
@@ -792,7 +954,6 @@ try {
         })();
         // Don't await - let it run in background
         inputPromise.catch(e => console.error('❌ [INPUT] Background start error:', e?.message));
-        __phase('Input detection dispatched (non-blocking)');
       } catch (error) {
         console.error('❌ [TRACKING-MANAGER] Failed to start input detection:', error);
       }
@@ -893,35 +1054,7 @@ try {
         console.error('❌ [TRACKING-MANAGER] Error starting database/sync services:', error);
       }
 
-      // Notify renderer
-      try {
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('tracking-started', this.currentSession);
-        }
-      } catch {}
-
-      __phase('All subsystems initialized');
-      console.log(`✅ [TRACKING-MANAGER] Tracking started with time log ID: ${this.currentTimeLogId}`);
-
-      this._startTimeLogCheckpoint();
-
-      // Tray icon was already updated immediately after state set (before subsystem init).
-      // No second updateState call needed here.
-
-      return {
-        success: true,
-        timeLogId: this.currentTimeLogId,
-        projectId: this.currentProjectId,
-        startTime: this.sessionStartTime,
-        isTracking: true,
-        offline: !!(this.currentSession?._offline || String(this.currentTimeLogId || '').startsWith('temp-'))
-      };
-    } catch (error) {
-      console.error('❌ [TRACKING-MANAGER] Failed to start tracking:', error);
-      this.isTracking = false;
-      this.isPaused = false;
-      return { success: false, error: error.message };
-    }
+      console.log('✅ [TRACKING-MANAGER] Background tracking subsystems brought up');
   }
 
   /**
@@ -935,8 +1068,32 @@ try {
   async stopTracking(reason = 'manual', message = null) {
     const stopStartTime = Date.now();
     try {
-      // ALWAYS set this flag regardless of current state — belt and suspenders
-      global.userExplicitlyStopped = true;
+      // Sleep/shutdown auto-stops must NOT block wake auto-resume.
+      // Manual/idle stops remain an explicit user/system intent.
+      const isAutoSleepStop = reason === 'system_sleep';
+      if (isAutoSleepStop) {
+        global._resumeTrackingAfterWake = {
+          projectId: this.currentProjectId || global.currentProjectId || null,
+          stoppedAt: Date.now(),
+        };
+        try {
+          const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+          clearUserExplicitlyStopped();
+        } catch (_) {
+          global.userExplicitlyStopped = false;
+        }
+      } else {
+        try {
+          const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+          markUserExplicitlyStopped({
+            reason,
+            timeLogId: this.currentTimeLogId || global.currentTimeLogId,
+          });
+        } catch (_) {
+          global.userExplicitlyStopped = true;
+        }
+        global._resumeTrackingAfterWake = null;
+      }
 
       // End sticky video-meeting session so the next work block isn't floored
       try {
@@ -958,8 +1115,10 @@ try {
       
       // CRITICAL: Set stopping flag to prevent session recovery from restoring tracking
       global.isStopping = true;
-      // CRITICAL: Mark explicit user stop to prevent health check from auto-recovering stale sessions
-      global.userExplicitlyStopped = true;
+      // Sleep auto-stop must allow wake auto-resume; manual/idle remain explicit.
+      if (!isAutoSleepStop) {
+        global.userExplicitlyStopped = true;
+      }
       
       // Capture timeLogId for background DB update
       const timeLogIdForBackground = this.currentTimeLogId;
@@ -971,6 +1130,7 @@ try {
       // Update local state immediately
       this.isTracking = false;
       this.isPaused = false;
+      this._localSessionArmed = false;
       
       // Propagate to global immediately
       global.isTracking = false;
@@ -1270,8 +1430,30 @@ try {
   async stopTrackingAsync(reason = 'manual', message = null) {
     console.log('🚀 [TRACKING-MANAGER] stopTrackingAsync - fast return with background cleanup');
     
-    // ALWAYS set this flag regardless of current state
-    global.userExplicitlyStopped = true;
+    const isAutoSleepStop = reason === 'system_sleep';
+    if (isAutoSleepStop) {
+      global._resumeTrackingAfterWake = {
+        projectId: this.currentProjectId || global.currentProjectId || null,
+        stoppedAt: Date.now(),
+      };
+      try {
+        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+        clearUserExplicitlyStopped();
+      } catch (_) {
+        global.userExplicitlyStopped = false;
+      }
+    } else {
+      try {
+        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+        markUserExplicitlyStopped({
+          reason,
+          timeLogId: this.currentTimeLogId || global.currentTimeLogId,
+        });
+      } catch (_) {
+        global.userExplicitlyStopped = true;
+      }
+      global._resumeTrackingAfterWake = null;
+    }
     try {
       const { clearMeetingSession } = require('../../lib/meeting-context');
       clearMeetingSession();
@@ -1570,13 +1752,86 @@ try {
     return floor;
   }
 
+  /**
+   * SYNCHRONOUS durable arm for sleep/suspend BEFORE async stop.
+   * OS may freeze the process mid-stopTracking — disk must already hold end_time.
+   */
+  armDurableSleepStop(reason = 'system_sleep') {
+    try {
+      const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
+      if (!timeLogId && !this.isTracking) return null;
+
+      const endTime = new Date().toISOString();
+      global._stopEndTimeOverride = global._stopEndTimeOverride || endTime;
+      const startTime =
+        this.sessionStartTime ||
+        this.currentSession?.start_time ||
+        global.sessionStartTime ||
+        endTime;
+      const userId = this.config?.user_id || global.currentUserId;
+
+      if (timeLogId) {
+        this._storeSessionCheckpoint({
+          timeLogId,
+          startTime,
+          checkpointAt: endTime,
+          userId,
+          projectId: this.currentProjectId || global.currentProjectId,
+          reason,
+        });
+        this._storePendingSessionClose(timeLogId, endTime, userId);
+        this._queueOfflineTimeLogUpdate({
+          id: timeLogId,
+          user_id: userId,
+          start_time: startTime,
+          end_time: endTime,
+          status: 'completed',
+          project_id: this.currentProjectId || this.currentSession?.project_id || null,
+          _sleep_armed: true,
+        });
+        this._appendTimeLedger({
+          event: 'sleep_arm_close',
+          id: timeLogId,
+          start_time: startTime,
+          end_time: endTime,
+          status: 'completed',
+          reason,
+        });
+      }
+
+      global._resumeTrackingAfterWake = {
+        projectId: this.currentProjectId || global.currentProjectId || null,
+        stoppedAt: Date.now(),
+        reason,
+      };
+      try {
+        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+        clearUserExplicitlyStopped();
+      } catch (_) {
+        global.userExplicitlyStopped = false;
+      }
+
+      console.log(
+        `💤 [TRACKING-MANAGER] Durable sleep arm written for ${timeLogId || 'no-id'} at ${endTime}`,
+      );
+      return endTime;
+    } catch (err) {
+      console.error('❌ [TRACKING-MANAGER] armDurableSleepStop failed:', err?.message || err);
+      return null;
+    }
+  }
+
   _startTimeLogCheckpoint() {
     this._stopTimeLogCheckpoint();
 
-    const CHECKPOINT_MS = 60 * 1000;
+    // PAYROLL: hard-kill loss window ≈ checkpoint interval. Keep this tight.
+    const CHECKPOINT_MS = 10 * 1000;
     this._timeLogCheckpointInterval = setInterval(() => {
       void this._checkpointCurrentTimeLog();
     }, CHECKPOINT_MS);
+    if (typeof this._timeLogCheckpointInterval.unref === 'function') {
+      this._timeLogCheckpointInterval.unref();
+    }
     // Immediate first floor so a crash seconds after Start still has a durable mark.
     void this._checkpointCurrentTimeLog();
   }
@@ -1795,7 +2050,11 @@ try {
       global._idlePromptTimeCutSeconds = 0;
     }
     const userId = this.config.user_id;
-    const isTempOfflineId = String(timeLogId).startsWith('temp-');
+    // Offline sessions now use stable UUIDs; still treat never-synced rows as creates.
+    const isTempOfflineId =
+      String(timeLogId).startsWith('temp-') ||
+      !!(this.currentSession?._offline) ||
+      !!(global.currentSession?._offline);
     const startTime =
       this.sessionStartTime ||
       this.currentSession?.start_time ||
@@ -2224,32 +2483,18 @@ try {
       if (!userId) return;
 
       if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
-        const checkpoint = this._readSessionCheckpoint?.() || null;
-        // Inspect/flag only unless we have a local durable checkpoint to confirm.
-        if (checkpoint?.checkpointAt && checkpoint?.timeLogId) {
-          try {
-            await backendTimeLogs.confirmStaleSessionClose(
-              {
-                user_id: userId,
-                time_log_id: checkpoint.timeLogId,
-                end_time: checkpoint.checkpointAt,
-                confirm_with_local_checkpoint: true,
-              },
-              this.config,
-            );
-            console.log(
-              `🔒 [TRACKING-MANAGER] Confirmed close via local checkpoint for ${checkpoint.timeLogId}`,
-            );
-          } catch (err) {
-            console.warn('⚠️ [TRACKING-MANAGER] Checkpoint confirmed close failed:', err?.message || err);
-          }
-        }
-        const result = await backendTimeLogs.closeActiveSessions(userId, deviceId, this.config, {
-          prefer_recover: false,
-          client_last_seen_at: checkpoint?.checkpointAt || null,
+        const {
+          closeOpenSessionsAfterExplicitStop,
+          resolveExplicitStopEndTime,
+        } = require('../utils/session-recovery');
+        const result = await closeOpenSessionsAfterExplicitStop({
+          userId,
+          deviceId,
+          end_time: resolveExplicitStopEndTime(),
+          config: this.config,
         });
         console.log(
-          `🚩 [TRACKING-MANAGER] Open-session inspect: recovered=${!!result?.recovered} flagged=${result?.flagged_count || 0}`,
+          `🔒 [TRACKING-MANAGER] Force-closed open sessions: closed=${result?.closed ?? 0}`,
         );
         return;
       }
@@ -2324,26 +2569,48 @@ try {
   }
 
   /**
-   * Queue a local temp time log create and return the temp row
+   * Queue a time-log create for durable offline sync.
+   * PAYROLL CRITICAL: use a stable UUID (not temp-*) so RDS/API retries are idempotent.
    */
   _queueOfflineTimeLogCreate(timeLogData, extra = {}) {
-    const tempTimeLog = {
-      id: `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    const existingId =
+      timeLogData?.id && !String(timeLogData.id).startsWith('temp-')
+        ? String(timeLogData.id)
+        : null;
+    const stableId = existingId || crypto.randomUUID();
+    const queuedTimeLog = {
       ...timeLogData,
       ...extra,
+      id: stableId,
       _offline: true,
       _retryCount: 0,
+      _queued_at: new Date().toISOString(),
     };
 
     const offlineQueue = this.getOfflineQueue();
-    offlineQueue.push({
+    // Deduplicate: keep latest create for same id (never drop the hours payload).
+    const filtered = offlineQueue.filter(
+      (item) =>
+        !(
+          item?.type === 'create_time_log' &&
+          String(item?.data?.id) === String(stableId)
+        ),
+    );
+    filtered.push({
       type: 'create_time_log',
-      data: tempTimeLog,
+      data: queuedTimeLog,
       timestamp: new Date().toISOString(),
     });
-    this.saveOfflineQueue(offlineQueue);
+    this._persistOfflineQueueOrThrow(filtered);
+    this._appendTimeLedger({
+      event: 'queue_create',
+      id: stableId,
+      start_time: queuedTimeLog.start_time,
+      end_time: queuedTimeLog.end_time || null,
+      status: queuedTimeLog.status || 'active',
+    });
     this.startOfflineSync();
-    return tempTimeLog;
+    return queuedTimeLog;
   }
 
   /**
@@ -2351,16 +2618,35 @@ try {
    */
   _queueOfflineTimeLogUpdate(payload) {
     const offlineQueue = this.getOfflineQueue();
-    offlineQueue.push({
+    const id = payload?.id ? String(payload.id) : null;
+    // Prefer a single pending update per id (latest end_time wins) so retries stay idempotent.
+    const filtered = id
+      ? offlineQueue.filter(
+          (item) =>
+            !(
+              item?.type === 'update_time_log' &&
+              String(item?.data?.id) === id
+            ),
+        )
+      : offlineQueue.slice();
+    filtered.push({
       type: 'update_time_log',
       data: {
         ...payload,
         _offline: true,
         _retryCount: 0,
+        _queued_at: new Date().toISOString(),
       },
       timestamp: new Date().toISOString(),
     });
-    this.saveOfflineQueue(offlineQueue);
+    this._persistOfflineQueueOrThrow(filtered);
+    this._appendTimeLedger({
+      event: 'queue_update',
+      id: payload?.id || null,
+      start_time: payload?.start_time || null,
+      end_time: payload?.end_time || null,
+      status: payload?.status || 'completed',
+    });
     this.startOfflineSync();
   }
 
@@ -2401,16 +2687,178 @@ try {
   }
 
   /**
-   * Save offline time-log queue
+   * Atomic durable write of offline time-log queue (tmp + fsync + rename).
+   * PAYROLL CRITICAL: never silently fail — callers that must not lose hours use
+   * `_persistOfflineQueueOrThrow`.
    */
   saveOfflineQueue(queue) {
     try {
-      const fs = require('fs');
-      const queuePath = this._getTimeLogOfflineQueuePath();
-      fs.writeFileSync(queuePath, JSON.stringify(Array.isArray(queue) ? queue : [], null, 2));
-      console.log('💾 [TRACKING-MANAGER] Offline time-log queue saved with', (queue || []).length, 'items');
+      this._persistOfflineQueueOrThrow(queue);
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] Error saving offline time-log queue:', error);
+    }
+  }
+
+  _persistOfflineQueueOrThrow(queue) {
+    const fs = require('fs');
+    const queuePath = this._getTimeLogOfflineQueuePath();
+    const dir = require('path').dirname(queuePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const payload = JSON.stringify(Array.isArray(queue) ? queue : [], null, 2);
+    const tmp = `${queuePath}.${process.pid}.${Date.now()}.tmp`;
+    const fd = fs.openSync(tmp, 'w');
+    try {
+      fs.writeFileSync(fd, payload, 'utf8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmp, queuePath);
+    // Best-effort fsync of directory entry on POSIX
+    try {
+      const dirFd = fs.openSync(dir, 'r');
+      fs.fsyncSync(dirFd);
+      fs.closeSync(dirFd);
+    } catch (_) { /* windows / restricted FS */ }
+    console.log(
+      '💾 [TRACKING-MANAGER] Offline time-log queue saved with',
+      (Array.isArray(queue) ? queue : []).length,
+      'items',
+    );
+  }
+
+  _getTimeLedgerPath() {
+    const path = require('path');
+    return path.join(this._getAppDataDir(), 'time-ledger.jsonl');
+  }
+
+  /**
+   * Append-only local payroll ledger — survives even if queue rewrite is interrupted.
+   * Used to re-queue any segments that never reached RDS.
+   */
+  _appendTimeLedger(entry) {
+    try {
+      const fs = require('fs');
+      const filePath = this._getTimeLedgerPath();
+      const line = JSON.stringify({
+        v: 1,
+        at: new Date().toISOString(),
+        ...entry,
+      });
+      fs.appendFileSync(filePath, `${line}\n`, 'utf8');
+    } catch (err) {
+      console.warn('⚠️ [TRACKING-MANAGER] time-ledger append failed:', err?.message || err);
+    }
+  }
+
+  /**
+   * On launch: re-queue any ledger close/create rows that are not yet reflected
+   * in offline-time-logs.json (belt-and-suspenders against interrupted saves).
+   */
+  _rehydrateOfflineQueueFromLedger() {
+    try {
+      const fs = require('fs');
+      const ledgerPath = this._getTimeLedgerPath();
+      if (!fs.existsSync(ledgerPath)) return;
+
+      const queue = this.getOfflineQueue();
+      const queuedIds = new Set(
+        queue
+          .map((item) => String(item?.data?.id || ''))
+          .filter(Boolean),
+      );
+      const lines = fs.readFileSync(ledgerPath, 'utf8').split('\n').filter(Boolean);
+      // Keep last event per id
+      const lastById = new Map();
+      for (const line of lines) {
+        try {
+          const row = JSON.parse(line);
+          if (row?.id) lastById.set(String(row.id), row);
+        } catch (_) { /* skip bad line */ }
+      }
+
+      let added = 0;
+      for (const [id, row] of lastById.entries()) {
+        if (row.event !== 'queue_create' && row.event !== 'queue_update') continue;
+
+        // If queue already has this id, MERGE later end_time into create/update —
+        // never skip a completed ledger update when only an active create remains.
+        if (queuedIds.has(id)) {
+          if (row.event === 'queue_update' && row.end_time) {
+            let merged = false;
+            for (const item of queue) {
+              if (String(item?.data?.id) !== id) continue;
+              const prevEnd = item.data?.end_time
+                ? new Date(item.data.end_time).getTime()
+                : 0;
+              const nextEnd = new Date(row.end_time).getTime();
+              if (!Number.isFinite(nextEnd)) continue;
+              if (!Number.isFinite(prevEnd) || nextEnd >= prevEnd) {
+                item.data.end_time = row.end_time;
+                item.data.status = row.status || 'completed';
+                if (row.start_time && !item.data.start_time) {
+                  item.data.start_time = row.start_time;
+                }
+                // Promote stranded active create → completed create for one-shot sync.
+                if (item.type === 'create_time_log') {
+                  item.data.status = 'completed';
+                }
+                merged = true;
+              }
+            }
+            if (merged) added += 1;
+          }
+          continue;
+        }
+
+        // Only rehydrate if we still have start+end (completed work) or active create.
+        if (row.event === 'queue_update' && row.end_time) {
+          queue.push({
+            type: 'update_time_log',
+            data: {
+              id,
+              user_id: row.user_id || this.config?.user_id,
+              start_time: row.start_time,
+              end_time: row.end_time,
+              status: row.status || 'completed',
+              _offline: true,
+              _retryCount: 0,
+              _rehydrated_from_ledger: true,
+            },
+            timestamp: new Date().toISOString(),
+          });
+          added += 1;
+        } else if (row.event === 'queue_create' && row.start_time) {
+          queue.push({
+            type: 'create_time_log',
+            data: {
+              id,
+              user_id: row.user_id || this.config?.user_id,
+              start_time: row.start_time,
+              end_time: row.end_time || null,
+              status: row.status || (row.end_time ? 'completed' : 'active'),
+              device_id: getDeviceId(),
+              is_manual: false,
+              _offline: true,
+              _retryCount: 0,
+              _rehydrated_from_ledger: true,
+            },
+            timestamp: new Date().toISOString(),
+          });
+          added += 1;
+        }
+      }
+
+      if (added > 0) {
+        this._persistOfflineQueueOrThrow(queue);
+        console.log(
+          `💾 [TRACKING-MANAGER] Rehydrated ${added} time-log item(s) from local ledger`,
+        );
+      }
+    } catch (err) {
+      console.warn('⚠️ [TRACKING-MANAGER] Ledger rehydrate failed:', err?.message || err);
     }
   }
 
@@ -2419,44 +2867,97 @@ try {
    */
   startOfflineSync() {
     // If already running, don't start another
-    if (this.offlineSyncTimer) return;
+    if (this.offlineSyncTimer) {
+      // Still kick an immediate flush when caller asks again (wake / online).
+      void this._flushOfflineQueueIfOnline();
+      return;
+    }
     
     console.log('🔄 [TRACKING-MANAGER] Starting offline sync timer');
     
-    // Try to sync every 30 seconds while network may be down
+    // Aggressive retry while queue has payroll items (was 30s).
     this.offlineSyncTimer = setInterval(() => {
-      this.processOfflineQueue();
-    }, 30000);
+      this._flushOfflineQueueIfOnline();
+    }, 10_000);
+    if (typeof this.offlineSyncTimer.unref === 'function') {
+      this.offlineSyncTimer.unref();
+    }
     
-    // Immediate attempt + short retry (reconnect often needs a beat)
-    setTimeout(() => this.processOfflineQueue(), 0);
-    setTimeout(() => this.processOfflineQueue(), 3000);
+    // Immediate attempt + staggered retries (reconnect often needs a beat)
+    setTimeout(() => this._flushOfflineQueueIfOnline(), 0);
+    setTimeout(() => this._flushOfflineQueueIfOnline(), 1500);
+    setTimeout(() => this._flushOfflineQueueIfOnline(), 5000);
+    setTimeout(() => this._flushOfflineQueueIfOnline(), 15000);
 
     // When the machine wakes / network returns, flush queued hours ASAP.
     if (!this._offlineResumeHooksBound) {
       this._offlineResumeHooksBound = true;
       try {
-        const { powerMonitor } = require('electron');
+        const { powerMonitor, net } = require('electron');
         if (powerMonitor?.on) {
-          powerMonitor.on('resume', () => {
-            console.log('🔄 [TRACKING-MANAGER] System resume — flushing offline time logs');
+          const flushOnWake = (label) => {
+            console.log(`🔄 [TRACKING-MANAGER] ${label} — flushing offline time logs`);
+            try {
+              this._rehydrateOfflineQueueFromLedger?.();
+            } catch (_) { /* ignore */ }
             this.startOfflineSync();
             void this.processOfflineQueue();
-          });
+            // Extra passes — first attempt often races DNS/VPN after wake.
+            setTimeout(() => void this.processOfflineQueue(), 2000);
+            setTimeout(() => void this.processOfflineQueue(), 8000);
+          };
+          powerMonitor.on('resume', () => flushOnWake('System resume'));
+          powerMonitor.on('unlock-screen', () => flushOnWake('Screen unlock'));
+        }
+        // Edge-detect Chromium online status (low → good internet).
+        if (net && typeof net.isOnline === 'function') {
+          this._wasOfflineForSync = !net.isOnline();
+          if (!this._onlinePollTimer) {
+            this._onlinePollTimer = setInterval(() => {
+              try {
+                const online = net.isOnline();
+                if (online && this._wasOfflineForSync) {
+                  console.log('🌐 [TRACKING-MANAGER] Network restored — flushing offline time logs');
+                  try {
+                    this._rehydrateOfflineQueueFromLedger?.();
+                  } catch (_) { /* ignore */ }
+                  this.startOfflineSync();
+                  void this.processOfflineQueue();
+                  setTimeout(() => void this.processOfflineQueue(), 3000);
+                }
+                this._wasOfflineForSync = !online;
+              } catch (_) { /* ignore */ }
+            }, 3000);
+            if (typeof this._onlinePollTimer.unref === 'function') {
+              this._onlinePollTimer.unref();
+            }
+          }
         }
       } catch (_) { /* ignore */ }
       try {
-        // When OS reports online again, flush immediately (complements 30s retry).
         const { app } = require('electron');
         if (app && typeof app.on === 'function') {
-          // Some Electron builds emit this when Chromium network status changes.
           app.on('browser-window-focus', () => {
             const q = this.getOfflineQueue();
-            if (q.length > 0) void this.processOfflineQueue();
+            if (q.length > 0) {
+              this.startOfflineSync();
+              void this._flushOfflineQueueIfOnline();
+            }
           });
         }
       } catch (_) { /* ignore */ }
     }
+  }
+
+  _flushOfflineQueueIfOnline() {
+    try {
+      const { net } = require('electron');
+      if (net && typeof net.isOnline === 'function' && !net.isOnline()) {
+        this._wasOfflineForSync = true;
+        return;
+      }
+    } catch (_) { /* proceed and let fetch fail */ }
+    void this.processOfflineQueue();
   }
 
   /**
@@ -2486,8 +2987,16 @@ try {
             const timeLogData = { ...item.data };
             delete timeLogData._offline;
             delete timeLogData._retryCount;
-            const tempId = timeLogData.id;
-            delete timeLogData.id; // Remove temp ID; assign a real UUID for backend
+            delete timeLogData._queued_at;
+            delete timeLogData._rehydrated_from_ledger;
+            // PAYROLL CRITICAL: keep stable UUID across retries (idempotent after RDS timeout).
+            const stableId =
+              timeLogData.id && !String(timeLogData.id).startsWith('temp-')
+                ? String(timeLogData.id)
+                : crypto.randomUUID();
+            timeLogData.id = stableId;
+            // Persist stable id back onto queue item for future retries
+            if (item.data) item.data.id = stableId;
 
             let timeLog = null;
             if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
@@ -2495,22 +3004,40 @@ try {
                 global.currentOrganizationId ||
                 this.config.organization_id ||
                 null;
-              const newId = crypto.randomUUID();
-              timeLog = await backendTimeLogs.createTimeLog(
-                {
-                  id: newId,
-                  ...timeLogData,
-                  organization_id: orgId,
-                },
-                this.config,
-              );
+              try {
+                timeLog = await backendTimeLogs.createTimeLog(
+                  {
+                    ...timeLogData,
+                    organization_id: orgId,
+                  },
+                  this.config,
+                  { timeoutMs: 12_000 },
+                );
+              } catch (createErr) {
+                // Treat duplicate/conflict as success — prior attempt likely committed.
+                const msg = String(createErr?.message || createErr || '').toLowerCase();
+                if (
+                  msg.includes('duplicate') ||
+                  msg.includes('unique') ||
+                  msg.includes('already exists') ||
+                  msg.includes('conflict')
+                ) {
+                  timeLog = { id: stableId, ...timeLogData };
+                  console.warn(
+                    '⚠️ [TRACKING-MANAGER] Create conflict treated as synced:',
+                    stableId,
+                  );
+                } else {
+                  throw createErr;
+                }
+              }
             } else {
               if (!this.supabaseService) {
                 throw new Error('No Supabase client for offline time log sync');
               }
               const { data, error } = await this.supabaseService
                 .from('time_logs')
-                .insert([timeLogData])
+                .upsert([timeLogData], { onConflict: 'id' })
                 .select()
                 .single();
               if (error) throw error;
@@ -2518,9 +3045,22 @@ try {
             }
 
             console.log('✅ [TRACKING-MANAGER] Synced offline time log:', timeLog.id);
+            this._appendTimeLedger({
+              event: 'synced_create',
+              id: timeLog.id,
+              start_time: timeLogData.start_time,
+              end_time: timeLogData.end_time || null,
+              status: timeLogData.status,
+            });
 
             // If this is the current session, update the ID
-            if (this.currentTimeLogId === tempId || this.currentTimeLogId === item.data.id) {
+            const prevId = item.data?.id || stableId;
+            if (
+              this.currentTimeLogId === prevId ||
+              this.currentTimeLogId === stableId ||
+              (String(this.currentTimeLogId || '').startsWith('temp-') &&
+                String(prevId).startsWith('temp-'))
+            ) {
               this.currentTimeLogId = timeLog.id;
               global.currentTimeLogId = timeLog.id;
               if (this.currentSession) {
@@ -2536,7 +3076,7 @@ try {
 
               if (this.mainWindow && !this.mainWindow.isDestroyed()) {
                 this.mainWindow.webContents.send('time-log-id-updated', {
-                  oldId: item.data.id,
+                  oldId: prevId,
                   newId: timeLog.id,
                 });
               }
@@ -2547,14 +3087,28 @@ try {
             delete updates.id;
             delete updates._offline;
             delete updates._retryCount;
+            delete updates._queued_at;
+            delete updates._rehydrated_from_ledger;
             delete updates.action;
 
             if (!id || String(id).startsWith('temp-')) {
-              // Convert stranded temp updates into a completed create
+              // Convert stranded temp updates into a completed create (stable UUID).
+              const completedId =
+                id && !String(id).startsWith('temp-') ? String(id) : crypto.randomUUID();
+              const startTime =
+                updates.start_time ||
+                this._readSessionCheckpoint()?.startTime ||
+                null;
+              if (!startTime || !updates.end_time) {
+                throw new Error(
+                  'Cannot sync stranded update without start_time and end_time',
+                );
+              }
               const createPayload = {
+                id: completedId,
                 user_id: updates.user_id || this.config.user_id,
                 project_id: updates.project_id || this.currentProjectId || null,
-                start_time: updates.start_time || updates.end_time,
+                start_time: startTime,
                 end_time: updates.end_time,
                 status: 'completed',
                 is_manual: false,
@@ -2567,19 +3121,79 @@ try {
                   this.config.organization_id ||
                   null;
                 await backendTimeLogs.createTimeLog(
-                  { id: crypto.randomUUID(), ...createPayload, organization_id: orgId },
+                  { ...createPayload, organization_id: orgId },
                   this.config,
                 );
               } else if (this.supabaseService) {
-                const { error } = await this.supabaseService.from('time_logs').insert([createPayload]);
+                const { error } = await this.supabaseService
+                  .from('time_logs')
+                  .upsert([createPayload], { onConflict: 'id' });
                 if (error) throw error;
               } else {
                 throw new Error('No DB client for offline completed create');
               }
               console.log('✅ [TRACKING-MANAGER] Synced offline completed temp session');
+              this._appendTimeLedger({
+                event: 'synced_update_as_create',
+                id: completedId,
+                start_time: startTime,
+                end_time: updates.end_time,
+                status: 'completed',
+              });
             } else if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
-              await backendTimeLogs.updateTimeLog(id, updates, this.config);
+              try {
+                await backendTimeLogs.updateTimeLog(id, updates, this.config, {
+                  timeoutMs: 12_000,
+                });
+              } catch (updErr) {
+                // Row missing (create still pending / lost) → upsert as completed create.
+                const msg = String(updErr?.message || updErr || '').toLowerCase();
+                const canCreate =
+                  updates.end_time &&
+                  (updates.start_time ||
+                    this._readSessionCheckpoint()?.startTime);
+                if (
+                  canCreate &&
+                  (msg.includes('not found') ||
+                    msg.includes('no rows') ||
+                    msg.includes('0 rows') ||
+                    msg.includes('no_row'))
+                ) {
+                  const startTime =
+                    updates.start_time ||
+                    this._readSessionCheckpoint()?.startTime;
+                  const orgId =
+                    global.currentOrganizationId ||
+                    this.config.organization_id ||
+                    null;
+                  await backendTimeLogs.createTimeLog(
+                    {
+                      id,
+                      user_id: updates.user_id || this.config.user_id,
+                      project_id: updates.project_id || this.currentProjectId || null,
+                      start_time: startTime,
+                      end_time: updates.end_time,
+                      status: 'completed',
+                      is_manual: false,
+                      idle_seconds: updates.idle_seconds || 0,
+                      device_id: updates.device_id || getDeviceId(),
+                      organization_id: orgId,
+                    },
+                    this.config,
+                    { timeoutMs: 12_000 },
+                  );
+                } else {
+                  throw updErr;
+                }
+              }
               console.log('✅ [TRACKING-MANAGER] Synced offline time log update:', id);
+              this._appendTimeLedger({
+                event: 'synced_update',
+                id,
+                start_time: updates.start_time || null,
+                end_time: updates.end_time || null,
+                status: updates.status || null,
+              });
             } else if (this.supabaseService) {
               const { error } = await this.supabaseService
                 .from('time_logs')
@@ -2607,12 +3221,15 @@ try {
 
       const hadItems = queue.length > 0;
       const syncedCount = queue.length - remainingItems.length;
-      this.saveOfflineQueue(remainingItems);
+      this._persistOfflineQueueOrThrow(remainingItems);
 
       if (remainingItems.length === 0 && this.offlineSyncTimer) {
         clearInterval(this.offlineSyncTimer);
         this.offlineSyncTimer = null;
         console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
+      } else if (remainingItems.length > 0) {
+        // Keep hammering until empty — never leave payroll stranded without a timer.
+        this.startOfflineSync();
       }
 
       // After any successful sync, refresh UI totals — but NEVER clear last-good.

@@ -426,4 +426,5 @@ module.exports = {
   secondsWithinLocalDay,
   logsOverlappingLocalDay,
   loadOfflineQueuedTimeLogRows,
+  mergeIntervalsSeconds,
 };
