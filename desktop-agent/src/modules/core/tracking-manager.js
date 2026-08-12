@@ -83,6 +83,13 @@ try {
         console.log(`⏱️ [STARTUP-TIMING] ${label}: +${elapsed}ms`);
       };
 
+      // Pacific day boundary before arming the session (lid-close overnight).
+      try {
+        if (typeof global.trayManager?.ensureWorkDayRollover === 'function') {
+          global.trayManager.ensureWorkDayRollover();
+        }
+      } catch (_) { /* ignore */ }
+
       // DIAGNOSTIC: Event loop lag monitor during startup (first 60 seconds)
       // Stored on instance so stopTracking() can clear it early
       this._lagCheckCount = 0;
@@ -701,6 +708,9 @@ try {
         `✅ [TRACKING-MANAGER] Tracking started with time log ID: ${this.currentTimeLogId}` +
           (startResult.offline ? ' (offline — will sync)' : ''),
       );
+      try {
+        global.notTrackingReminderManager?.onTrackingStarted?.();
+      } catch (_) { /* ignore */ }
       return startResult;
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] Failed to start tracking:', error);
@@ -877,7 +887,12 @@ try {
                 return;
               }
               global.enhancedScreenshotManager?.debugScreenshotTimer();
-              const timersActive = (global.enhancedScreenshotManager?.windowTimers?.length || 0) > 0 || !!global.enhancedScreenshotManager?._windowInterval;
+              const mgr = global.enhancedScreenshotManager;
+              const timersActive =
+                (mgr?.windowTimers?.length || 0) > 0 ||
+                !!mgr?._windowInterval ||
+                !!mgr?.screenshotInterval ||
+                !!mgr?.nextScreenshotTime;
               if (!timersActive) {
                 console.log('🛠️ [TRACKING-DEBUG] No screenshot timers after start — calling startScreenshotCapture once');
                 global.enhancedScreenshotManager.startScreenshotCapture();
@@ -1135,6 +1150,9 @@ try {
       // Propagate to global immediately
       global.isTracking = false;
       global.isPaused = false;
+      try {
+        global.notTrackingReminderManager?.onTrackingStopped?.();
+      } catch (_) { /* ignore */ }
       // CRITICAL FIX: Send tracking-stopped to renderer IMMEDIATELY in Phase 1
       // This allows renderer to stop ActivityMonitor polling before slow cleanup
       try {
@@ -1483,6 +1501,9 @@ try {
     // Update global state
     global.isTracking = false;
     global.isPaused = false;
+    try {
+      global.notTrackingReminderManager?.onTrackingStopped?.();
+    } catch (_) { /* ignore */ }
     
     // Update screenshot manager state immediately to prevent race condition
     if (global.enhancedScreenshotManager) {

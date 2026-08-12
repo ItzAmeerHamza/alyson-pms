@@ -475,10 +475,11 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       // Initialize event system first
       global.eventManager.initialize();
 
-      // Register data/stats IPC handlers AFTER ipc-event-map so RDS handlers win over legacy stubs
-      global.ipcEventMap.initialize();
-
+      // DataStats owns get-url/app/screenshot-activity (real DB). Init it before
+      // ipc-event-map so any remaining shared channels are replaceable via removeHandler.
       await global.dataStatsManager.initialize();
+
+      global.ipcEventMap.initialize();
       
       // AppLifecycleManager already initialized in startMainApplication() for early window display
       // Just get the reference to the already-created window
@@ -699,6 +700,24 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       // Start session health monitoring for database synchronization
       loadUserExplicitlyStoppedFromDisk();
       startSessionHealthCheck();
+
+      // Not-tracking reminder: focus main window after activity grace while OFF.
+      try {
+        const NotTrackingReminderManager = require('../activity/not-tracking-reminder-manager');
+        if (!global.notTrackingReminderManager) {
+          global.notTrackingReminderManager = new NotTrackingReminderManager();
+        }
+        if (!global.isTracking && !global.trackingManager?.isTracking) {
+          global.notTrackingReminderManager.start();
+        } else {
+          global.notTrackingReminderManager.onTrackingStarted();
+        }
+      } catch (reminderErr) {
+        console.warn(
+          '⚠️ [STARTUP-MANAGER] Not-tracking reminder init failed:',
+          reminderErr?.message || reminderErr,
+        );
+      }
 
       // Ship yesterday's diagnostic log to S3 and start watching for the next rotation
       startLogUploadSchedule();

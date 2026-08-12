@@ -1559,12 +1559,19 @@ class UIManager {
               if (typeof window.applyTodayEffectiveStats === 'function') {
                 window.applyTodayEffectiveStats(today);
               }
-              const trackedSec =
-                typeof window.resolveStoppedDisplaySeconds === 'function'
-                  ? window.resolveStoppedDisplaySeconds(today.totalTime)
-                  : Math.max(0, Math.floor(today.totalTime));
-              if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(trackedSec);
+              const dbTotal = Math.max(0, Math.floor(Number(today.totalTime) || 0));
+              if (today.stale === true) {
+                const trackedSec =
+                  typeof window.resolveStoppedDisplaySeconds === 'function'
+                    ? window.resolveStoppedDisplaySeconds(dbTotal, 0, { authoritative: false })
+                    : dbTotal;
+                if (typeof window.setTrackerDisplaySeconds === 'function') {
+                  window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: false });
+                }
+              } else if (typeof window.applyAuthoritativeStoppedTotal === 'function') {
+                window.applyAuthoritativeStoppedTotal(dbTotal, { reason: 'ui-stopped-refresh' });
+              } else if (typeof window.setTrackerDisplaySeconds === 'function') {
+                window.setTrackerDisplaySeconds(dbTotal, { allowDecrease: true });
               }
               if (typeof today.completedTodayBeforeCurrentSessionSeconds === 'number') {
                 if (typeof window.applyClosedBaseFromStats === 'function') {
@@ -3366,15 +3373,22 @@ class UIManager {
             } else {
               window.setTrackerDisplaySeconds(totalSec);
             }
-          } else {
+          } else if (todayStats.stale === true) {
             const trackedDisplay =
               typeof window.resolveStoppedDisplaySeconds === 'function'
-                ? window.resolveStoppedDisplaySeconds(totalSec)
+                ? window.resolveStoppedDisplaySeconds(totalSec, 0, { authoritative: false })
                 : totalSec;
-            // PAYROLL RED LINE: never allowDecrease from a stats refresh.
-            // Only idle-cut / day-rollover may lower the clock.
             window.setTrackerDisplaySeconds(trackedDisplay, { allowDecrease: false });
-            console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', trackedDisplay, 's');
+            console.log('⚠️ [TODAY-TIME] Stale stats — holding local floor', trackedDisplay, 's');
+          } else if (typeof window.applyAuthoritativeStoppedTotal === 'function') {
+            // PLATFORM RULE: stopped clock = DB/portal total. Never local HW.
+            const trackedDisplay = window.applyAuthoritativeStoppedTotal(totalSec, {
+              reason: 'ui-load-today',
+            });
+            console.log('✅ [TODAY-TIME] Authoritative stopped clock', trackedDisplay, 's');
+          } else {
+            window.setTrackerDisplaySeconds(totalSec, { allowDecrease: true });
+            console.log('✅ [TODAY-TIME] Restored tracker clock from tracked', totalSec, 's');
           }
         }
       } else {
@@ -3745,12 +3759,19 @@ class UIManager {
                   if (typeof window.applyTodayEffectiveStats === 'function') {
                     window.applyTodayEffectiveStats(today);
                   }
-                  const trackedSec =
-                    typeof window.resolveStoppedDisplaySeconds === 'function'
-                      ? window.resolveStoppedDisplaySeconds(today.totalTime)
-                      : Math.max(0, Math.floor(today.totalTime));
-                  if (typeof window.setTrackerDisplaySeconds === 'function') {
-                    window.setTrackerDisplaySeconds(trackedSec);
+                  const dbTotal = Math.max(0, Math.floor(Number(today.totalTime) || 0));
+                  if (today.stale === true) {
+                    const trackedSec =
+                      typeof window.resolveStoppedDisplaySeconds === 'function'
+                        ? window.resolveStoppedDisplaySeconds(dbTotal, 0, { authoritative: false })
+                        : dbTotal;
+                    if (typeof window.setTrackerDisplaySeconds === 'function') {
+                      window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: false });
+                    }
+                  } else if (typeof window.applyAuthoritativeStoppedTotal === 'function') {
+                    window.applyAuthoritativeStoppedTotal(dbTotal, { reason: 'ui-timer-refresh' });
+                  } else if (typeof window.setTrackerDisplaySeconds === 'function') {
+                    window.setTrackerDisplaySeconds(dbTotal, { allowDecrease: true });
                   }
                 }
                 // Never wipe the day's clock to 0 on a missing/failed stats fetch.

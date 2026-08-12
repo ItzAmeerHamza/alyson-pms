@@ -1264,8 +1264,8 @@ class DataStatsManager {
    * Get URL activity data
    */
   registerGetUrlActivity() {
-    // Remove any existing handler first to prevent duplicate registration
-    this.ipcMain.removeAllListeners('get-url-activity');
+    // handle() registrations are NOT cleared by removeAllListeners — must use removeHandler.
+    try { this.ipcMain.removeHandler('get-url-activity'); } catch (_) { /* none */ }
     console.log('📡 [IPC] Registering get-url-activity handler');
     
     this.ipcMain.handle('get-url-activity', async () => {
@@ -1801,12 +1801,10 @@ class DataStatsManager {
    * Get app activity data
    */
   registerGetAppActivity() {
-    // Check if handler already exists to prevent duplicate registration
-    if (this.ipcMain.listenerCount('get-app-activity') > 0) {
-      console.log('⚠️ [IPC] get-app-activity handler already exists, skipping registration');
-      return;
-    }
-    
+    // listenerCount() does not see invoke handlers from handle() — always replace cleanly.
+    try { this.ipcMain.removeHandler('get-app-activity'); } catch (_) { /* none */ }
+    console.log('📡 [IPC] Registering get-app-activity handler');
+
     this.ipcMain.handle('get-app-activity', async () => {
       try {
         console.log('📱 [IPC] Fetching app activity data...');

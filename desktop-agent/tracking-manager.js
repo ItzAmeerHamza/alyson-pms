@@ -427,7 +427,12 @@ class TrackingManager extends EventEmitter {
           setTimeout(() => {
             try {
               global.enhancedScreenshotManager?.debugScreenshotTimer();
-              const timersActive = (global.enhancedScreenshotManager?.windowTimers?.length || 0) > 0 && !!global.enhancedScreenshotManager?.windowEndTimer;
+              const mgr = global.enhancedScreenshotManager;
+              const timersActive =
+                (mgr?.windowTimers?.length || 0) > 0 ||
+                !!mgr?.windowEndTimer ||
+                !!mgr?.screenshotInterval ||
+                !!mgr?.nextScreenshotTime;
               if (!timersActive) {
                 console.log('🛠️ [TRACKING-DEBUG] No screenshot timers after start — calling startScreenshotCapture once');
                 global.enhancedScreenshotManager.startScreenshotCapture();

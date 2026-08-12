@@ -10,8 +10,6 @@ const {
   insertAppLogsBatch,
   insertUrlLogsBatch,
   insertIdleLog,
-  closeOpenAppLogs,
-  closeOpenUrlLogs,
 } = require('../utils/backend-time-logs');
 
 class EnhancedSyncManager {
@@ -433,22 +431,12 @@ class EnhancedSyncManager {
     }
 
     if (isBackendTimeLogsEnabled(this.config)) {
-      // Session model: close any open URL visit before inserting the new one
-      try {
-        const userId = batch[0]?.user_id;
-        const startedAt = batch[0]?.started_at || batch[0]?.timestamp || new Date().toISOString();
-        if (userId) {
-          await closeOpenUrlLogs({
-            user_id: userId,
-            ended_at: startedAt,
-          }, this.config);
-        }
-      } catch (closeErr) {
-        console.warn('⚠️ [URL-SYNC] close_open_url_logs failed (non-fatal):', closeErr?.message || closeErr);
-      }
+      // Backend forceUrlInsert closes *other* open URLs and skips insert when the
+      // same site_url is already open — do NOT close-all here (that caused
+      // close+reinsert spam for the same link every flush).
       await insertUrlLogsBatch(batch, this.config);
       this.clearDbBackoff();
-      console.log(`✅ [URL-SYNC] Inserted ${batch.length} URL session(s) via backend RDS`);
+      console.log(`✅ [URL-SYNC] Synced ${batch.length} URL session(s) via backend RDS`);
       return;
     }
     
@@ -487,33 +475,55 @@ class EnhancedSyncManager {
 
       const payload = batch.map(sanitizeUrlLog);
 
-      // Close previous open URL slices before inserting new ones
-      // This replaces the dangerous auto_close_url_slices database trigger
+      // Close other open URL slices (different site_url only). Same continuous URL
+      // stays open — never close+reinsert the active visit.
+      const toInsert = [];
       try {
-        const seen = new Set();
         for (const row of payload) {
-          const key = `${row.user_id}|${row.browser}`;
-          if (seen.has(key) || !row.user_id || !row.browser) continue;
-          seen.add(key);
-          const earliest = payload
-            .filter(r => r.user_id === row.user_id && r.browser === row.browser && r.started_at)
-            .reduce((min, r) => (r.started_at < min ? r.started_at : min), row.started_at);
+          if (!row.user_id || !row.site_url) continue;
+          const { data: openSame } = await this.supabaseService
+            .from('app_url_activity')
+            .select('id')
+            .eq('user_id', row.user_id)
+            .eq('site_url', row.site_url)
+            .is('ended_at', null)
+            .limit(1);
+          if (openSame && openSame.length > 0) {
+            // Already recording this link — refresh title only.
+            await this.supabaseService
+              .from('app_url_activity')
+              .update({
+                title: row.title || undefined,
+                domain: row.domain || undefined,
+                browser: row.browser || undefined,
+              })
+              .eq('id', openSame[0].id);
+            continue;
+          }
           await this.supabaseService
             .from('app_url_activity')
-            .update({ ended_at: earliest })
+            .update({ ended_at: row.started_at })
             .eq('user_id', row.user_id)
-            .eq('browser', row.browser)
             .is('ended_at', null)
-            .lt('started_at', earliest);
+            .neq('site_url', row.site_url)
+            .lt('started_at', row.started_at);
+          toInsert.push(row);
         }
       } catch (closeErr) {
-        console.warn('⚠️ [URL-SYNC] Failed to close previous URL slices (non-fatal):', closeErr?.message);
+        console.warn('⚠️ [URL-SYNC] Failed to dedupe/close previous URL slices (non-fatal):', closeErr?.message);
+        toInsert.push(...payload);
+      }
+
+      if (toInsert.length === 0) {
+        this.clearDbBackoff();
+        console.log('✅ [URL-SYNC] No new URL rows (same visits already open)');
+        return;
       }
 
       // Add statement timeout wrapper - FIXED: Insert into app_url_activity TABLE
       const insertPromise = this.supabaseService
         .from('app_url_activity')
-        .insert(payload, { returning: 'minimal' });
+        .insert(toInsert, { returning: 'minimal' });
         
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Statement timeout')), this.batchConfig.statementTimeoutMs);
@@ -667,6 +677,26 @@ class EnhancedSyncManager {
     try {
       // Normalize data
       let normalized = Array.isArray(data) ? data : [data];
+
+      // Drop consecutive duplicate app/URL rows (same continuous focus).
+      if (type === 'urlLogs' || type === 'appLogs') {
+        normalized = normalized.filter((item) => {
+          if (!item || typeof item !== 'object') return false;
+          const key =
+            type === 'urlLogs'
+              ? String(item.site_url || item.url || '').trim().toLowerCase()
+              : String(item.app_name || '').trim().toLowerCase();
+          if (!key) return false;
+          const last = this._lastQueuedFocusKey?.[type];
+          if (last && last === key) {
+            return false;
+          }
+          if (!this._lastQueuedFocusKey) this._lastQueuedFocusKey = {};
+          this._lastQueuedFocusKey[type] = key;
+          return true;
+        });
+        if (normalized.length === 0) return true;
+      }
       
       // Add to batch queue
       this.batchQueues[type].push(...normalized);
@@ -880,20 +910,10 @@ class EnhancedSyncManager {
       console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
 
       if (isBackendTimeLogsEnabled(this.config)) {
-        // Session model: close previous open app focus before new session insert
-        try {
-          const first = items[0];
-          if (first?.user_id && first?.started_at) {
-            await closeOpenAppLogs({
-              user_id: first.user_id,
-              ended_at: first.started_at,
-            }, this.config);
-          }
-        } catch (closeErr) {
-          console.warn('⚠️ [SYNC] close_open_app_logs failed (non-fatal):', closeErr?.message || closeErr);
-        }
+        // Backend forceAppInsert closes *other* open apps and skips when the same
+        // app_name is already open — avoid close-all+reinsert spam here.
         await insertAppLogsBatch(items, this.config);
-        console.log(`✅ [SYNC] Successfully inserted ${items.length} app session(s) via backend RDS`);
+        console.log(`✅ [SYNC] Successfully synced ${items.length} app session(s) via backend RDS`);
         return;
       }
       

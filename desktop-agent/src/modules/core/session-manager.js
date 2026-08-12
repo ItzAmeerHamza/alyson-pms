@@ -135,6 +135,22 @@ class SessionManager {
       } catch (settingsErr) {
         console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
       }
+      try {
+        const NotTrackingReminderManager = require('../activity/not-tracking-reminder-manager');
+        if (!global.notTrackingReminderManager) {
+          global.notTrackingReminderManager = new NotTrackingReminderManager();
+        }
+        if (!global.isTracking && !global.trackingManager?.isTracking) {
+          global.notTrackingReminderManager.start();
+        } else {
+          global.notTrackingReminderManager.onTrackingStarted();
+        }
+      } catch (reminderErr) {
+        console.warn(
+          '⚠️ [SESSION] Not-tracking reminder start failed:',
+          reminderErr?.message || reminderErr,
+        );
+      }
       return { success: true, message: 'Session saved' };
     } catch (error) {
       console.error('❌ [SESSION] handleUserLogin error:', error);
@@ -435,6 +451,10 @@ class SessionManager {
       global.currentUserId = null;
       global.currentUserRole = null;
       global.currentOrganizationId = null;
+
+      try {
+        global.notTrackingReminderManager?.stop?.();
+      } catch (_) { /* ignore */ }
       
       // Clear saved session file
       try {

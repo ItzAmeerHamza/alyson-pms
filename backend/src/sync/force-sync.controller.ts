@@ -11,7 +11,11 @@ import {
   parseTenantUserId as parseTenantUserIdStrict,
   parseWorkspaceId,
 } from '../database/time-doctor-sql';
-import { endOfWorkDayExclusiveIso, startOfWorkDayIso } from '../lib/work-timezone';
+import {
+  endOfWorkDayExclusiveIso,
+  normalizeWorkTimezone,
+  startOfWorkDayIso,
+} from '../lib/work-timezone';
 
 function parseUserIdParam(raw: unknown): number {
   try {
@@ -422,6 +426,51 @@ export class ForceSyncController {
       const userId = parseUserIdParam(urlLog.user_id);
       const timeLogId = await this.resolveTimeLogId(urlLog.time_log_id);
       const startedAt = urlLog.timestamp || urlLog.started_at || new Date().toISOString();
+      const siteUrl = String(urlLog.site_url).trim();
+      const title = urlLog.title || 'Untitled';
+
+      // Same continuous visit: keep the open row — do not close+reinsert.
+      const existing = await this.db.query<{ id: string }>(
+        `SELECT id FROM time_doctor.url_logs
+          WHERE user_id = $1
+            AND ended_at IS NULL
+            AND site_url = $2
+          ORDER BY started_at DESC
+          LIMIT 1`,
+        [userId, siteUrl],
+      );
+      if (existing.rows[0]?.id) {
+        await this.db.query(
+          `UPDATE time_doctor.url_logs
+              SET title = COALESCE(NULLIF($2, ''), title),
+                  domain = COALESCE(NULLIF($3, ''), domain),
+                  browser = COALESCE(NULLIF($4, ''), browser),
+                  time_log_id = COALESCE($5, time_log_id)
+            WHERE id = $1`,
+          [existing.rows[0].id, title, urlLog.domain || null, urlLog.browser || null, timeLogId],
+        );
+        this.logger.log(`Skipped duplicate URL insert (already open): ${existing.rows[0].id}`);
+        return {
+          success: true,
+          skipped: true,
+          reason: 'already_open',
+          message: 'URL already open — not re-inserted',
+          id: existing.rows[0].id,
+          url: siteUrl,
+          domain: urlLog.domain,
+        };
+      }
+
+      // Different URL: close other open visits, then insert once.
+      await this.db.query(
+        `UPDATE time_doctor.url_logs
+            SET ended_at = GREATEST(started_at, $1::timestamptz)
+          WHERE user_id = $2
+            AND ended_at IS NULL
+            AND site_url IS DISTINCT FROM $3
+            AND started_at <= $1::timestamptz`,
+        [startedAt, userId, siteUrl],
+      );
 
       const result = await this.db.query<{ id: string }>(
         `INSERT INTO time_doctor.url_logs
@@ -431,8 +480,8 @@ export class ForceSyncController {
         [
           userId,
           timeLogId,
-          urlLog.site_url,
-          urlLog.title || 'Untitled',
+          siteUrl,
+          title,
           urlLog.domain,
           urlLog.browser,
           startedAt,
@@ -446,7 +495,7 @@ export class ForceSyncController {
         success: true,
         message: 'URL inserted successfully',
         id: result.rows[0].id,
-        url: urlLog.site_url,
+        url: siteUrl,
         domain: urlLog.domain
       };
 
@@ -473,6 +522,49 @@ export class ForceSyncController {
       const userId = parseUserIdParam(appLog.user_id);
       const timeLogId = await this.resolveTimeLogId(appLog.time_log_id);
       const startedAt = appLog.timestamp || appLog.started_at || new Date().toISOString();
+      const appName = String(appLog.app_name).trim();
+      const windowTitle = appLog.window_title || 'Unknown';
+
+      // Same continuous app focus: keep open row — do not close+reinsert.
+      const existing = await this.db.query<{ id: string }>(
+        `SELECT id FROM time_doctor.app_logs
+          WHERE user_id = $1
+            AND ended_at IS NULL
+            AND lower(app_name) = lower($2)
+          ORDER BY started_at DESC
+          LIMIT 1`,
+        [userId, appName],
+      );
+      if (existing.rows[0]?.id) {
+        await this.db.query(
+          `UPDATE time_doctor.app_logs
+              SET window_title = COALESCE(NULLIF($2, ''), window_title),
+                  time_log_id = COALESCE($3, time_log_id)
+            WHERE id = $1`,
+          [existing.rows[0].id, windowTitle, timeLogId],
+        );
+        this.logger.log(`Skipped duplicate app insert (already open): ${existing.rows[0].id}`);
+        return {
+          success: true,
+          skipped: true,
+          reason: 'already_open',
+          message: 'App already open — not re-inserted',
+          id: existing.rows[0].id,
+          app_name: appName,
+          window_title: windowTitle,
+        };
+      }
+
+      // Different app: close other open focuses, then insert once.
+      await this.db.query(
+        `UPDATE time_doctor.app_logs
+            SET ended_at = GREATEST(started_at, $1::timestamptz)
+          WHERE user_id = $2
+            AND ended_at IS NULL
+            AND lower(app_name) IS DISTINCT FROM lower($3)
+            AND started_at <= $1::timestamptz`,
+        [startedAt, userId, appName],
+      );
 
       const result = await this.db.query<{ id: string }>(
         `INSERT INTO time_doctor.app_logs
@@ -482,8 +574,8 @@ export class ForceSyncController {
         [
           userId,
           timeLogId,
-          appLog.app_name,
-          appLog.window_title || 'Unknown',
+          appName,
+          windowTitle,
           startedAt,
           workspaceId,
         ],
@@ -495,8 +587,8 @@ export class ForceSyncController {
         success: true,
         message: 'App inserted successfully',
         id: result.rows[0].id,
-        app_name: appLog.app_name,
-        window_title: appLog.window_title || 'Unknown'
+        app_name: appName,
+        window_title: windowTitle,
       };
 
     } catch (error) {
@@ -604,20 +696,28 @@ export class ForceSyncController {
       case 'insert_app_logs': {
         const logs = Array.isArray(data?.logs) ? data.logs : [];
         const ids: string[] = [];
+        let inserted = 0;
+        let skipped = 0;
         for (const log of logs) {
           const result = await this.forceAppInsert(log);
           if (result?.id) ids.push(result.id);
+          if (result?.skipped) skipped += 1;
+          else inserted += 1;
         }
-        return { success: true, inserted: logs.length, ids };
+        return { success: true, inserted, skipped, ids };
       }
       case 'insert_url_logs': {
         const logs = Array.isArray(data?.logs) ? data.logs : [];
         const ids: string[] = [];
+        let inserted = 0;
+        let skipped = 0;
         for (const log of logs) {
           const result = await this.forceUrlInsert(log);
           if (result?.id) ids.push(result.id);
+          if (result?.skipped) skipped += 1;
+          else inserted += 1;
         }
-        return { success: true, inserted: logs.length, ids };
+        return { success: true, inserted, skipped, ids };
       }
       case 'close_open_app_logs': {
         // Session model: close open app focus rows (no per-minute snapshots).
@@ -1070,6 +1170,7 @@ export class ForceSyncController {
           high_activity_threshold: 60,
           low_activity_threshold: 10,
           screenshot_interval_minutes: 10,
+          timezone: normalizeWorkTimezone(null),
         };
         if (!workspaceId) {
           return { workspace_id: null, settings: defaults };
@@ -1089,6 +1190,9 @@ export class ForceSyncController {
             low_activity_threshold: Number(raw.low_activity_threshold ?? defaults.low_activity_threshold),
             screenshot_interval_minutes: Number(
               raw.screenshot_interval_minutes ?? defaults.screenshot_interval_minutes,
+            ),
+            timezone: normalizeWorkTimezone(
+              typeof raw.timezone === 'string' ? raw.timezone : defaults.timezone,
             ),
           },
         };

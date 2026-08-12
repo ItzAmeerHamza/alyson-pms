@@ -8,6 +8,7 @@ import {
   WORKSPACE_AS_ORG_SELECT,
 } from '../database/time-doctor-sql';
 import { CognitoService } from './cognito.service';
+import { normalizeWorkTimezone } from '../lib/work-timezone';
 
 export interface User {
   id: string;
@@ -29,6 +30,8 @@ export interface OrganizationSummary {
   slug: string;
   logo_url: string | null;
   is_active: boolean;
+  /** IANA company/work-day TZ (Time Doctor Company Time Zone). */
+  timezone?: string | null;
 }
 
 export interface AuthProfileResponse {
@@ -243,11 +246,28 @@ export class AuthService {
 
   async getOrganizationById(orgId: string): Promise<OrganizationSummary | null> {
     if (!this.databaseService.isEnabled()) return null;
-    const result = await this.databaseService.query<OrganizationSummary>(
-      `${WORKSPACE_AS_ORG_SELECT} WHERE w.id = $1::int LIMIT 1`,
+    const result = await this.databaseService.query<
+      OrganizationSummary & { timezone: string | null }
+    >(
+      `SELECT
+         w.id::text AS id,
+         w.name,
+         coalesce(nullif(lower(trim(w.key)), ''), w.id::text) AS slug,
+         w.image_uri AS logo_url,
+         coalesce(w.active, true) AS is_active,
+         ws.settings->>'timezone' AS timezone
+       FROM tenant.workspace w
+       LEFT JOIN time_doctor.workspace_settings ws ON ws.workspace_id = w.id
+       WHERE w.id = $1::int
+       LIMIT 1`,
       [orgId],
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      ...row,
+      timezone: normalizeWorkTimezone(row.timezone),
+    };
   }
 
   private async findUserByCognitoSub(sub: string): Promise<User | null> {

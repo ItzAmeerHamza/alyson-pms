@@ -453,19 +453,10 @@ class IPCEventMap {
       return await this._getActivityLogs();
     });
 
-    this.registerHandler('get-url-activity', async () => {
-      return await this._getUrlActivity();
-    });
-
-    this.registerHandler('get-app-activity', async () => {
-      return await this._getAppActivity();
-    });
-
-    this.registerHandler('get-screenshot-activity', async () => {
-      return await this._getScreenshotActivity();
-    });
-
-    // fetch-screenshots* owned by DataStatsManager (RDS + S3) — do not register here
+    // get-url-activity / get-app-activity / get-screenshot-activity / fetch-screenshots*
+    // are owned by DataStatsManager (real DB queries). Stub handlers here previously
+    // registered first and blocked DataStats from replacing them (removeAllListeners
+    // does not clear ipcMain.handle registrations).
   }
 
   /**
@@ -598,6 +589,24 @@ class IPCEventMap {
 
     this.registerHandler('update-app-settings', (event, newSettings) => {
       return this._updateAppSettings(newSettings);
+    });
+
+    this.registerHandler('get-auto-launch', () => {
+      try {
+        const { getAutoLaunchEnabled, readPreference } = require('../utils/auto-launch');
+        return { success: true, enabled: getAutoLaunchEnabled(), ...readPreference() };
+      } catch (error) {
+        return { success: false, enabled: true, error: error.message };
+      }
+    });
+
+    this.registerHandler('set-auto-launch', (_event, enabled) => {
+      try {
+        const { setAutoLaunchEnabled } = require('../utils/auto-launch');
+        return setAutoLaunchEnabled(!!enabled);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
     });
 
     this.registerHandler('get-config', () => {
@@ -951,6 +960,16 @@ class IPCEventMap {
   _updateAppSettings(newSettings) {
     try {
       global.appSettings = { ...global.appSettings, ...newSettings };
+      // Keep OS login-item in sync when settings payload includes auto_launch.
+      if (newSettings && typeof newSettings.auto_launch === 'boolean') {
+        try {
+          const { setAutoLaunchEnabled } = require('../utils/auto-launch');
+          setAutoLaunchEnabled(newSettings.auto_launch);
+          global.trayManager?.updateMenu?.();
+        } catch (err) {
+          console.warn('⚠️ [IPC] auto_launch sync failed:', err?.message || err);
+        }
+      }
       return { success: true, message: 'Settings updated successfully' };
     } catch (error) {
       return { success: false, error: error.message };
@@ -1125,6 +1144,9 @@ class IPCEventMap {
     if (global.isTracking) {
       await global.stopTracking?.('user_logout');
     }
+    try {
+      global.notTrackingReminderManager?.stop?.();
+    } catch (_) { /* ignore */ }
     return { success: true, message: 'User logged out successfully' };
   }
 

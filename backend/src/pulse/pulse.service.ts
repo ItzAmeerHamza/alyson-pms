@@ -21,18 +21,25 @@ import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
   eachWorkDateKey,
+  normalizeWorkTimezone,
   sqlWorkDate,
   workDateKey,
   workDateRangeToUtcIso,
   workDayBoundsMs,
 } from '../lib/work-timezone';
 import { computeEffectiveTime } from '../lib/effective-time';
+import {
+  nextDayTotalHours,
+  resolveAdjustmentDeltaSeconds,
+} from './time-adjustment.util';
 
 export interface OrgSettings {
   hours_threshold: number;
   high_activity_threshold: number;
   low_activity_threshold: number;
   screenshot_interval_minutes: number;
+  /** IANA company/work-day TZ (match Time Doctor Company Time Zone, e.g. America/Chicago). */
+  timezone: string;
 }
 
 const DEFAULT_SETTINGS: OrgSettings = {
@@ -41,6 +48,7 @@ const DEFAULT_SETTINGS: OrgSettings = {
   /** Below this activity_percent a screenshot counts as LOW (was 20 — too noisy). */
   low_activity_threshold: 10,
   screenshot_interval_minutes: 10,
+  timezone: normalizeWorkTimezone(null),
 };
 
 /** Effective LOW cutoff for hours: never looser than 10% (stricter = less LOW on reports). */
@@ -50,9 +58,9 @@ function lowActivityCutoffPercent(settings: OrgSettings): number {
   return Math.min(Math.max(threshold, 0), 10);
 }
 
-/** Calendar day in Pacific (America/Los_Angeles) — matches desktop agent. */
-function toDateKey(value: string | Date): string {
-  return workDateKey(value instanceof Date ? value : new Date(value));
+/** Calendar day in the workspace work timezone. */
+function toDateKey(value: string | Date, tz?: string): string {
+  return workDateKey(value instanceof Date ? value : new Date(value), tz);
 }
 
 function parsedVisionFields(visionAnalysis: unknown, summary: string | null) {
@@ -160,6 +168,9 @@ export class PulseService {
       screenshot_interval_minutes: Number(
         raw.screenshot_interval_minutes ?? DEFAULT_SETTINGS.screenshot_interval_minutes,
       ),
+      timezone: normalizeWorkTimezone(
+        typeof raw.timezone === 'string' ? raw.timezone : DEFAULT_SETTINGS.timezone,
+      ),
     };
     // Normalize so reports / engagement use the stricter LOW bar (≤10%).
     settings.low_activity_threshold = lowActivityCutoffPercent(settings);
@@ -205,7 +216,9 @@ export class PulseService {
 
   private dailyHoursFromLogs(
     logs: Array<{ user_id: string; start_time: string | Date; end_time: string | Date | null }>,
+    tz?: string,
   ): Map<string, Map<string, number>> {
+    const workTz = normalizeWorkTimezone(tz);
     const byUserDay = new Map<string, Map<string, number>>();
 
     const byUser = new Map<string, Array<{ startMs: number; endMs: number }>>();
@@ -222,8 +235,8 @@ export class PulseService {
       for (const entry of entries) {
         let cursor = entry.startMs;
         while (cursor < entry.endMs) {
-          const day = workDateKey(new Date(cursor));
-          const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day);
+          const day = workDateKey(new Date(cursor), workTz);
+          const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day, workTz);
           const clipStart = Math.max(entry.startMs, dayStart);
           const clipEnd = Math.min(entry.endMs, dayEnd);
           if (clipEnd > clipStart) {
@@ -246,20 +259,254 @@ export class PulseService {
     return byUserDay;
   }
 
+  /**
+   * Net admin adjustments (hours) per user_id → work_date (Pacific).
+   */
+  private async fetchAdjustmentHoursInRange(
+    user: ScopedAuthUser,
+    startKey: string,
+    endKey: string,
+    restrictToUserId?: string,
+  ): Promise<Map<string, Map<string, number>>> {
+    const scope = workspaceScope(user, 'a');
+    const params: unknown[] = [...scope.params, startKey, endKey];
+    let userFilter = '';
+    if (restrictToUserId) {
+      params.push(parseTenantUserId(restrictToUserId));
+      userFilter = `AND a.user_id = $${params.length}`;
+    } else {
+      const visibleIds = await this.visibleEmployeeIds(user);
+      userFilter = this.applyVisibleUserFilter(visibleIds, params, 'a.user_id');
+    }
+
+    const result = await this.db.query<{
+      user_id: string;
+      work_date: string;
+      delta_seconds: string | number;
+    }>(
+      `SELECT a.user_id::text AS user_id,
+              a.work_date::text AS work_date,
+              SUM(a.delta_seconds)::bigint AS delta_seconds
+         FROM time_doctor.time_adjustments a
+        WHERE ${scope.clause}
+          AND a.work_date >= $${scope.params.length + 1}::date
+          AND a.work_date <= $${scope.params.length + 2}::date
+          ${userFilter}
+        GROUP BY a.user_id, a.work_date`,
+      params,
+    );
+
+    const byUser = new Map<string, Map<string, number>>();
+    for (const row of result.rows) {
+      const secs = Number(row.delta_seconds) || 0;
+      const hours = Math.round((secs / 3600) * 10) / 10;
+      if (!byUser.has(row.user_id)) byUser.set(row.user_id, new Map());
+      byUser.get(row.user_id)!.set(String(row.work_date).slice(0, 10), hours);
+    }
+    return byUser;
+  }
+
+  async listTimeAdjustments(user: ScopedAuthUser, userId: string, workDate: string) {
+    const targetId = parseTenantUserId(userId);
+    const dayKey = String(workDate).slice(0, 10);
+    const scope = workspaceScope(user, 'a');
+    const params: unknown[] = [...scope.params, targetId, dayKey];
+
+    const result = await this.db.query<{
+      id: string;
+      user_id: string;
+      work_date: string;
+      delta_seconds: number;
+      reason: string;
+      created_by: string;
+      created_by_email: string | null;
+      created_by_name: string | null;
+      created_at: string;
+    }>(
+      `SELECT a.id::text AS id,
+              a.user_id::text AS user_id,
+              a.work_date::text AS work_date,
+              a.delta_seconds,
+              a.reason,
+              a.created_by::text AS created_by,
+              u.email AS created_by_email,
+              trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS created_by_name,
+              a.created_at::text AS created_at
+         FROM time_doctor.time_adjustments a
+         LEFT JOIN tenant."user" u ON u.id = a.created_by
+        WHERE ${scope.clause}
+          AND a.user_id = $${scope.params.length + 1}
+          AND a.work_date = $${scope.params.length + 2}::date
+        ORDER BY a.created_at DESC`,
+      params,
+    );
+
+    return {
+      user_id: String(targetId),
+      work_date: dayKey,
+      adjustments: result.rows.map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        work_date: String(r.work_date).slice(0, 10),
+        delta_seconds: Number(r.delta_seconds) || 0,
+        delta_hours: Math.round(((Number(r.delta_seconds) || 0) / 3600) * 100) / 100,
+        reason: r.reason,
+        created_by: r.created_by,
+        created_by_email: r.created_by_email,
+        created_by_name: r.created_by_name || r.created_by_email,
+        created_at: r.created_at,
+      })),
+    };
+  }
+
+  async createTimeAdjustment(
+    user: ScopedAuthUser,
+    input: {
+      userId: string;
+      workDate: string;
+      deltaSeconds?: number;
+      hours?: number;
+      deltaMinutes?: number;
+      reason: string;
+    },
+  ) {
+    const targetId = parseTenantUserId(input.userId);
+    const adminId = parseTenantUserId(user.id);
+    const workDate = String(input.workDate).slice(0, 10);
+    const reason = String(input.reason || '').trim();
+    if (reason.length < 3) {
+      throw new BadRequestException('reason must be at least 3 characters');
+    }
+
+    const deltaSeconds = resolveAdjustmentDeltaSeconds(input);
+    if (!deltaSeconds) {
+      throw new BadRequestException('Provide a non-zero hours, deltaMinutes, or deltaSeconds');
+    }
+    if (Math.abs(deltaSeconds) > 86400) {
+      throw new BadRequestException('Adjustment cannot exceed 24 hours per action');
+    }
+
+    const wsId = parseWorkspaceId(user.organization_id);
+    if (!user.is_super_admin && !wsId) {
+      throw new BadRequestException('Workspace context required');
+    }
+
+    // Target must be a trackable employee in this workspace.
+    const targetParams: unknown[] = [targetId];
+    let targetSql = `
+      SELECT u.id, ext.workspace_id
+        FROM tenant."user" u
+        JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE u.id = $1
+         AND ${TRACKABLE_PULSE_ROLES_SQL}`;
+    if (!user.is_super_admin && wsId) {
+      targetParams.push(wsId);
+      targetSql += ` AND ext.workspace_id = $2`;
+    }
+    const target = await this.db.query<{ id: number; workspace_id: number }>(
+      targetSql,
+      targetParams,
+    );
+    if (!target.rows[0]) {
+      throw new BadRequestException('Employee not found in this workspace');
+    }
+    const workspaceId = target.rows[0].workspace_id;
+
+    const orgSettings = await this.getOrgSettings(user);
+    const workTz = orgSettings.timezone;
+    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(workDate, workDate, workTz);
+    const logs = await this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, String(targetId));
+    const trackedMap = this.dailyHoursFromLogs(logs, workTz);
+    const trackedHours = trackedMap.get(String(targetId))?.get(workDate) ?? 0;
+
+    const netResult = await this.db.query<{ net: string | number }>(
+      `SELECT COALESCE(SUM(delta_seconds), 0)::bigint AS net
+         FROM time_doctor.time_adjustments
+        WHERE user_id = $1
+          AND work_date = $2::date
+          AND workspace_id = $3`,
+      [targetId, workDate, workspaceId],
+    );
+    const currentNetSec = Number(netResult.rows[0]?.net) || 0;
+    const nextNetSec = currentNetSec + deltaSeconds;
+    const nextTotalHours = nextDayTotalHours(trackedHours, currentNetSec, deltaSeconds);
+    if (nextTotalHours == null) {
+      throw new BadRequestException(
+        `Adjustment would make the day total negative (tracked ${trackedHours.toFixed(1)}h, ` +
+          `current adjustments ${(currentNetSec / 3600).toFixed(1)}h)`,
+      );
+    }
+
+    const inserted = await this.db.query<{
+      id: string;
+      delta_seconds: number;
+      created_at: string;
+    }>(
+      `INSERT INTO time_doctor.time_adjustments
+         (workspace_id, user_id, work_date, delta_seconds, reason, created_by)
+       VALUES ($1, $2, $3::date, $4, $5, $6)
+       RETURNING id::text AS id, delta_seconds, created_at::text AS created_at`,
+      [workspaceId, targetId, workDate, deltaSeconds, reason, adminId],
+    );
+
+    try {
+      await this.db.query(
+        `INSERT INTO time_doctor.time_log_events
+           (user_id, workspace_id, action, source, duration_delta_seconds, meta)
+         VALUES ($1, $2, 'admin_time_adjustment', 'pulse-admin', $3, $4::jsonb)`,
+        [
+          targetId,
+          workspaceId,
+          deltaSeconds,
+          JSON.stringify({
+            work_date: workDate,
+            reason,
+            created_by: adminId,
+            adjustment_id: inserted.rows[0]?.id,
+          }),
+        ],
+      );
+    } catch (err) {
+      this.logger.warn(
+        `time_log_events audit for adjustment failed: ${(err as Error)?.message || err}`,
+      );
+    }
+
+    const row = inserted.rows[0];
+    return {
+      success: true,
+      adjustment: {
+        id: row.id,
+        user_id: String(targetId),
+        work_date: workDate,
+        delta_seconds: Number(row.delta_seconds) || deltaSeconds,
+        delta_hours: Math.round((deltaSeconds / 3600) * 100) / 100,
+        reason,
+        created_by: String(adminId),
+        created_at: row.created_at,
+      },
+      tracked_hours: trackedHours,
+      adjustment_hours: Math.round((nextNetSec / 3600) * 10) / 10,
+      hours_worked: Math.max(0, Math.round(nextTotalHours * 10) / 10),
+    };
+  }
+
   private dailyIdleSecondsFromTimeLogs(
     logs: Array<{
       user_id: string;
       start_time: string | Date;
       idle_seconds: number | null;
     }>,
+    tz?: string,
   ): Map<string, Map<string, number>> {
+    const workTz = normalizeWorkTimezone(tz);
     const byUserDay = new Map<string, Map<string, number>>();
 
     for (const log of logs) {
       const seconds = log.idle_seconds ?? 0;
       if (seconds <= 0) continue;
 
-      const day = toDateKey(log.start_time);
+      const day = toDateKey(log.start_time, workTz);
       const hours = Math.round((seconds / 3600) * 10) / 10;
       if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
       const dayMap = byUserDay.get(log.user_id)!;
@@ -318,7 +565,9 @@ export class PulseService {
       idle_end: string | Date | null;
       duration_seconds: number | null;
     }>,
+    tz?: string,
   ): Map<string, Map<string, number>> {
+    const workTz = normalizeWorkTimezone(tz);
     const byUserDay = new Map<string, Map<string, number>>();
 
     for (const log of logs) {
@@ -336,8 +585,8 @@ export class PulseService {
 
       let cursor = startMs;
       while (cursor < endMs) {
-        const day = workDateKey(new Date(cursor));
-        const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day);
+        const day = workDateKey(new Date(cursor), workTz);
+        const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day, workTz);
         const clipStart = Math.max(startMs, dayStart);
         const clipEnd = Math.min(endMs, dayEnd);
         if (clipEnd > clipStart) {
@@ -406,7 +655,9 @@ export class PulseService {
     lowActivityThreshold: number,
     intervalMinutes: number,
     userId?: string,
+    tz?: string,
   ): Promise<Map<string, Map<string, number>>> {
+    const workTz = normalizeWorkTimezone(tz);
     const scope = workspaceScope(user, 'ext');
     const params: unknown[] = [...scope.params, lowActivityThreshold, start, end];
     const thresholdIdx = scope.params.length + 1;
@@ -429,7 +680,7 @@ export class PulseService {
     }>(
       `SELECT
          s.user_id::text AS user_id,
-         ${sqlWorkDate('s.captured_at')}::text AS activity_date,
+         ${sqlWorkDate('s.captured_at', workTz)}::text AS activity_date,
          s.captured_at,
          s.activity_percent,
          (
@@ -643,10 +894,17 @@ export class PulseService {
 
     const startKey = String(start).slice(0, 10);
     const endKey = String(end).slice(0, 10);
-    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey);
+    const workTz = settings.timezone;
+    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey, workTz);
     const logs = await this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId);
     const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso, restrictToUserId);
-    const dailyByUser = this.dailyHoursFromLogs(logs);
+    const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      startKey,
+      endKey,
+      restrictToUserId,
+    );
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
     const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
       user,
@@ -655,12 +913,13 @@ export class PulseService {
       lowActivityCutoff,
       settings.screenshot_interval_minutes,
       restrictToUserId,
+      workTz,
     );
     // Idle: OS inactivity stretches ≥ 5 min (idle_logs); short periods ignored.
     // Fallback time_logs.idle_seconds only when no idle_logs exist for that day.
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs),
-      this.dailyIdleSecondsFromTimeLogs(logs),
+      this.dailyLowActivityFromIdleLogs(idleLogs, workTz),
+      this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
 
     const managerIds = [
@@ -678,7 +937,7 @@ export class PulseService {
       for (const m of mgr.rows) managerEmails.set(m.id, m.email);
     }
 
-    const days = eachWorkDateKey(startKey, endKey);
+    const days = eachWorkDateKey(startKey, endKey, workTz);
 
     return {
       hours_threshold: settings.hours_threshold,
@@ -686,11 +945,12 @@ export class PulseService {
       low_activity_cutoff: lowActivityCutoff,
       high_activity_threshold: settings.high_activity_threshold,
       screenshot_interval_minutes: settings.screenshot_interval_minutes,
-      timezone: 'America/Los_Angeles',
+      timezone: workTz,
       start: startKey,
       end: endKey,
       employees: usersResult.rows.map((emp) => {
         const dayMap = dailyByUser.get(emp.id) ?? new Map();
+        const adjMap = adjustmentByUser.get(emp.id) ?? new Map();
         const lowActivityMap = lowActivityByUser.get(emp.id) ?? new Map();
         const idleMap = idleByUser.get(emp.id) ?? new Map();
         return {
@@ -699,12 +959,18 @@ export class PulseService {
           email: emp.email,
           manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
           days: days.map((date) => {
-            const hoursWorked = dayMap.get(date) ?? 0;
+            const trackedHours = dayMap.get(date) ?? 0;
+            const adjustmentHours = adjMap.get(date) ?? 0;
+            const hoursWorked = Math.max(
+              0,
+              Math.round((trackedHours + adjustmentHours) * 10) / 10,
+            );
             const lowRaw = lowActivityMap.get(date) ?? 0;
             const idleRaw = idleMap.get(date) ?? 0;
+            // Idle/low-activity stay based on tracked sessions only.
             const lowActivityHours =
-              hoursWorked > 0 ? Math.min(lowRaw, hoursWorked) : lowRaw;
-            const idleHours = hoursWorked > 0 ? Math.min(idleRaw, hoursWorked) : idleRaw;
+              trackedHours > 0 ? Math.min(lowRaw, trackedHours) : lowRaw;
+            const idleHours = trackedHours > 0 ? Math.min(idleRaw, trackedHours) : idleRaw;
             const effective = computeEffectiveTime(
               hoursWorked,
               lowActivityHours,
@@ -713,6 +979,8 @@ export class PulseService {
 
             return {
               date,
+              tracked_hours: trackedHours,
+              adjustment_hours: adjustmentHours,
               hours_worked: hoursWorked,
               low_activity_hours: Math.round(lowActivityHours * 10) / 10,
               idle_hours: Math.round(idleHours * 10) / 10,
@@ -736,9 +1004,11 @@ export class PulseService {
     end: string,
     restrictToUserId?: string,
   ) {
+    const settings = await this.getOrgSettings(user);
+    const workTz = settings.timezone;
     const startKey = String(start).slice(0, 10);
     const endKey = String(end).slice(0, 10);
-    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey);
+    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey, workTz);
     const scope = workspaceScope(user, 't');
     const params: unknown[] = [...scope.params, startIso, endExclusiveIso];
     const startIdx = scope.params.length + 1;
@@ -794,7 +1064,7 @@ export class PulseService {
     return {
       start: startKey,
       end: endKey,
-      timezone: 'America/Los_Angeles',
+      timezone: workTz,
       projects: result.rows.map((row) => ({
         project_id: row.project_id,
         name: row.name,
@@ -809,6 +1079,7 @@ export class PulseService {
     const { startIso, endExclusiveIso } = workDateRangeToUtcIso(
       String(start).slice(0, 10),
       String(end).slice(0, 10),
+      settings.timezone,
     );
     const params: unknown[] = [...scope.params, startIso, endExclusiveIso];
     const visibleIds = await this.visibleEmployeeIds(user);
@@ -1896,12 +2167,14 @@ export class PulseService {
     hoursThresholdOverride?: number | string | null,
     meta?: { month?: string; week_index?: number },
   ) {
+    const settings = await this.getOrgSettings(user);
+    const workTz = settings.timezone;
     const weekStart = this.mondayKey(anchorDate);
     const weekEnd = this.addCalendarDays(weekStart, 4); // Friday (work week)
-    const todayKey = workDateKey(new Date());
+    const todayKey = workDateKey(new Date(), workTz);
     const effectiveEnd = weekEnd > todayKey ? todayKey : weekEnd;
     const hoursThreshold = this.resolveWeeklyHoursThreshold(hoursThresholdOverride);
-    const dayKeys = eachWorkDateKey(weekStart, effectiveEnd).filter((d) => {
+    const dayKeys = eachWorkDateKey(weekStart, effectiveEnd, workTz).filter((d) => {
       const [y, m, dd] = d.split('-').map((n) => parseInt(n, 10));
       const dow = new Date(Date.UTC(y, m - 1, dd, 12)).getUTCDay();
       return dow >= 1 && dow <= 5;
@@ -1928,14 +2201,14 @@ export class PulseService {
         day_keys: [] as string[],
         hours_threshold: hoursThreshold,
         expected_hours: hoursThreshold,
+        timezone: workTz,
         employees: [],
       };
     }
 
-    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(weekStart, effectiveEnd);
+    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(weekStart, effectiveEnd, workTz);
     const logs = await this.fetchTimeLogsInRange(user, startIso, endExclusiveIso);
-    const dailyByUser = this.dailyHoursFromLogs(logs);
-    const settings = await this.getOrgSettings(user);
+    const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
     const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
       user,
@@ -1943,11 +2216,13 @@ export class PulseService {
       endExclusiveIso,
       lowActivityCutoff,
       settings.screenshot_interval_minutes,
+      undefined,
+      workTz,
     );
     const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso);
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs),
-      this.dailyIdleSecondsFromTimeLogs(logs),
+      this.dailyLowActivityFromIdleLogs(idleLogs, workTz),
+      this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
     const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
 
@@ -2022,7 +2297,7 @@ export class PulseService {
       period_start: weekStart,
       period_end: effectiveEnd,
       /** Work calendar for hour bucketing (not browser local). */
-      timezone: 'America/Los_Angeles',
+      timezone: settings.timezone,
       day_keys: dayKeys,
       hours_threshold: hoursThreshold,
       expected_hours: hoursThreshold,

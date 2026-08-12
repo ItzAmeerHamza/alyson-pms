@@ -162,6 +162,12 @@ class EventHandlerManager {
         
         // Re-sync tray state and fire any deferred auto-stop notification
         if (this.global.trayManager) {
+          // Pacific day rollover first (lid-close overnight freezes midnight timers).
+          try {
+            if (typeof this.global.trayManager.ensureWorkDayRollover === 'function') {
+              this.global.trayManager.ensureWorkDayRollover();
+            }
+          } catch (_) { /* ignore */ }
           this.global.trayManager.onSystemResume();
         }
         
@@ -396,6 +402,13 @@ class EventHandlerManager {
         this._displaySleepGraceTimer = null;
       }
 
+      // Display can wake without a full suspend/resume cycle — still roll the day.
+      try {
+        if (typeof this.global.trayManager?.ensureWorkDayRollover === 'function') {
+          this.global.trayManager.ensureWorkDayRollover();
+        }
+      } catch (_) { /* ignore */ }
+
       if (this.global.isTracking) {
         try {
           const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
@@ -440,6 +453,12 @@ class EventHandlerManager {
         clearTimeout(this._screenLockGraceTimer);
         this._screenLockGraceTimer = null;
       }
+
+      try {
+        if (typeof this.global.trayManager?.ensureWorkDayRollover === 'function') {
+          this.global.trayManager.ensureWorkDayRollover();
+        }
+      } catch (_) { /* ignore */ }
 
       if (this.global.isTracking) {
         try {

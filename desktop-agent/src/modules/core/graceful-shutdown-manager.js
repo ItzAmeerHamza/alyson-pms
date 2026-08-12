@@ -558,6 +558,15 @@ class GracefulShutdownManager {
       if (typeof global.clearAllIntervals === 'function') {
         global.clearAllIntervals();
       }
+
+      // Not-tracking reminder must keep running after Stop (employee still working).
+      // cleanupAll previously wiped it because it was registered in the registry.
+      try {
+        const reminder = global.notTrackingReminderManager;
+        if (reminder && typeof reminder.onTrackingStopped === 'function') {
+          reminder.onTrackingStopped();
+        }
+      } catch (_) { /* ignore */ }
       
       console.log('✅ [GRACEFUL-SHUTDOWN] All intervals stopped');
       return true;

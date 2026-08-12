@@ -669,6 +669,32 @@ class IPCHandlers {
       }
     });
 
+    try { this.ipcMain.removeHandler('get-auto-launch'); } catch (_) {}
+    this.ipcMain.handle('get-auto-launch', () => {
+      try {
+        const { getAutoLaunchEnabled, readPreference } = require('./utils/auto-launch');
+        return { success: true, enabled: getAutoLaunchEnabled(), ...readPreference() };
+      } catch (error) {
+        console.error('❌ [IPC] get-auto-launch failed:', error);
+        return { success: false, enabled: true, error: error.message };
+      }
+    });
+
+    try { this.ipcMain.removeHandler('set-auto-launch'); } catch (_) {}
+    this.ipcMain.handle('set-auto-launch', (_event, enabled) => {
+      try {
+        const { setAutoLaunchEnabled } = require('./utils/auto-launch');
+        const result = setAutoLaunchEnabled(!!enabled);
+        try {
+          global.trayManager?.updateMenu?.();
+        } catch (_) { /* ignore */ }
+        return result;
+      } catch (error) {
+        console.error('❌ [IPC] set-auto-launch failed:', error);
+        return { success: false, error: error.message };
+      }
+    });
+
     this.ipcMain.handle('get-queue-status', () => {
       try {
         const syncManager = this.configManager.syncManager;

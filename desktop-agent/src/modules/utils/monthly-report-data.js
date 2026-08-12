@@ -62,7 +62,11 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     getWorkTimezone,
     workDateKey,
   } = require('./work-timezone');
-  initWorkTimezone(config);
+  // Prefer workspace timezone already on config (set after login). Avoid
+  // resetting to Pacific when config.work_timezone is still unset.
+  if (config?.work_timezone || config?.WORK_TIMEZONE || process.env.WORK_TIMEZONE) {
+    initWorkTimezone(config);
+  }
 
   const rawUserId = global.currentUserId || config?.user_id || config?.userId;
   const userId = normalizeTenantUserId(rawUserId);

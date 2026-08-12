@@ -5,19 +5,30 @@
  * Override via WORK_TIMEZONE env or config.work_timezone / config.WORK_TIMEZONE.
  */
 
+function isValidIanaTimezone(tz) {
+  if (!tz || typeof tz !== 'string') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz.trim() }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveWorkTimezone(config = global?.config) {
-  return (
+  const candidate =
     config?.work_timezone ||
     config?.WORK_TIMEZONE ||
     process.env.WORK_TIMEZONE ||
-    'America/Los_Angeles'
-  );
+    'America/Los_Angeles';
+  return isValidIanaTimezone(candidate) ? String(candidate).trim() : 'America/Los_Angeles';
 }
 
 let _tz = 'America/Los_Angeles';
 
 function setWorkTimezone(tz) {
-  _tz = tz || 'America/Los_Angeles';
+  _tz = isValidIanaTimezone(tz) ? String(tz).trim() : 'America/Los_Angeles';
+  return _tz;
 }
 
 function getWorkTimezone() {
@@ -106,6 +117,7 @@ function elapsedSecondsSinceWorkMidnight(sessionStart, nowMs = Date.now(), tz = 
 }
 
 function formatWorkTimezoneLabel(tz = _tz) {
+  if (tz === 'America/Chicago') return 'Central Time';
   if (tz === 'America/Los_Angeles') return 'Pacific Time';
   return tz.replace(/_/g, ' ');
 }
@@ -162,6 +174,7 @@ module.exports = {
   initWorkTimezone,
   setWorkTimezone,
   getWorkTimezone,
+  isValidIanaTimezone,
   getWorkTzParts,
   workDateKey,
   startOfWorkDay,

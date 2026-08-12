@@ -18,6 +18,7 @@ import {
   canViewPulseTeam,
   isPulseOrgAdmin,
 } from '../database/time-doctor-sql';
+import { CreateTimeAdjustmentDto } from './dto/time-adjustment.dto';
 import { PulseService } from './pulse.service';
 
 @Controller('pulse')
@@ -288,5 +289,34 @@ export class PulseController {
     const updated = await this.pulse.updateUser(req.user, id, body);
     if (!updated) throw new BadRequestException('User not found or update failed');
     return updated;
+  }
+
+  /**
+   * Org-admin only: list manual time adjustments for one employee × Pacific day.
+   */
+  @Get('time-adjustments')
+  async listTimeAdjustments(
+    @Req() req: { user: any },
+    @Query('userId') userId: string,
+    @Query('workDate') workDate: string,
+  ) {
+    this.ensureOrgAdmin(req.user);
+    if (!userId || !workDate) {
+      throw new BadRequestException('userId and workDate are required');
+    }
+    return this.pulse.listTimeAdjustments(req.user, userId, workDate);
+  }
+
+  /**
+   * Org-admin only: add (+) or remove (-) time for an employee on a Pacific day.
+   * Append-only audit row; day total = tracked + net adjustments (never below 0).
+   */
+  @Post('time-adjustments')
+  async createTimeAdjustment(
+    @Req() req: { user: any },
+    @Body() body: CreateTimeAdjustmentDto,
+  ) {
+    this.ensureOrgAdmin(req.user);
+    return this.pulse.createTimeAdjustment(req.user, body);
   }
 }

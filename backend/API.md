@@ -41,6 +41,21 @@ All require `admin` or `manager` role.
 | POST | `/pulse/low-hours/send` | Email Reporting | Send notification emails |
 | GET | `/pulse/low-hours/history` | Email Reporting | Sent email log |
 | PATCH | `/pulse/users/:id` | Team Management | Update manager, department, role, etc. |
+| GET | `/pulse/time-adjustments?userId=&workDate=` | Team Time Report | Org-admin: list manual adjustments for employee × Pacific day |
+| POST | `/pulse/time-adjustments` | Team Time Report | Org-admin: add (+) / remove (−) time (append-only audit) |
+
+### POST `/pulse/time-adjustments` body
+
+```json
+{
+  "userId": "1195",
+  "workDate": "2026-08-11",
+  "deltaMinutes": 30,
+  "reason": "Missed clock-in approved by manager"
+}
+```
+
+Also accepts `hours` or signed `deltaSeconds`. Day total = tracked `time_logs` + net adjustments, floored at 0. Non-admins receive 403.
 
 ### POST `/pulse/low-hours/send` body
 

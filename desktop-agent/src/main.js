@@ -3898,35 +3898,37 @@ if (isElectronContext && ipcMain) {
     }
 
     // ================================
-    // DISABLE AUTO-START ON STARTUP
+    // AUTO-START AT LOGIN (default ON)
     // ================================
-    // Ensure the app never auto-launches at Windows/macOS startup
-    // This removes any stale registry entries that may have been set during development
+    // Product default: start Alyson PM when the user logs into the device.
+    // Preference is persisted; tray / IPC can toggle it off.
     try {
-      if (app.setLoginItemSettings) {
-        // Explicitly disable auto-launch for all platforms
-        app.setLoginItemSettings({
-          openAtLogin: false,
-          openAsHidden: false
-        });
-        console.log('✅ [AUTO-START] Disabled - app will only run when manually launched');
-        
-        // On Windows, also clean up any stale registry entries with wrong names
-        if (process.platform === 'win32') {
-          const { exec } = require('child_process');
-          // Remove any stale entries that might have been created with wrong app names
-          const staleKeys = ['vite_react_shadcn_ts', 'time-flow-admin', 'alyson-pms', 'alyson-time-doctor', 'alyson-work-time-agent'];
-          staleKeys.forEach(keyName => {
-            exec(`reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${keyName}" /f`, (error) => {
+      const { initAutoLaunch } = require('./modules/utils/auto-launch');
+      initAutoLaunch();
+
+      // Clean up stale Windows Run keys from old product names (does not remove our login item).
+      if (process.platform === 'win32') {
+        const { exec } = require('child_process');
+        const staleKeys = [
+          'vite_react_shadcn_ts',
+          'time-flow-admin',
+          'alyson-pms',
+          'alyson-time-doctor',
+          'alyson-work-time-agent',
+        ];
+        staleKeys.forEach((keyName) => {
+          exec(
+            `reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "${keyName}" /f`,
+            (error) => {
               if (!error) {
-                console.log(`🧹 [AUTO-START] Removed stale registry entry: ${keyName}`);
+                console.log(`🧹 [AUTO-LAUNCH] Removed stale registry entry: ${keyName}`);
               }
-            });
-          });
-        }
+            },
+          );
+        });
       }
     } catch (error) {
-      console.log('⚠️ [AUTO-START] Could not disable auto-start:', error.message);
+      console.log('⚠️ [AUTO-LAUNCH] Init failed:', error.message);
     }
 
     // PERFORMANCE FIX: Second-instance handler
@@ -6152,11 +6154,28 @@ if (isElectronContext && ipcMain) {
 
     // Live tray high-water (wall-clock) — DB/network lag must never pull the
     // reported total below what the employee already saw on the menu bar.
+    // Exception: orphan-cap inflation (~elapsed since work-timezone midnight) must
+    // never override a much lower authoritative DB total.
     try {
       const trayHwDate = global._trayTodayHighWaterDate;
       const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
-      if (trayHw > 0 && trayHwDate === new Date().toDateString()) {
-        total = Math.max(total, trayHw);
+      // Prefer company work-day key; accept legacy toDateString() for same machine day.
+      const trayHwMatchesToday =
+        trayHwDate === workDate || trayHwDate === new Date().toDateString();
+      if (trayHw > 0 && trayHwMatchesToday) {
+        const dayElapsed =
+          cap != null ? Math.max(0, (cap - 120)) : null;
+        const nearMidnight =
+          dayElapsed != null && trayHw >= Math.max(0, dayElapsed - 300);
+        const aboveDb = trayHw > total + 180;
+        if (nearMidnight && aboveDb) {
+          console.warn(
+            `⚠️ [TODAY-TIME-STATS] Ignoring orphan-cap tray high-water ${trayHw}s (db ${total}s)`,
+          );
+          global._trayTodayHighWaterSeconds = total;
+        } else {
+          total = Math.max(total, trayHw);
+        }
       }
     } catch (_) { /* ignore */ }
 
@@ -6288,8 +6307,9 @@ if (isElectronContext && ipcMain) {
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
       const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
       const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
-      const { initWorkTimezone, workDateKey } = require('./modules/utils/work-timezone');
-      initWorkTimezone(config);
+      // Do not re-init from cold config here — that wiped workspace timezone
+      // (set after login via refreshWorkspaceSettings) back to Pacific.
+      const { workDateKey } = require('./modules/utils/work-timezone');
       const supabase = global.supabaseService || global.supabase;
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);

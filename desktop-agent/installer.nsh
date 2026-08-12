@@ -32,4 +32,7 @@
   nsExec::ExecToLog 'taskkill /F /IM "Alyson Work Time.exe"'
   nsExec::ExecToLog 'taskkill /F /IM "Work Time.exe"'
   Sleep 2000
+
+  ; Remove login auto-start Run key if present (matches auto-launch.js name)
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Alyson PM"
 !macroend

@@ -4,7 +4,6 @@
  */
 
 const {
-  initWorkTimezone,
   workDateKey,
   startOfWorkDay,
   endOfWorkDayExclusive,
@@ -12,12 +11,8 @@ const {
   elapsedSecondsSinceWorkMidnight,
 } = require('./work-timezone');
 
-// Initialize from config when module loads in main process.
-try {
-  initWorkTimezone(global?.config);
-} catch {
-  /* renderer/tests may load without global.config */
-}
+// Prefer timezone already applied after login (workspace settings).
+// Only fall back to config/env default when still at module-load default.
 
 /** @deprecated Use workDateKey — kept for callers. "Local" = configured work timezone. */
 function localDateKey(d = new Date()) {
@@ -125,16 +120,10 @@ function aggregateTimeLogRows(timeLogs, currentTimeLogId, isTracking = false) {
         });
       }
     } else if (isActiveRow) {
-      // Orphan active row (not current): count through now like the API does.
-      const sec = secondsWithinWorkDay(start, now, dayRef);
-      if (sec > 0) {
-        const dayStart = startOfWorkDay(dayRef).getTime();
-        const dayEnd = endOfWorkDayExclusive(dayRef).getTime();
-        closedIntervals.push({
-          startMs: Math.max(start, dayStart),
-          endMs: Math.min(now, dayEnd),
-        });
-      }
+      // Orphan active row (not the live session): DO NOT count through "now".
+      // That inflated the desktop clock to wall-clock-since-midnight after
+      // crash/reboot while the portal (closed rows only) stayed correct.
+      // Session-recovery closes orphans; until then they contribute 0 here.
     }
   }
 

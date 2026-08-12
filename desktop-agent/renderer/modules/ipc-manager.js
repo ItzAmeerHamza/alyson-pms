@@ -932,6 +932,13 @@ class IPCManager {
       this._trackingGeneration = (this._trackingGeneration || 0) + 1;
       const startGeneration = this._trackingGeneration;
 
+      // Overnight sleep can miss Pacific midnight — reset daily clock before Start.
+      try {
+        if (typeof window.ensureCurrentWorkDay === 'function') {
+          window.ensureCurrentWorkDay({ reason: 'ipc-start-tracking' });
+        }
+      } catch (_) { /* ignore */ }
+
       // OPTIMISTIC START first — never block the UI on today-stats / screenshots.
       // Base seconds refresh runs in the background and reconciles the clock.
       const optimisticStartTime = new Date();

@@ -1854,17 +1854,16 @@ if (uploadResult?.id) {
       this.ensureNextScreenshotTimer();
       this.sendNextScreenshotUpdate();
 
-      // Safety net: if no window timers are active after a short grace period,
-      // attempt a recovery (but do NOT fire an immediate capture - the recovery will schedule properly)
+      // Safety net: if neither fixed-interval nor window timers armed after grace,
+      // attempt a recovery (do NOT fire an immediate capture).
+      // Fixed-interval mode uses screenshotInterval/nextScreenshotTime — NOT windowTimers.
       setTimeout(() => {
         try {
-          const timersActive = (this.windowTimers && this.windowTimers.length) || 0;
-          if (!timersActive) {
+          const windowTimersActive = (this.windowTimers && this.windowTimers.length) || 0;
+          const fixedIntervalActive = !!(this.screenshotInterval || this.nextScreenshotTime);
+          if (!windowTimersActive && !fixedIntervalActive) {
             log.warn({ step: 'NO SCHEDULED TIMERS DETECTED AFTER START', message: 'Attempting recovery' });
             this.forceScreenshotTimerRecovery();
-            // REMOVED: Redundant immediate capture call that caused burst screenshots
-            // The recovery already restarts screenshot scheduling which will capture at the right time
-            // Old code: setTimeout(() => { this.captureScreenshot(false); }, 1500);
           }
         } catch (e) {
           log.warn({ step: 'RECOVERY CHECK FAILED', message: e.message });

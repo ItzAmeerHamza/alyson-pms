@@ -370,33 +370,91 @@ class TrayManager {
     }
   }
 
+  _workDayKeyFilePath() {
+    try {
+      const userData =
+        (this.app && typeof this.app.getPath === 'function' && this.app.getPath('userData')) ||
+        null;
+      if (!userData) return null;
+      return path.join(userData, 'pacific-work-day-key.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _readPersistedWorkDayKey() {
+    try {
+      const filePath = this._workDayKeyFilePath();
+      if (!filePath || !fs.existsSync(filePath)) return null;
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      const key = typeof raw?.workDayKey === 'string' ? raw.workDayKey : null;
+      return key && /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _persistWorkDayKey(dayKey) {
+    try {
+      const filePath = this._workDayKeyFilePath();
+      if (!filePath || !dayKey) return;
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({ workDayKey: dayKey, updatedAt: new Date().toISOString() }),
+        'utf8',
+      );
+    } catch (_) { /* ignore */ }
+  }
+
+  _broadcastWorkDaySync(todayKey, previousDate = null, rolled = false) {
+    try {
+      const win = this._getMainTrackerWindow();
+      if (!win || win.isDestroyed()) return;
+      const payload = {
+        date: todayKey,
+        previousDate,
+        isTracking: this.isTracking,
+        rolled: !!rolled,
+      };
+      if (rolled) {
+        win.webContents.send('local-day-rollover', payload);
+      }
+      // Always sync so a slept renderer can self-heal even if tray already rolled.
+      win.webContents.send('work-day-sync', payload);
+    } catch (_) { /* ignore send failures */ }
+  }
+
+  /**
+   * Pacific work-day boundary. Safe to call on resume/wake/start — no-ops if
+   * already on today's key. Returns true when a rollover reset ran.
+   */
   _maybeRolloverLocalDay() {
     const { localDateKey } = require('../utils/today-time-log-stats');
     const todayKey = localDateKey();
     if (!this._localDayKey) {
-      this._localDayKey = todayKey;
-      this._scheduleNextWorkDayRollover();
+      // Prefer persisted key so a missed midnight after lid-close still rolls.
+      this._localDayKey = this._readPersistedWorkDayKey() || todayKey;
+    }
+    if (this._localDayKey === todayKey) {
+      this._persistWorkDayKey(todayKey);
       return false;
     }
-    if (this._localDayKey === todayKey) return false;
 
     const previousDate = this._localDayKey;
     console.log(`🌙 [TRAY] Work-day rollover (${require('../utils/work-timezone').getWorkTimezone()}): ${previousDate} → ${todayKey}`);
     this._localDayKey = todayKey;
     this._cumulativeBaseSeconds = 0;
     this._lastCumulativeSeconds = 0;
+    this._persistWorkDayKey(todayKey);
     if (typeof global !== 'undefined') {
       global._lastTodayTotalAtStop = null;
       global._rendererFrozenTotalAtStop = null;
       global._frozenTotalDate = todayKey;
       // Drop yesterday's floor so get-today-time-stats cannot reinflate the clock.
       global._lastGoodTodayStats = null;
-      // These two are keyed by machine-local date (toDateString), not the work
-      // timezone — on a non-Pacific machine they otherwise survive past this
-      // rollover and silently reinflate today's total back to yesterday's via
-      // the Math.max() floor in holdTodayTrackedFloor().
+      // Key tray high-water by Pacific work day (not machine toDateString).
       global._trayTodayHighWaterSeconds = 0;
-      global._trayTodayHighWaterDate = null;
+      global._trayTodayHighWaterDate = todayKey;
       global._rendererTodayFloorSeconds = 0;
     }
 
@@ -409,20 +467,21 @@ class TrayManager {
       this.tray.setToolTip(`▶ Today: ${zeroDisplay} (session ${zeroDisplay}) — ${projectLabel}`);
     }
 
-    try {
-      const { BrowserWindow } = require('electron');
-      const windows = BrowserWindow.getAllWindows();
-      if (windows.length > 0 && !windows[0].isDestroyed()) {
-        windows[0].webContents.send('local-day-rollover', {
-          date: todayKey,
-          previousDate,
-          isTracking: this.isTracking,
-        });
-      }
-    } catch (_) { /* ignore send failures */ }
-
+    this._broadcastWorkDaySync(todayKey, previousDate, true);
     this._scheduleNextWorkDayRollover();
     return true;
+  }
+
+  /** Public: force Pacific day check (resume / unlock / Start). */
+  ensureWorkDayRollover() {
+    const rolled = this._maybeRolloverLocalDay();
+    if (!rolled) {
+      try {
+        const { localDateKey } = require('../utils/today-time-log-stats');
+        this._broadcastWorkDaySync(localDateKey(), null, false);
+      } catch (_) { /* ignore */ }
+    }
+    return rolled;
   }
 
   _scheduleNextWorkDayRollover() {
@@ -450,7 +509,12 @@ class TrayManager {
   _startLocalDayWatch() {
     if (this._dayWatchInterval) return;
     const { localDateKey } = require('../utils/today-time-log-stats');
-    this._localDayKey = localDateKey();
+    const todayKey = localDateKey();
+    const persisted = this._readPersistedWorkDayKey();
+    // If the process slept past Pacific midnight, persisted day is yesterday —
+    // seed _localDayKey from disk so the first check performs a real reset.
+    this._localDayKey = persisted || todayKey;
+    this._maybeRolloverLocalDay();
     this._scheduleNextWorkDayRollover();
     this._dayWatchInterval = setInterval(() => {
       this._maybeRolloverLocalDay();
@@ -462,6 +526,11 @@ class TrayManager {
 
   _getMainTrackerWindow() {
     try {
+      // Prefer the real tracker window — on Windows other BrowserWindows
+      // (debug/permission) can steal the first "visible" match and drop clock IPC.
+      const main = this.mainWindow || global.mainWindow;
+      if (main && !main.isDestroyed()) return main;
+
       const BrowserWindow = this.BrowserWindow || require('electron').BrowserWindow;
       const windows = BrowserWindow.getAllWindows();
       // Prefer a visible non-destroyed window; fall back to first live window.
@@ -521,10 +590,13 @@ class TrayManager {
     const visible = win.isVisible() && !win.isMinimized();
     const now = Date.now();
     const sameSecond = cum === this._lastPushedCumulative;
-    // Hidden: at most one heartbeat / 15s so we do not burn IPC while idle in tray.
-    // Visible: 1Hz only when the displayed second actually changes (or force).
+    // Windows/Linux: in-app clock is the only clock — always push 1Hz while tracking.
+    // macOS: hidden window may heartbeat every 15s (menu bar still updates via setTitle).
+    const win32OrLinux = process.platform === 'win32' || process.platform === 'linux';
     if (!force) {
-      if (!visible) {
+      if (win32OrLinux) {
+        if (sameSecond && now - (this._lastRendererPushAt || 0) < 900) return;
+      } else if (!visible) {
         if (now - (this._lastRendererPushAt || 0) < 15000) return;
       } else if (sameSecond && now - (this._lastRendererPushAt || 0) < 900) {
         return;
@@ -600,22 +672,16 @@ class TrayManager {
         const elapsed = this._getSessionElapsedSeconds();
         const display = this._formatElapsed(elapsed);
         const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
-        // Forward-only cumulative — never let a tick show less than last painted second.
-        const rawCumulative = Math.max(0, baseSec + elapsed);
-        const lastCum = Math.max(0, Math.floor(Number(this._lastCumulativeSeconds) || 0));
-        const cumulativeSeconds = Math.max(rawCumulative, lastCum);
+        // LIVE ACCURACY: wall-clock only (closed base + session elapsed).
+        // Do not hold an inflated prior cumulative — that lagged/froze the title.
+        const cumulativeSeconds = Math.max(0, baseSec + elapsed);
         const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
         this._lastCumulativeSeconds = cumulativeSeconds;
-        // Persist a main-process floor so renderer/DB lag cannot erase today's peak.
+        // High-water tracks real live total only (never invents time).
         try {
-          if (typeof global.holdTodayTrackedFloor === 'function') {
-            /* optional */
-          }
-          global._trayTodayHighWaterSeconds = Math.max(
-            Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
-            cumulativeSeconds,
-          );
-          global._trayTodayHighWaterDate = new Date().toDateString();
+          const { localDateKey } = require('../utils/today-time-log-stats');
+          global._trayTodayHighWaterSeconds = cumulativeSeconds;
+          global._trayTodayHighWaterDate = localDateKey();
         } catch (_) { /* ignore */ }
 
         if (process.platform === 'darwin' && cumulativeDisplay !== this._lastTrayTitle) {
@@ -757,6 +823,33 @@ class TrayManager {
         }
       });
 
+      // ── Auto-start at login (default ON; user can toggle) ──
+      let autoLaunchChecked = true;
+      try {
+        const { getAutoLaunchEnabled } = require('../utils/auto-launch');
+        autoLaunchChecked = !!getAutoLaunchEnabled();
+      } catch (_) {
+        autoLaunchChecked = true;
+      }
+      menuItems.push({
+        label: 'Start Alyson PM at login',
+        type: 'checkbox',
+        checked: autoLaunchChecked,
+        click: (menuItem) => {
+          try {
+            const { setAutoLaunchEnabled } = require('../utils/auto-launch');
+            const result = setAutoLaunchEnabled(!!menuItem.checked);
+            console.log(
+              `🔔 [TRAY] Auto-launch ${result.enabled ? 'enabled' : 'disabled'}`,
+              result.applied === false ? '(dev — applies when packaged)' : '',
+            );
+            this.updateMenu();
+          } catch (err) {
+            console.warn('⚠️ [TRAY] Failed to update auto-launch:', err?.message || err);
+          }
+        },
+      });
+
       // ── Utilities ──
       menuItems.push({
         label: '🔧 Toggle Monitoring Tools',
@@ -804,6 +897,9 @@ class TrayManager {
    * @param {number} [extra.completedTodayBeforeSessionSeconds] - Closed sessions today (local day) before current run
    */
   updateState(isTracking, isPaused, extra = {}) {
+    // Lid-close overnight: Start must not carry yesterday's cumulative base.
+    this._maybeRolloverLocalDay();
+
     const wasTracking = this.isTracking;
     this.isTracking = isTracking;
     this.isPaused = isPaused;
@@ -816,7 +912,7 @@ class TrayManager {
     if (extra.completedTodayBeforeSessionSeconds !== undefined) {
       const n = Number(extra.completedTodayBeforeSessionSeconds);
       const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-      // Forward-only: Start must never wipe a known base with 0 (reboot race).
+      // Forward-only on the same Pacific day only (rollover already zeroed base).
       this._cumulativeBaseSeconds = Math.max(
         Math.floor(Number(this._cumulativeBaseSeconds) || 0),
         next,
@@ -853,6 +949,7 @@ class TrayManager {
    */
   async ensureCumulativeBaseFromDb() {
     try {
+      this._maybeRolloverLocalDay();
       const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
       const supabase = global.supabaseClient || global.supabaseService || global.supabase;
       const userId = global.currentUserId || global.trackingManager?.currentSession?.user_id;
@@ -912,6 +1009,15 @@ class TrayManager {
     this._systemSleeping = false;
     console.log('🌅 [TRAY] System resumed — re-syncing tray state');
 
+    // CRITICAL: sleep freezes midnight timers. Force Pacific day rollover now so
+    // yesterday's 8h cannot stick when the user Starts later without quitting.
+    try {
+      this.ensureWorkDayRollover();
+      this._scheduleNextWorkDayRollover();
+    } catch (e) {
+      console.warn('⚠️ [TRAY] Work-day check on resume failed:', e?.message || e);
+    }
+
     // Use global.isTracking as ground truth (set in Phase 1 of stopTracking,
     // BEFORE the graceful shutdown that gets suspended by the OS).
     // The tray's own this.isTracking may still be stale (true) because
@@ -922,6 +1028,8 @@ class TrayManager {
     setTimeout(() => {
       try {
         if (!this.tray || this.tray.isDestroyed()) return;
+        // Second pass — OS clock can settle after wake.
+        this.ensureWorkDayRollover();
         if (!globalTracking) {
           console.log('⏱️ [TRAY] Force-clearing stale timer on resume (global.isTracking=false)');
           this.isTracking = false;

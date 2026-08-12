@@ -1,5 +1,18 @@
 const WORK_TIMEZONE = process.env.WORK_TIMEZONE || 'America/Los_Angeles';
 
+/** Normalize IANA timezone; fall back to env/Pacific default. */
+export function normalizeWorkTimezone(tz?: string | null): string {
+  const raw = String(tz || '').trim();
+  if (!raw) return WORK_TIMEZONE;
+  try {
+    // Throws RangeError for invalid IANA names.
+    new Intl.DateTimeFormat('en-US', { timeZone: raw }).format(new Date());
+    return raw;
+  } catch {
+    return WORK_TIMEZONE;
+  }
+}
+
 function getWorkTzParts(date = new Date(), tz = WORK_TIMEZONE) {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
@@ -103,14 +116,18 @@ export function workDateRangeToUtcIso(
   return { startIso, endExclusiveIso };
 }
 
-/** List Pacific YYYY-MM-DD keys from start through end inclusive. */
-export function eachWorkDateKey(startKey: string, endKeyInclusive: string): string[] {
+/** List work-calendar YYYY-MM-DD keys from start through end inclusive. */
+export function eachWorkDateKey(
+  startKey: string,
+  endKeyInclusive: string,
+  tz = WORK_TIMEZONE,
+): string[] {
   const days: string[] = [];
-  let { startMs } = workDayBoundsMs(startKey);
-  const { endMs: lastEnd } = workDayBoundsMs(endKeyInclusive);
+  let { startMs } = workDayBoundsMs(startKey, tz);
+  const { endMs: lastEnd } = workDayBoundsMs(endKeyInclusive, tz);
   while (startMs < lastEnd) {
-    days.push(workDateKey(new Date(startMs)));
-    startMs = workDayBoundsMs(workDateKey(new Date(startMs))).endMs;
+    days.push(workDateKey(new Date(startMs), tz));
+    startMs = workDayBoundsMs(workDateKey(new Date(startMs), tz), tz).endMs;
   }
   return days;
 }

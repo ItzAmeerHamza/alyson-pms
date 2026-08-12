@@ -320,13 +320,24 @@ class BrowserUrlManager extends EventEmitter {
         return;
       }
       
-      // If different URL or enough time passed, capture it
+      // Same continuous URL: update UI only — never re-insert into DB.
       const source = isFromTabMonitor ? '[TAB-MONITOR]' : '[ACTIVITY]';
-      if (isNewUrl) {
-        try { const { logger } = require('../utils/logger'); logger && logger.info({ category: 'URL', step: 'NEW', ctx: { url: urlData.url, browser: urlData.browser, domain: urlData.domain, previous: lastUrl || 'none' } }); } catch {}
-      } else {
-        try { const { logger } = require('../utils/logger'); logger && logger.debug({ category: 'URL', step: 'REVISIT', ctx: { url: urlData.url, browser: urlData.browser, since_s: Math.round(timeSinceLastCapture/1000) } }); } catch {}
+      if (!isNewUrl) {
+        try { const { logger } = require('../utils/logger'); logger && logger.debug({ category: 'URL', step: 'REVISIT SKIP DB', ctx: { url: urlData.url, browser: urlData.browser, since_s: Math.round(timeSinceLastCapture/1000) } }); } catch {}
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          try {
+            this.mainWindow.webContents.send('url-detected', {
+              url: urlData.url,
+              browser: urlData.browser,
+              domain: urlData.domain,
+              title: urlData.title,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (_) { /* ignore */ }
+        }
+        return;
       }
+      try { const { logger } = require('../utils/logger'); logger && logger.info({ category: 'URL', step: 'NEW', ctx: { url: urlData.url, browser: urlData.browser, domain: urlData.domain, previous: lastUrl || 'none' } }); } catch {}
       
       // Update last URL for this browser and timing tracking
       this.lastBrowserUrls.set(urlData.browser, urlData.url);
@@ -812,13 +823,24 @@ class BrowserUrlManager extends EventEmitter {
         return;
       }
       
-      // If different URL or enough time passed, capture it
+      // Same continuous URL: UI only — never re-insert into DB.
       const source = isFromTabMonitor ? '[TAB-MONITOR]' : '[ACTIVITY]';
-      if (isNewUrl) {
-        console.log(`🔗 [URL-CAPTURE] 🆕 NEW URL DETECTED ${source}: "${urlData.url}" | Browser: "${urlData.browser}" | Domain: "${urlData.domain}" | Previous: "${lastUrl || 'none'}"`);
-      } else {
-        console.log(`🔗 [URL-CAPTURE] 🔄 RE-VISITING URL ${source}: "${urlData.url}" | Browser: "${urlData.browser}" | Time since last: ${Math.round(timeSinceLastCapture/1000)}s`);
+      if (!isNewUrl) {
+        console.log(`🔗 [URL-CAPTURE] 🔄 REVISIT SKIP DB ${source}: "${urlData.url}" | Browser: "${urlData.browser}" | Time since last: ${Math.round(timeSinceLastCapture/1000)}s`);
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          try {
+            this.mainWindow.webContents.send('url-detected', {
+              url: urlData.url,
+              browser: urlData.browser,
+              domain: urlData.domain,
+              title: urlData.title,
+              timestamp: new Date().toISOString(),
+            });
+          } catch (_) { /* ignore */ }
+        }
+        return;
       }
+      console.log(`🔗 [URL-CAPTURE] 🆕 NEW URL DETECTED ${source}: "${urlData.url}" | Browser: "${urlData.browser}" | Domain: "${urlData.domain}" | Previous: "${lastUrl || 'none'}"`);
       
       // Update last URL for this browser and timing tracking
       this.lastBrowserUrls.set(urlData.browser, urlData.url);

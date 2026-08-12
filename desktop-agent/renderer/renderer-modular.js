@@ -10,6 +10,7 @@ if (typeof window !== 'undefined') {
 const { ipcRenderer } = require('electron');
 const {
   initWorkTimezone,
+  setWorkTimezone,
   workDateKey,
   elapsedSecondsSinceWorkMidnight,
   nextWorkDayMidnight,
@@ -87,6 +88,64 @@ function maxPlausibleTrackedSecondsToday(nowMs = Date.now()) {
   return elapsed + 120;
 }
 
+/** True when a local total sits near wall-clock since Pacific midnight. */
+function isNearWorkDayCapTotal(seconds, nowMs = Date.now()) {
+  const n = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (n <= 0) return false;
+  const dayElapsed = secondsElapsedInWorkDay(nowMs);
+  if (!Number.isFinite(dayElapsed) || dayElapsed < 300) return false;
+  return n >= Math.max(0, dayElapsed - 300);
+}
+
+/**
+ * Local total is corrupt vs authoritative DB/tray:
+ * - any local > auth by >3 min when auth > 0 (frozen HW after orphan, etc.)
+ * - OR local near "since midnight" while auth is much lower / empty
+ * Never lock the employee clock to that fake total.
+ */
+function isInflatedWorkDayCapHighWater(highWaterSeconds, authoritativeSeconds = 0, nowMs = Date.now()) {
+  const hw = Math.max(0, Math.floor(Number(highWaterSeconds) || 0));
+  const auth = Math.max(0, Math.floor(Number(authoritativeSeconds) || 0));
+  if (hw <= 0) return false;
+  const aboveAuth = hw > auth + 180;
+  if (!aboveAuth) return false;
+  // Real stats/tray total present — trust the gap; do not require near-midnight.
+  if (auth > 0) return true;
+  // Empty/failed auth: only discard classic orphan-cap signature.
+  return isNearWorkDayCapTotal(hw, nowMs);
+}
+
+/** Drop corrupt local high-water and align display to authoritative seconds. */
+function discardInflatedHighWater(authoritativeSeconds = 0, reason = 'db-trust') {
+  const auth = Math.max(0, Math.floor(Number(authoritativeSeconds) || 0));
+  const prev = Math.max(
+    0,
+    Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+    Math.floor(Number(window.__todayTrackedSeconds) || 0),
+  );
+  console.warn(
+    `⚠️ [TRACKER] Discarding inflated high-water ${prev}s → ${auth}s (${reason})`,
+  );
+  clearTrackedHighWaterStorage(localDateIso());
+  window.__todayTrackedHighWaterSeconds = auth;
+  window.__todayTrackedSeconds = auth;
+  window.__todayBaseAtLastStop = null;
+  const closed = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  if (window.__lastTrackingStartTime) {
+    // auth includes live elapsed — closed base must stay closed-only.
+    if (isInflatedWorkDayCapHighWater(closed, auth) || closed > auth + 180) {
+      const elapsed = getTodayElapsedSeconds(window.__lastTrackingStartTime);
+      window.__completedTodayBaseSeconds = Math.max(0, auth - elapsed);
+    }
+  } else if (isInflatedWorkDayCapHighWater(closed, auth) || closed > auth + 180) {
+    window.__completedTodayBaseSeconds = auth;
+  }
+  persistTrackedHighWater(auth, { force: true });
+  return auth;
+}
+window.isInflatedWorkDayCapHighWater = isInflatedWorkDayCapHighWater;
+window.discardInflatedHighWater = discardInflatedHighWater;
+
 function clearTrackedHighWaterStorage(dayKey = localDateIso()) {
   const key = _trackedHighWaterStorageKey(dayKey);
   try { sessionStorage.removeItem(key); } catch (_) {}
@@ -142,6 +201,18 @@ function hydrateTrackedHighWaterFromCache() {
         const el = getTrackerTimerElement();
         if (el) el.textContent = '00:00:00';
       } catch (_) {}
+      return;
+    }
+    // Never first-paint a large cached high-water before DB confirms.
+    // Stale orphan HW (e.g. 2h35m) was locking the stopped clock until Start.
+    // Keep tiny values only (brief offline paint); anything else waits for stats.
+    if (n > 180 || isNearWorkDayCapTotal(n)) {
+      console.warn(
+        `⚠️ [TRACKER] Deferring cached high-water ${n}s until DB confirms`,
+      );
+      clearTrackedHighWaterStorage(todayKey);
+      window.__todayTrackedHighWaterSeconds = 0;
+      window.__todayTrackedSeconds = 0;
       return;
     }
     window.__todayTrackedHighWaterSeconds = Math.max(
@@ -258,19 +329,19 @@ function applyTodayEffectiveStats(stats) {
       let incoming = Math.max(0, Math.floor(stats.totalTime));
       if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
       if (window.__lastTrackingStartTime && typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+        const liveAuth =
+          Math.max(0, Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0)) +
+          getTodayElapsedSeconds(window.__lastTrackingStartTime);
+        if (isInflatedWorkDayCapHighWater(window.__todayTrackedHighWaterSeconds, liveAuth)) {
+          discardInflatedHighWater(liveAuth, 'partial-live-stats');
+        }
         applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
         window.__todayTrackedSeconds =
           Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
           getTodayElapsedSeconds(window.__lastTrackingStartTime);
+        setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
       } else if (!window.__lastTrackingStartTime) {
-        // Sync must never lower local recorded time — unless over work-day cap.
-        let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
-        if (Number.isFinite(cap) && highWater > cap) {
-          highWater = cap;
-          window.__todayTrackedHighWaterSeconds = cap;
-          persistTrackedHighWater(cap, { force: true });
-        }
-        window.__todayTrackedSeconds = Math.max(incoming, highWater);
+        applyAuthoritativeStoppedTotal(incoming, { reason: 'partial-stopped-stats' });
       }
     }
     updateTrackerEffectiveMeta();
@@ -298,28 +369,35 @@ function applyTodayEffectiveStats(stats) {
   if (typeof stats.totalTime === 'number' && stats.stale !== true) {
     let incoming = Math.max(0, Math.floor(stats.totalTime));
     if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
-    // Live: closed base from DB+offline (ignore wipe-to-zero only).
-    // Display ticks use wall clock so the timer neither races nor lags.
-    // Stopped: trust DB + offline-queue merge.
+    // Live: closed base from DB+offline; display = base + wall-clock elapsed.
+    // Stopped: trust DB + offline-queue merge over orphan-inflated local HW.
     if (window.__lastTrackingStartTime) {
+      const liveAuth =
+        Math.max(0, Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0)) +
+        getTodayElapsedSeconds(window.__lastTrackingStartTime);
+      if (
+        isInflatedWorkDayCapHighWater(window.__todayTrackedHighWaterSeconds, liveAuth) ||
+        isInflatedWorkDayCapHighWater(window.__todayTrackedSeconds, liveAuth)
+      ) {
+        discardInflatedHighWater(liveAuth, 'live-db-stats');
+      }
       applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
+      const dbClosed = Math.max(
+        0,
+        Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0),
+      );
+      if (
+        (stats.timeLogsCount || 0) > 0 &&
+        Math.floor(Number(window.__completedTodayBaseSeconds) || 0) > dbClosed + 180
+      ) {
+        window.__completedTodayBaseSeconds = dbClosed;
+      }
       window.__todayTrackedSeconds =
         Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
+      setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
     } else {
-      // Stopped: PAYROLL CRITICAL — never rewind the clock because DB/API is
-      // behind (connection timeout, offline queue not flushed yet, partial sync).
-      // Only the work-day wall-clock cap may clamp an impossible local total.
-      let highWater = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
-      if (Number.isFinite(cap) && highWater > cap) {
-        highWater = cap;
-        window.__todayTrackedHighWaterSeconds = cap;
-        persistTrackedHighWater(cap, { force: true });
-      }
-      window.__todayTrackedSeconds = Math.max(incoming, highWater);
-      if (typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
-        applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: false });
-      }
+      applyAuthoritativeStoppedTotal(incoming, { reason: 'stopped-db-stats' });
     }
   }
   if (Number.isFinite(cap) && window.__todayTrackedSeconds > cap) {
@@ -480,35 +558,77 @@ try {
 } catch (_) {}
 try { updateTrackerEffectiveMeta(); } catch (_) {}
 
-function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0) {
+/**
+ * PLATFORM RULE (stopped): big clock == authoritative get-today-time-stats.
+ * Local high-water / stop floors must never invent time the portal does not have.
+ * Call this on every successful non-stale stopped stats load.
+ */
+function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {}) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
+  const cap = maxPlausibleTrackedSecondsToday();
+  const clamped = Number.isFinite(cap) ? Math.min(db, cap) : db;
+  const prev = Math.max(
+    0,
+    Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+    Math.floor(Number(window.__todayTrackedSeconds) || 0),
+    readTrackerDisplaySeconds(),
+  );
+  if (prev > clamped + 5) {
+    console.warn(
+      `⚠️ [TRACKER] Correcting stopped clock ${prev}s → ${clamped}s (${reason})`,
+    );
+  }
+  clearTrackedHighWaterStorage(localDateIso());
+  window.__todayTrackedHighWaterSeconds = clamped;
+  window.__todayTrackedSeconds = clamped;
+  window.__todayBaseAtLastStop = null;
+  window.__completedTodayBaseSeconds = clamped;
+  window.__todayBaseHydratedOnce = true;
+  window.__trackerDisplayDayKey = localDateIso();
+  persistTrackedHighWater(clamped, { force: true });
+  setTrackerDisplaySeconds(clamped, { allowDecrease: true });
+  updateTrackerEffectiveMeta();
+  return clamped;
+}
+window.applyAuthoritativeStoppedTotal = applyAuthoritativeStoppedTotal;
+
+/**
+ * Resolve stopped display. When authoritative DB seconds are known (auth=true),
+ * return DB only. Local floors apply only for failed/stale fetches.
+ */
+function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0, { authoritative = true } = {}) {
+  const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
+  const cap = maxPlausibleTrackedSecondsToday();
+  const extra = Math.max(0, Math.floor(Number(extraFloor) || 0));
+
+  // Successful stats path: portal/DB (+ offline merge) is the only truth.
+  if (authoritative) {
+    let resolved = Math.max(db, extra);
+    if (Number.isFinite(cap) && resolved > cap) resolved = cap;
+    window.__todayBaseAtLastStop = null;
+    return resolved;
+  }
+
+  // Fallback path (stale/failed fetch): keep local floors so a blip does not zero the clock.
   const todayKey = localDateIso();
   const sameDay = window.__trackerDisplayDayKey === todayKey;
-  const floorFromStop = sameDay
+  let floorFromStop = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0))
     : 0;
-  const floorFromTracked = sameDay
+  let floorFromTracked = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0))
     : 0;
-  const highWater = sameDay
+  let highWater = sameDay
     ? Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0))
     : 0;
-  // PAYROLL CRITICAL: DB/API lag must never lower local recorded time.
-  // Prefer the max of DB + all local floors. Only the work-day cap may clamp.
-  let resolved = Math.max(
-    db,
-    floorFromTracked,
-    floorFromStop,
-    highWater,
-    Math.max(0, Math.floor(Number(extraFloor) || 0)),
-  );
-  const cap = maxPlausibleTrackedSecondsToday();
-  if (Number.isFinite(cap) && resolved > cap) {
-    resolved = cap;
+  if (isInflatedWorkDayCapHighWater(highWater, db) || isInflatedWorkDayCapHighWater(highWater, 0)) {
+    discardInflatedHighWater(db, 'resolve-stopped-fallback');
+    highWater = db;
+    floorFromTracked = Math.min(floorFromTracked, db);
+    floorFromStop = 0;
   }
-  if (db > 0 && resolved === db) {
-    window.__todayBaseAtLastStop = null;
-  }
+  let resolved = Math.max(db, extra, floorFromTracked, highWater, floorFromStop);
+  if (Number.isFinite(cap) && resolved > cap) resolved = cap;
   return resolved;
 }
 
@@ -560,8 +680,15 @@ function applyClosedBaseFromStats(rawBase, { live = false } = {}) {
   if (Number.isFinite(cap) && prev > cap) {
     prev = 0;
   }
+  // Orphan-inflated closed base (near midnight) must snap down to DB.
+  if (incoming > 0 && isInflatedWorkDayCapHighWater(prev, incoming)) {
+    console.warn(
+      `⚠️ [TRACKER] Snapping inflated closed base ${prev}s → ${incoming}s`,
+    );
+    prev = incoming;
+  }
   window.__todayBaseHydratedOnce = true;
-  // Forward-only whether live or stopped — tracked time never goes backwards mid-day.
+  // Forward-only for normal lag — but never keep an orphan-cap floor.
   window.__completedTodayBaseSeconds = Math.max(prev, incoming);
   if (Number.isFinite(cap)) {
     window.__completedTodayBaseSeconds = Math.min(window.__completedTodayBaseSeconds, cap);
@@ -592,8 +719,23 @@ function resolveTrackingDisplaySeconds(liveCumulative) {
 }
 window.resolveTrackingDisplaySeconds = resolveTrackingDisplaySeconds;
 
-/** Tray IPC is preferred when fresh; both sides should show DB-base + live elapsed. */
+/** True when the OS menu-bar tray is the sole smooth 1Hz clock (macOS only). */
+function isDarwinTrayClockPlatform() {
+  try {
+    return typeof process !== 'undefined' && process.platform === 'darwin';
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Tray IPC is preferred when fresh on macOS (menu-bar title).
+ * On Windows/Linux there is no setTitle clock — the in-app renderer must keep
+ * owning 1Hz updates. Deferring to tray there freezes the big clock after ~2s
+ * (first tray tick clears local intervals; later IPC pushes are easy to miss).
+ */
 function isTrayTimerDrivingDisplay() {
+  if (!isDarwinTrayClockPlatform()) return false;
   if (window.__localTrackingClockActive) return false;
   if (!window.__trayTimerActive) return false;
   if (Date.now() - (window.__lastTrayTimerTickAt || 0) >= TRAY_TICK_STALE_MS) return false;
@@ -602,34 +744,30 @@ function isTrayTimerDrivingDisplay() {
 window.isTrayTimerDrivingDisplay = isTrayTimerDrivingDisplay;
 
 function beginLocalTrackingClock(startTime) {
+  // Lid-close overnight: Start must not inherit yesterday's daily total.
+  try {
+    ensureCurrentWorkDay({ reason: 'begin-live-clock' });
+  } catch (_) { /* ignore */ }
   window.__lastTrackingStartTime = startTime;
   window.__localTrackingClockActive = true;
   window.__trayTimerActive = false;
   window.__lastTrayTimerTickAt = 0;
   window.__hwAdvanceAnchor = null;
   window.__clearedSecondaryForTray = false;
-  // PAYROLL / UX: never start live clock from 0 when today's high-water is known
-  // (common after reboot — DB/tray floors are in-memory and wiped).
-  // If this is a recovered session (start already in the past), only seed the
-  // *closed* portion: highWater - elapsed, so we don't double-count.
-  // Never seed when HW is far above known closed base (inflated / corrupt HW).
-  const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+  // LIVE ACCURACY: closed base comes from DB/stats only — never seed from
+  // local high-water (that reintroduced phantom "since midnight" time).
   const closedKnown = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  if (hw > 0) {
-    const elapsedNow = getTodayElapsedSeconds(startTime);
-    const closedSeed = Math.max(0, hw - elapsedNow);
-    // If HW is >2 min above known closed base with no live elapsed yet, treat as
-    // inflated and do not raise the closed base (clock would freeze on tray ticks).
-    const hwInflated =
-      closedKnown > 0 && elapsedNow < 5 && closedSeed > closedKnown + 120;
-    if (!hwInflated) {
-      window.__completedTodayBaseSeconds = Math.max(closedKnown, closedSeed);
-    } else {
-      console.warn(
-        `⚠️ [TRACKER] Ignoring inflated high-water seed ${hw}s (closed base ${closedKnown}s)`,
-      );
-    }
+  const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
+  if (hw > 0 && (closedKnown === 0 || isInflatedWorkDayCapHighWater(hw, closedKnown))) {
+    // Drop corrupt HW so the first live paint is base + wall-clock elapsed.
+    discardInflatedHighWater(
+      closedKnown + getTodayElapsedSeconds(startTime),
+      'begin-live-clock',
+    );
+    window.__completedTodayBaseSeconds = closedKnown;
   }
+  window.__lastWatchdogShownSeconds = readTrackerDisplaySeconds();
+  window.__lastWatchdogShownAt = Date.now();
   ensureTrackingDisplayWatchdog();
   updateRendererTrackingClock();
 }
@@ -640,45 +778,36 @@ function updateRendererTrackingClock() {
   const start = window.__lastTrackingStartTime;
   if (!start) return;
   const dashboardTimer = document.getElementById('sessionTime');
-  // Prefer the last tray cumulative when fresh — keeps big clock = menu bar.
   const trayAge = Date.now() - (window.__lastTrayTimerTickAt || 0);
   const trayCum = Math.floor(Number(window.__lastTrayCumulativeSeconds) || 0);
   const elapsed = getTodayElapsedSeconds(start);
-  const highWater = Math.max(
-    0,
-    Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-    Math.floor(Number(window.__todayTrackedSeconds) || 0),
-  );
-  // Closed base only — do NOT fold live high-water into base here or
-  // base+elapsed double-counts as the session grows.
-  let base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  let localLive = resolveTrackingDisplaySeconds(base + elapsed);
-  // PAYROLL RED LINE: never lower the employee-visible total.
-  // If high-water / prior paint is ahead of tray (DB lag, overlap cleanup),
-  // raise closed base so the clock stays at that floor and keeps advancing.
-  if (highWater > localLive + 1) {
-    base = Math.max(base, highWater - elapsed);
-    window.__completedTodayBaseSeconds = base;
-    localLive = base + elapsed;
-  }
-  let cumulativeSec = Math.max(localLive, highWater);
+  const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  // LIVE ACCURACY: wall-clock only — closed DB base + seconds since Start.
+  // Never Math.max with high-water (that caused phantom totals / sticky lag).
+  let cumulativeSec = resolveTrackingDisplaySeconds(base + elapsed);
   if (trayCum > 0 && trayAge < 5000) {
-    if (trayCum + 1 < highWater) {
-      // Tray behind painted total — do not rewind; keep floor and advance.
-      cumulativeSec = Math.max(localLive, highWater);
-    } else {
-      cumulativeSec = Math.max(trayCum, localLive, highWater);
+    // Prefer fresh tray when it matches wall-clock (±2s); otherwise keep local.
+    if (Math.abs(trayCum - cumulativeSec) <= 2) {
+      cumulativeSec = Math.max(trayCum, cumulativeSec);
+    } else if (trayCum < cumulativeSec) {
+      // Tray slightly behind — still advance with wall clock (no lag).
+      cumulativeSec = Math.max(cumulativeSec, trayCum);
+    } else if (trayCum > cumulativeSec + 2) {
+      // Tray ahead of wall clock — trust wall clock (prevents phantom jump).
+      cumulativeSec = base + elapsed;
     }
   }
-  window.__lastTrayCumulativeSeconds = Math.max(trayCum, cumulativeSec);
+  window.__lastTrayCumulativeSeconds = cumulativeSec;
   const sessionStr = formatSecondsAsHMS(elapsed);
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
+  // allowDecrease so a prior inflated paint cannot freeze the live second.
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
 }
 
 function ensureTrackingDisplayWatchdog() {
   if (window.__trackingDisplayWatchdog) return;
-  // Failover only (2s): tray owns the smooth 1Hz clock while visible.
+  // Failover (1s on win32 / 2s elsewhere): tray owns smooth 1Hz on macOS only.
+  const watchdogMs = isDarwinTrayClockPlatform() ? 2000 : 1000;
   window.__trackingDisplayWatchdog = setInterval(() => {
     // Recover start time if main is tracking but renderer lost it (clock would freeze).
     if (!window.__lastTrackingStartTime) {
@@ -705,10 +834,18 @@ function ensureTrackingDisplayWatchdog() {
       }
       return;
     }
-    if (typeof document !== 'undefined' && document.hidden) return;
-    if (isTrayTimerDrivingDisplay()) return;
+    const shown = readTrackerDisplaySeconds();
+    if (shown !== window.__lastWatchdogShownSeconds) {
+      window.__lastWatchdogShownSeconds = shown;
+      window.__lastWatchdogShownAt = Date.now();
+    }
+    const stalled =
+      Date.now() - (window.__lastWatchdogShownAt || Date.now()) >= TRAY_TICK_STALE_MS;
+    // Hidden tabs may throttle timers, but a stalled live clock must still advance.
+    if (typeof document !== 'undefined' && document.hidden && !stalled) return;
+    if (isTrayTimerDrivingDisplay() && !stalled) return;
     updateRendererTrackingClock();
-  }, 2000);
+  }, watchdogMs);
   // Refresh idle/low-activity deductions periodically while the session is live.
   if (!window.__effectiveStatsRefresh) {
     window.__effectiveStatsRefresh = setInterval(() => {
@@ -864,43 +1001,53 @@ function scheduleNextWorkDayRollover() {
     const delay = Math.max(250, nextMs - Date.now() + 250);
     window.__workDayRolloverTimeout = setTimeout(() => {
       window.__workDayRolloverTimeout = null;
-      const todayKey = localDateIso();
-      if (window.__localDayKey && window.__localDayKey !== todayKey) {
-        const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
-        handleLocalDayRollover(isTracking, window.__localDayKey);
-      } else {
-        // Still schedule the following midnight (clock skew / already rolled).
-        scheduleNextWorkDayRollover();
-      }
+      // After overnight sleep this timeout is overdue — ensureCurrentWorkDay resets.
+      ensureCurrentWorkDay({ reason: 'midnight-timeout' });
+      scheduleNextWorkDayRollover();
     }, Math.min(delay, 2147483647));
   } catch (err) {
     console.warn('⚠️ [RENDERER] Failed to schedule Pacific midnight rollover:', err?.message || err);
   }
 }
 
-function ensureLocalDayRolloverWatch() {
-  if (window.__localDayRolloverWatch) return;
+/**
+ * Force Pacific work-day alignment. Call on resume/wake/focus/Start so a
+ * laptop that slept through midnight still shows 0 for the new day.
+ * @returns {boolean} true when a rollover reset ran
+ */
+function ensureCurrentWorkDay({ reason = 'check', isTracking } = {}) {
   const todayKey = localDateIso();
-  const persisted = readPersistedWorkDayKey();
-  // App slept through Pacific midnight or restarted next day — force reset to 0.
-  if (persisted && persisted !== todayKey) {
-    console.log(`🌙 [RENDERER] Missed Pacific midnight while away (${persisted} → ${todayKey}) — resetting`);
-    window.__localDayKey = persisted;
-    window.__trackerDisplayDayKey = persisted;
-    const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
-    handleLocalDayRollover(isTracking, persisted);
-  } else {
+  const previous =
+    (window.__localDayKey && window.__localDayKey !== todayKey ? window.__localDayKey : null) ||
+    (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey
+      ? window.__trackerDisplayDayKey
+      : null) ||
+    (() => {
+      const persisted = readPersistedWorkDayKey();
+      return persisted && persisted !== todayKey ? persisted : null;
+    })();
+  if (!previous) {
     window.__localDayKey = todayKey;
     window.__trackerDisplayDayKey = window.__trackerDisplayDayKey || todayKey;
     persistCurrentWorkDayKey(todayKey);
+    return false;
   }
+  console.log(`🌙 [RENDERER] Work-day sync (${reason}): ${previous} → ${todayKey}`);
+  const tracking =
+    typeof isTracking === 'boolean'
+      ? isTracking
+      : !!(moduleInstances?.ipcManager?.isTracking || window.__isTracking);
+  handleLocalDayRollover(tracking, previous);
+  return true;
+}
+window.ensureCurrentWorkDay = ensureCurrentWorkDay;
+
+function ensureLocalDayRolloverWatch() {
+  if (window.__localDayRolloverWatch) return;
+  ensureCurrentWorkDay({ reason: 'watch-init' });
   scheduleNextWorkDayRollover();
   window.__localDayRolloverWatch = setInterval(() => {
-    const key = localDateIso();
-    if (window.__localDayKey && window.__localDayKey !== key) {
-      const isTracking = !!(moduleInstances?.ipcManager?.isTracking);
-      handleLocalDayRollover(isTracking, window.__localDayKey);
-    }
+    ensureCurrentWorkDay({ reason: 'watch-tick' });
   }, 1000);
 }
 
@@ -1346,9 +1493,14 @@ function setupModuleCommunication() {
         flushPendingHighWaterPersist();
         return;
       }
+      // Opening the lid / focusing the app after overnight sleep.
+      ensureCurrentWorkDay({ reason: 'visibility' });
       if (window.__lastTrackingStartTime) {
         updateRendererTrackingClock();
       }
+    });
+    window.addEventListener('focus', () => {
+      ensureCurrentWorkDay({ reason: 'window-focus' });
     });
   } catch (_) { /* ignore */ }
   ipcRenderer.on('local-day-rollover', (_event, data) => {
@@ -1359,25 +1511,61 @@ function setupModuleCommunication() {
       (window.__trackerDisplayDayKey && window.__trackerDisplayDayKey !== todayKey
         ? window.__trackerDisplayDayKey
         : null);
-    handleLocalDayRollover(!!data?.isTracking, previousDayKey);
+    if (previousDayKey && previousDayKey !== todayKey) {
+      handleLocalDayRollover(!!data?.isTracking, previousDayKey);
+    } else {
+      ensureCurrentWorkDay({ reason: 'ipc-rollover', isTracking: !!data?.isTracking });
+    }
+  });
+  ipcRenderer.on('work-day-sync', (_event, data) => {
+    ensureCurrentWorkDay({
+      reason: 'ipc-work-day-sync',
+      isTracking: typeof data?.isTracking === 'boolean' ? data.isTracking : undefined,
+    });
+  });
+  ipcRenderer.on('work-timezone-updated', (_event, data) => {
+    const tz =
+      (typeof data === 'string' ? data : data?.timezone) ||
+      null;
+    if (!tz) return;
+    const prevDay = localDateIso();
+    setWorkTimezone(tz);
+    if (typeof global !== 'undefined' && global.config) {
+      global.config.work_timezone = tz;
+      global.config.WORK_TIMEZONE = tz;
+    }
+    console.log('🌎 [RENDERER] Work-day timezone updated:', tz, `(was day ${prevDay})`);
+    ensureCurrentWorkDay({ reason: 'work-timezone-updated' });
+    try {
+      void refreshTodayCompletedBaseSeconds().then(() => {
+        try {
+          updateRendererTrackingClock();
+        } catch (_) { /* ignore */ }
+      });
+    } catch (_) { /* ignore */ }
   });
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
     window.__trayTimerActive = true;
     window.__lastTrayTimerTickAt = Date.now();
-    window.__localTrackingClockActive = false;
     window.__hwAdvanceAnchor = null;
-    // Tray owns the clock — drop redundant renderer 1Hz intervals (once).
-    if (!window.__clearedSecondaryForTray) {
-      window.__clearedSecondaryForTray = true;
-      try {
-        if (typeof window.clearSecondaryRendererTimers === 'function') {
-          window.clearSecondaryRendererTimers();
-        }
-        if (moduleInstances?.ipcManager?.sessionTimer) {
-          clearInterval(moduleInstances.ipcManager.sessionTimer);
-          moduleInstances.ipcManager.sessionTimer = null;
-        }
-      } catch (_) { /* ignore */ }
+    // macOS: tray menu-bar title is the primary clock — drop redundant renderer 1Hz.
+    // Windows/Linux: keep local 1Hz forever (no setTitle); clearing it freezes the UI clock.
+    if (isDarwinTrayClockPlatform()) {
+      window.__localTrackingClockActive = false;
+      if (!window.__clearedSecondaryForTray) {
+        window.__clearedSecondaryForTray = true;
+        try {
+          if (typeof window.clearSecondaryRendererTimers === 'function') {
+            window.clearSecondaryRendererTimers();
+          }
+          if (moduleInstances?.ipcManager?.sessionTimer) {
+            clearInterval(moduleInstances.ipcManager.sessionTimer);
+            moduleInstances.ipcManager.sessionTimer = null;
+          }
+        } catch (_) { /* ignore */ }
+      }
+    } else {
+      window.__localTrackingClockActive = true;
     }
     const dashboardTimer = document.getElementById('sessionTime');
     if (data && (data.display || data.cumulativeDisplay)) {
@@ -1409,12 +1597,11 @@ function setupModuleCommunication() {
         window.__completedTodayBaseSeconds = trayBase;
       }
       const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-      // Same formula as tray: closed base + wall-clock session elapsed.
+      // LIVE ACCURACY: closed base + wall-clock elapsed (same as tray formula).
+      // Do not Math.max with high-water — that invents time / freezes the second.
       let liveCumulative = start ? base + getTodayElapsedSeconds(start) : trayCumulative;
-      // Tray is source of truth while its ticks are fresh — keep app icon + big clock identical.
-      let cumulativeSec = trayCumulative > 0 ? trayCumulative : liveCumulative;
-      // If local wall-clock is within 2s of tray, prefer the higher (minor skew).
-      if (start && Math.abs(liveCumulative - trayCumulative) <= 2) {
+      let cumulativeSec = liveCumulative;
+      if (start && trayCumulative > 0 && Math.abs(liveCumulative - trayCumulative) <= 2) {
         cumulativeSec = Math.max(liveCumulative, trayCumulative);
       }
       const cap = maxPlausibleTrackedSecondsToday();
@@ -1425,29 +1612,7 @@ function setupModuleCommunication() {
       if (dashboardTimer && dashboardTimer.textContent !== sessionStr) {
         dashboardTimer.textContent = sessionStr;
       }
-      // PAYROLL RED LINE: never drop the painted total when tray/DB is briefly
-      // behind. If high-water is ahead, raise closed base so the clock keeps
-      // advancing from that floor (fixes freeze without eating time).
-      const hw = Math.max(
-        0,
-        Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-        Math.floor(Number(window.__todayTrackedSeconds) || 0),
-        readTrackerDisplaySeconds(),
-      );
-      if (start && hw > cumulativeSec + 1) {
-        const elapsedNow = getTodayElapsedSeconds(start);
-        window.__completedTodayBaseSeconds = Math.max(
-          Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
-          hw - elapsedNow,
-        );
-        cumulativeSec = Math.max(
-          hw,
-          Math.floor(Number(window.__completedTodayBaseSeconds) || 0) + elapsedNow,
-        );
-      } else {
-        cumulativeSec = Math.max(hw, cumulativeSec);
-      }
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: false });
+      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
     }
   });
 
@@ -1701,8 +1866,14 @@ function setupModuleCommunication() {
             ipcRenderer.invoke('get-today-time-stats').then((s) => {
               if (trackerTimer && s && typeof s.totalTime === 'number') {
                 applyTodayEffectiveStats(s);
-                const resolved = resolveStoppedDisplaySeconds(s.totalTime);
-                setTrackerDisplaySeconds(resolved);
+                if (s.stale === true) {
+                  setTrackerDisplaySeconds(
+                    resolveStoppedDisplaySeconds(s.totalTime, 0, { authoritative: false }),
+                    { allowDecrease: false },
+                  );
+                } else {
+                  applyAuthoritativeStoppedTotal(s.totalTime, { reason: 'timer-verify-stopped' });
+                }
               }
             }).catch(() => {
               /* keep high-water display — never wipe the day's clock on a failed fetch */
@@ -1743,8 +1914,14 @@ function setupModuleCommunication() {
           ipcRenderer.invoke('get-today-time-stats').then((s) => {
             if (trackerTimer && s && typeof s.totalTime === 'number') {
               applyTodayEffectiveStats(s);
-              const resolved = resolveStoppedDisplaySeconds(s.totalTime);
-              setTrackerDisplaySeconds(resolved);
+              if (s.stale === true) {
+                setTrackerDisplaySeconds(
+                  resolveStoppedDisplaySeconds(s.totalTime, 0, { authoritative: false }),
+                  { allowDecrease: false },
+                );
+              } else {
+                applyAuthoritativeStoppedTotal(s.totalTime, { reason: 'timer-verify-error-stopped' });
+              }
             }
           }).catch(() => {
             /* keep high-water display */

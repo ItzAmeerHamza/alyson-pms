@@ -134,7 +134,8 @@ class CrossPlatformInputDetector extends EventEmitter {
 
   async startMacOSInProcessInput() {
     try {
-      const { MacOSUiohookInput } = require('../platform/macos-uiohook-input');
+      // File lives at src/platform/… (this module is also under src/).
+      const { MacOSUiohookInput } = require('./platform/macos-uiohook-input');
       if (!MacOSUiohookInput.isAvailable()) {
         const msg = MacOSUiohookInput.loadErrorMessage();
         console.warn('⚠️ [UIOHOOK] Not available:', msg || 'unknown');
