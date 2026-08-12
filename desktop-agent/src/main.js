@@ -4438,6 +4438,13 @@ if (isElectronContext && ipcMain) {
   // Initialize force updater and check for updates before starting app
   if (isElectronContext) {
     app.whenReady().then(() => {
+      try {
+        const { installRendererDiagnosticBridge } = require('./modules/utils/renderer-diagnostic-bridge');
+        installRendererDiagnosticBridge();
+      } catch (bridgeErr) {
+        console.warn('⚠️ [RENDERER-LOG] Bridge install failed:', bridgeErr?.message || bridgeErr);
+      }
+
       // === MEMORY OPTIMIZATION: Periodic GC hint ===
       // Suggests V8 garbage collection every 5 minutes to reclaim leaked memory
       // This is a non-blocking hint — V8 may ignore it if not needed
@@ -6293,6 +6300,44 @@ if (isElectronContext && ipcMain) {
     }
     return { success: true, totalSeconds: sec };
   });
+  const buildWorkDayContext = () => {
+    const { getWorkDayContext, getWorkTimezone, setWorkTimezone } = require('./modules/utils/work-timezone');
+    const { getLastAppliedTimezone } = require('./modules/utils/workspace-settings');
+    const applied = getLastAppliedTimezone();
+    if (applied) setWorkTimezone(applied);
+    return getWorkDayContext(new Date(), applied || getWorkTimezone());
+  };
+  const withWorkDayContext = (payload) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    const workDay = buildWorkDayContext();
+    return {
+      ...payload,
+      workDate: payload.workDate || workDay.todayKey,
+      date: payload.date || workDay.todayKey,
+      timezone: workDay.timezone,
+      workDay,
+    };
+  };
+
+  try { ipcMain.removeHandler('get-work-timezone'); } catch {}
+  try { ipcMain.removeHandler('get-work-day-context'); } catch {}
+  ipcMain.handle('get-work-timezone', async () => {
+    try {
+      const workDay = buildWorkDayContext();
+      return { success: true, timezone: workDay.timezone, workDay };
+    } catch (err) {
+      return { success: false, timezone: 'America/Los_Angeles' };
+    }
+  });
+  ipcMain.handle('get-work-day-context', async () => {
+    try {
+      const workDay = buildWorkDayContext();
+      return { success: true, ...workDay, workDay };
+    } catch (err) {
+      return { success: false, timezone: 'America/Los_Angeles' };
+    }
+  });
+
   ipcMain.handle('get-today-time-stats', async () => {
     // Single-flight: login/dashboard used to fire 10+ parallel queries and race
     // zeros vs real totals onto the big clock.
@@ -6314,8 +6359,12 @@ if (isElectronContext && ipcMain) {
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);
       if (!userId) {
-        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
-        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'User not authenticated' };
+        if (global._lastGoodTodayStats) return withWorkDayContext(global._lastGoodTodayStats);
+        return withWorkDayContext({
+          totalTime: 0,
+          completedTodayBeforeCurrentSessionSeconds: 0,
+          error: 'User not authenticated',
+        });
       }
 
       const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
@@ -6364,11 +6413,15 @@ if (isElectronContext && ipcMain) {
               offlineOnly: true,
             }, { isTracking });
             global._lastGoodTodayStats = payload;
-            return payload;
+            return withWorkDayContext(payload);
           }
         } catch (_) { /* fall through */ }
-        if (global._lastGoodTodayStats) return global._lastGoodTodayStats;
-        return { totalTime: 0, completedTodayBeforeCurrentSessionSeconds: 0, error: 'No database connection' };
+        if (global._lastGoodTodayStats) return withWorkDayContext(global._lastGoodTodayStats);
+        return withWorkDayContext({
+          totalTime: 0,
+          completedTodayBeforeCurrentSessionSeconds: 0,
+          error: 'No database connection',
+        });
       }
 
       const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
@@ -6417,7 +6470,7 @@ if (isElectronContext && ipcMain) {
         console.warn(
           `⚠️ [TODAY-TIME-STATS] Ignoring empty total ${totalTime}s (last good ${lastGood.totalTime}s)`,
         );
-        return { ...lastGood, stale: true, floorHeld: true };
+        return withWorkDayContext({ ...lastGood, stale: true, floorHeld: true });
       }
 
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: totalTime, completed_closed: completedClosedSeconds } }); } catch { }
@@ -6464,14 +6517,14 @@ if (isElectronContext && ipcMain) {
       // Only the authorized idle-prompt cut may drop totals (once).
       payload = holdTodayTrackedFloor(payload, { isTracking });
       global._lastGoodTodayStats = payload;
-      return payload;
+      return withWorkDayContext(payload);
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
       if (global._lastGoodTodayStats) {
         console.warn('⚠️ [TODAY-TIME-STATS] Returning last-good stats after error:', error.message);
-        return { ...global._lastGoodTodayStats, stale: true, error: error.message };
+        return withWorkDayContext({ ...global._lastGoodTodayStats, stale: true, error: error.message });
       }
-      return {
+      return withWorkDayContext({
         totalTime: 0,
         completedTodayBeforeCurrentSessionSeconds: 0,
         effectiveSeconds: 0,
@@ -6480,7 +6533,7 @@ if (isElectronContext && ipcMain) {
         lowActivitySeconds: 0,
         effectiveStatsComputed: false,
         error: error.message,
-      };
+      });
     }
     })();
 

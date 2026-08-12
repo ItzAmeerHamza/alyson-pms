@@ -410,11 +410,17 @@ class TrayManager {
     try {
       const win = this._getMainTrackerWindow();
       if (!win || win.isDestroyed()) return;
+      let workDay = null;
+      try {
+        workDay = require('../utils/work-timezone').getWorkDayContext();
+      } catch (_) { /* ignore */ }
       const payload = {
         date: todayKey,
         previousDate,
         isTracking: this.isTracking,
         rolled: !!rolled,
+        timezone: workDay?.timezone || null,
+        workDay,
       };
       if (rolled) {
         win.webContents.send('local-day-rollover', payload);

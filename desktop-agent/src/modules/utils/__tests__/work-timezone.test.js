@@ -75,4 +75,36 @@ describe('work-timezone company / Time Doctor sync', () => {
     expect(workDateKey(justAfterCentralMidnight, 'America/Los_Angeles')).toBe('2026-08-10');
     expect(workDateKey(justAfterCentralMidnight, 'Asia/Karachi')).toBe('2026-08-11');
   });
+
+  it('round-the-clock: 2AM Central start only counts after company midnight on next day', () => {
+    const {
+      elapsedSecondsSinceWorkMidnight,
+      getWorkDayContext,
+    } = require('../work-timezone');
+    setWorkTimezone('America/Chicago');
+
+    // Started 02:00 CDT Aug 11, still tracking at 00:30 CDT Aug 12
+    const sessionStart = '2026-08-11T07:00:00.000Z'; // 02:00 CDT
+    const afterMidnight = Date.parse('2026-08-12T05:30:00.000Z'); // 00:30 CDT Aug 12
+    const elapsedToday = elapsedSecondsSinceWorkMidnight(sessionStart, afterMidnight);
+    expect(elapsedToday).toBe(30 * 60); // only 30m into new company day
+
+    const ctx = getWorkDayContext(new Date(afterMidnight), 'America/Chicago');
+    expect(ctx.todayKey).toBe('2026-08-12');
+    expect(ctx.secondsElapsedInDay).toBe(30 * 60);
+  });
+
+  it('does not invent Pacific wall-clock when company TZ is Central', () => {
+    const { elapsedSecondsSinceWorkMidnight, startOfWorkDay } = require('../work-timezone');
+    setWorkTimezone('America/Chicago');
+    const now = Date.parse('2026-08-12T05:00:30.000Z'); // Central midnight + 30s
+    const realStart = '2026-08-11T22:17:00.000Z'; // ~6.7h before
+    const chicagoElapsed = elapsedSecondsSinceWorkMidnight(realStart, now);
+    expect(chicagoElapsed).toBe(30);
+
+    const pacificDayStart = startOfWorkDay(new Date(now), 'America/Los_Angeles').getTime();
+    const pacificInvented = Math.floor((now - pacificDayStart) / 1000);
+    expect(pacificInvented).toBeGreaterThan(20 * 3600);
+    expect(chicagoElapsed).toBeLessThan(60);
+  });
 });

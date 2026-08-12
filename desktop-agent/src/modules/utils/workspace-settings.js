@@ -80,16 +80,50 @@ function applyScreenshotIntervalMinutes(minutes, options = {}) {
   return { applied: true, changed, minutes: mins, seconds };
 }
 
-function broadcastWorkTimezone(tz) {
+function broadcastWorkTimezone(tz = lastAppliedTimezone) {
+  const { getWorkTimezone, isValidIanaTimezone } = require('./work-timezone');
+  const resolved = isValidIanaTimezone(tz) ? String(tz).trim() : getWorkTimezone();
+  if (!resolved) return;
   try {
     const { BrowserWindow } = require('electron');
     for (const win of BrowserWindow.getAllWindows()) {
       if (win && !win.isDestroyed()) {
-        win.webContents.send('work-timezone-updated', { timezone: tz });
+        let workDay = null;
+        try {
+          workDay = require('./work-timezone').getWorkDayContext(new Date(), resolved);
+        } catch (_) { /* ignore */ }
+        win.webContents.send('work-timezone-updated', {
+          timezone: resolved,
+          todayKey: workDay?.todayKey,
+          workDay,
+        });
       }
     }
   } catch (err) {
     console.warn('⚠️ [WORKSPACE-SETTINGS] Failed to notify renderer of timezone:', err?.message || err);
+  }
+}
+
+/** Re-push company TZ whenever a BrowserWindow finishes loading (renderer starts at Pacific). */
+function installWorkTimezoneWindowHooks() {
+  if (global._workTimezoneWindowHooksInstalled) return;
+  global._workTimezoneWindowHooksInstalled = true;
+  try {
+    const { app, BrowserWindow } = require('electron');
+    const push = () => {
+      const tz = lastAppliedTimezone || require('./work-timezone').getWorkTimezone();
+      if (tz) broadcastWorkTimezone(tz);
+    };
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win || win.isDestroyed()) return;
+      win.webContents.on('did-finish-load', push);
+    });
+    app.on('browser-window-created', (_e, win) => {
+      if (!win || win.isDestroyed()) return;
+      win.webContents.on('did-finish-load', push);
+    });
+  } catch (err) {
+    console.warn('⚠️ [WORKSPACE-SETTINGS] TZ window hooks failed:', err?.message || err);
   }
 }
 
@@ -118,9 +152,10 @@ function applyWorkTimezone(timezone) {
   console.log(
     `🌎 [TIMEZONE] Work-day boundaries: ${tz}${changed && prev ? ` (was ${prev})` : ''}`,
   );
-  if (changed) {
-    broadcastWorkTimezone(tz);
-  }
+  // Always broadcast — renderer has a separate module copy that defaults to Pacific.
+  // Login often applies TZ before the tracker window exists; late windows must still sync.
+  installWorkTimezoneWindowHooks();
+  broadcastWorkTimezone(tz);
   return { applied: true, changed, timezone: tz };
 }
 
@@ -166,9 +201,11 @@ module.exports = {
   fetchWorkspaceSettings,
   applyScreenshotIntervalMinutes,
   applyWorkTimezone,
+  broadcastWorkTimezone,
+  installWorkTimezoneWindowHooks,
+  getLastAppliedTimezone: () => lastAppliedTimezone,
   refreshWorkspaceSettings,
   startWorkspaceSettingsRefresh,
   stopWorkspaceSettingsRefresh,
   getLastAppliedScreenshotIntervalMinutes: () => lastAppliedMinutes,
-  getLastAppliedTimezone: () => lastAppliedTimezone,
 };

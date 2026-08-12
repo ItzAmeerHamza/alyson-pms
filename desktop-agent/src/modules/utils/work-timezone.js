@@ -1,8 +1,16 @@
 /**
- * Work-day boundaries for timers, reports, and DB "today" queries.
- * Default: America/Los_Angeles (Pacific Time — PST in winter, PDT in summer).
+ * Company work-day boundaries (Time Doctor "Company Time Zone").
  *
- * Override via WORK_TIMEZONE env or config.work_timezone / config.WORK_TIMEZONE.
+ * PLATFORM RULES:
+ * 1. Main process owns the timezone after workspace settings load.
+ * 2. Renderer has a separate module copy — it MUST sync via IPC
+ *    (get-work-day-context / work-timezone-updated / stats.workDay).
+ * 3. Employee personal TZ (Karachi, etc.) never defines "today".
+ * 4. Overnight / odd-hour shifts are normal: clamp session elapsed to
+ *    company midnight; do not invent wall-clock-since-wrong-midnight.
+ *
+ * Default fallback: America/Los_Angeles until company TZ is applied.
+ * Override: WORK_TIMEZONE env or config.work_timezone / WORK_TIMEZONE.
  */
 
 function isValidIanaTimezone(tz) {
@@ -169,6 +177,26 @@ function workMonthBounds(date = new Date(), tz = _tz) {
   return { year: p.year, month: p.month, startMs, endExclusiveMs, daysInMonth };
 }
 
+/**
+ * Authoritative work-day snapshot for IPC / renderer sync.
+ * Main should attach this to stats and tray day events.
+ */
+function getWorkDayContext(date = new Date(), tz = _tz) {
+  const timezone = isValidIanaTimezone(tz) ? String(tz).trim() : getWorkTimezone();
+  const now = date instanceof Date ? date : new Date(date);
+  const nowMs = now.getTime();
+  const dayStartMs = startOfWorkDay(now, timezone).getTime();
+  const nextMidnightMs = nextWorkDayMidnight(now, timezone).getTime();
+  return {
+    timezone,
+    todayKey: workDateKey(now, timezone),
+    dayStartMs,
+    nextMidnightMs,
+    secondsElapsedInDay: Math.max(0, Math.floor((nowMs - dayStartMs) / 1000)),
+    label: formatWorkTimezoneLabel(timezone),
+  };
+}
+
 module.exports = {
   resolveWorkTimezone,
   initWorkTimezone,
@@ -187,4 +215,5 @@ module.exports = {
   nextWorkDayMidnight,
   workDayBoundsForYmd,
   workMonthBounds,
+  getWorkDayContext,
 };

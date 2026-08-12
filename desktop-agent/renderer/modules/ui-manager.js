@@ -4358,7 +4358,7 @@ class UIManager {
 
     if (!gridEl) return;
 
-    // Default to Pacific work-day "today" (not machine-local Pakistan/etc.)
+    // Default to company work-day "today" (not machine-local Pakistan/etc.)
     if (dateInput && !dateInput.value) {
       dateInput.value = workDateKey();
     }
@@ -4536,7 +4536,7 @@ class UIManager {
       const m = String(next.getUTCMonth() + 1).padStart(2, '0');
       const d = String(next.getUTCDate()).padStart(2, '0');
       const nextKey = `${y}-${m}-${d}`;
-      if (nextKey > workDateKey()) return; // Don't go past Pacific "today"
+      if (nextKey > workDateKey()) return; // Don't go past company "today"
 
       dateInput.value = nextKey;
       this._trackerScreenshotsCache = null; // invalidate cache
