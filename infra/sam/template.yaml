@@ -60,7 +60,28 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ''
-    Description: DeepSeek API key for screenshot vision analysis (worker Lambda only)
+    Description: DeepSeek API key for screenshot vision analysis and leave email classification
+  GoogleDwdClientEmail:
+    Type: String
+    Default: ''
+    Description: Google Workspace DWD service account client email (leave Gmail scan)
+  GoogleDwdPrivateKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Google DWD private key — deploy.sh base64-encodes PEM (spaces in BEGIN PRIVATE KEY break SAM overrides)
+  GoogleDwdSubject:
+    Type: String
+    Default: people-ops@cintara.ai
+    Description: Workspace user to impersonate for Gmail readonly (leave inbox)
+  LeaveCreditHoursPerDay:
+    Type: String
+    Default: '7'
+    Description: Hours credited per leave weekday into time_adjustments
+  LeaveScanApiBaseUrl:
+    Type: String
+    Default: ''
+    Description: Public HTTP API base URL for leave-scan worker ingest callbacks (avoids CFN cycle with HttpApi)
   ScreenshotAiEnabled:
     Type: String
     Default: 'false'
@@ -225,6 +246,34 @@ Resources:
                 - ses:SendEmail
                 - ses:SendRawEmail
               Resource: '*'
+
+  # Outside VPC: Gmail DWD + DeepSeek leave scan (API Lambda has no NAT / internet egress).
+  LeaveScanWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-leave-scan-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/leave-scan-worker-handler.handler
+      Timeout: 300
+      MemorySize: 1024
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          DEEPSEEK_TEXT_MODEL: deepseek-chat
+          GOOGLE_DWD_CLIENT_EMAIL: !Ref GoogleDwdClientEmail
+          GOOGLE_DWD_PRIVATE_KEY: !Ref GoogleDwdPrivateKey
+          GOOGLE_DWD_SUBJECT: !Ref GoogleDwdSubject
+          GOOGLE_WORKSPACE_ADMIN_SUBJECT_EMAIL: !Ref GoogleDwdSubject
+          LEAVE_EMAIL_MAILBOX: people-ops@cintara.ai
+          INTERNAL_API_KEY: !Ref InternalApiKey
+          # Parameter (not !Sub HttpApi) — avoids circular dependency with API Function
+          LEAVE_SCAN_API_BASE_URL: !Ref LeaveScanApiBaseUrl
 
   ScreenshotAiDLQ:
     Type: AWS::SQS::Queue
@@ -420,6 +469,7 @@ Resources:
           SES_EMAIL_FUNCTION_NAME: !Ref SesEmailFunction
           EMAIL_FROM: !Ref EmailFrom
           EMAIL_SENDERS: !Ref EmailSenders
+          PACING_DIGEST_TO: hamza@cintara.ai,mohita@cintara.ai,alysonclient@cintara.ai
           LAMBDA_VPC_ENDPOINT_URL: !Join
             - ''
             - - 'https://'
@@ -432,6 +482,15 @@ Resources:
           SCREENSHOT_AI_QUEUE_URL: !Ref ScreenshotAiQueue
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
           SQS_VPC_ENDPOINT_URL: !Sub 'https://${SqsVpcEndpointDnsName}'
+          # Leave module: scan runs on non-VPC LeaveScanWorker (Gmail + DeepSeek); API persists via ingest-batch
+          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          GOOGLE_DWD_CLIENT_EMAIL: !Ref GoogleDwdClientEmail
+          GOOGLE_DWD_PRIVATE_KEY: !Ref GoogleDwdPrivateKey
+          GOOGLE_DWD_SUBJECT: !Ref GoogleDwdSubject
+          GOOGLE_WORKSPACE_ADMIN_SUBJECT_EMAIL: !Ref GoogleDwdSubject
+          LEAVE_CREDIT_HOURS_PER_DAY: !Ref LeaveCreditHoursPerDay
+          # Name string (not !Ref worker) — avoids circular dependency with worker → API URL
+          LEAVE_SCAN_FUNCTION_NAME: !Sub 'alyson-time-doctor-leave-scan-${EnvironmentName}'
       VpcConfig:
         SubnetIds: !Ref VpcSubnetIds
         SecurityGroupIds: !Ref VpcSecurityGroupIds
@@ -448,7 +507,7 @@ Resources:
                 - ec2:DescribeNetworkInterfaces
                 - ec2:DeleteNetworkInterface
               Resource: '*'
-        # Invoke non-VPC workers (Cognito admin + SES email) via Lambda VPC endpoint.
+        # Invoke non-VPC workers (Cognito / SES / leave-scan) via Lambda VPC endpoint.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -457,6 +516,7 @@ Resources:
               Resource:
                 - !GetAtt CognitoAdminFunction.Arn
                 - !GetAtt SesEmailFunction.Arn
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:alyson-time-doctor-leave-scan-${EnvironmentName}'
       Events:
         ProxyApi:
           Type: HttpApi

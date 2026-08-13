@@ -128,13 +128,14 @@ export class UsersService {
 
       await client.query(
         `INSERT INTO time_doctor.user_extensions
-           (user_id, workspace_id, cognito_sub, pulse_role, department, created_at, updated_at)
-         VALUES ($1::int, $2, $3, $4, $5, NOW(), NOW())
+           (user_id, workspace_id, cognito_sub, pulse_role, department, started_on, created_at, updated_at)
+         VALUES ($1::int, $2, $3, $4, $5, CURRENT_DATE, NOW(), NOW())
          ON CONFLICT (user_id) DO UPDATE SET
            workspace_id = EXCLUDED.workspace_id,
            cognito_sub = COALESCE(EXCLUDED.cognito_sub, time_doctor.user_extensions.cognito_sub),
            pulse_role = EXCLUDED.pulse_role,
            department = COALESCE(EXCLUDED.department, time_doctor.user_extensions.department),
+           started_on = COALESCE(time_doctor.user_extensions.started_on, EXCLUDED.started_on),
            updated_at = NOW()`,
         [userId, workspaceId, cognito.sub, dto.role, department],
       );

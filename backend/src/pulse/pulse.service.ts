@@ -1,10 +1,17 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { calculateMergedHoursByUser, mergeTimeIntervals } from '../lib/time-merge';
+import { mergeTimeIntervals } from '../lib/time-merge';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
   TRACKABLE_PULSE_ROLES_SQL,
+  canAccessPulseTeamReports,
+  canAdjustPulseTime,
   isPulseAdmin,
   parseTenantUserId,
   parseWorkspaceId,
@@ -32,6 +39,10 @@ import {
   nextDayTotalHours,
   resolveAdjustmentDeltaSeconds,
 } from './time-adjustment.util';
+import {
+  expectedHoursForEmployment,
+  normalizeStartedOn,
+} from './employment-start';
 
 export interface OrgSettings {
   hours_threshold: number;
@@ -113,6 +124,10 @@ export class PulseService {
    * Everyone else = self only.
    */
   private async visibleEmployeeIds(user: ScopedAuthUser): Promise<string[] | null> {
+    // Admin/manager org-wide team reports (same as canAccessPulseTeamReports).
+    if (canAccessPulseTeamReports(user)) {
+      return null;
+    }
     if (isPulseAdmin(user) || user.is_super_admin) {
       return null;
     }
@@ -259,8 +274,57 @@ export class PulseService {
     return byUserDay;
   }
 
+  /** Day total = tracked + admin adjustments (never below 0). Product-wide actual time. */
+  private hoursWorkedForDay(trackedHours: number, adjustmentHours = 0): number {
+    return Math.max(
+      0,
+      Math.round((Number(trackedHours) + Number(adjustmentHours)) * 10) / 10,
+    );
+  }
+
   /**
-   * Net admin adjustments (hours) per user_id → work_date (Pacific).
+   * Merge admin adjustments into tracked daily maps.
+   * Result is the canonical "actual hours" used across Pulse reports.
+   */
+  private mergeTrackedWithAdjustments(
+    trackedByUser: Map<string, Map<string, number>>,
+    adjustmentByUser: Map<string, Map<string, number>>,
+  ): Map<string, Map<string, number>> {
+    const out = new Map<string, Map<string, number>>();
+    const userIds = new Set<string>([
+      ...trackedByUser.keys(),
+      ...adjustmentByUser.keys(),
+    ]);
+    for (const uid of userIds) {
+      const tracked = trackedByUser.get(uid) ?? new Map<string, number>();
+      const adj = adjustmentByUser.get(uid) ?? new Map<string, number>();
+      const days = new Set<string>([...tracked.keys(), ...adj.keys()]);
+      const dayMap = new Map<string, number>();
+      for (const day of days) {
+        dayMap.set(
+          day,
+          this.hoursWorkedForDay(tracked.get(day) ?? 0, adj.get(day) ?? 0),
+        );
+      }
+      if (dayMap.size > 0) out.set(uid, dayMap);
+    }
+    return out;
+  }
+
+  private sumDailyHoursByUser(
+    dailyByUser: Map<string, Map<string, number>>,
+  ): Map<string, number> {
+    const totals = new Map<string, number>();
+    for (const [uid, dayMap] of dailyByUser) {
+      let sum = 0;
+      for (const hours of dayMap.values()) sum += hours;
+      totals.set(uid, Math.round(sum * 10) / 10);
+    }
+    return totals;
+  }
+
+  /**
+   * Net admin adjustments (hours) per user_id → work_date (company work day).
    */
   private async fetchAdjustmentHoursInRange(
     user: ScopedAuthUser,
@@ -307,6 +371,9 @@ export class PulseService {
   }
 
   async listTimeAdjustments(user: ScopedAuthUser, userId: string, workDate: string) {
+    if (!canAdjustPulseTime(user)) {
+      throw new ForbiddenException('Manager or admin role required to adjust time');
+    }
     const targetId = parseTenantUserId(userId);
     const dayKey = String(workDate).slice(0, 10);
     const scope = workspaceScope(user, 'a');
@@ -370,6 +437,9 @@ export class PulseService {
       reason: string;
     },
   ) {
+    if (!canAdjustPulseTime(user)) {
+      throw new ForbiddenException('Manager or admin role required to adjust time');
+    }
     const targetId = parseTenantUserId(input.userId);
     const adminId = parseTenantUserId(user.id);
     const workDate = String(input.workDate).slice(0, 10);
@@ -802,7 +872,8 @@ export class PulseService {
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND ${TRACKABLE_PULSE_ROLES_SQL}
-         AND u.email NOT ILIKE '%@example.com%'`,
+         AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL`,
       scope.params,
     );
 
@@ -824,7 +895,18 @@ export class PulseService {
     }
 
     const logs = await this.fetchTimeLogsInRange(user, startIso, endIso);
-    const dailyByUser = this.dailyHoursFromLogs(logs);
+    const trackedByUser = this.dailyHoursFromLogs(logs);
+    const startKey = workDateKey(start);
+    const endKey = workDateKey(end);
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      startKey,
+      endKey,
+    );
+    const dailyByUser = this.mergeTrackedWithAdjustments(
+      trackedByUser,
+      adjustmentByUser,
+    );
 
     const dailyTotals = new Map<string, number>();
     for (const dayMap of dailyByUser.values()) {
@@ -870,6 +952,7 @@ export class PulseService {
       scope.clause,
       TRACKABLE_PULSE_ROLES_SQL,
       `u.email NOT ILIKE '%@example.com%'`,
+      `ext.paused_at IS NULL`,
     ];
     if (restrictToUserId) {
       userParams.push(parseTenantUserId(restrictToUserId));
@@ -961,10 +1044,7 @@ export class PulseService {
           days: days.map((date) => {
             const trackedHours = dayMap.get(date) ?? 0;
             const adjustmentHours = adjMap.get(date) ?? 0;
-            const hoursWorked = Math.max(
-              0,
-              Math.round((trackedHours + adjustmentHours) * 10) / 10,
-            );
+            const hoursWorked = this.hoursWorkedForDay(trackedHours, adjustmentHours);
             const lowRaw = lowActivityMap.get(date) ?? 0;
             const idleRaw = idleMap.get(date) ?? 0;
             // Idle/low-activity stay based on tracked sessions only.
@@ -1061,15 +1141,39 @@ export class PulseService {
       params,
     );
 
+    // Adjustments are not project-scoped — surface as their own bucket so
+    // org totals match Team Time / Email Reporting actual hours.
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      startKey,
+      endKey,
+      restrictToUserId,
+    );
+    let adjustmentHours = 0;
+    for (const dayMap of adjustmentByUser.values()) {
+      for (const hours of dayMap.values()) adjustmentHours += hours;
+    }
+    adjustmentHours = Math.round(adjustmentHours * 10) / 10;
+
+    const projects = result.rows.map((row) => ({
+      project_id: row.project_id,
+      name: row.name,
+      hours: Number(row.hours) || 0,
+    }));
+    if (Math.abs(adjustmentHours) >= 0.05) {
+      projects.push({
+        project_id: 'admin_adjustments',
+        name: 'Time adjustments',
+        hours: adjustmentHours,
+      });
+      projects.sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
+    }
+
     return {
       start: startKey,
       end: endKey,
       timezone: workTz,
-      projects: result.rows.map((row) => ({
-        project_id: row.project_id,
-        name: row.name,
-        hours: Number(row.hours) || 0,
-      })),
+      projects,
     };
   }
 
@@ -1178,6 +1282,7 @@ export class PulseService {
        WHERE ${scope.clause}
          AND ${TRACKABLE_PULSE_ROLES_SQL}
          AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
          ${visibleFilter}
        ORDER BY full_name ASC NULLS LAST`,
       userParams,
@@ -1299,6 +1404,7 @@ export class PulseService {
        WHERE ${scope.clause}
          AND ${TRACKABLE_PULSE_ROLES_SQL}
          AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
          ${visibleFilter}
        ORDER BY full_name ASC NULLS LAST`,
       userParams,
@@ -1495,7 +1601,16 @@ export class PulseService {
 
     const logs = await this.fetchTimeLogsInRange(user, prevStartIso, checkEndIso);
     const idleLogs = await this.fetchIdleLogsInRange(user, prevStartIso, checkEndIso);
-    const dailyByUser = this.dailyHoursFromLogs(logs);
+    const trackedByUser = this.dailyHoursFromLogs(logs);
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      previousKey,
+      checkDate,
+    );
+    const dailyByUser = this.mergeTrackedWithAdjustments(
+      trackedByUser,
+      adjustmentByUser,
+    );
     const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
       user,
       prevStartIso,
@@ -1548,12 +1663,13 @@ export class PulseService {
       idle_hours: number;
       below_threshold: boolean;
     } => {
+      const tracked = trackedByUser.get(empId)?.get(dateKey) ?? 0;
       const hours = dailyByUser.get(empId)?.get(dateKey) ?? 0;
       const lowRaw = lowActivityByUser.get(empId)?.get(dateKey) ?? 0;
       const idleRaw = idleByUser.get(empId)?.get(dateKey) ?? 0;
       const lowActivityHours =
-        hours > 0 ? Math.min(lowRaw, hours) : lowRaw;
-      const idleHours = hours > 0 ? Math.min(idleRaw, hours) : idleRaw;
+        tracked > 0 ? Math.min(lowRaw, tracked) : lowRaw;
+      const idleHours = tracked > 0 ? Math.min(idleRaw, tracked) : idleRaw;
       return {
         hours,
         low_activity_hours: Math.round(lowActivityHours * 10) / 10,
@@ -1642,6 +1758,7 @@ export class PulseService {
       location: string | null;
       is_active: boolean;
       manager_id: string | null;
+      started_on: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
@@ -1655,7 +1772,17 @@ export class PulseService {
       weekStart.toISOString(),
       new Date().toISOString(),
     );
-    const weeklyHours = calculateMergedHoursByUser(logs);
+    const trackedByUser = this.dailyHoursFromLogs(logs);
+    const weekStartKey = workDateKey(weekStart);
+    const weekEndKey = workDateKey(new Date());
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      weekStartKey,
+      weekEndKey,
+    );
+    const weeklyHours = this.sumDailyHoursByUser(
+      this.mergeTrackedWithAdjustments(trackedByUser, adjustmentByUser),
+    );
 
     let leads = usersResult.rows.filter(
       (u) => u.role === 'admin' || u.role === 'manager' || u.role === 'team_leader',
@@ -1682,6 +1809,7 @@ export class PulseService {
           role: e.role,
           department: e.department,
           location: e.location,
+          started_on: e.started_on ? String(e.started_on).slice(0, 10) : null,
           status: e.is_active ? 'active' : 'inactive',
           weekly_hours: includeHours ? weeklyHours.get(e.id) ?? 0 : null,
         }));
@@ -1696,6 +1824,7 @@ export class PulseService {
         role: lead.role,
         department: lead.department,
         location: lead.location,
+        started_on: lead.started_on ? String(lead.started_on).slice(0, 10) : null,
         status: lead.is_active ? 'active' : 'inactive',
         direct_reports: reportsFor(lead.id),
       })),
@@ -1706,6 +1835,8 @@ export class PulseService {
               id: e.id,
               full_name: e.full_name,
               email: e.email,
+              department: e.department,
+              started_on: e.started_on ? String(e.started_on).slice(0, 10) : null,
               weekly_hours: weeklyHours.get(e.id) ?? 0,
             }))
         : [],
@@ -1759,11 +1890,15 @@ export class PulseService {
       email: string;
       manager_id: string | null;
       department: string | null;
+      started_on: string | null;
     }>(
+      // Soft-deleted / removed employees set paused_at (is_active=false).
+      // Email Reporting must exclude them — same gate as not-tracking report.
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND ${TRACKABLE_PULSE_ROLES_SQL}
-         AND u.email NOT ILIKE '%@example.com%'`,
+         AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL`,
       scope.params,
     );
 
@@ -1991,40 +2126,59 @@ export class PulseService {
       this.dailyLowActivityFromIdleLogs(idleLogs),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      periodStart,
+      effectiveEnd,
+    );
     const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
 
     const below = users
       .map((emp) => {
+        const startedOn = normalizeStartedOn((emp as { started_on?: string | null }).started_on);
+        const employment = expectedHoursForEmployment({
+          dayKeys,
+          startedOn,
+          hoursPerDay,
+          periodEnd: effectiveEnd,
+        });
+        if (employment.exclude) return null;
+
+        const empExpected = employment.expectedHours;
+        const empCutoff = Math.round(empExpected * (pacePercent / 100) * 10) / 10;
+        const empDays = employment.employmentDays;
+
         const dayMap = dailyByUser.get(emp.id) ?? new Map<string, number>();
+        const adjMap = adjustmentByUser.get(emp.id) ?? new Map<string, number>();
         const lowMap = lowActivityByUser.get(emp.id) ?? new Map<string, number>();
         const idleMap = idleByUser.get(emp.id) ?? new Map<string, number>();
         let hours = 0;
+        let adjustmentTotal = 0;
         let lowTotal = 0;
         let idleTotal = 0;
         let nonEffectiveTotal = 0;
         let effectiveTotal = 0;
-        for (const day of dayKeys) {
-          hours += dayMap.get(day) ?? 0;
-        }
-        hours = Math.round(hours * 10) / 10;
         const mgr = emp.manager_id ? managerMap.get(emp.manager_id) : null;
-        const pace =
-          hoursThreshold > 0
-            ? Math.round((hours / hoursThreshold) * 1000) / 10
-            : 0;
         const daily_hours: Record<string, number> = {};
+        const daily_adjustment: Record<string, number> = {};
         const daily_low_activity: Record<string, number> = {};
         const daily_idle: Record<string, number> = {};
         const daily_non_effective: Record<string, number> = {};
         const daily_effective: Record<string, number> = {};
-        for (const day of dayKeys) {
-          const worked = dayMap.get(day) ?? 0;
+        for (const day of empDays) {
+          const tracked = dayMap.get(day) ?? 0;
+          const adj = adjMap.get(day) ?? 0;
+          const worked = this.hoursWorkedForDay(tracked, adj);
           const lowRaw = lowMap.get(day) ?? 0;
           const idleRaw = idleMap.get(day) ?? 0;
-          const low = worked > 0 ? Math.min(lowRaw, worked) : lowRaw;
-          const idle = worked > 0 ? Math.min(idleRaw, worked) : idleRaw;
+          // Idle/low stay based on tracked sessions; day total includes adjustments.
+          const low = tracked > 0 ? Math.min(lowRaw, tracked) : lowRaw;
+          const idle = tracked > 0 ? Math.min(idleRaw, tracked) : idleRaw;
           const eff = computeEffectiveTime(worked, low, idle);
+          hours += worked;
+          adjustmentTotal += adj;
           daily_hours[day] = worked;
+          daily_adjustment[day] = adj;
           daily_low_activity[day] = Math.round(low * 10) / 10;
           daily_idle[day] = Math.round(idle * 10) / 10;
           daily_non_effective[day] = eff.non_effective_hours;
@@ -2034,31 +2188,38 @@ export class PulseService {
           nonEffectiveTotal += eff.non_effective_hours;
           effectiveTotal += eff.effective_hours;
         }
+        hours = Math.round(hours * 10) / 10;
+        adjustmentTotal = Math.round(adjustmentTotal * 10) / 10;
+        const pace =
+          empExpected > 0 ? Math.round((hours / empExpected) * 1000) / 10 : 0;
         return {
           employee_id: emp.id,
           full_name: emp.full_name,
           email: emp.email,
           department: emp.department,
+          started_on: startedOn,
           hours_worked: hours,
+          adjustment_hours: adjustmentTotal,
           low_activity_hours: Math.round(lowTotal * 10) / 10,
           idle_hours: Math.round(idleTotal * 10) / 10,
           non_effective_hours: Math.round(nonEffectiveTotal * 10) / 10,
           effective_hours: Math.round(effectiveTotal * 10) / 10,
-          expected_hours: hoursThreshold,
+          expected_hours: empExpected,
           pace_percent: pace,
-          hours_short: Math.round(Math.max(0, hoursThreshold - hours) * 10) / 10,
+          hours_short: Math.round(Math.max(0, empExpected - hours) * 10) / 10,
           manager_email: mgr?.email ?? null,
           manager_name: mgr?.full_name ?? null,
-          below_threshold: hours < cutoff,
+          below_threshold: hours < empCutoff,
           daily_hours,
+          daily_adjustment,
           daily_low_activity,
           daily_idle,
           daily_non_effective,
           daily_effective,
-          day_keys: dayKeys,
+          day_keys: empDays,
         };
       })
-      .filter((e) => e.below_threshold)
+      .filter((e): e is NonNullable<typeof e> => Boolean(e) && e.below_threshold)
       .sort((a, b) => a.hours_worked - b.hours_worked);
 
     return {
@@ -2109,15 +2270,23 @@ export class PulseService {
       this.dailyLowActivityFromIdleLogs(idleLogs),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(user, date, date);
     const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
 
     const below = users
       .map((emp) => {
-        const hours = Math.round((dailyByUser.get(emp.id)?.get(date) ?? 0) * 10) / 10;
+        const startedOn = normalizeStartedOn((emp as { started_on?: string | null }).started_on);
+        if (startedOn && date < startedOn) return null;
+
+        const tracked = dailyByUser.get(emp.id)?.get(date) ?? 0;
+        const adjustmentHours = adjustmentByUser.get(emp.id)?.get(date) ?? 0;
+        const hours = this.hoursWorkedForDay(tracked, adjustmentHours);
         const lowRaw = lowActivityByUser.get(emp.id)?.get(date) ?? 0;
         const idleRaw = idleByUser.get(emp.id)?.get(date) ?? 0;
-        const lowHours = Math.round((hours > 0 ? Math.min(lowRaw, hours) : lowRaw) * 10) / 10;
-        const idleHours = Math.round((hours > 0 ? Math.min(idleRaw, hours) : idleRaw) * 10) / 10;
+        const lowHours =
+          Math.round((tracked > 0 ? Math.min(lowRaw, tracked) : lowRaw) * 10) / 10;
+        const idleHours =
+          Math.round((tracked > 0 ? Math.min(idleRaw, tracked) : idleRaw) * 10) / 10;
         const eff = computeEffectiveTime(hours, lowHours, idleHours);
         const mgr = emp.manager_id ? managerMap.get(emp.manager_id) : null;
         const short = Math.round(Math.max(0, hoursThreshold - hours) * 10) / 10;
@@ -2126,7 +2295,10 @@ export class PulseService {
           full_name: emp.full_name,
           email: emp.email,
           department: (emp as any).department ?? null,
+          started_on: startedOn,
           hours_worked: hours,
+          tracked_hours: Math.round(tracked * 10) / 10,
+          adjustment_hours: adjustmentHours,
           low_activity_hours: lowHours,
           idle_hours: idleHours,
           non_effective_hours: eff.non_effective_hours,
@@ -2137,6 +2309,7 @@ export class PulseService {
           manager_name: mgr?.full_name ?? null,
           below_threshold: hours < hoursThreshold,
           daily_hours: { [date]: hours },
+          daily_adjustment: { [date]: adjustmentHours },
           daily_low_activity: { [date]: lowHours },
           daily_idle: { [date]: idleHours },
           daily_non_effective: { [date]: eff.non_effective_hours },
@@ -2144,7 +2317,7 @@ export class PulseService {
           day_keys: [date],
         };
       })
-      .filter((e) => e.below_threshold)
+      .filter((e): e is NonNullable<typeof e> => Boolean(e) && e.below_threshold)
       .sort((a, b) => a.hours_worked - b.hours_worked);
 
     return {
@@ -2224,32 +2397,57 @@ export class PulseService {
       this.dailyLowActivityFromIdleLogs(idleLogs, workTz),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
+    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+      user,
+      weekStart,
+      effectiveEnd,
+    );
     const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
 
+    const hoursPerDay = hoursThreshold / 5;
     const below = users
       .map((emp) => {
+        const startedOn = normalizeStartedOn((emp as { started_on?: string | null }).started_on);
+        const employment = expectedHoursForEmployment({
+          dayKeys,
+          startedOn,
+          hoursPerDay,
+          periodEnd: effectiveEnd,
+        });
+        if (employment.exclude) return null;
+
+        const empExpected = employment.expectedHours;
+        const empDays = employment.employmentDays;
+
         const dayMap = dailyByUser.get(emp.id) ?? new Map<string, number>();
+        const adjMap = adjustmentByUser.get(emp.id) ?? new Map<string, number>();
         const lowMap = lowActivityByUser.get(emp.id) ?? new Map<string, number>();
         const idleMap = idleByUser.get(emp.id) ?? new Map<string, number>();
         let hours = 0;
+        let adjustmentTotal = 0;
         let lowTotal = 0;
         let idleTotal = 0;
         let nonEffectiveTotal = 0;
         let effectiveTotal = 0;
         const daily_hours: Record<string, number> = {};
+        const daily_adjustment: Record<string, number> = {};
         const daily_low_activity: Record<string, number> = {};
         const daily_idle: Record<string, number> = {};
         const daily_non_effective: Record<string, number> = {};
         const daily_effective: Record<string, number> = {};
-        for (const day of dayKeys) {
-          const worked = dayMap.get(day) ?? 0;
+        for (const day of empDays) {
+          const tracked = dayMap.get(day) ?? 0;
+          const adj = adjMap.get(day) ?? 0;
+          const worked = this.hoursWorkedForDay(tracked, adj);
           const lowRaw = lowMap.get(day) ?? 0;
           const idleRaw = idleMap.get(day) ?? 0;
-          const low = worked > 0 ? Math.min(lowRaw, worked) : lowRaw;
-          const idle = worked > 0 ? Math.min(idleRaw, worked) : idleRaw;
+          const low = tracked > 0 ? Math.min(lowRaw, tracked) : lowRaw;
+          const idle = tracked > 0 ? Math.min(idleRaw, tracked) : idleRaw;
           const eff = computeEffectiveTime(worked, low, idle);
           hours += worked;
+          adjustmentTotal += adj;
           daily_hours[day] = worked;
+          daily_adjustment[day] = adj;
           daily_low_activity[day] = Math.round(low * 10) / 10;
           daily_idle[day] = Math.round(idle * 10) / 10;
           daily_non_effective[day] = eff.non_effective_hours;
@@ -2260,31 +2458,35 @@ export class PulseService {
           effectiveTotal += eff.effective_hours;
         }
         hours = Math.round(hours * 10) / 10;
+        adjustmentTotal = Math.round(adjustmentTotal * 10) / 10;
         const mgr = emp.manager_id ? managerMap.get(emp.manager_id) : null;
         return {
           employee_id: emp.id,
           full_name: emp.full_name,
           email: emp.email,
           department: (emp as any).department ?? null,
+          started_on: startedOn,
           hours_worked: hours,
+          adjustment_hours: adjustmentTotal,
           low_activity_hours: Math.round(lowTotal * 10) / 10,
           idle_hours: Math.round(idleTotal * 10) / 10,
           non_effective_hours: Math.round(nonEffectiveTotal * 10) / 10,
           effective_hours: Math.round(effectiveTotal * 10) / 10,
-          expected_hours: hoursThreshold,
-          hours_short: Math.round(Math.max(0, hoursThreshold - hours) * 10) / 10,
+          expected_hours: empExpected,
+          hours_short: Math.round(Math.max(0, empExpected - hours) * 10) / 10,
           manager_email: mgr?.email ?? null,
           manager_name: mgr?.full_name ?? null,
-          below_threshold: hours < hoursThreshold,
+          below_threshold: hours < empExpected,
           daily_hours,
+          daily_adjustment,
           daily_low_activity,
           daily_idle,
           daily_non_effective,
           daily_effective,
-          day_keys: dayKeys,
+          day_keys: empDays,
         };
       })
-      .filter((e) => e.below_threshold)
+      .filter((e): e is NonNullable<typeof e> => Boolean(e) && e.below_threshold)
       .sort((a, b) => a.hours_worked - b.hours_worked);
 
     return {
@@ -2617,6 +2819,7 @@ export class PulseService {
       location?: string | null;
       manager_id?: string | null;
       is_active?: boolean;
+      started_on?: string | null;
     },
   ) {
     const scope = workspaceScope(user, 'ext');
@@ -2640,6 +2843,14 @@ export class PulseService {
     if (updates.manager_id !== undefined) {
       sets.push(`manager_id = $${idx++}`);
       params.push(updates.manager_id ? parseTenantUserId(updates.manager_id) : null);
+    }
+    if (updates.started_on !== undefined) {
+      const started = normalizeStartedOn(updates.started_on);
+      if (updates.started_on !== null && updates.started_on !== '' && !started) {
+        throw new BadRequestException('started_on must be YYYY-MM-DD');
+      }
+      sets.push(`started_on = $${idx++}::date`);
+      params.push(started);
     }
     if (updates.is_active === false) {
       sets.push('paused_at = NOW()');

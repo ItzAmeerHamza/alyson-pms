@@ -168,6 +168,20 @@ const TRAY_TICK_STALE_MS = 2500;
 window.__trayTimerActive = false;
 window.__lastTrayTimerTickAt = 0;
 window.__lastTrayCumulativeSeconds = 0;
+
+/**
+ * Main/renderer tracking flags only — leftover __lastTrackingStartTime is NOT proof.
+ * After lid-close the Start timestamp can survive while status is Not Tracking.
+ */
+function isRendererActivelyTracking() {
+  try {
+    if (typeof moduleInstances !== 'undefined' && moduleInstances?.ipcManager?.isTracking) {
+      return true;
+    }
+  } catch (_) { /* ignore */ }
+  return !!window.__isTracking;
+}
+window.isRendererActivelyTracking = isRendererActivelyTracking;
 /** Non-effective seconds (idle + low activity) for today — used to show effective time. */
 window.__todayNonEffectiveSeconds = 0;
 window.__todayTrackedSeconds = 0;
@@ -473,7 +487,11 @@ function applyTodayEffectiveStats(stats) {
     if (typeof stats.totalTime === 'number' && stats.stale !== true) {
       let incoming = Math.max(0, Math.floor(stats.totalTime));
       if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
-      if (window.__lastTrackingStartTime && typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+      if (
+        isRendererActivelyTracking() &&
+        window.__lastTrackingStartTime &&
+        typeof stats.completedTodayBeforeCurrentSessionSeconds === 'number'
+      ) {
         const liveAuth =
           Math.max(0, Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0)) +
           getTodayElapsedSeconds(window.__lastTrackingStartTime);
@@ -485,7 +503,7 @@ function applyTodayEffectiveStats(stats) {
           Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
           getTodayElapsedSeconds(window.__lastTrackingStartTime);
         setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
-      } else if (!window.__lastTrackingStartTime) {
+      } else if (!isRendererActivelyTracking() || !window.__lastTrackingStartTime) {
         applyAuthoritativeStoppedTotal(incoming, { reason: 'partial-stopped-stats' });
       }
     }
@@ -516,7 +534,8 @@ function applyTodayEffectiveStats(stats) {
     if (Number.isFinite(cap)) incoming = Math.min(incoming, cap);
     // Live: closed base from DB+offline; display = base + wall-clock elapsed.
     // Stopped: trust DB + offline-queue merge over orphan-inflated local HW.
-    if (window.__lastTrackingStartTime) {
+    // Leftover Start after lid-close is not a live session — treat as stopped.
+    if (isRendererActivelyTracking() && window.__lastTrackingStartTime) {
       const liveAuth =
         Math.max(0, Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
@@ -859,6 +878,7 @@ function isDarwinTrayClockPlatform() {
  */
 function isTrayTimerDrivingDisplay() {
   if (!isDarwinTrayClockPlatform()) return false;
+  if (!isRendererActivelyTracking()) return false;
   if (window.__localTrackingClockActive) return false;
   if (!window.__trayTimerActive) return false;
   if (Date.now() - (window.__lastTrayTimerTickAt || 0) >= TRAY_TICK_STALE_MS) return false;
@@ -898,6 +918,10 @@ window.beginLocalTrackingClock = beginLocalTrackingClock;
 window.updateRendererTrackingClock = updateRendererTrackingClock;
 
 function updateRendererTrackingClock() {
+  if (!isRendererActivelyTracking()) {
+    stopLiveTrackingClock('tick-while-stopped');
+    return;
+  }
   const start = window.__lastTrackingStartTime;
   if (!start) return;
   const dashboardTimer = document.getElementById('sessionTime');
@@ -935,11 +959,13 @@ function ensureTrackingDisplayWatchdog() {
   // Failover (1s on win32 / 2s elsewhere): tray owns smooth 1Hz on macOS only.
   const watchdogMs = isDarwinTrayClockPlatform() ? 2000 : 1000;
   window.__trackingDisplayWatchdog = setInterval(() => {
+    if (!isRendererActivelyTracking()) {
+      stopLiveTrackingClock('watchdog-not-tracking');
+      return;
+    }
     // Recover start time if main is tracking but renderer lost it (clock would freeze).
     if (!window.__lastTrackingStartTime) {
-      const tracking =
-        !!(typeof moduleInstances !== 'undefined' && moduleInstances?.ipcManager?.isTracking) ||
-        !!window.__isTracking;
+      const tracking = isRendererActivelyTracking();
       if (!tracking) return;
       // One-shot async recover; interval keeps trying until start time is set.
       if (!window.__recoverStartInFlight) {
@@ -1001,6 +1027,34 @@ function stopTrackingDisplayWatchdog() {
   window.__localTrackingClockActive = false;
   flushPendingHighWaterPersist();
 }
+
+/**
+ * Hard-stop the live 1Hz clock. Call whenever status is Not Tracking.
+ * Leftover sessionStart after lid-close made "tracked today" tick from
+ * company midnight even though the employee had already stopped.
+ */
+function stopLiveTrackingClock(reason = 'stopped') {
+  const hadLive =
+    !!window.__lastTrackingStartTime ||
+    !!window.__trackingDisplayWatchdog ||
+    !!window.__localTrackingClockActive ||
+    !!window.__trayTimerActive;
+  window.__lastTrackingStartTime = null;
+  window.__localTrackingClockActive = false;
+  window.__trayTimerActive = false;
+  window.__lastTrayTimerTickAt = 0;
+  window.__hwAdvanceAnchor = null;
+  stopTrackingDisplayWatchdog();
+  try {
+    if (typeof window.clearSecondaryRendererTimers === 'function') {
+      window.clearSecondaryRendererTimers();
+    }
+  } catch (_) { /* ignore */ }
+  if (hadLive) {
+    logTrackerDiagnostic('info', `⏹️ [TRACKER] Stopped live clock (${reason})`);
+  }
+}
+window.stopLiveTrackingClock = stopLiveTrackingClock;
 
 /** Closed time_logs today (local day), excluding the current open session — for cumulative "worked today" UI. */
 async function refreshTodayCompletedBaseSeconds() {
@@ -1120,6 +1174,9 @@ function handleLocalDayRollover(isTracking, previousDayKeyOverride = null, autho
     if (dashboardTimer) dashboardTimer.textContent = '00:00:00';
     void refreshTodayCompletedBaseSeconds().then(() => updateRendererTrackingClock());
   } else {
+    // New day + stopped: leftover Start from yesterday must not keep ticking
+    // "since midnight" on a Not Tracking clock.
+    stopLiveTrackingClock('day-rollover-stopped');
     const dashboardTimer = document.getElementById('sessionTime');
     if (dashboardTimer) dashboardTimer.textContent = '--:--:--';
     void refreshTodayCompletedBaseSeconds();
@@ -1636,12 +1693,18 @@ function setupModuleCommunication() {
       }
       // Opening the lid / focusing the app after overnight sleep.
       ensureCurrentWorkDay({ reason: 'visibility' });
-      if (window.__lastTrackingStartTime) {
+      if (isRendererActivelyTracking() && window.__lastTrackingStartTime) {
         updateRendererTrackingClock();
+      } else if (!isRendererActivelyTracking()) {
+        stopLiveTrackingClock('visibility-stopped');
+        void refreshTodayCompletedBaseSeconds();
       }
     });
     window.addEventListener('focus', () => {
       ensureCurrentWorkDay({ reason: 'window-focus' });
+      if (!isRendererActivelyTracking()) {
+        stopLiveTrackingClock('window-focus-stopped');
+      }
     });
   } catch (_) { /* ignore */ }
   ipcRenderer.on('local-day-rollover', (_event, data) => {
@@ -1698,7 +1761,23 @@ function setupModuleCommunication() {
       });
     } catch (_) { /* ignore */ }
   });
+  ipcRenderer.on('system-resumed', (_event, data) => {
+    const tracking =
+      typeof data?.isTracking === 'boolean' ? data.isTracking : isRendererActivelyTracking();
+    ensureCurrentWorkDay({ reason: 'system-resume', isTracking: tracking });
+    if (!tracking) {
+      stopLiveTrackingClock('system-resume');
+      void refreshTodayCompletedBaseSeconds();
+      if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
+        void moduleInstances.uiManager.loadTodaysTotalTime();
+      }
+    }
+  });
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
+    if (!isRendererActivelyTracking()) {
+      stopLiveTrackingClock('tray-tick-while-stopped');
+      return;
+    }
     window.__trayTimerActive = true;
     window.__lastTrayTimerTickAt = Date.now();
     window.__hwAdvanceAnchor = null;
@@ -1796,17 +1875,26 @@ function setupModuleCommunication() {
   });
 
   ipcRenderer.on('tracking-stopped', (_event, data) => {
+    stopLiveTrackingClock('tracking-stopped');
     window.__hwAdvanceAnchor = null;
     window.__clearedSecondaryForTray = false;
     const cutSec = Math.max(0, Math.floor(Number(data?.timeCutSeconds) || 0));
     // Only the shown-idle-prompt timeout may lower tracked time (exactly 10m).
     const authorizedCut = data?.reason === 'idle_timeout' && cutSec > 0;
-    const liveHigh = Math.max(
+    const frozen = Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0));
+    let liveHigh = Math.max(
       0,
       Math.floor(Number(window.__todayTrackedSeconds) || 0),
       Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
     );
-    const frozen = Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0));
+    // Overnight leftover clock ≈ wall-clock since midnight — do not freeze that as today's total.
+    if (
+      !authorizedCut &&
+      (isInflatedWorkDayCapHighWater(liveHigh, frozen) || isInflatedWorkDayCapHighWater(liveHigh, 0))
+    ) {
+      discardInflatedHighWater(frozen, 'tracking-stopped-orphan-cap');
+      liveHigh = frozen;
+    }
     const hint = authorizedCut
       ? Math.max(frozen, Math.max(0, liveHigh - cutSec))
       : Math.max(liveHigh, frozen);
@@ -1837,6 +1925,10 @@ function setupModuleCommunication() {
 
   // Session timer updates (renderer-side fallback — only used when tray timer is NOT active)
   ipcManager.on('session-timer-update', (timerData) => {
+    if (!isRendererActivelyTracking()) {
+      stopLiveTrackingClock('session-timer-while-stopped');
+      return;
+    }
     if (isTrayTimerDrivingDisplay()) return;
     if (typeof updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
       updateRendererTrackingClock();
@@ -1883,11 +1975,8 @@ function setupModuleCommunication() {
   // Global cleanup function for all timers
   window.clearAllTimers = function() {
     console.log('🧹 [TIMER] Clearing all timer intervals...');
-    window.clearSecondaryRendererTimers();
-    stopTrackingDisplayWatchdog();
+    stopLiveTrackingClock('clear-all-timers');
     flushPendingHighWaterPersist();
-    window.__lastTrackingStartTime = null;
-    window.__trayTimerActive = false;
     console.log('✅ [TIMER] All timer intervals cleared');
   };
   

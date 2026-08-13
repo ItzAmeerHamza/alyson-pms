@@ -113,6 +113,24 @@ EMAIL_SENDERS_PARAM="${EMAIL_SENDERS_PARAM// /}"
 echo "==> EMAIL_FROM: ${EMAIL_FROM_PARAM}"
 echo "==> EMAIL_SENDERS: ${EMAIL_SENDERS_PARAM}"
 
+# SAM --parameter-overrides splits on spaces. PEM headers contain spaces
+# ("-----BEGIN PRIVATE KEY-----"), which truncated the key to "-----BEGIN" in Lambda.
+# Pass base64(PEM); leave GmailDwdService decodes when value has no BEGIN marker.
+GOOGLE_DWD_PRIVATE_KEY_PARAM=""
+if [[ -n "${GOOGLE_DWD_PRIVATE_KEY:-}" ]]; then
+  GOOGLE_DWD_PRIVATE_KEY_PARAM="$(
+    python3 - <<'PY'
+import os, base64
+raw = os.environ.get("GOOGLE_DWD_PRIVATE_KEY", "")
+pem = raw.replace("\\n", "\n").strip().strip("'").strip('"')
+print(base64.b64encode(pem.encode("utf-8")).decode("ascii"), end="")
+PY
+  )"
+  echo "==> GoogleDwdPrivateKey: base64-encoded PEM (${#GOOGLE_DWD_PRIVATE_KEY_PARAM} chars)"
+else
+  echo "==> GoogleDwdPrivateKey: (empty)"
+fi
+
 sam deploy \
   --stack-name "$STACK_NAME" \
   --template-file template.yaml \
@@ -136,6 +154,11 @@ sam deploy \
     "CognitoUserPoolId=${COGNITO_USER_POOL_ID}" \
     "CognitoClientId=${COGNITO_CLIENT_ID}" \
     "DeepseekApiKey=${DEEPSEEK_API_KEY:-}" \
+    "GoogleDwdClientEmail=${GOOGLE_DWD_CLIENT_EMAIL:-}" \
+    "GoogleDwdPrivateKey=${GOOGLE_DWD_PRIVATE_KEY_PARAM}" \
+    "GoogleDwdSubject=${GOOGLE_DWD_SUBJECT:-people-ops@cintara.ai}" \
+    "LeaveCreditHoursPerDay=${LEAVE_CREDIT_HOURS_PER_DAY:-7}" \
+    "LeaveScanApiBaseUrl=${LEAVE_SCAN_API_BASE_URL:-https://rxbi86aui3.execute-api.us-west-2.amazonaws.com}" \
     "ScreenshotAiEnabled=${SCREENSHOT_AI_ENABLED:-false}" \
     "ScreenshotAiBackfillBatchSize=${SCREENSHOT_AI_BACKFILL_BATCH_SIZE:-100}" \
     "EnvironmentName=${ENVIRONMENT_NAME:-dev}" \

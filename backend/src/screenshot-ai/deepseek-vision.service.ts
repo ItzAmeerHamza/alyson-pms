@@ -75,11 +75,33 @@ export class DeepseekVisionService {
     this.textModel =
       this.config.get<string>('DEEPSEEK_TEXT_MODEL') ||
       this.config.get<string>('DEEPSEEK_MODEL') ||
-      'deepseek-v4-flash';
+      'deepseek-chat';
   }
 
   isConfigured(): boolean {
     return Boolean(this.apiKey);
+  }
+
+  /**
+   * Generic JSON chat completion (leave classifier, etc.).
+   * Reuses the same DeepSeek text model as screenshot analysis.
+   */
+  async chatJson(params: {
+    systemPrompt: string;
+    userContent: string;
+    maxTokens?: number;
+    temperature?: number;
+  }): Promise<{ parsed: Record<string, unknown>; model?: string; usage?: Record<string, unknown> }> {
+    if (!this.apiKey) {
+      throw new Error('DEEPSEEK_API_KEY is not configured');
+    }
+    return this.callChat({
+      model: this.textModel,
+      systemPrompt: params.systemPrompt,
+      userContent: params.userContent,
+      maxTokens: params.maxTokens,
+      temperature: params.temperature,
+    });
   }
 
   async analyzeScreenshot(params: {
@@ -178,6 +200,8 @@ export class DeepseekVisionService {
     model: string;
     systemPrompt: string;
     userContent: string;
+    maxTokens?: number;
+    temperature?: number;
   }): Promise<{ parsed: Record<string, unknown>; model?: string; usage?: Record<string, unknown> }> {
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -192,8 +216,8 @@ export class DeepseekVisionService {
           { role: 'system', content: params.systemPrompt },
           { role: 'user', content: params.userContent },
         ],
-        max_tokens: 900,
-        temperature: 0.15,
+        max_tokens: params.maxTokens ?? 900,
+        temperature: params.temperature ?? 0.15,
       }),
     });
 

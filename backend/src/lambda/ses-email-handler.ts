@@ -1,4 +1,5 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { buildSesRawMime } from '../common/ses-raw-mime';
 
 /**
  * Non-VPC Lambda: send mail via public SES API.
@@ -7,6 +8,13 @@ import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
  * existing Lambda interface VPC endpoint (PrivateDnsEnabled=false) — same pattern
  * as cognito-admin-handler. Do not add SES VPC endpoints or change Private DNS.
  */
+
+export type SesEmailAttachmentPayload = {
+  filename: string;
+  contentType: string;
+  /** base64-encoded file bytes */
+  contentBase64: string;
+};
 
 export type SesEmailEvent = {
   action: 'send';
@@ -18,6 +26,8 @@ export type SesEmailEvent = {
   text?: string;
   /** Optional override; defaults to EMAIL_FROM env on the worker. */
   from?: string;
+  /** Optional file attachments (CSV, etc.). Uses SES Raw MIME when present. */
+  attachments?: SesEmailAttachmentPayload[];
 };
 
 /** Flat shape so Nest tsc (strictNullChecks off) can read failure fields. */
@@ -57,6 +67,13 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
   const subject = String(event.subject || '').trim();
   const html = String(event.html || '').trim();
   const from = String(event.from || defaultFrom()).trim();
+  const attachments = (event.attachments || [])
+    .map((a) => ({
+      filename: String(a?.filename || '').trim(),
+      contentType: String(a?.contentType || 'application/octet-stream').trim(),
+      contentBase64: String(a?.contentBase64 || '').trim(),
+    }))
+    .filter((a) => a.filename && a.contentBase64);
 
   if (!to.length || !subject || !html || !from) {
     return {
@@ -67,29 +84,59 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
   }
 
   try {
+    const useRaw = attachments.length > 0;
     const result = await getClient().send(
-      new SendEmailCommand({
-        FromEmailAddress: from,
-        Destination: {
-          ToAddresses: to,
-          ...(cc.length ? { CcAddresses: cc } : {}),
-        },
-        Content: {
-          Simple: {
-            Subject: { Data: subject, Charset: 'UTF-8' },
-            Body: {
-              Html: { Data: html, Charset: 'UTF-8' },
-              ...(event.text
-                ? { Text: { Data: String(event.text), Charset: 'UTF-8' } }
-                : {}),
+      new SendEmailCommand(
+        useRaw
+          ? {
+              FromEmailAddress: from,
+              Destination: {
+                ToAddresses: to,
+                ...(cc.length ? { CcAddresses: cc } : {}),
+              },
+              Content: {
+                Raw: {
+                  Data: buildSesRawMime({
+                    from,
+                    to,
+                    cc,
+                    subject,
+                    html,
+                    text: event.text,
+                    attachments: attachments.map((a) => ({
+                      filename: a.filename,
+                      contentType: a.contentType,
+                      content: Buffer.from(a.contentBase64, 'base64'),
+                    })),
+                  }),
+                },
+              },
+            }
+          : {
+              FromEmailAddress: from,
+              Destination: {
+                ToAddresses: to,
+                ...(cc.length ? { CcAddresses: cc } : {}),
+              },
+              Content: {
+                Simple: {
+                  Subject: { Data: subject, Charset: 'UTF-8' },
+                  Body: {
+                    Html: { Data: html, Charset: 'UTF-8' },
+                    ...(event.text
+                      ? { Text: { Data: String(event.text), Charset: 'UTF-8' } }
+                      : {}),
+                  },
+                },
+              },
             },
-          },
-        },
-      }),
+      ),
     );
     const messageId = result.MessageId || '';
     console.log(
-      `ses-email send ok to=${to.join(',')}${cc.length ? ` cc=${cc.join(',')}` : ''} messageId=${messageId}`,
+      `ses-email send ok to=${to.join(',')}${cc.length ? ` cc=${cc.join(',')}` : ''}${
+        attachments.length ? ` attachments=${attachments.length}` : ''
+      } messageId=${messageId}`,
     );
     return { ok: true, messageId };
   } catch (error) {

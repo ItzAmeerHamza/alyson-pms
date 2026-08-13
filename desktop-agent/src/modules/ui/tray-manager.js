@@ -1030,6 +1030,14 @@ class TrayManager {
     // updateState() in Phase 3 hasn't run yet.
     const globalTracking = (typeof global !== 'undefined') && (global.isTracking === true);
 
+    // Stop phantom ticks immediately — the 1s menu-bar delay used to keep
+    // pushing "since midnight" into a stopped renderer after overnight sleep.
+    if (!globalTracking) {
+      this.isTracking = false;
+      this.stopTrayTimer();
+      this._trackingStartTime = null;
+    }
+
     // Force re-sync after a short delay so macOS has fully restored the menu bar
     setTimeout(() => {
       try {

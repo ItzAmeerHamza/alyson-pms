@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { AccessGrantsModule } from './access-grants/access-grants.module';
 import { ForceSyncController } from './sync/force-sync.controller';
 import { HealthController } from './health/health.controller';
+import { LeaveModule } from './leave/leave.module';
 
 /**
  * Alyson Pulse backend — minimal Lambda-friendly API surface.
@@ -33,6 +34,7 @@ import { HealthController } from './health/health.controller';
     AuthModule,
     DataModule,
     PulseModule,
+    LeaveModule,
     ScreenshotAiModule,
     TimeDoctorModule,
     UsersModule,

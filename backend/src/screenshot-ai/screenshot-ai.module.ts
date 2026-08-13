@@ -21,6 +21,10 @@ import { ScreenshotImageContextService } from './screenshot-image-context.servic
     ScreenshotAiAnalyzerService,
     ScreenshotAiBackfillService,
   ],
-  exports: [ScreenshotAiBackfillService, ScreenshotAiAnalyzerService],
+  exports: [
+    ScreenshotAiBackfillService,
+    ScreenshotAiAnalyzerService,
+    DeepseekVisionService,
+  ],
 })
 export class ScreenshotAiModule {}

@@ -170,6 +170,18 @@ class EventHandlerManager {
           } catch (_) { /* ignore */ }
           this.global.trayManager.onSystemResume();
         }
+
+        // Renderer midnight timers freeze in sleep. Tell the window to kill any
+        // leftover live clock so "Not Tracking" cannot keep ticking since midnight.
+        try {
+          const { BrowserWindow } = require('electron');
+          const payload = { isTracking: !!this.global.isTracking };
+          for (const win of BrowserWindow.getAllWindows()) {
+            if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+              win.webContents.send('system-resumed', payload);
+            }
+          }
+        } catch (_) { /* ignore */ }
         
         if (this.systemSleepStart) {
           const sleepDuration = Date.now() - this.systemSleepStart;

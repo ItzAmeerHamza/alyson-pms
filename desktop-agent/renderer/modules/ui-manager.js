@@ -4767,8 +4767,19 @@ class UIManager {
         );
         const liveNonEff = Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0));
         const liveReady = !!window.__effectiveStatsReady;
-
-        const todayTracked = Math.max(liveTracked, rowTotal);
+        const reallyTracking = !!(
+          window.__isTracking ||
+          (typeof window.isRendererActivelyTracking === 'function' &&
+            window.isRendererActivelyTracking())
+        );
+        // Stopped + phantom "since midnight" must not paint today's month bar.
+        const liveIsOrphanCap =
+          typeof window.isInflatedWorkDayCapHighWater === 'function' &&
+          window.isInflatedWorkDayCapHighWater(liveTracked, rowTotal);
+        const todayTracked =
+          !reallyTracking && liveIsOrphanCap
+            ? rowTotal
+            : Math.max(liveTracked, rowTotal);
         const todayNonEff = liveReady
           ? Math.min(todayTracked, liveNonEff)
           : Math.min(todayTracked, rowNonEff);
@@ -4807,6 +4818,18 @@ class UIManager {
       if (!todayRow || typeof todayRow.totalSeconds !== 'number') return;
 
       const rowTotal = Math.max(0, Math.floor(Number(todayRow.totalSeconds) || 0));
+      const reallyTracking = !!(
+        window.__isTracking ||
+        (typeof window.isRendererActivelyTracking === 'function' &&
+          window.isRendererActivelyTracking())
+      );
+      if (
+        !reallyTracking &&
+        typeof window.isInflatedWorkDayCapHighWater === 'function' &&
+        window.isInflatedWorkDayCapHighWater(rowTotal, 0)
+      ) {
+        return;
+      }
       if (rowTotal > 0 && typeof window.setTrackerDisplaySeconds === 'function') {
         window.setTrackerDisplaySeconds(rowTotal);
       }

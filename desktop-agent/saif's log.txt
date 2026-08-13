@@ -1,0 +1,250 @@
+=== TimeFlow Diagnostic Report ===
+Timestamp: 2026-08-10T11:53:11.773Z
+App Version: 1.0.225
+Platform: win32 (x64)
+OS: Windows_NT 10.0.26200
+Node: 18.18.2
+Electron: 28.3.3
+
+--- Health Check ---
+Overall: healthy_with_warnings
+Can Start Timer: true
+Warnings:
+  - resources: High resource usage detected
+
+--- Check Details ---
+permissions: pass - All win32 permissions granted
+database: pass - Database configuration and connectivity verified
+screenshot: pass - Screenshot capture available
+appDetection: pass - App detection supported
+urlDetection: pass - URL detection supported
+idleDetection: pass - Idle detection available
+inputDetection: pass - Input detection available (Python monitor)
+resources: warn - High resource usage detected
+
+--- Python Diagnostics ---
+Found Path: C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+Version: Python 3.11.9
+Python Disabled: false
+Failure Count: 0
+Max Retries: 4
+Provisioner Result: success
+
+--- Input Detection ---
+Input Manager Active: true
+Activity Stats: clicks=3, keys=2, moves=17
+Last Activity Update: 2026-08-10T11:53:11.426Z
+
+--- Tracking State ---
+Is Tracking: true
+Current Time Log ID: ed5a7dcc-c150-4b45-9898-d8b7514a5747
+Current Project ID: 641e94b1-0e28-459a-a94e-093d751e9848
+
+--- System Resources ---
+CPU Cores: 18
+Total Memory: 16 GB
+Free Memory: 0.9 GB
+Heap Used: 20 MB
+
+--- Recent Logs (last 200) ---
+[2026-08-10T11:52:46.413Z] [] ⏱️ [TRAY] Tick #1: set="00:15:49" (session 00:00:00) readBack="(n/a)" (project: Affiliate)
+[2026-08-10T11:52:46.414Z] [] ⏱️ [TRAY] Timer started
+[2026-08-10T11:52:46.418Z] [] ✅ [TRAY] Icon updated immediately after state set
+[2026-08-10T11:52:46.420Z] [] ⏱️ [STARTUP-TIMING] Local session armed — returning Start success: +1447ms
+[2026-08-10T11:52:46.420Z] [] ✅ [TRACKING-MANAGER] Tracking started with time log ID: ed5a7dcc-c150-4b45-9898-d8b7514a5747
+[2026-08-10T11:52:46.421Z] [] 🌐 [URL] UrlCaptureManager scheduled to start in 3s (staggered)
+[2026-08-10T11:52:46.421Z] [] [SYSTEM] SCREENSHOT RESET {"clicks":0,"keys":0,"moves":0}
+[2026-08-10T11:52:46.421Z] [] ✅ Activity counters reset on start (ensures fresh tracking session)
+[2026-08-10T11:52:46.421Z] [] 🔍 [TRACKING-DEBUG] Checking for enhancedScreenshotManager: {"exists":true,"hasUpdateMethod":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747"}
+[2026-08-10T11:52:46.421Z] [] ✅ [TRACKING-DEBUG] Calling updateTrackingState...
+[2026-08-10T11:52:46.421Z] [] [SCREEN] UPDATE TRACKING STATE {"isTracking":true,"hasSession":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747","previousTracking":false}
+[2026-08-10T11:52:46.421Z] [] ✅ [SCREENSHOT] Shutdown flag cleared via updateTrackingState
+[2026-08-10T11:52:46.421Z] [] [SCREEN] STARTING SCREENSHOT SYSTEMS - TRACKING ACTIVE WITH SESSION
+[2026-08-10T11:52:46.421Z] [] [JSON] {"ts":"2026-08-10T11:52:46.421Z","level":"info","category":"SCREEN","step":"STARTING SCREENSHOT SYSTEMS - TRACKING ACTIVE WITH SESSION"}
+[2026-08-10T11:52:46.421Z] [] ✅ [SCREENSHOT] Shutdown/pause flags cleared - system ready
+[2026-08-10T11:52:46.421Z] [] [SCREEN] START SCREENSHOT CAPTURE
+[2026-08-10T11:52:46.421Z] [] [SCREEN] CURRENT STATE {"isTracking":true,"hasSession":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747"}
+[2026-08-10T11:52:46.421Z] [] 🚀 [SCREENSHOT] Starting fixed-interval mode (60s)...
+[2026-08-10T11:52:46.422Z] [] [SCREEN] NEXT SCREENSHOT IN {"minutes":1,"time":"5:23:46 pm"}
+[2026-08-10T11:52:46.423Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":0,"lastUpdate":1786362766421}
+[2026-08-10T11:52:46.423Z] [] [IPC] activity-update: SENT
+[2026-08-10T11:52:46.423Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":0,"keys":0,"moves":0}
+[2026-08-10T11:52:46.423Z] [] [SCREEN] TIMER UPDATES STARTED {"uiMs":30000}
+[2026-08-10T11:52:46.423Z] [] [JSON] {"ts":"2026-08-10T11:52:46.423Z","level":"info","category":"SCREEN","step":"TIMER UPDATES STARTED","ctx":{"uiMs":30000}}
+[2026-08-10T11:52:46.423Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":0,"lastUpdate":1786362766421}
+[2026-08-10T11:52:46.424Z] [] [SCREEN] TIMER UPDATE SENT (ACTIVITY UNCHANGED)
+[2026-08-10T11:52:46.424Z] [] [SCREEN] UPDATE TRACKING STATE COMPLETED {"isTracking":true,"hasSession":true,"windowTimersActive":0}
+[2026-08-10T11:52:46.424Z] [] 🎮 [TRACKING-MANAGER] Starting input detection (non-blocking)...
+[2026-08-10T11:52:46.424Z] [] [INPUT] CONTROL START
+[2026-08-10T11:52:46.424Z] [] [JSON] {"ts":"2026-08-10T11:52:46.424Z","level":"info","category":"INPUT","step":"CONTROL START"}
+[2026-08-10T11:52:46.424Z] [] [INPUT] MONITOR START – Starting input detection monitoring
+[2026-08-10T11:52:46.424Z] [] [JSON] {"ts":"2026-08-10T11:52:46.424Z","level":"info","category":"INPUT","step":"MONITOR START","message":"Starting input detection monitoring"}
+[2026-08-10T11:52:46.424Z] [] [INPUT] METHOD – PowerMonitor active (idle timer only, no synthetic activity)
+[2026-08-10T11:52:46.424Z] [] 🌍 Cross-Platform Input Detector initialized for win32
+[2026-08-10T11:52:46.424Z] [] 🚀 Starting Cross-Platform Input Detector...
+[2026-08-10T11:52:46.424Z] [] 🪟 Starting Windows input detection...
+[2026-08-10T11:52:46.424Z] [] 🔧 [ASAR] Resolved unpacked path: C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\app.asar.unpacked\src\external_input_monitor_windows.py
+[2026-08-10T11:52:46.425Z] [] 🐍 Starting external Python monitor...
+[2026-08-10T11:52:46.425Z] [] 🐍 [PYTHON] Using provisioned Python path: C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+[2026-08-10T11:52:46.425Z] [] 📍 Using Python executable: C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+[2026-08-10T11:52:46.425Z] [] 📂 Script path: "C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\app.asar.unpacked\src\external_input_monitor_windows.py"
+[2026-08-10T11:52:46.425Z] [] 📂 Working directory: "C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\app.asar.unpacked\src"
+[2026-08-10T11:52:46.425Z] [] 📂 Script is readable: true
+[2026-08-10T11:52:46.425Z] [] 🚀 [PYTHON] Launching Python process...
+[2026-08-10T11:52:46.425Z] []    Python: "C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe"
+[2026-08-10T11:52:46.425Z] []    Script: "C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\app.asar.unpacked\src\external_input_monitor_windows.py"
+[2026-08-10T11:52:46.425Z] [] ✅ [PYTHON] Using bundled standalone Python — no external PYTHONPATH needed
+[2026-08-10T11:52:46.435Z] [] ✅ [PYTHON-WIN] Process started with execFile (PID: 9220)
+[2026-08-10T11:52:46.435Z] [] ✅ External Python monitor started
+[2026-08-10T11:52:46.435Z] [] [INPUT] METHOD – System idle monitoring active
+[2026-08-10T11:52:46.435Z] [] [INPUT] MONITOR STARTED – Methods: 2
+[2026-08-10T11:52:46.435Z] [] [JSON] {"ts":"2026-08-10T11:52:46.435Z","level":"info","category":"INPUT","step":"MONITOR STARTED","message":"Methods: 2"}
+[2026-08-10T11:52:46.435Z] [] 📊 [TRACKING] Status changed: 🟢 ACTIVE
+[2026-08-10T11:52:46.435Z] [] 📊 [TRACKING] Session ID: ed5a7dcc-c150-4b45-9898-d8b7514a5747
+[2026-08-10T11:52:46.435Z] [] 📊 [TRACKING] Project ID: 641e94b1-0e28-459a-a94e-093d751e9848
+[2026-08-10T11:52:46.435Z] [] 📱 [TRACKING-MANAGER] Setting app detection state...
+[2026-08-10T11:52:46.435Z] [] [APP_DETECTION] CAPTURE START – startAppCapture() called
+[2026-08-10T11:52:46.435Z] [] [JSON] {"ts":"2026-08-10T11:52:46.435Z","level":"info","category":"APP_DETECTION","step":"CAPTURE START","message":"startAppCapture() called"}
+[2026-08-10T11:52:46.435Z] [] 🔍 [APP-DETECTION] Periodic capture requested, will defer to real-time detection
+[2026-08-10T11:52:46.435Z] [] [APP_DETECTION] CAPTURE SKIP – Deferring to real-time detection (PERFORMANCE FIX)
+[2026-08-10T11:52:46.435Z] [] [JSON] {"ts":"2026-08-10T11:52:46.435Z","level":"info","category":"APP_DETECTION","step":"CAPTURE SKIP","message":"Deferring to real-time detection (PERFORMANCE FIX)"}
+[2026-08-10T11:52:46.435Z] [] ✅ [TRACKING-MANAGER] App detection state set, real-time deferred 1s
+[2026-08-10T11:52:46.435Z] [] 🔄 [CLEANUP] Registered interval: Activity Stats Persistence
+[2026-08-10T11:52:46.435Z] [] 💾 [DATABASE] Activity stats persistence started (every 60s)
+[2026-08-10T11:52:46.435Z] [] ✅ [TRACKING-MANAGER] Activity stats persistence started
+[2026-08-10T11:52:46.436Z] [] 🔄 [CLEANUP] Registered interval: Database Status Reporting
+[2026-08-10T11:52:46.436Z] [] 📊 [DATABASE STATUS] Periodic status reporting started (every 30s)
+[2026-08-10T11:52:46.436Z] [] ✅ [TRACKING-MANAGER] Database status reporting started
+[2026-08-10T11:52:46.436Z] [] 🔄 [CLEANUP] Registered interval: Activity Sync
+[2026-08-10T11:52:46.436Z] [] 🔄 [ACTIVITY-SYNC] Started (60s intervals)
+[2026-08-10T11:52:46.436Z] [] ✅ [TRACKING-MANAGER] Enhanced sync activity started
+[2026-08-10T11:52:46.436Z] [] 🔄 [CLEANUP] Registered interval: Consolidated IPC
+[2026-08-10T11:52:46.436Z] [] 📡 [IPC] Consolidated IPC started (30s intervals)
+[2026-08-10T11:52:46.436Z] [] ✅ [TRACKING-MANAGER] Enhanced sync IPC started
+[2026-08-10T11:52:46.436Z] [] ✅ [TRACKING-MANAGER] Background tracking subsystems brought up
+[2026-08-10T11:52:46.436Z] [] [INPUT] CONTROL STARTED
+[2026-08-10T11:52:46.436Z] [] [JSON] {"ts":"2026-08-10T11:52:46.436Z","level":"info","category":"INPUT","step":"CONTROL STARTED"}
+[2026-08-10T11:52:46.436Z] [] ✅ Cross-Platform Input Detector started successfully
+[2026-08-10T11:52:46.436Z] [] ✅ [TRACKING-MANAGER] Input detection started in 12ms
+[2026-08-10T11:52:46.436Z] [] [INPUT] METHOD – Platform-specific detection active
+[2026-08-10T11:52:46.509Z] [] 🎯 External Python monitor initializing on undefined: External Windows input monitor starting
+[2026-08-10T11:52:46.509Z] [] ✅ External Python input detection started successfully on windows
+[2026-08-10T11:52:47.430Z] [] ⏱️ [TRAY] Tick #2: set="00:15:50" (session 00:00:01) readBack="(n/a)" (project: Affiliate)
+[2026-08-10T11:52:47.430Z] [] 🔧 [SCREENSHOT-FIX] Forcing screenshot capture start...
+[2026-08-10T11:52:47.445Z] [] [APP_DETECTION] REALTIME START {"isTracking":true,"hasConfig":true,"userId":"1225","hasDetectMethod":true}
+[2026-08-10T11:52:47.445Z] [] [JSON] {"ts":"2026-08-10T11:52:47.445Z","level":"info","category":"APP_DETECTION","step":"REALTIME START","ctx":{"isTracking":true,"hasConfig":true,"userId":"1225","hasDetectMethod":true}}
+[2026-08-10T11:52:47.446Z] [] ✅ [REALTIME-APP] Real-time app detection interval created with jitter (±200ms)
+[2026-08-10T11:52:47.446Z] [] [APP_DETECTION] REALTIME STARTED – 15000ms intervals
+[2026-08-10T11:52:47.446Z] [] [JSON] {"ts":"2026-08-10T11:52:47.446Z","level":"info","category":"APP_DETECTION","step":"REALTIME STARTED","message":"15000ms intervals"}
+[2026-08-10T11:52:47.446Z] [] ✅ [TRACKING-MANAGER] App detection real-time interval started (staggered 1s)
+[2026-08-10T11:52:47.448Z] [] [APP-CACHE] Initialized with 6000 ms TTL (platform: win32 )
+[2026-08-10T11:52:47.448Z] [] [APP-CACHE] Cache miss (age: 1786362767448ms) - detecting...
+[2026-08-10T11:52:47.449Z] [] [WINDOWS-APP] Using active-win (native Windows API) as PRIMARY method
+[2026-08-10T11:52:47.476Z] [] 🔄 [CLEANUP] Registered interval: Real-time App Detection
+[2026-08-10T11:52:47.476Z] [] [WINDOWS-APP] active-win returned null or incomplete data, failCount: 1
+[2026-08-10T11:52:47.477Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-08-10T11:52:47.477Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-08-10T11:52:47.896Z] [] 📸 [WORKSPACE-SETTINGS] Screenshot interval from database: 1 min (60s)
+[2026-08-10T11:52:47.896Z] [] ✅ [SCREENSHOT] Shutdown/pause flags cleared - system ready
+[2026-08-10T11:52:47.896Z] [] [SCREEN] START SCREENSHOT CAPTURE
+[2026-08-10T11:52:47.896Z] [] [SCREEN] CURRENT STATE {"isTracking":true,"hasSession":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747"}
+[2026-08-10T11:52:47.896Z] [] 🚀 [SCREENSHOT] Starting fixed-interval mode (60s)...
+[2026-08-10T11:52:47.896Z] [] [SCREEN] NEXT SCREENSHOT IN {"minutes":1,"time":"5:23:47 pm"}
+[2026-08-10T11:52:47.896Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":0,"lastUpdate":1786362766421}
+[2026-08-10T11:52:47.896Z] [] [SCREEN] TIMER UPDATE SENT (ACTIVITY UNCHANGED)
+[2026-08-10T11:52:47.896Z] [] [SCREEN] TIMER UPDATES STARTED {"uiMs":30000}
+[2026-08-10T11:52:47.896Z] [] [JSON] {"ts":"2026-08-10T11:52:47.896Z","level":"info","category":"SCREEN","step":"TIMER UPDATES STARTED","ctx":{"uiMs":30000}}
+[2026-08-10T11:52:47.896Z] [] ✅ [SCREENSHOT-FIX] Screenshot systems started
+[2026-08-10T11:52:48.113Z] [] ✓ [WINDOWS-APP] Native success: Alyson PM
+[2026-08-10T11:52:48.113Z] [] [WINDOWS-APP] Native API succeeded: Alyson PM
+[2026-08-10T11:52:48.113Z] [] [WINDOWS-APP] Saved external app: Alyson PM
+[2026-08-10T11:52:48.114Z] [] [APP_DETECTION] SESSION START {"sessionKey":"alyson pm","appName":"Alyson PM"}
+[2026-08-10T11:52:48.114Z] [] [JSON] {"ts":"2026-08-10T11:52:48.114Z","level":"info","category":"APP_DETECTION","step":"SESSION START","ctx":{"sessionKey":"alyson pm","appName":"Alyson PM"}}
+[2026-08-10T11:52:48.115Z] [] ✅ [DWELL] App queued via enhanced sync manager: Alyson PM
+[2026-08-10T11:52:48.444Z] [] ⏱️ [TRAY] Tick #3: set="00:15:51" (session 00:00:02) readBack="(n/a)" (project: Affiliate)
+[2026-08-10T11:52:49.125Z] [] 📱 [SYNC] Inserting 1 app logs to database
+[2026-08-10T11:52:49.140Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-08-10T11:52:49.432Z] [] 🔧 [URL-FIX] Setting isPolling to true
+[2026-08-10T11:52:49.432Z] [] [URL] UrlCaptureManager already running (polling continues automatically)
+[2026-08-10T11:52:49.432Z] [] 🌐 [URL] UrlCaptureManager started (staggered 3s after timer start)
+[2026-08-10T11:52:49.736Z] [] ✅ [SYNC] Successfully inserted 1 app session(s) via backend RDS
+[2026-08-10T11:52:49.736Z] [] ✅ [BATCH-FLUSH] Flushed 1 app logs
+[2026-08-10T11:52:50.894Z] [] [SYSTEM] DAILY-ACTIVITY – Initialized new day {"date":"Mon Aug 10 2026"}
+[2026-08-10T11:52:50.895Z] [] [SYSTEM] ACTIVITY SUMMARY {"clicks":0,"keys":0,"moves":1,"total":1,"last_update_iso":"2026-08-10T11:52:50.894Z"}
+[2026-08-10T11:52:50.895Z] [] [JSON] {"ts":"2026-08-10T11:52:50.894Z","level":"info","category":"SYSTEM","step":"ACTIVITY SUMMARY","ctx":{"clicks":0,"keys":0,"moves":1,"total":1,"last_update_iso":"2026-08-10T11:52:50.894Z"}}
+[2026-08-10T11:52:51.247Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Alyson PM
+[2026-08-10T11:52:51.248Z] [] 🔍 [MONITORING] Detected app: {"appName":"Alyson PM","windowTitle":"Alyson Time Doctor"}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] SCREENSHOT TIMER STATUS
+[2026-08-10T11:52:54.437Z] [] [SCREEN] - nextScreenshotTime: {"value":"2026-08-10T11:53:47.896Z"}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] - isTracking: {"value":true}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] - currentSession: {"value":true}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] - screenshotsPaused: {"value":false}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] - screenshotInterval: {"value":true}
+[2026-08-10T11:52:54.437Z] [] 🛠️ [TRACKING-DEBUG] No screenshot timers after start — calling startScreenshotCapture once
+[2026-08-10T11:52:54.437Z] [] ✅ [SCREENSHOT] Shutdown/pause flags cleared - system ready
+[2026-08-10T11:52:54.437Z] [] [SCREEN] START SCREENSHOT CAPTURE
+[2026-08-10T11:52:54.437Z] [] [SCREEN] CURRENT STATE {"isTracking":true,"hasSession":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747"}
+[2026-08-10T11:52:54.437Z] [] 🚀 [SCREENSHOT] Starting fixed-interval mode (60s)...
+[2026-08-10T11:52:54.437Z] [] [SCREEN] NEXT SCREENSHOT IN {"minutes":1,"time":"5:23:54 pm"}
+[2026-08-10T11:52:54.437Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":0,"keys":0,"moves":3,"lastUpdate":1786362773801}
+[2026-08-10T11:52:54.437Z] [] [IPC] activity-update: SENT
+[2026-08-10T11:52:54.438Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":0,"keys":0,"moves":3}
+[2026-08-10T11:52:59.092Z] [] 🔧 [FIX-ACTIVITY] Syncing activity data for screenshots...
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Got data from enhancedActivityManager: {"clicks":0,"keys":0,"moves":5}
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Got data from displayActivityStats: {"clicks":0,"keys":0,"moves":5}
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Got data from activityStats: {"clicks":0,"keys":0,"moves":5}
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Got data from periodActivityStats: {"clicks":0,"keys":0,"moves":5}
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Using delta from globalInputManager.stats: {"clicks":0,"keys":0,"moves":5,"cumulative":{"clicks":0,"keys":0,"moves":5}}
+[2026-08-10T11:52:59.092Z] [] ✅ [FIX-ACTIVITY] Activity data synced: {"between":{"clicks":0,"keys":0,"moves":5},"manager":{"clicks":0,"keys":0,"moves":5}}
+[2026-08-10T11:52:59.154Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-08-10T11:53:01.253Z] [] [WINDOWS-APP] Using active-win (native Windows API) as PRIMARY method
+[2026-08-10T11:53:01.253Z] [] [WINDOWS-APP] active-win returned null or incomplete data, failCount: 2
+[2026-08-10T11:53:01.253Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-08-10T11:53:01.253Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-08-10T11:53:01.425Z] [] [SCREEN] NO SCHEDULED TIMERS DETECTED AFTER START – Attempting recovery
+[2026-08-10T11:53:01.425Z] [] [JSON] {"ts":"2026-08-10T11:53:01.425Z","level":"warn","category":"SCREEN","step":"NO SCHEDULED TIMERS DETECTED AFTER START","message":"Attempting recovery"}
+[2026-08-10T11:53:01.425Z] [] [SCREEN] FORCING SCREENSHOT TIMER RECOVERY
+[2026-08-10T11:53:01.425Z] [] [JSON] {"ts":"2026-08-10T11:53:01.425Z","level":"info","category":"SCREEN","step":"FORCING SCREENSHOT TIMER RECOVERY"}
+[2026-08-10T11:53:01.425Z] [] [SCREEN] RESTARTING SCREENSHOT SYSTEM
+[2026-08-10T11:53:01.425Z] [] [JSON] {"ts":"2026-08-10T11:53:01.425Z","level":"info","category":"SCREEN","step":"RESTARTING SCREENSHOT SYSTEM"}
+[2026-08-10T11:53:01.425Z] [] 🛑 [SCREENSHOT] Shutdown flag set - blocking all captures
+[2026-08-10T11:53:01.425Z] [] [SCREEN] SHUTDOWN FLAG SET
+[2026-08-10T11:53:02.260Z] [] ✓ [WINDOWS-APP] Native success: chrome
+[2026-08-10T11:53:02.261Z] [] [WINDOWS-APP] Native API succeeded: Google Chrome
+[2026-08-10T11:53:02.261Z] [] [WINDOWS-APP] Saved external app: Google Chrome
+[2026-08-10T11:53:02.261Z] [] 🔍 [MONITORING] Detected app: {"appName":"Google Chrome","windowTitle":"Speedtest by Ookla - The Global Broadband Speed Te"}
+[2026-08-10T11:53:02.434Z] [] ✅ [SCREENSHOT] Shutdown/pause flags cleared - system ready
+[2026-08-10T11:53:02.434Z] [] [SCREEN] START SCREENSHOT CAPTURE
+[2026-08-10T11:53:02.435Z] [] [SCREEN] CURRENT STATE {"isTracking":true,"hasSession":true,"sessionId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747"}
+[2026-08-10T11:53:02.435Z] [] 🚀 [SCREENSHOT] Starting fixed-interval mode (60s)...
+[2026-08-10T11:53:02.435Z] [] [SCREEN] NEXT SCREENSHOT IN {"minutes":1,"time":"5:24:02 pm"}
+[2026-08-10T11:53:02.435Z] [] [SCREEN] RAW GLOBAL ACTIVITY {"clicks":2,"keys":0,"moves":9,"lastUpdate":1786362782292}
+[2026-08-10T11:53:02.436Z] [] [IPC] activity-update: SENT
+[2026-08-10T11:53:02.436Z] [] [SCREEN] TIMER UPDATE SENT WITH ACTIVITY DATA {"clicks":2,"keys":0,"moves":9}
+[2026-08-10T11:53:02.605Z] [] [APP-CACHE] Cache miss (age: 14492ms) - detecting...
+[2026-08-10T11:53:02.605Z] [] [WINDOWS-APP] ⚡ CACHE HIT: Google Chrome
+[2026-08-10T11:53:03.746Z] [] [APP_DETECTION] SESSION START {"sessionKey":"google chrome","appName":"Google Chrome"}
+[2026-08-10T11:53:03.746Z] [] [JSON] {"ts":"2026-08-10T11:53:03.746Z","level":"info","category":"APP_DETECTION","step":"SESSION START","ctx":{"sessionKey":"google chrome","appName":"Google Chrome"}}
+[2026-08-10T11:53:03.746Z] [] ✅ [DWELL] App queued via enhanced sync manager: Google Chrome
+[2026-08-10T11:53:04.749Z] [] 📱 [SYNC] Inserting 1 app logs to database
+[2026-08-10T11:53:05.467Z] [] [SCREEN] Dashboard: DATA LOAD START {"source":"get-today-time-stats"}
+[2026-08-10T11:53:05.861Z] [] [SCREEN] Dashboard: DATA LOAD END {"source":"get-today-time-stats","total_seconds":968,"completed_closed":949}
+[2026-08-10T11:53:06.167Z] [] ✅ [SYNC] Successfully inserted 1 app session(s) via backend RDS
+[2026-08-10T11:53:06.167Z] [] ✅ [BATCH-FLUSH] Flushed 1 app logs
+[2026-08-10T11:53:06.233Z] [] [SESSION] HEALTH_CHECK_OK {"adapter":"recovery","userId":"1225","timeLogId":"ed5a7dcc-c150-4b45-9898-d8b7514a5747","isTracking":true}
+[2026-08-10T11:53:06.779Z] [] ⚠️ [ACTIVITY] Database save error: Invalid API key
+[2026-08-10T11:53:06.912Z] [] [URL] No result from adapter - this is normal if no browser is active
+[2026-08-10T11:53:09.159Z] [] 🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: true
+[2026-08-10T11:53:10.387Z] [] 🏥 [SYSTEM-MONITOR] Starting comprehensive health check...
+[2026-08-10T11:53:10.387Z] [] [HEALTH-CHECK] WIN32 Permissions: Screen=authorized, Accessibility=true, InputMonitoring=true
+[2026-08-10T11:53:11.270Z] [] [WINDOWS-APP] Using active-win (native Windows API) as PRIMARY method
+[2026-08-10T11:53:11.271Z] [] ⚠️ [WINDOWS-APP] active-win failed 3 times, disabling to improve performance
+[2026-08-10T11:53:11.271Z] [] [WINDOWS-APP] active-win returned null or incomplete data, failCount: 3
+[2026-08-10T11:53:11.271Z] [] [WINDOWS-APP] Trying Native API (GetForegroundWindow) as SECONDARY method...
+[2026-08-10T11:53:11.271Z] [] 🔧 [WINDOWS-APP] Starting Native API detection (spawn)...
+[2026-08-10T11:53:11.754Z] [] [HEALTH-CHECK] ✅ Python available (provisioner confirmed): C:\Users\tambo\AppData\Local\Programs\alyson-pm-desktop-agent\resources\python-windows\python.exe
+[2026-08-10T11:53:11.754Z] [] [HEALTH-CHECK] Input detection: ✅ PASS - Input detection available (Python monitor)
+[2026-08-10T11:53:11.773Z] [] 📊 [HEALTH] Health check completed: HEALTHY_WITH_WARNINGS
+[2026-08-10T11:53:11.773Z] [] 📊 [HEALTH] ✅ 7 checks passed
+[2026-08-10T11:53:11.773Z] [] 📊 [HEALTH] ⚠️ 1 warnings found
+

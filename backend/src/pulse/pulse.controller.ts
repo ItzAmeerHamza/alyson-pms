@@ -14,17 +14,22 @@ import {
 import { AuthGuard } from '../auth/auth.guard';
 import {
   canAccessPulseTeamReports,
+  canAdjustPulseTime,
   canManagePulseUsers,
   canViewPulseTeam,
   isPulseOrgAdmin,
 } from '../database/time-doctor-sql';
 import { CreateTimeAdjustmentDto } from './dto/time-adjustment.dto';
 import { PulseService } from './pulse.service';
+import { PacingService } from './pacing.service';
 
 @Controller('pulse')
 @UseGuards(AuthGuard)
 export class PulseController {
-  constructor(private readonly pulse: PulseService) {}
+  constructor(
+    private readonly pulse: PulseService,
+    private readonly pacing: PacingService,
+  ) {}
 
   private ensureOrgAdmin(user: { role?: string; is_super_admin?: boolean }) {
     if (!isPulseOrgAdmin(user)) {
@@ -41,6 +46,12 @@ export class PulseController {
   private ensureCanManageUsers(user: { role?: string; is_super_admin?: boolean }) {
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Admin or manager role required');
+    }
+  }
+
+  private ensureCanAdjustTime(user: { role?: string; is_super_admin?: boolean }) {
+    if (!canAdjustPulseTime(user)) {
+      throw new ForbiddenException('Manager or admin role required to adjust time');
     }
   }
 
@@ -283,6 +294,8 @@ export class PulseController {
       location?: string | null;
       manager_id?: string | null;
       is_active?: boolean;
+      /** First work day expected to track (YYYY-MM-DD). Pre-start days are not paced. */
+      started_on?: string | null;
     },
   ) {
     this.ensureCanManageUsers(req.user);
@@ -292,7 +305,7 @@ export class PulseController {
   }
 
   /**
-   * Org-admin only: list manual time adjustments for one employee × Pacific day.
+   * Manager/admin only: list manual time adjustments for one employee × work day.
    */
   @Get('time-adjustments')
   async listTimeAdjustments(
@@ -300,7 +313,7 @@ export class PulseController {
     @Query('userId') userId: string,
     @Query('workDate') workDate: string,
   ) {
-    this.ensureOrgAdmin(req.user);
+    this.ensureCanAdjustTime(req.user);
     if (!userId || !workDate) {
       throw new BadRequestException('userId and workDate are required');
     }
@@ -308,7 +321,7 @@ export class PulseController {
   }
 
   /**
-   * Org-admin only: add (+) or remove (-) time for an employee on a Pacific day.
+   * Manager/admin only: add (+) or remove (-) time for an employee on a work day.
    * Append-only audit row; day total = tracked + net adjustments (never below 0).
    */
   @Post('time-adjustments')
@@ -316,7 +329,55 @@ export class PulseController {
     @Req() req: { user: any },
     @Body() body: CreateTimeAdjustmentDto,
   ) {
-    this.ensureOrgAdmin(req.user);
+    this.ensureCanAdjustTime(req.user);
     return this.pulse.createTimeAdjustment(req.user, body);
+  }
+
+  /**
+   * Weekly pacing (HR math): 35h target, Mon–Thu sample projection.
+   * Query: day=YYYY-MM-DD (optional anchor).
+   */
+  @Get('pacing/weekly')
+  async pacingWeekly(@Req() req: { user: any }, @Query('day') day?: string) {
+    this.ensureCanAdjustTime(req.user);
+    return this.pacing.getWeeklyReport(req.user, day);
+  }
+
+  /**
+   * Monthly / custom-range pacing (HR math): weekdays × 7h target,
+   * projected = worked + avg × remaining.
+   * Query: month=YYYY-MM OR start=&end=YYYY-MM-DD
+   */
+  @Get('pacing/monthly')
+  async pacingMonthly(
+    @Req() req: { user: any },
+    @Query('month') month?: string,
+    @Query('start') start?: string,
+    @Query('end') end?: string,
+  ) {
+    this.ensureCanAdjustTime(req.user);
+    return this.pacing.getMonthlyReport(req.user, { month, start, end });
+  }
+
+  /**
+   * Email selected pacing rows to HR
+   * (default hamza@, mohita@, alysonclient@).
+   * Body: { mode: 'weekly'|'monthly', day?, month?, employee_ids: string[], to?, from? }
+   */
+  @Post('pacing/send')
+  async pacingSend(
+    @Req() req: { user: any },
+    @Body()
+    body: {
+      mode?: string;
+      day?: string;
+      month?: string;
+      employee_ids?: string[];
+      to?: string | string[];
+      from?: string;
+    },
+  ) {
+    this.ensureCanAdjustTime(req.user);
+    return this.pacing.sendPacingDigest(req.user, body || {});
   }
 }

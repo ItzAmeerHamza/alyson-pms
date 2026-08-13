@@ -2,7 +2,12 @@ import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { SesEmailEvent, SesEmailResult } from '../lambda/ses-email-handler';
+import type {
+  SesEmailAttachmentPayload,
+  SesEmailEvent,
+  SesEmailResult,
+} from '../lambda/ses-email-handler';
+import { buildSesRawMime } from './ses-raw-mime';
 
 /**
  * Sends transactional email.
@@ -103,6 +108,11 @@ export class SesEmailService {
     html: string;
     text?: string;
     from?: string;
+    attachments?: Array<{
+      filename: string;
+      contentType?: string;
+      content: string | Buffer;
+    }>;
   }): Promise<SesEmailResult> {
     const to = (Array.isArray(input.to) ? input.to : [input.to])
       .map((addr) => String(addr || '').trim().toLowerCase())
@@ -114,6 +124,20 @@ export class SesEmailService {
     const subject = String(input.subject || '').trim();
     const html = String(input.html || '').trim();
     const from = this.resolveFrom(input.from);
+    const attachments: SesEmailAttachmentPayload[] = (input.attachments || [])
+      .map((a) => {
+        const filename = String(a?.filename || '').trim();
+        if (!filename) return null;
+        const buf = Buffer.isBuffer(a.content)
+          ? a.content
+          : Buffer.from(String(a.content ?? ''), 'utf8');
+        return {
+          filename,
+          contentType: String(a.contentType || 'application/octet-stream'),
+          contentBase64: buf.toString('base64'),
+        };
+      })
+      .filter((a): a is SesEmailAttachmentPayload => Boolean(a));
 
     if (!to.length || !subject || !html || !from) {
       return {
@@ -132,6 +156,7 @@ export class SesEmailService {
         html,
         text: input.text,
         from,
+        ...(attachments.length ? { attachments } : {}),
       });
     }
 
@@ -140,25 +165,53 @@ export class SesEmailService {
     }
 
     try {
+      const useRaw = attachments.length > 0;
       const result = await this.sesClient.send(
-        new SendEmailCommand({
-          FromEmailAddress: from,
-          Destination: {
-            ToAddresses: to,
-            ...(cc.length ? { CcAddresses: cc } : {}),
-          },
-          Content: {
-            Simple: {
-              Subject: { Data: subject, Charset: 'UTF-8' },
-              Body: {
-                Html: { Data: html, Charset: 'UTF-8' },
-                ...(input.text
-                  ? { Text: { Data: String(input.text), Charset: 'UTF-8' } }
-                  : {}),
+        new SendEmailCommand(
+          useRaw
+            ? {
+                FromEmailAddress: from,
+                Destination: {
+                  ToAddresses: to,
+                  ...(cc.length ? { CcAddresses: cc } : {}),
+                },
+                Content: {
+                  Raw: {
+                    Data: buildSesRawMime({
+                      from,
+                      to,
+                      cc,
+                      subject,
+                      html,
+                      text: input.text,
+                      attachments: attachments.map((a) => ({
+                        filename: a.filename,
+                        contentType: a.contentType,
+                        content: Buffer.from(a.contentBase64, 'base64'),
+                      })),
+                    }),
+                  },
+                },
+              }
+            : {
+                FromEmailAddress: from,
+                Destination: {
+                  ToAddresses: to,
+                  ...(cc.length ? { CcAddresses: cc } : {}),
+                },
+                Content: {
+                  Simple: {
+                    Subject: { Data: subject, Charset: 'UTF-8' },
+                    Body: {
+                      Html: { Data: html, Charset: 'UTF-8' },
+                      ...(input.text
+                        ? { Text: { Data: String(input.text), Charset: 'UTF-8' } }
+                        : {}),
+                    },
+                  },
+                },
               },
-            },
-          },
-        }),
+        ),
       );
       return { ok: true, messageId: result.MessageId || '' };
     } catch (error) {
