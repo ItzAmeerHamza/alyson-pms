@@ -115,7 +115,18 @@ class EventHandlerManager {
 
       // PAYROLL CRITICAL: write checkpoint + pending close + offline queue to disk
       // SYNCHRONOUSLY before async stop — OS may freeze mid-stopTracking.
-      if (this.global.isTracking || this.global.trackingManager?.isTracking) {
+      //
+      // The gate must include a bare time-log id: a Start still in flight leaves
+      // isTracking false while a row is already open on the server. That race
+      // left 6 of 8 observed suspends completely unarmed, and those sessions
+      // then billed the whole sleep.
+      const hasOpenSession = !!(
+        this.global.isTracking ||
+        this.global.trackingManager?.isTracking ||
+        this.global.currentTimeLogId ||
+        this.global.trackingManager?.currentTimeLogId
+      );
+      if (hasOpenSession) {
         this.console.log('🛑 Laptop lid closed / system sleep - durable arm then stop');
         try {
           if (typeof this.global.trackingManager?.armDurableSleepStop === 'function') {
@@ -132,6 +143,12 @@ class EventHandlerManager {
           // Fire-and-forget: durable state is already on disk.
           void this.global.stopTracking('system_sleep');
         }
+        // Kill any leftover open row too. Each closes at its own last
+        // proof-of-life, so this is safe even if the stop above never finishes.
+        try {
+          const { closeOpenSessionsAfterExplicitStop } = require('./session-recovery');
+          void closeOpenSessionsAfterExplicitStop({ reason: 'system_sleep', timeoutMs: 4000 });
+        } catch (_) { /* ignore */ }
       }
 
       // Pause anti-cheat during sleep (restart on resume if still tracking)
@@ -156,6 +173,35 @@ class EventHandlerManager {
         this.console.log('🌅 System resumed from sleep');
         // Clear shutdown flag so detection/polling can resume when tracking starts
         global.isShuttingDown = false;
+
+        // Stop checkpoint/heartbeat BEFORE they can stamp NOW and re-freshen
+        // an overnight orphan. Then close at last durable mark if stale.
+        try {
+          this.global.trackingManager?._stopTimeLogCheckpoint?.();
+        } catch (_) { /* ignore */ }
+        try {
+          const { reconcileAfterWake } = require('./session-recovery');
+          const wake = await reconcileAfterWake();
+          if (
+            wake?.continued &&
+            this.global.trackingManager &&
+            typeof this.global.trackingManager._startTimeLogCheckpoint === 'function'
+          ) {
+            this.global.trackingManager._startTimeLogCheckpoint();
+          }
+        } catch (wakeErr) {
+          this.console.warn(
+            '⚠️ [RESUME] Stale-session reconcile failed:',
+            wakeErr?.message || wakeErr,
+          );
+          // Never leave a live session without a checkpoint writer — the next
+          // health check would read a stale mark and close real working time.
+          try {
+            if (this.global.isTracking || this.global.trackingManager?.isTracking) {
+              this.global.trackingManager?._startTimeLogCheckpoint?.();
+            }
+          } catch (_) { /* ignore */ }
+        }
         // Safety net: always clear screen lock flag on resume (display-wake should also clear it,
         // but this prevents the flag from getting stuck if display-wake doesn't fire)
         global.isScreenLocked = false;

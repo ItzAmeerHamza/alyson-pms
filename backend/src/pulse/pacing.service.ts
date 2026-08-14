@@ -136,7 +136,7 @@ export class PacingService {
          LEFT JOIN tenant."user" u ON u.id = t.user_id
         WHERE ${scope.clause}
           AND t.start_time < $${scope.params.length + 2}::timestamptz
-          AND coalesce(t.end_time, NOW()) > $${scope.params.length + 1}::timestamptz
+          AND coalesce(t.end_time, t.last_alive_at, NOW()) > $${scope.params.length + 1}::timestamptz
           AND t.start_time >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
           AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'`,
       params,

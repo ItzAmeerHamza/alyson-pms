@@ -12,7 +12,6 @@ class DataStatsManager {
     this.ipcMain = dependencies.ipcMain;
     this.config = dependencies.config;
     this.appSettings = dependencies.appSettings;
-    this.supabaseService = dependencies.supabaseService;
     this.global = dependencies.global || global;
     this.require = dependencies.require || require;
     this.process = dependencies.process || process;
@@ -30,7 +29,7 @@ class DataStatsManager {
     console.log('✅ DataStatsManager initialized');
   }
 
-  /** RDS (time_doctor.* + tenant.user) via NestJS — not legacy Supabase public.* tables. */
+  /** RDS (time_doctor.* + tenant.user) via NestJS is the only data source. */
   _usesRdsBackend() {
     try {
       const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
@@ -41,69 +40,37 @@ class DataStatsManager {
   }
 
   async _fetchTimeLogs(userId, opts = {}) {
-    const { isBackendRdsEnabled, getTimeLogsInRange } = require('../utils/backend-rds-reads');
-    if (isBackendRdsEnabled(this.config)) {
-      try {
-        const data = await getTimeLogsInRange(
-          userId,
-          { start: opts.start, end: opts.end, beforeEnd: opts.beforeEnd },
-          this.config,
-        );
-        return { data, error: null };
-      } catch (err) {
-        return { data: [], error: { message: err?.message || String(err) } };
-      }
+    const { getTimeLogsInRange } = require('../utils/backend-rds-reads');
+    try {
+      const data = await getTimeLogsInRange(
+        userId,
+        { start: opts.start, end: opts.end, beforeEnd: opts.beforeEnd },
+        this.config,
+      );
+      return { data, error: null };
+    } catch (err) {
+      return { data: [], error: { message: err?.message || String(err) } };
     }
-    if (!this.supabaseService) {
-      return { data: [], error: { message: 'Database service not available' } };
-    }
-    const select = opts.select || 'id, start_time, end_time';
-    let query = this.supabaseService.from('time_logs').select(select).eq('user_id', userId);
-    if (opts.start) query = query.gte('start_time', opts.start);
-    if (opts.end) query = query.lt('start_time', opts.end);
-    else if (opts.beforeEnd) query = query.lt('start_time', opts.beforeEnd);
-    query = query.order('start_time', { ascending: opts.ascending !== false });
-    return query;
   }
 
   async _fetchAppLogs(userId, { start, end, limit } = {}) {
-    const { isBackendRdsEnabled, listAppLogs } = require('../utils/backend-rds-reads');
-    if (isBackendRdsEnabled(this.config)) {
-      try {
-        const data = await listAppLogs(userId, { start, end, limit }, this.config);
-        return { data, error: null };
-      } catch (err) {
-        return { data: [], error: { message: err?.message || String(err) } };
-      }
+    const { listAppLogs } = require('../utils/backend-rds-reads');
+    try {
+      const data = await listAppLogs(userId, { start, end, limit }, this.config);
+      return { data, error: null };
+    } catch (err) {
+      return { data: [], error: { message: err?.message || String(err) } };
     }
-    if (!this.supabaseService) return { data: [], error: { message: 'Database service not available' } };
-    let query = this.supabaseService
-      .from('app_logs')
-      .select('app_name, timestamp, started_at, ended_at')
-      .eq('user_id', userId);
-    if (start) query = query.gte('timestamp', start);
-    if (end) query = query.lte('timestamp', end);
-    return query;
   }
 
   async _fetchUrlLogs(userId, { start, end, limit } = {}) {
-    const { isBackendRdsEnabled, listUrlLogs } = require('../utils/backend-rds-reads');
-    if (isBackendRdsEnabled(this.config)) {
-      try {
-        const data = await listUrlLogs(userId, { start, end, limit }, this.config);
-        return { data, error: null };
-      } catch (err) {
-        return { data: [], error: { message: err?.message || String(err) } };
-      }
+    const { listUrlLogs } = require('../utils/backend-rds-reads');
+    try {
+      const data = await listUrlLogs(userId, { start, end, limit }, this.config);
+      return { data, error: null };
+    } catch (err) {
+      return { data: [], error: { message: err?.message || String(err) } };
     }
-    if (!this.supabaseService) return { data: [], error: { message: 'Database service not available' } };
-    let query = this.supabaseService
-      .from('url_logs')
-      .select('url, timestamp')
-      .eq('user_id', userId);
-    if (start) query = query.gte('timestamp', start);
-    if (end) query = query.lte('timestamp', end);
-    return query;
   }
 
   /**
@@ -159,7 +126,7 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-weekly-time-stats'); } catch {}
     this.ipcMain.handle('get-weekly-time-stats', async () => {
       try {
-        if (!this._usesRdsBackend() && !this.supabaseService) {
+        if (!this._usesRdsBackend()) {
           return { totalTime: 0, dailyBreakdown: [], error: 'Database service not available' };
         }
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
@@ -249,7 +216,7 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-monthly-time-stats'); } catch {}
     this.ipcMain.handle('get-monthly-time-stats', async () => {
       try {
-        if (!this._usesRdsBackend() && !this.supabaseService) {
+        if (!this._usesRdsBackend()) {
           return { totalTime: 0, weeklyBreakdown: [], error: 'Database service not available' };
         }
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
@@ -336,7 +303,7 @@ class DataStatsManager {
     try { this.ipcMain.removeHandler('get-daily-time-breakdown'); } catch {}
     this.ipcMain.handle('get-daily-time-breakdown', async () => {
       try {
-        if (!this._usesRdsBackend() && !this.supabaseService) return { totalTime: 0, hourlyBreakdown: [], error: 'Database service not available' };
+        if (!this._usesRdsBackend()) return { totalTime: 0, hourlyBreakdown: [], error: 'Database service not available' };
         const userId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
         if (!userId) return { totalTime: 0, hourlyBreakdown: [], error: 'User not authenticated' };
 
@@ -396,63 +363,6 @@ class DataStatsManager {
   registerGetConfig() {
     // Skip registering get-config handler - using early handler from main.js to prevent conflicts
     console.log('📡 [DataStatsManager] Skipping get-config registration - using early handler from main.js');
-    return;
-    
-    // DISABLED: Check if handler already exists before registering
-    try {
-      // Try to remove existing handler first - this will throw if none exists
-      this.ipcMain.removeHandler('get-config');
-      console.log('📡 [DataStatsManager] Removed existing get-config handler');
-    } catch (e) {
-      // No existing handler, which is fine
-    }
-    
-    this.ipcMain.handle('get-config', () => {
-      try {
-        this.safeLog && this.safeLog('⚙️ Getting app configuration...');
-        this.logger && this.logger.info({ category: 'IPC', step: 'get-config: START' });
-        
-        // Debug logging to see what's being returned
-        const result = {
-          success: true,
-          supabase_url: this.config.supabase_url,
-          supabase_key: this.config.supabase_key,
-          user_id: this.config.user_id || this.config.userId,
-          userEmail: this.config.userEmail,
-          project_id: this.config.project_id || this.config.projectId,
-          screenshotInterval: this.config.screenshotInterval || (this.appSettings.screenshot_interval_seconds * 1000) || 300000,
-          idleThreshold: this.config.idleThreshold || (this.appSettings.idle_threshold_seconds * 1000) || 60000,
-          isTracking: this.global.isTracking,
-          isPaused: this.global.isPaused,
-          platform: this.process.platform,
-          version: this.require('../../../package.json').version || '1.0.0',
-          NODE_ENV: this.config.NODE_ENV || this.process.env.NODE_ENV || 'production',
-          settings: this.appSettings
-        };
-        
-        console.log('🔍 [DEBUG] Returning config to renderer:', {
-          hasSupabaseUrl: !!result.supabase_url,
-          hasSupabaseKey: !!result.supabase_key,
-          urlValue: result.supabase_url,
-          success: result.success
-        });
-        
-        return result;
-      } catch (error) {
-        console.error('❌ Error getting config:', error);
-        this.logger && this.logger.error({ category: 'IPC', step: 'get-config: ERROR', message: error.message });
-        return { 
-          success: false, 
-          error: error.message,
-          supabase_url: '',
-          supabase_key: '',
-          platform: this.process.platform,
-          isTracking: false,
-          isPaused: false,
-          settings: this.appSettings || {}
-        };
-      }
-    });
   }
 
   /**
@@ -472,35 +382,15 @@ class DataStatsManager {
 
         console.log('[DELETE-EST] Estimating deduction for screenshot:', screenshotId);
 
-        // RDS + S3 deployment: estimate via the NestJS backend, not legacy Supabase.
-        const { usesBackendScreenshots, estimateDeductionViaBackend } = require('../utils/backend-screenshots');
-        if (usesBackendScreenshots(this.config)) {
-          const effectiveUserId =
-            this.global.currentUserId || this.config?.user_id || this.config?.userId;
-          const res = await estimateDeductionViaBackend(effectiveUserId, screenshotId, this.config);
-          if (res && res.success) {
-            return { success: true, deductedSeconds: res.deductedSeconds, capturedAt: res.capturedAt };
-          }
-          return { success: false, error: res?.error || 'Failed to estimate deduction' };
+        // RDS + S3 deployment: estimate via the NestJS backend.
+        const { estimateDeductionViaBackend } = require('../utils/backend-screenshots');
+        const effectiveUserId =
+          this.global.currentUserId || this.config?.user_id || this.config?.userId;
+        const res = await estimateDeductionViaBackend(effectiveUserId, screenshotId, this.config);
+        if (res && res.success) {
+          return { success: true, deductedSeconds: res.deductedSeconds, capturedAt: res.capturedAt };
         }
-
-        const { estimateDeduction } = require('../utils/screenshot-deletion');
-        const { deductedSeconds, screenshot } = await estimateDeduction({
-          screenshotId,
-          supabase: this.supabaseService
-        });
-
-        console.log('[DELETE-EST] Result:', {
-          deductedSeconds,
-          time_log_id: screenshot.time_log_id,
-          captured_at: screenshot.captured_at
-        });
-
-        return {
-          success: true,
-          deductedSeconds,
-          capturedAt: screenshot.captured_at
-        };
+        return { success: false, error: res?.error || 'Failed to estimate deduction' };
       } catch (error) {
         console.error('[DELETE-EST] Error estimating screenshot deduction:', error);
         return { success: false, error: error.message };
@@ -528,46 +418,14 @@ class DataStatsManager {
           return { success: false, error: 'User not authenticated' };
         }
 
-        // RDS + S3 deployment: delete via the NestJS backend (ownership enforced there),
-        // not legacy Supabase. The backend also deducts time and removes the S3 object.
-        const { usesBackendScreenshots, deleteScreenshotViaBackend } = require('../utils/backend-screenshots');
-        if (usesBackendScreenshots(this.config)) {
-          const res = await deleteScreenshotViaBackend(effectiveUserId, screenshotId, this.config);
-          if (res && res.success) {
-            return { success: true, deductedSeconds: res.deductedSeconds, timeLogId: res.timeLogId };
-          }
-          return { success: false, error: res?.error || 'Failed to delete screenshot' };
+        // RDS + S3 deployment: delete via the NestJS backend (ownership enforced there).
+        // The backend also deducts time and removes the S3 object.
+        const { deleteScreenshotViaBackend } = require('../utils/backend-screenshots');
+        const res = await deleteScreenshotViaBackend(effectiveUserId, screenshotId, this.config);
+        if (res && res.success) {
+          return { success: true, deductedSeconds: res.deductedSeconds, timeLogId: res.timeLogId };
         }
-
-        if (!this.config.user_id) {
-          return { success: false, error: 'User not authenticated' };
-        }
-
-        // Security: verify screenshot belongs to current user
-        const { data: screenshot } = await this.supabaseService
-          .from('screenshots')
-          .select('user_id')
-          .eq('id', screenshotId)
-          .single();
-
-        if (!screenshot) {
-          return { success: false, error: 'Screenshot not found' };
-        }
-
-        if (screenshot.user_id !== this.config.user_id) {
-          console.warn('Security: user', this.config.user_id, 'tried to delete screenshot owned by', screenshot.user_id);
-          return { success: false, error: 'Access denied: can only delete your own screenshots' };
-        }
-
-        const { deleteScreenshotWithDeduction } = require('../utils/screenshot-deletion');
-        const result = await deleteScreenshotWithDeduction({
-          screenshotId,
-          deletedBy: this.config.user_id,
-          deletionSource: 'desktop_agent',
-          supabase: this.supabaseService
-        });
-
-        return result;
+        return { success: false, error: res?.error || 'Failed to delete screenshot' };
       } catch (error) {
         console.error('Error deleting screenshot:', error);
         return { success: false, error: error.message };
@@ -584,28 +442,10 @@ class DataStatsManager {
     this.ipcMain.handle('test-open-app-detection', async (event, params = {}) => {
       try {
         const appName = params.appName || (this.process.platform === 'darwin' ? 'Calculator' : 'notepad');
-        if (!this.supabaseService) {
+        if (!this._usesRdsBackend()) {
           return { success: false, error: 'Database service not available' };
         }
-        let effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId || this.global.config?.user_id;
-        // Attempt to resolve user from Supabase if not set yet
-        if (!effectiveUserId) {
-          try {
-            const authClient = this.global.supabase || this.supabaseService;
-            if (authClient?.auth?.getUser) {
-              const { data } = await authClient.auth.getUser();
-              const uid = data?.user?.id;
-              if (uid) {
-                effectiveUserId = uid;
-                this.global.currentUserId = uid;
-                if (this.config) this.config.user_id = uid;
-                console.log('🔐 [TEST] Resolved and set user ID from Supabase:', uid);
-              }
-            }
-          } catch (e) {
-            console.log('⚠️ [TEST] Could not resolve user from Supabase:', e.message);
-          }
-        }
+        const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId || this.global.config?.user_id;
         if (!effectiveUserId) {
           return { success: false, error: 'User not authenticated' };
         }
@@ -654,34 +494,13 @@ class DataStatsManager {
 
         // Verify in DB: look back a few minutes
         const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        // Try selecting with detected_at first; if the column doesn't exist, fall back
-        let rows;
-        {
-          const { data, error } = await this.supabaseService
-            .from('app_logs')
-            .select('id, app_name, window_title, timestamp, detected_at')
-            .eq('user_id', effectiveUserId)
-            .gte('timestamp', since)
-            .order('timestamp', { ascending: false })
-            .limit(25);
-          if (!error) {
-            rows = data || [];
-          } else if (/(column|could not find).*detected_at/i.test(error.message || '')) {
-            // Fallback: older schema without detected_at
-            const retry = await this.supabaseService
-              .from('app_logs')
-              .select('id, app_name, window_title, timestamp')
-              .eq('user_id', effectiveUserId)
-              .gte('timestamp', since)
-              .order('timestamp', { ascending: false })
-              .limit(25);
-            if (retry.error) {
-              return { success: false, error: retry.error.message };
-            }
-            rows = retry.data || [];
-          } else {
-            return { success: false, error: error.message };
-          }
+        const { data: rows, error: rowsError } = await this._fetchAppLogs(effectiveUserId, {
+          start: since,
+          end: new Date().toISOString(),
+          limit: 25,
+        });
+        if (rowsError) {
+          return { success: false, error: rowsError.message };
         }
 
         const found = rows.find(r => {
@@ -774,9 +593,9 @@ class DataStatsManager {
             info: this.global.antiCheatDetector ? 'Detection system available' : 'antiCheatDetector.getReport is not a function'
           },
           database: {
-            status: this.config.supabase_url && this.config.supabase_key ? 'active' : 'error',
+            status: this._usesRdsBackend() ? 'active' : 'error',
             lastUpdate: now,
-            info: this.config.supabase_url && this.config.supabase_key ? 'Connected' : "Connection failed • Error invoking remote method 'get-stats': Error: No handler registered for 'get-stats'"
+            info: this._usesRdsBackend() ? 'Connected' : 'Connection failed • BACKEND_API_URL / INTERNAL_API_KEY not configured'
           }
         };
 
@@ -879,146 +698,31 @@ class DataStatsManager {
 
         const {
           fetchScreenshotsFromBackend,
-          usesBackendScreenshots,
           applyActivityFilter,
           buildEnhancedResponse,
         } = require('../utils/backend-screenshots');
 
-        if (usesBackendScreenshots(this.config)) {
-          const backendRows = await fetchScreenshotsFromBackend(user_id, this.config, {
-            date,
-            limit,
-          });
-          if (Array.isArray(backendRows)) {
-            const withImages = backendRows.filter(
-              (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
-            );
-            const filtered = applyActivityFilter(withImages, activity_filter);
-            console.log(`✅ [ENHANCED-SCREENSHOTS] Backend/RDS: ${filtered.length} rows for ${date}`);
-            if (filtered.length === 0) {
-              console.warn(
-                '⚠️ [ENHANCED-SCREENSHOTS] No RDS rows for this date. S3-only uploads (failed screenshot_upload_complete) will not appear until complete succeeds.',
-              );
-            }
-            return buildEnhancedResponse(filtered);
-          }
-          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Backend fetch failed');
-          const { normalizeTenantUserId } = require('../utils/tenant-user-id');
-          if (
-            (this.config?.auth_provider === 'cognito' || process.env.VITE_AUTH_PROVIDER === 'cognito') &&
-            normalizeTenantUserId(user_id)
-          ) {
-            return { success: true, screenshots: [], duplicates: [] };
-          }
-          console.warn('⚠️ [ENHANCED-SCREENSHOTS] Falling back to Supabase');
-        }
-        
-        const { workDayBoundsForYmd } = require('../utils/work-timezone');
-        const [y, mo, d] = String(date).split('-').map(Number);
-        const { startMs, endMs } = workDayBoundsForYmd(y, mo, d);
-        const rangeStartIso = new Date(startMs).toISOString();
-        const rangeEndIso = new Date(endMs - 1).toISOString();
-
-        // Build query with activity filtering using service role client for admin access
-        let query = this.supabaseService
-          .from('screenshots')
-          .select('*, is_duplicate, duplicate_reason, duplicate_group_hash, duplicate_hash')
-          .eq('user_id', user_id)
-          .gte('captured_at', rangeStartIso)
-          .lte('captured_at', rangeEndIso)
-          .order('captured_at', { ascending: false });
-        
-        // Apply activity level filtering
-        if (activity_filter !== 'all') {
-          if (activity_filter === 'high') {
-            query = query.gte('activity_percent', 70);
-          } else if (activity_filter === 'medium') {
-            query = query.gte('activity_percent', 30).lt('activity_percent', 70);
-          } else if (activity_filter === 'low') {
-            query = query.lt('activity_percent', 30);
-          }
-        }
-        
-        query = query.limit(limit);
-        
-        const { data: screenshots, error } = await query;
-
-        if (error) {
-          console.error('❌ Error fetching enhanced screenshots:', error);
-          this.systemMonitor && this.systemMonitor.sendDebugUpdate('ERROR', `Enhanced screenshot fetch failed: ${error.message}`);
-          return { success: false, error: error.message, screenshots: [], duplicates: [] };
-        }
-
-        // Storage bucket is private; generate signed URLs for renderer display.
-        try {
-          await Promise.all(
-            (screenshots || []).map(async (s) => {
-              const filePath = s?.file_path;
-              if (!filePath || !this.supabaseService?.storage) return;
-              const { data } = await this.supabaseService.storage
-                .from('screenshots')
-                .createSignedUrl(filePath, 60 * 60);
-              if (data?.signedUrl) s.image_url = data.signedUrl;
-            })
+        const backendRows = await fetchScreenshotsFromBackend(user_id, this.config, {
+          date,
+          limit,
+        });
+        if (Array.isArray(backendRows)) {
+          const withImages = backendRows.filter(
+            (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
           );
-        } catch (e) {
-          console.warn('⚠️ [DataStatsManager] Could not create signed URLs for screenshots:', e?.message || e);
-        }
-
-        // Use backend duplicate detection results instead of flawed time-based detection
-        const duplicates = [];
-        const duplicateGroups = new Map();
-        
-        (screenshots || []).forEach(screenshot => {
-          // Check if screenshot is marked as duplicate by backend analysis
-          if (screenshot.is_duplicate) {
-            duplicates.push({
-              id: screenshot.id,
-              reason: screenshot.duplicate_reason || 'Detected by backend analysis',
-              group_hash: screenshot.duplicate_group_hash,
-              detected_method: 'backend_analysis'
-            });
-            
-            // Group duplicates by hash for better visualization
-            if (screenshot.duplicate_group_hash) {
-              if (!duplicateGroups.has(screenshot.duplicate_group_hash)) {
-                duplicateGroups.set(screenshot.duplicate_group_hash, []);
-              }
-              duplicateGroups.get(screenshot.duplicate_group_hash).push(screenshot.id);
-            }
+          const filtered = applyActivityFilter(withImages, activity_filter);
+          console.log(`✅ [ENHANCED-SCREENSHOTS] Backend/RDS: ${filtered.length} rows for ${date}`);
+          if (filtered.length === 0) {
+            console.warn(
+              '⚠️ [ENHANCED-SCREENSHOTS] No RDS rows for this date. S3-only uploads (failed screenshot_upload_complete) will not appear until complete succeeds.',
+            );
           }
-        });
-        
-        // Extract just the IDs for backward compatibility
-        const duplicateIds = duplicates.map(d => d.id);
-
-        // Rewrite image URLs through proxy when direct Supabase is unreachable
-        if (global.useSupabaseProxy && global.supabaseDirectUrl && global.SUPABASE_PROXY_URL) {
-          (screenshots || []).forEach(s => {
-            if (s.image_url && s.image_url.includes(global.supabaseDirectUrl)) {
-              s.image_url = s.image_url.replace(global.supabaseDirectUrl, global.SUPABASE_PROXY_URL);
-            }
-          });
+          return buildEnhancedResponse(filtered);
         }
 
-        console.log('🧠 [DEBUG] Filtered for display:', screenshots?.length || 0, 'screenshots found');
-        console.log('🧠 [DEBUG] Query parameters used:', {
-          user_id,
-          date_range: `${rangeStartIso} to ${rangeEndIso}`,
-          activity_filter,
-          total_found: screenshots?.length || 0
-        });
-        
-        this.safeLog && this.safeLog(`✅ Fetched ${screenshots?.length || 0} enhanced screenshots (${duplicates.length} duplicates detected)`);
-        this.systemMonitor && this.systemMonitor.sendDebugUpdate('SCREENSHOT', `Enhanced fetch: ${screenshots?.length || 0} screenshots, ${duplicates.length} duplicates for ${date}`);
-        return { 
-          success: true, 
-          screenshots: screenshots || [],
-          duplicates: duplicateIds,
-          duplicate_details: duplicates,
-          duplicate_groups: Object.fromEntries(duplicateGroups),
-          count: screenshots?.length || 0
-        };
+        console.warn('⚠️ [ENHANCED-SCREENSHOTS] Backend fetch failed — returning empty list');
+        this.systemMonitor && this.systemMonitor.sendDebugUpdate('ERROR', 'Enhanced screenshot fetch failed (backend unavailable)');
+        return { success: true, screenshots: [], duplicates: [] };
       } catch (error) {
         console.error('❌ Error in fetch-screenshots-enhanced handler:', error);
         return { success: false, error: error.message, screenshots: [], duplicates: [] };
@@ -1048,43 +752,21 @@ class DataStatsManager {
           return { success: false, error: 'User not authenticated' };
         }
 
-        const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('../utils/backend-screenshots');
+        const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
 
-        if (usesBackendScreenshots(this.config)) {
-          const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-          const rows = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
-            startIso: since,
-            endIso: new Date().toISOString(),
-            limit: 20,
-          });
-          if (Array.isArray(rows)) {
-            console.log(`✅ [IPC] Backend screenshot activity: ${rows.length} records`);
-            return { success: true, data: rows, source: 'backend' };
-          }
-          console.warn('⚠️ [IPC] Backend screenshot activity failed, trying Supabase');
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const rows = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
+          startIso: since,
+          endIso: new Date().toISOString(),
+          limit: 20,
+        });
+        if (Array.isArray(rows)) {
+          console.log(`✅ [IPC] Backend screenshot activity: ${rows.length} records`);
+          this.logger && this.logger.info({ category: 'IPC', step: 'get-screenshot-activity: SUCCESS', ctx: { records: rows.length } });
+          return { success: true, data: rows, source: 'backend' };
         }
 
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
-        
-        const { data, error } = await this.supabaseService
-          .from('screenshots')
-          .select('file_path, image_url, captured_at, activity_percent, app_name, window_title, time_log_id, mouse_clicks, keystrokes, mouse_movements, is_duplicate, duplicate_reason, duplicate_group_hash')
-          .eq('user_id', effectiveUserId)
-          .gte('captured_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          .order('captured_at', { ascending: false })
-          .limit(20);
-        
-        if (error) {
-          console.error('❌ Error fetching screenshot activity:', error);
-          return { success: false, error: error.message };
-        }
-        
-        console.log(`✅ [IPC] Fetched ${data?.length || 0} screenshot activity records (Supabase)`);
-        this.logger && this.logger.info({ category: 'IPC', step: 'get-screenshot-activity: SUCCESS', ctx: { records: data?.length || 0 } });
-        return { success: true, data: data || [], source: 'supabase' };
-        
+        throw new Error('Backend screenshot activity fetch failed');
       } catch (error) {
         console.error('❌ Error in get-screenshot-activity:', error);
         this.logger && this.logger.error({ category: 'IPC', step: 'get-screenshot-activity: ERROR', message: error.message });
@@ -1133,51 +815,14 @@ class DataStatsManager {
           return { success: false, error: 'Access denied: Can only view your own screenshots', screenshots: [] };
         }
         
-        const { workDayBoundsForYmd: boundsForYmd } = require('../utils/work-timezone');
-        const [yy, mm, dd] = String(date).split('-').map(Number);
-        const dayBounds = boundsForYmd(yy, mm, dd);
-        const dayStartIso = new Date(dayBounds.startMs).toISOString();
-        const dayEndIso = new Date(dayBounds.endMs - 1).toISOString();
+        // RDS + S3: rows already carry a presigned image_url, so no signed-URL step is needed.
+        const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+        const screenshots = await fetchScreenshotsFromBackend(userId, this.config, { date, limit });
 
-        // Query screenshots from database using service role client for admin access
-        const { data: screenshots, error } = await this.supabaseService
-          .from('screenshots')
-          .select('*')
-          .eq('user_id', userId)
-          .gte('captured_at', dayStartIso)
-          .lte('captured_at', dayEndIso)
-          .order('captured_at', { ascending: false })
-          .limit(limit);
-
-        if (error) {
-          console.error('❌ Error fetching screenshots:', error);
-          this.systemMonitor && this.systemMonitor.sendDebugUpdate('ERROR', `Screenshot fetch failed: ${error.message}`);
-          return { success: false, error: error.message, screenshots: [] };
-        }
-
-        // Storage bucket is private; generate signed URLs for renderer display.
-        try {
-          await Promise.all(
-            (screenshots || []).map(async (s) => {
-              const filePath = s?.file_path;
-              if (!filePath || !this.supabaseService?.storage) return;
-              const { data } = await this.supabaseService.storage
-                .from('screenshots')
-                .createSignedUrl(filePath, 60 * 60);
-              if (data?.signedUrl) s.image_url = data.signedUrl;
-            })
-          );
-        } catch (e) {
-          console.warn('⚠️ [DataStatsManager] Could not create signed URLs for screenshots:', e?.message || e);
-        }
-
-        // Rewrite image URLs through proxy when direct Supabase is unreachable
-        if (global.useSupabaseProxy && global.supabaseDirectUrl && global.SUPABASE_PROXY_URL) {
-          (screenshots || []).forEach(s => {
-            if (s.image_url && s.image_url.includes(global.supabaseDirectUrl)) {
-              s.image_url = s.image_url.replace(global.supabaseDirectUrl, global.SUPABASE_PROXY_URL);
-            }
-          });
+        if (!Array.isArray(screenshots)) {
+          console.error('❌ Error fetching screenshots: backend fetch failed');
+          this.systemMonitor && this.systemMonitor.sendDebugUpdate('ERROR', 'Screenshot fetch failed (backend unavailable)');
+          return { success: false, error: 'Screenshot fetch failed', screenshots: [] };
         }
 
         this.safeLog && this.safeLog(`✅ Fetched ${screenshots?.length || 0} screenshots`);
@@ -1272,10 +917,6 @@ class DataStatsManager {
       try {
         console.log('🌐 [IPC] Fetching URL activity data...');
         
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
-        
         // Get effective user ID from multiple sources
         const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
         
@@ -1284,33 +925,22 @@ class DataStatsManager {
         }
         
         // Get URL logs from last 24 hours for current user
-        // Some rows store URL in `site_url`, others in `url` → select both and normalize
-        let query = this.supabaseService
-          .from('url_logs')
-          .select('id, url, site_url, title, browser, timestamp, time_log_id, domain, user_id')
-          .gte('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          // Removed problematic .or() clause - will filter in JS instead
-          .order('timestamp', { ascending: false })
-          .limit(50);
-        
-        // Filter out internal noise values when present on either column
-        query = query
-          .not('site_url', 'ilike', '%browser-activity-detected.local%')
-          .not('url', 'ilike', '%browser-activity-detected.local%');
-        
-        // Always filter to current user's data only (even for admins in desktop agent)
-        query = query.eq('user_id', effectiveUserId);
-        
-        const { data, error } = await query;
+        const { data, error } = await this._fetchUrlLogs(effectiveUserId, {
+          start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          end: new Date().toISOString(),
+          limit: 50,
+        });
         
         if (error) {
           console.error('❌ Error fetching URL activity:', error);
           return { success: false, error: error.message };
         }
         
-        // Filter out rows where both url and site_url are null, then normalize
+        // Some rows store URL in `site_url`, others in `url` → normalize.
+        // The internal-noise filter runs in JS (the RDS reader has no ilike-exclude option).
         const normalized = (data || [])
           .filter(row => row.url || row.site_url)  // Drop rows where both are null
+          .filter(row => !String(row.url || row.site_url).includes('browser-activity-detected.local'))
           .map((row) => ({
             ...row,
             url: row.url || row.site_url || null,
@@ -1342,10 +972,6 @@ class DataStatsManager {
           console.log('📅 [IPC] Fetching URL history data...', params);
         }
         
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
-        
         // Get effective user ID from multiple sources
         const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
         
@@ -1370,22 +996,11 @@ class DataStatsManager {
         console.log(`🔍 [URL-HISTORY] Fetching URLs from ${start.toISOString()} to ${end.toISOString()}`);
         
         // Get URL logs for the specified date range (timestamp-based)
-        const baseSelect = 'id, url, site_url, title, domain, browser, timestamp, time_log_id, user_id';
-        let queryTs = this.supabaseService
-          .from('url_logs')
-          .select(baseSelect)
-          .gte('timestamp', start.toISOString())
-          .lte('timestamp', end.toISOString())
-          .eq('user_id', effectiveUserId)
-          .order('timestamp', { ascending: false })
-          .limit(500);
-        
-        // Filter out internal noise values when present on either column
-        queryTs = queryTs
-          .not('site_url', 'ilike', '%browser-activity-detected.local%')
-          .not('url', 'ilike', '%browser-activity-detected.local%');
-        
-        const { data: dataTs, error } = await queryTs;
+        const { data: dataTs, error } = await this._fetchUrlLogs(effectiveUserId, {
+          start: start.toISOString(),
+          end: end.toISOString(),
+          limit: 500,
+        });
         const data = dataTs || [];
         
         if (error) {
@@ -1409,9 +1024,11 @@ class DataStatsManager {
           /\binbox\b.*\bzoho\b/i, /\binbox\b.*\bgmail\b/i,
         ];
         
-        // Filter out rows where both url and site_url are null, then normalize
+        // Filter out rows where both url and site_url are null, then normalize.
+        // The internal-noise filter runs in JS (the RDS reader has no ilike-exclude option).
         const normalized = (data || [])
           .filter(row => row.url || row.site_url)  // Drop rows where both are null
+          .filter(row => !String(row.url || row.site_url).includes('browser-activity-detected.local'))
           .filter(row => {
             // Filter out non-browser web app URLs by title
             if (row.title) {
@@ -1461,50 +1078,10 @@ class DataStatsManager {
           globalConfigUserId: this.global.config?.user_id
         });
         
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
-        
         // Get effective user ID from multiple sources
         const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId || this.global.config?.user_id;
         
         console.log('🔍 [IPC DEBUG] Effective user ID:', effectiveUserId);
-        
-        // Check if Supabase service is ready with better error handling
-        if (!this.supabaseService) {
-          console.warn('⚠️ [APP-HISTORY] Supabase service not initialized, waiting for initialization...');
-          // Wait longer for service initialization with multiple retries
-          for (let i = 0; i < 10; i++) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-            if (this.supabaseService) {
-              console.log('✅ [APP-HISTORY] Supabase service initialized after', (i + 1) * 200, 'ms');
-              break;
-            }
-          }
-          if (!this.supabaseService) {
-            console.error('❌ [APP-HISTORY] Supabase service failed to initialize after 2 seconds');
-            return { success: false, error: 'Database service not available - initialization timeout' };
-          }
-        }
-        
-        // Fallback: resolve user from Supabase if globals/config haven't synced yet
-        if (!effectiveUserId) {
-          try {
-            const authClient = this.global.supabase || this.supabaseService;
-            if (authClient?.auth?.getUser) {
-              const { data } = await authClient.auth.getUser();
-              const uid = data?.user?.id;
-              if (uid) {
-                effectiveUserId = uid;
-                this.global.currentUserId = uid;
-                if (this.config) this.config.user_id = uid;
-                console.log('🔐 [APP-HISTORY] Resolved and set user ID from Supabase:', uid);
-              }
-            }
-          } catch (e) {
-            console.log('⚠️ [APP-HISTORY] Could not resolve user from Supabase:', e.message);
-          }
-        }
 
         if (!effectiveUserId) {
           return { success: false, error: 'User not authenticated' };
@@ -1568,85 +1145,15 @@ class DataStatsManager {
             const stats = this.calculateAppHistoryStats(sorted);
             return { success: true, data: sorted, stats };
           } catch (rdsErr) {
-            console.warn('⚠️ [APP-HISTORY] RDS list_app_logs failed, trying Supabase:', rdsErr.message);
+            console.error('❌ [APP-HISTORY] RDS list_app_logs failed:', rdsErr.message);
+            return { success: false, error: rdsErr.message };
           }
         }
-        
-        // Get app logs for the specified date range (legacy Supabase schema variants)
-        // Prefer columns that exist on time_doctor.app_logs (no duration_seconds).
-        let query = this.supabaseService
-          .from('app_logs')
-          .select('id, app_name, window_title, app_path, timestamp, started_at, ended_at, created_at, category, time_log_id, user_id')
-          .gte('timestamp', start.toISOString())
-          .lte('timestamp', end.toISOString())
-          .not('app_name', 'is', null)
-          .eq('user_id', effectiveUserId)
-          .order('timestamp', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(1000);
-        
-        let data, error;
-        try {
-          const result = await query;
-          data = result.data;
-          error = result.error;
-          if (error) throw error;
-        } catch (e) {
-          const msg = e.message || '';
-          if (/(column|could not find).*(started_at|ended_at|duration_seconds|detected_at)/i.test(msg)) {
-            console.log('⚠️ [APP-HISTORY] Schema mismatch, using minimal column set:', msg);
-            const fallbackResult = await this.supabaseService
-              .from('app_logs')
-              .select('id, app_name, window_title, timestamp, created_at, time_log_id, user_id')
-              .gte('timestamp', start.toISOString())
-              .lte('timestamp', end.toISOString())
-              .not('app_name', 'is', null)
-              .eq('user_id', effectiveUserId)
-              .order('timestamp', { ascending: false })
-              .limit(1000);
-            data = fallbackResult.data;
-            error = fallbackResult.error;
-            if (error && /(column|could not find).*created_at/i.test(error.message || '')) {
-              const fb2 = await this.supabaseService
-                .from('app_logs')
-                .select('id, app_name, window_title, timestamp, time_log_id, user_id')
-                .gte('timestamp', start.toISOString())
-                .lte('timestamp', end.toISOString())
-                .not('app_name', 'is', null)
-                .eq('user_id', effectiveUserId)
-                .order('timestamp', { ascending: false })
-                .limit(1000);
-              data = fb2.data;
-              error = fb2.error;
-            }
-          } else {
-            error = e;
-          }
-        }
-        
-        if (error) {
-          console.error('❌ Error fetching app history:', error);
-          return { success: false, error: error.message };
-        }
-        
-        console.log(`✅ [IPC] Fetched ${data?.length || 0} app history records`);
-        console.log('🔍 [IPC DEBUG] Sample app data:', data?.slice(0, 3)?.map(d => ({
-          app_name: d.app_name,
-          timestamp: d.timestamp,
-          user_id: d.user_id,
-          time_log_id: d.time_log_id
-        })));
-        console.log('🧩 [PARSE-DB] AppHistory: start enrich/sort', { records: data?.length || 0 });
-        // Calculate statistics (estimate durations if missing)
-        const enriched = this.enrichWithEstimatedDurations(data || []);
-        const sorted = this._sortAppHistoryRows(enriched);
-        const stats = this.calculateAppHistoryStats(sorted);
-        
-        return { 
-          success: true, 
-          data: sorted, 
-          stats: stats 
-        };
+
+        console.warn(
+          '⚠️ [APP-HISTORY] Backend not configured or non-tenant user id — returning empty history',
+        );
+        return { success: true, data: [], stats: this.calculateAppHistoryStats([]) };
         
       } catch (error) {
         console.error('❌ Error in get-app-history:', error);
@@ -1809,10 +1316,6 @@ class DataStatsManager {
       try {
         console.log('📱 [IPC] Fetching app activity data...');
         
-        if (!this.supabaseService) {
-          throw new Error('Supabase service client not initialized');
-        }
-        
         // Get effective user ID from multiple sources
         const effectiveUserId = this.global.currentUserId || this.config?.user_id || this.config?.userId;
         
@@ -1821,13 +1324,11 @@ class DataStatsManager {
         }
         
         // Get app logs from last 24 hours for current user
-        const { data, error } = await this.supabaseService
-          .from('app_logs')
-          .select('app_name, window_title, timestamp, time_log_id')
-          .eq('user_id', effectiveUserId)
-          .gte('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-          .order('timestamp', { ascending: false })
-          .limit(50);
+        const { data, error } = await this._fetchAppLogs(effectiveUserId, {
+          start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          end: new Date().toISOString(),
+          limit: 50,
+        });
         
         if (error) {
           console.error('❌ Error fetching app activity:', error);
@@ -1852,7 +1353,7 @@ class DataStatsManager {
       try {
         console.log('📊 [TODAY-STATS] Fetching today\'s comprehensive statistics...');
         
-        if (!this._usesRdsBackend() && !this.supabaseService) {
+        if (!this._usesRdsBackend()) {
           return { success: false, error: 'Database service not available' };
         }
 
@@ -1879,27 +1380,14 @@ class DataStatsManager {
         });
 
         let screenshots = [];
-        if (this._usesRdsBackend()) {
-          try {
-            const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
-            screenshots = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
-              startIso: todayStart.toISOString(),
-              endIso: todayEnd.toISOString(),
-            }) || [];
-          } catch (err) {
-            console.warn('⚠️ [TODAY-STATS] Backend screenshots read failed:', err.message);
-          }
-        } else if (this.supabaseService) {
-          const screenshotsResult = await this.supabaseService
-            .from('screenshots')
-            .select('id, captured_at, activity_percent, keystrokes, mouse_clicks, mouse_movements')
-            .eq('user_id', effectiveUserId)
-            .gte('captured_at', todayStart.toISOString())
-            .lte('captured_at', todayEnd.toISOString());
-          if (screenshotsResult.error) {
-            console.warn('⚠️ [TODAY-STATS] Screenshots query failed:', screenshotsResult.error.message);
-          }
-          screenshots = screenshotsResult.data || [];
+        try {
+          const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+          screenshots = await fetchScreenshotsFromBackend(effectiveUserId, this.config, {
+            startIso: todayStart.toISOString(),
+            endIso: todayEnd.toISOString(),
+          }) || [];
+        } catch (err) {
+          console.warn('⚠️ [TODAY-STATS] Backend screenshots read failed:', err.message);
         }
 
         const appLogsResult = await this._fetchAppLogs(effectiveUserId, {
@@ -2037,49 +1525,19 @@ class DataStatsManager {
           return { success: true, data: [] };
         }
 
-        const {
-          fetchTodayScreenshotsFromBackend,
-          usesBackendScreenshots,
-        } = require('../utils/backend-screenshots');
+        const { fetchTodayScreenshotsFromBackend } = require('../utils/backend-screenshots');
 
-        if (usesBackendScreenshots(this.config)) {
-          const backendRows = await fetchTodayScreenshotsFromBackend(effectiveUserId, this.config);
-          if (Array.isArray(backendRows) && backendRows.length >= 0) {
-            const withImages = backendRows.filter(
-              (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
-            );
-            console.log(`✅ [TODAY-SCREENSHOTS] Backend/RDS: ${withImages.length} screenshots`);
-            return { success: true, data: withImages, source: 'backend' };
-          }
-          console.warn('⚠️ [TODAY-SCREENSHOTS] Backend fetch failed, falling back to Supabase');
+        const backendRows = await fetchTodayScreenshotsFromBackend(effectiveUserId, this.config);
+        if (Array.isArray(backendRows) && backendRows.length >= 0) {
+          const withImages = backendRows.filter(
+            (s) => s.image_url || (s.s3_key && String(s.s3_key).includes('/')),
+          );
+          console.log(`✅ [TODAY-SCREENSHOTS] Backend/RDS: ${withImages.length} screenshots`);
+          return { success: true, data: withImages, source: 'backend' };
         }
 
-        if (!this.supabaseService) {
-          console.error('❌ [TODAY-SCREENSHOTS] No backend or Supabase available');
-          return { success: false, error: 'Database service not available' };
-        }
-
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const { data, error } = await this.supabaseService
-          .from('screenshots')
-          .select('captured_at, file_path, image_url, activity_percent, focus_percent, app_name, window_title, mouse_clicks, keystrokes, mouse_movements')
-          .eq('user_id', effectiveUserId)
-          .gte('captured_at', todayStart.toISOString())
-          .lte('captured_at', todayEnd.toISOString())
-          .order('captured_at', { ascending: false });
-
-        if (error) {
-          const errorMessage = error.message || String(error);
-          console.error('❌ [TODAY-SCREENSHOTS] Supabase error:', errorMessage.split('\n')[0]);
-          return { success: false, error: errorMessage };
-        }
-
-        console.log(`✅ [TODAY-SCREENSHOTS] Supabase: ${data?.length || 0} screenshots`);
-        return { success: true, data: data || [], source: 'supabase' };
+        console.error('❌ [TODAY-SCREENSHOTS] Backend fetch failed');
+        return { success: false, error: 'Database service not available' };
       } catch (error) {
         console.error('❌ [TODAY-SCREENSHOTS] Error:', error);
         return { success: false, error: error.message };
@@ -2095,8 +1553,8 @@ class DataStatsManager {
       try {
         console.log('📝 [TODAY-ACTIVITY-LOG] Fetching today\'s activity log...');
         
-        if (!this.supabaseService) {
-          console.error('❌ [TODAY-ACTIVITY-LOG] Supabase service not available');
+        if (!this._usesRdsBackend()) {
+          console.error('❌ [TODAY-ACTIVITY-LOG] Backend not configured');
           return { success: false, error: 'Database service not available' };
         }
 
@@ -2117,105 +1575,38 @@ class DataStatsManager {
         console.log(`📝 [TODAY-ACTIVITY-LOG] Fetching activity log for user ${effectiveUserId}`);
         console.log(`📝 [TODAY-ACTIVITY-LOG] Date range: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
 
-        // Get activity from multiple sources and combine (with error handling for each)
+        // One read per source: RDS has a single schema, so the legacy per-column
+        // query variants (started_at / created_at / null-timestamp) are not needed.
         const [
           screenshotResult,
-          appTsRes,
-          appStartedAtRes,
-          appCrRes,
-          urlTsRes,
-          urlCrRes,
+          appResult,
+          urlResult,
           timeResult
         ] = await Promise.allSettled([
-          // Screenshot activities — captured_at is authoritative
-          this.supabaseService
-            .from('screenshots')
-            .select('id, captured_at, created_at, app_name, activity_percent')
-            .eq('user_id', effectiveUserId)
-            .gte('captured_at', todayStart.toISOString())
-            .lte('captured_at', todayEnd.toISOString())
-            .order('captured_at', { ascending: false }),
-
-          // App activities by timestamp
-          this.supabaseService
-            .from('app_logs')
-            .select('id, timestamp, created_at, app_name, window_title, detected_at')
-            .eq('user_id', effectiveUserId)
-            .gte('timestamp', todayStart.toISOString())
-            .lte('timestamp', todayEnd.toISOString())
-            .order('timestamp', { ascending: false }),
-
-          // App activities by started_at (newer schema)
-          this.supabaseService
-            .from('app_logs')
-            .select('id, started_at, ended_at, created_at, app_name, window_title, detected_at, duration_seconds')
-            .eq('user_id', effectiveUserId)
-            .gte('started_at', todayStart.toISOString())
-            .lte('started_at', todayEnd.toISOString())
-            .order('started_at', { ascending: false }),
-
-          // App activities where timestamp is null — filter by created_at
-          this.supabaseService
-            .from('app_logs')
-            .select('id, timestamp, created_at, app_name, window_title, detected_at')
-            .eq('user_id', effectiveUserId)
-            .is('timestamp', null)
-            .gte('created_at', todayStart.toISOString())
-            .lte('created_at', todayEnd.toISOString())
-            .order('created_at', { ascending: false }),
-
-          // URL activities by timestamp
-          this.supabaseService
-            .from('url_logs')
-            .select('id, timestamp, url, site_url, browser, domain')
-            .eq('user_id', effectiveUserId)
-            .gte('timestamp', todayStart.toISOString())
-            .lte('timestamp', todayEnd.toISOString())
-            .order('timestamp', { ascending: false }),
-
-          // URL activities where timestamp is null — filter by created_at
-          this.supabaseService
-            .from('url_logs')
-            .select('id, timestamp, url, site_url, browser, domain')
-            .eq('user_id', effectiveUserId)
-            .is('timestamp', null)
-            .order('timestamp', { ascending: false }),
-
-          // Time log activities — start_time is authoritative
-          this.supabaseService
-            .from('time_logs')
-            .select('id, start_time, end_time, is_idle, idle_seconds')
-            .eq('user_id', effectiveUserId)
-            .gte('start_time', todayStart.toISOString())
-            .lte('start_time', todayEnd.toISOString())
-            .order('start_time', { ascending: false })
+          require('../utils/backend-screenshots').fetchScreenshotsFromBackend(
+            effectiveUserId,
+            this.config,
+            { startIso: todayStart.toISOString(), endIso: todayEnd.toISOString() },
+          ),
+          this._fetchAppLogs(effectiveUserId, {
+            start: todayStart.toISOString(),
+            end: todayEnd.toISOString(),
+          }),
+          this._fetchUrlLogs(effectiveUserId, {
+            start: todayStart.toISOString(),
+            end: todayEnd.toISOString(),
+          }),
+          this._fetchTimeLogs(effectiveUserId, {
+            start: todayStart.toISOString(),
+            end: new Date(todayEnd.getTime() + 1).toISOString(),
+          })
         ]);
 
         // Process results with error handling
-        const screenshots = screenshotResult.status === 'fulfilled' ? (screenshotResult.value.data || []) : [];
-        const appByTs = appTsRes.status === 'fulfilled' ? (appTsRes.value.data || []) : [];
-        const appByStarted = appStartedAtRes.status === 'fulfilled' ? (appStartedAtRes.value.data || []) : [];
-        const appByCr = appCrRes.status === 'fulfilled' ? (appCrRes.value.data || []) : [];
-        const urlByTs = urlTsRes.status === 'fulfilled' ? (urlTsRes.value.data || []) : [];
-        const urlByCr = urlCrRes.status === 'fulfilled' ? (urlCrRes.value.data || []) : [];
+        const screenshots = screenshotResult.status === 'fulfilled' ? (screenshotResult.value || []) : [];
+        const appLogs = appResult.status === 'fulfilled' ? (appResult.value.data || []) : [];
+        const urlLogs = urlResult.status === 'fulfilled' ? (urlResult.value.data || []) : [];
         const timeLogs = timeResult.status === 'fulfilled' ? (timeResult.value.data || []) : [];
-
-        // Deduplicate function
-        const dedupe = (rows, keyFn) => {
-          const seen = new Set();
-          const out = [];
-          for (const r of rows) {
-            const k = keyFn(r);
-            if (seen.has(k)) continue;
-            seen.add(k);
-            out.push(r);
-          }
-          return out;
-        };
-
-        // Merge and deduplicate app and URL logs
-        const appLogs = dedupe([...appByTs, ...appByStarted, ...appByCr], r => r.id ?? `${r.app_name}|${r.timestamp || r.started_at || r.created_at}`);
-        const urlLogs = dedupe([...urlByTs, ...urlByCr], r => r.id ?? `${r.url || r.site_url}|${r.timestamp}`);
 
         // Log data counts
         console.log(`📝 [TODAY-ACTIVITY-LOG] Data retrieved: {screenshots: ${screenshots.length}, appLogs: ${appLogs.length}, urlLogs: ${urlLogs.length}, timeLogs: ${timeLogs.length}}`);
@@ -2224,23 +1615,20 @@ class DataStatsManager {
         if (screenshotResult.status === 'rejected') {
           console.error('❌ Screenshot query error:', screenshotResult.reason);
         }
-        if (appTsRes.status === 'rejected') {
-          console.error('❌ App logs (timestamp) query error:', appTsRes.reason);
+        if (appResult.status === 'rejected') {
+          console.error('❌ App logs query error:', appResult.reason);
+        } else if (appResult.value.error) {
+          console.error('❌ App logs query error:', appResult.value.error.message);
         }
-        if (appCrRes.status === 'rejected') {
-          console.error('❌ App logs (created_at) query error:', appCrRes.reason);
-        }
-        if (appStartedAtRes.status === 'rejected') {
-          console.error('❌ App logs (started_at) query error:', appStartedAtRes.reason);
-        }
-        if (urlTsRes.status === 'rejected') {
-          console.error('❌ URL logs (timestamp) query error:', urlTsRes.reason);
-        }
-        if (urlCrRes.status === 'rejected') {
-          console.log('ℹ️ URL logs (created_at) not used in schema; relying on timestamp only');
+        if (urlResult.status === 'rejected') {
+          console.error('❌ URL logs query error:', urlResult.reason);
+        } else if (urlResult.value.error) {
+          console.error('❌ URL logs query error:', urlResult.value.error.message);
         }
         if (timeResult.status === 'rejected') {
           console.error('❌ Time logs query error:', timeResult.reason);
+        } else if (timeResult.value.error) {
+          console.error('❌ Time logs query error:', timeResult.value.error.message);
         }
 
         // Combine and format all activities

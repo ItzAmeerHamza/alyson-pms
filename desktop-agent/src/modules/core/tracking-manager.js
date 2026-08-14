@@ -8,13 +8,13 @@ const { EventEmitter } = require('events');
 const debugLogger = require('../utils/debug-logger');
 const { getDeviceId } = require('../utils/device-id');
 const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
+const { normalizeTenantUserId } = require('../utils/tenant-user-id');
 const backendTimeLogs = require('../utils/backend-time-logs');
 
 class TrackingManager extends EventEmitter {
   constructor(config, dependencies = {}) {
     super();
     this.config = config;
-    this.supabaseService = dependencies.supabaseService;
     this.cleanupRegistry = dependencies.cleanupRegistry;
     
     // Tracking state
@@ -73,9 +73,37 @@ class TrackingManager extends EventEmitter {
   }
 
   /**
-   * Start tracking session
+   * Start tracking session.
+   *
+   * Single-flight. The isTracking guard inside sits behind an await and
+   * isTracking is not set until createTimeLog resolves, so two concurrent
+   * callers both pass the guard and both INSERT. There are ~14 call sites
+   * (renderer IPC, tray, resume-after-wake, session recovery, startup), and
+   * more than one routinely fires for a single user action — producing bursts
+   * of rows milliseconds apart. The extras are closed immediately with no
+   * proof-of-life, which is where the sub-minute sessions come from.
+   *
+   * Sharing the in-flight promise makes a second caller join the first start
+   * rather than open a second session.
    */
   async startTracking(projectId = null) {
+    if (this._startInFlight) {
+      console.log('⏳ [TRACKING-MANAGER] Start already in progress - joining it');
+      return this._startInFlight;
+    }
+
+    this._startInFlight = (async () => {
+      try {
+        return await this._startTrackingInner(projectId);
+      } finally {
+        this._startInFlight = null;
+      }
+    })();
+
+    return this._startInFlight;
+  }
+
+  async _startTrackingInner(projectId = null) {
 try {
       const __startupTimestamp = Date.now();
       const __phase = (label) => {
@@ -240,29 +268,23 @@ try {
         };
       }
 
-      if (!this.supabaseService) {
-        // Fallback to global supabase if dependency injection failed
-        // Try service role first, then authenticated client, then anonymous client
-        this.supabaseService = global.supabaseService || global.supabaseClient || global.supabase;
-        debugLogger.guard('tracking', 'Using fallback Supabase service', {
-          hasGlobalSupabaseService: !!global.supabaseService,
-          hasGlobalSupabaseClient: !!global.supabaseClient,
-          hasGlobalSupabase: !!global.supabase,
-          foundFallback: !!this.supabaseService
-        });
-      }
       const useBackendTimeLogs = backendTimeLogs.isBackendTimeLogsEnabled(this.config);
-      if (!useBackendTimeLogs && !this.supabaseService) {
-        debugLogger.guard('tracking', 'Supabase service not available - cannot start tracking', {
-          supabaseService: !!this.supabaseService,
-          globalSupabaseService: !!global.supabaseService,
-          globalSupabaseClient: !!global.supabaseClient
+      if (!useBackendTimeLogs) {
+        // PAYROLL: the API is the only store there is. Running a clock we can
+        // never persist would show the employee time that is not being recorded.
+        debugLogger.guard('tracking', 'Backend time logs API not configured - cannot start tracking', {
+          useBackendTimeLogs,
         });
-        throw new Error('Supabase service not available');
+        throw new Error('Backend time logs API not configured');
       }
 
-      // Guard: ensure we have a valid user ID before proceeding
-      const effectiveUserId = this.config.user_id || global.currentUserId;
+      // Take the first value that is actually a tenant id, not simply the first
+      // value present. config.user_id can still hold a legacy Supabase UUID from
+      // before this device migrated, and the backend rejects those — so preferring
+      // it blindly broke Start until session restore overwrote it.
+      const effectiveUserId =
+        normalizeTenantUserId(this.config.user_id) ||
+        normalizeTenantUserId(global.currentUserId);
       if (!effectiveUserId) {
         throw new Error('User not authenticated');
       }
@@ -273,7 +295,14 @@ try {
       console.log(`🔒 [TRACKING-MANAGER] Pre-insert inspect for user ${effectiveUserId}, device ${deviceId}`);
       const localCheckpoint = this._readSessionCheckpoint?.() || null;
       let recoveredSession = null;
-      if (useBackendTimeLogs) {
+      // Already known offline: skip the inspect + cleanup preamble entirely.
+      // Re-discovering the outage here cost 5s + 5s before Start even tried to
+      // create the session. Orphans are reconciled on the next online Start.
+      const offlineHint = useBackendTimeLogs && backendTimeLogs.isLikelyOffline();
+      if (offlineHint) {
+        console.log('📴 [TRACKING-MANAGER] Offline — arming local session immediately');
+      }
+      if (useBackendTimeLogs && !offlineHint) {
         try {
           // Fail fast on low internet — Start must not hang waiting for inspect.
           const inspect = await backendTimeLogs.reconcileOpenSessions(
@@ -289,9 +318,44 @@ try {
           );
           if (inspect?.recovered?.id) {
             recoveredSession = inspect.recovered;
-            console.log(
-              `♻️ [TRACKING-MANAGER] Recovered fresh open session ${recoveredSession.id} (ageSec=${recoveredSession.age_seconds})`,
-            );
+            try {
+              const { workDateKey } = require('../utils/work-timezone');
+              const startKey = workDateKey(new Date(recoveredSession.start_time));
+              const todayKey = workDateKey();
+              if (startKey && todayKey && startKey !== todayKey) {
+                console.warn(
+                  `🚩 [TRACKING-MANAGER] Recovered session started ${startKey}, today is ${todayKey} — closing at last heartbeat instead of continuing`,
+                );
+                const {
+                  closeOpenSessionsAfterExplicitStop,
+                } = require('../utils/session-recovery');
+                await closeOpenSessionsAfterExplicitStop({
+                  userId: effectiveUserId,
+                  deviceId,
+                  // suggested_end_at belongs to THIS recovered row. Naming it
+                  // keeps that end off any other open row on the device.
+                  timeLogId: recoveredSession.id,
+                  end_time:
+                    recoveredSession.suggested_end_at ||
+                    recoveredSession.last_heartbeat_at ||
+                    localCheckpoint?.checkpointAt ||
+                    undefined,
+                  config: this.config,
+                  timeoutMs: 5000,
+                });
+                recoveredSession = null;
+              }
+            } catch (dayErr) {
+              console.warn(
+                '⚠️ [TRACKING-MANAGER] Work-day recover check failed:',
+                dayErr?.message || dayErr,
+              );
+            }
+            if (recoveredSession) {
+              console.log(
+                `♻️ [TRACKING-MANAGER] Recovered fresh open session ${recoveredSession.id} (ageSec=${recoveredSession.age_seconds})`,
+              );
+            }
           } else if (inspect?.flagged_count > 0) {
             const flagged = inspect.flagged || [];
             console.warn(
@@ -304,6 +368,8 @@ try {
               } = require('../utils/session-recovery');
               const suggested =
                 flagged[0]?.suggested_end_at ||
+                flagged[0]?.last_heartbeat_at ||
+                flagged[0]?.last_evidence_at ||
                 flagged[0]?.client_checkpoint_at ||
                 localCheckpoint?.checkpointAt ||
                 null;
@@ -314,6 +380,15 @@ try {
                 config: this.config,
                 timeoutMs: 5000,
               });
+              // Those rows are finished, so drop every local handle to them:
+              // the id, the checkpoint interval and the checkpoint file. Left
+              // in place, the next write still addresses a dead session and
+              // stamps it with the new session's clock.
+              const {
+                clearLocalTrackingAfterStaleClose,
+              } = require('../utils/session-recovery');
+              clearLocalTrackingAfterStaleClose();
+              this._clearSessionCheckpoint?.();
             } catch (closeErr) {
               console.warn(
                 '⚠️ [TRACKING-MANAGER] Orphan close before Start failed:',
@@ -338,7 +413,7 @@ try {
         }
       }
 
-      if (global.sessionManager && global.sessionManager.closeExistingSessionsBeforeStart) {
+      if (!offlineHint && global.sessionManager && global.sessionManager.closeExistingSessionsBeforeStart) {
         try {
           const cleanupResult = await Promise.race([
             global.sessionManager.closeExistingSessionsBeforeStart(),
@@ -390,7 +465,7 @@ try {
         };
         error = null;
         console.log('✅ [TRACKING-MANAGER] Resuming recovered time log:', timeLog.id);
-      } else if (useBackendTimeLogs) {
+      } else {
         // Stable id chosen before the network call so a timeout-after-commit
         // + offline retry cannot insert a second row.
         const newId = crypto.randomUUID();
@@ -408,139 +483,23 @@ try {
               organization_id: orgId,
             },
             this.config,
-            { timeoutMs: 8000 },
+            // Known-offline: fail fast instead of making the employee wait 8s
+            // to be told what we already knew. The row is queued either way.
+            { timeoutMs: offlineHint ? 2000 : 8000 },
           );
           error = null;
           console.log('✅ [TRACKING-MANAGER] RDS time log created:', timeLog.id);
         } catch (e) {
           error = e;
           timeLog = null;
-          console.error('❌ [TRACKING-MANAGER] RDS create_time_log failed:', e.message || e);
-        }
-      } else {
-        try {
-          // Low internet: never hang forever on Supabase insert.
-          const resp = await Promise.race([
-            this.supabaseService
-              .from('time_logs')
-              .insert([timeLogData])
-              .select()
-              .single(),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Supabase create_time_log timeout after 8000ms')), 8000),
-            ),
-          ]);
-          timeLog = resp.data;
-          error = resp.error;
-        } catch (e) {
-          error = e;
+          console.warn(
+            `⚠️ [TRACKING-MANAGER] create_time_log offline — queued, will sync: ${e.message || e}`,
+          );
         }
       }
 
       console.timeEnd('T4-T5: time_logs insert');
       console.log('💾 [TRACKING-MANAGER] T5: After time_logs insert:', new Date().toISOString());
-
-      if (error) {
-        // Special fallback: Some packaged builds see "Content-Type not acceptable: text/plain" from postgrest-js
-        // Work around by calling PostgREST directly with explicit headers
-        const errMsg = (error && (error.message || String(error))) || '';
-        const shouldUseDirectPost = errMsg.includes('Content-Type not acceptable') || errMsg.includes('406');
-        if (shouldUseDirectPost && global.config && global.config.supabase_url) {
-          try {
-            console.log('🛠️ [TRACKING-MANAGER] Applying direct PostgREST fallback for time_logs insert');
-            const fetchImpl = global.fetch || require('node-fetch');
-            const url = `${global.config.supabase_url.replace(/\/$/, '')}/rest/v1/time_logs`;
-            // SECURITY: Use the authenticated user's access token (not the service key)
-            const anonKey = global.config.supabase_key || global.config.VITE_SUPABASE_ANON_KEY || global.config.SUPABASE_ANON_KEY;
-            let bearerToken = anonKey;
-            try {
-              const { data: sess } = await this.supabaseService.auth.getSession();
-              if (sess?.session?.access_token) bearerToken = sess.session.access_token;
-            } catch (_) { /* use anon key if session unavailable */ }
-            const headers = {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Prefer': 'return=representation',
-              'apikey': anonKey,
-              'Authorization': `Bearer ${bearerToken}`
-            };
-            const res = await fetchImpl(url, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify([timeLogData])
-            });
-            const contentType = res.headers.get('content-type') || '';
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error(`Direct insert failed (${res.status}): ${text}`);
-            }
-            if (!contentType.includes('application/json')) {
-              const text = await res.text();
-              console.warn('⚠️ [TRACKING-MANAGER] Direct insert returned non-JSON, attempting to parse:', contentType);
-              try { timeLog = JSON.parse(text)[0]; } catch { timeLog = null; }
-            } else {
-              const json = await res.json();
-              timeLog = Array.isArray(json) ? json[0] : json;
-            }
-            error = null;
-            console.log('✅ [TRACKING-MANAGER] Direct PostgREST insert succeeded');
-          } catch (directErr) {
-            console.error('❌ [TRACKING-MANAGER] Direct PostgREST fallback failed:', directErr);
-          }
-        }
-      }
-
-      // AUTO-RETRY: Handle duplicate active session constraint violation
-      if (error) {
-        const errMsg = (error && (error.message || error.details || String(error))) || '';
-        const isDuplicateSession = errMsg.includes('idx_one_active_session_per_user') ||
-          errMsg.includes('duplicate key') ||
-          error.code === '23505';
-
-        if (isDuplicateSession) {
-          console.warn('⚠️ [TRACKING-MANAGER] Duplicate active session detected - force-closing existing session and retrying...');
-          try {
-            await this._forceCloseActiveSessions(effectiveUserId, getDeviceId());
-            // Retry the insert once
-            const retryResp = await this.supabaseService
-              .from('time_logs')
-              .insert([timeLogData])
-              .select()
-              .single();
-            if (retryResp.error) {
-              console.error('❌ [TRACKING-MANAGER] Retry insert also failed:', retryResp.error);
-
-              // SESSION ADOPTION: If cleanup + retry both failed, adopt the existing active session
-              console.log('🔄 [TRACKING-MANAGER] Attempting session adoption fallback...');
-              try {
-                const { data: existingSession, error: fetchErr } = await this.supabaseService
-                  .from('time_logs')
-                  .select('*')
-                  .eq('user_id', effectiveUserId)
-                  .eq('status', 'active')
-                  .order('start_time', { ascending: false })
-                  .limit(1)
-                  .single();
-                if (existingSession && !fetchErr) {
-                  timeLog = existingSession;
-                  error = null;
-                  console.log(`✅ [TRACKING-MANAGER] Adopted existing active session: ${existingSession.id} (started ${existingSession.start_time})`);
-                } else {
-                  console.error('❌ [TRACKING-MANAGER] Session adoption failed - could not find active session:', fetchErr?.message || fetchErr);
-                }
-              } catch (adoptErr) {
-                console.error('❌ [TRACKING-MANAGER] Session adoption exception:', adoptErr.message || adoptErr);
-              }
-            } else {
-              timeLog = retryResp.data;
-              error = null;
-              console.log('✅ [TRACKING-MANAGER] Retry insert succeeded after closing stale session');
-            }
-          } catch (retryErr) {
-            console.error('❌ [TRACKING-MANAGER] Retry after duplicate-session cleanup failed:', retryErr);
-          }
-        }
-      }
 
       if (error) {
         console.error('❌ [TRACKING-MANAGER] Database error creating time log:', error);
@@ -642,16 +601,11 @@ try {
             try {
               if (!global.isTracking) return;
               const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
-              const supabase =
-                global.supabaseClient ||
-                this.supabaseService ||
-                global.supabaseService ||
-                global.supabase;
-              if (!(effectiveUserId && timeLog?.id && (supabase || isBackendTimeLogsEnabled()))) {
+              if (!(effectiveUserId && timeLog?.id && isBackendTimeLogsEnabled())) {
                 return;
               }
               const agg = await Promise.race([
-                computeTodayTimeLogSeconds(supabase, effectiveUserId, timeLog.id, true),
+                computeTodayTimeLogSeconds(effectiveUserId, timeLog.id, true),
                 new Promise((_, reject) =>
                   setTimeout(() => reject(new Error('today stats timeout')), 8000),
                 ),
@@ -683,6 +637,11 @@ try {
       } catch {}
 
       this._startTimeLogCheckpoint();
+
+      // Idle is per-session — do not carry the previous session's total forward.
+      try {
+        global.enhancedIdleMonitor?.resetSessionIdleSeconds?.();
+      } catch (_) { /* idle monitor optional */ }
 
       const startResult = {
         success: true,
@@ -1354,20 +1313,11 @@ try {
           await closeOpenAppLogs({ user_id: userId, ended_at: endedAt }, global.config);
           console.log('✅ [TRACKING-MANAGER] Closed open app/URL sessions on stop');
         } else {
-          const supabase = global.supabaseClient || global.supabaseService;
-          if (userId && supabase) {
-            await supabase.from('app_url_activity')
-              .update({ ended_at: endedAt })
-              .eq('user_id', userId)
-              .is('ended_at', null);
-            try {
-              await supabase.from('app_logs')
-                .update({ ended_at: endedAt })
-                .eq('user_id', userId)
-                .is('ended_at', null);
-            } catch (_) { /* optional on older schemas */ }
-            console.log('✅ [TRACKING-MANAGER] Closed open URL slices on stop');
-          }
+          // Left open, their ended_at will be stamped by the next app switch —
+          // long after work ended. Surfaced so inflated app usage is explainable.
+          console.warn(
+            '⚠️ [TRACKING-MANAGER] Cannot close open app/URL rows on stop (no user id or API not configured)',
+          );
         }
 
         // Clear local app session tracker so a later start does not reuse stale state
@@ -1782,6 +1732,8 @@ try {
       const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
       if (!timeLogId && !this.isTracking) return null;
 
+      this._stopTimeLogCheckpoint();
+
       const endTime = new Date().toISOString();
       global._stopEndTimeOverride = global._stopEndTimeOverride || endTime;
       const startTime =
@@ -1865,9 +1817,14 @@ try {
   }
 
   /**
-   * Persist a local wall-clock floor for the open session (crash / offline safety).
-   * Does NOT write end_time to the server while active — that would block the
-   * authorized idle-alert 10m cut (server end_time is monotonic except that cut).
+   * DEAD-MAN'S SWITCH. Every 10s, stamp last_alive_at = now on the row, so the
+   * server always already knows where this session ends if the agent vanishes.
+   *
+   * We cannot rely on writing the end at stop time: lid-close freezes the
+   * process mid-call (observed on a real device: 8 suspends, only 2 completed
+   * stops, one that took 5m21s and failed). Anything written at wake time bills
+   * the whole sleep. Stamping while alive has no such failure mode — worst case
+   * is losing the last 10 seconds, never gaining hours.
    */
   async _checkpointCurrentTimeLog() {
     const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
@@ -1906,16 +1863,13 @@ try {
 
     if (!backendTimeLogs.isBackendTimeLogsEnabled(this.config)) return;
 
-    try {
-      // Keep-alive only — do not set end_time while tracking (preserves idle-cut).
-      await backendTimeLogs.updateTimeLog(
-        timeLogId,
-        { status: 'active' },
-        this.config,
-      );
-      // Durable server liveness (independent of screenshots which may pause).
-      const userId = this.config?.user_id || global.currentUserId;
-      if (userId) {
+    // PAYROLL CRITICAL: the heartbeat is proof the employee was working. It must
+    // NOT share a try block with the keep-alive update — a single failed update
+    // used to swallow the heartbeat too, so a flaky network made an active
+    // session look dead to the server. Send it first and independently.
+    const userId = this.config?.user_id || global.currentUserId;
+    if (userId) {
+      try {
         await backendTimeLogs.upsertSessionHeartbeat(
           {
             user_id: userId,
@@ -1929,7 +1883,19 @@ try {
           },
           this.config,
         );
+      } catch (err) {
+        console.warn('⚠️ [TRACKING-MANAGER] Heartbeat failed:', err?.message || err);
       }
+    }
+
+    try {
+      // Advance the dead-man value on the row itself. end_time stays NULL so
+      // "open session" semantics (end_time IS NULL) are unchanged everywhere.
+      await backendTimeLogs.updateTimeLog(
+        timeLogId,
+        { status: 'active', last_alive_at: nowIso, client_last_seen_at: nowIso },
+        this.config,
+      );
     } catch (err) {
       console.warn('⚠️ [TRACKING-MANAGER] Time log checkpoint failed:', err?.message || err);
     }
@@ -2020,7 +1986,6 @@ try {
 
   /**
    * End time log in background - doesn't use this.currentTimeLogId which is already cleared
-   * FIXED: Uses authenticated supabaseService instead of raw fetch with wrong config names
    */
   async _endCurrentTimeLogBackground(timeLogId) {
     if (!timeLogId) {
@@ -2099,42 +2064,21 @@ try {
       ...(idleCutSeconds ? { authorized_idle_cut: true, time_cut_seconds: idleCutSeconds } : {}),
     });
 
-    const supabase = this.supabaseService || global.supabaseService || global.supabaseClient;
     const useBackendTimeLogs = backendTimeLogs.isBackendTimeLogsEnabled(this.config);
 
-    if (!useBackendTimeLogs && !supabase) {
-      console.error('❌ [TRACKING-MANAGER] No database client — hours kept in offline-time-logs.json');
+    if (!useBackendTimeLogs) {
+      console.error('❌ [TRACKING-MANAGER] Backend API not configured — hours kept in offline-time-logs.json');
       return { success: true, reason: 'offline_queued', offline: true };
     }
 
     try {
+      // Idle total for this session comes from the monitor that logged every idle
+      // chunk — same source the shutdown path uses. No query, and it works offline.
       let idleSeconds = 0;
       try {
-        const sessionStart = startTime;
-        if (sessionStart && supabase) {
-          const { data: idleLogs } = await supabase
-            .from('idle_logs')
-            .select('idle_start, idle_end, duration_seconds')
-            .eq('user_id', userId)
-            .gte('idle_start', sessionStart)
-            .lte('idle_start', endTime);
-
-          if (idleLogs && idleLogs.length > 0) {
-            const sessionStartMs = new Date(sessionStart).getTime();
-            const sessionEndMs = new Date(endTime).getTime();
-            for (const idle of idleLogs) {
-              if (idle.duration_seconds) {
-                idleSeconds += idle.duration_seconds;
-              } else if (idle.idle_start && idle.idle_end) {
-                const iStart = Math.max(new Date(idle.idle_start).getTime(), sessionStartMs);
-                const iEnd = Math.min(new Date(idle.idle_end).getTime(), sessionEndMs);
-                if (iEnd > iStart) idleSeconds += Math.floor((iEnd - iStart) / 1000);
-              }
-            }
-          }
-        }
+        idleSeconds = global.enhancedIdleMonitor?.getSessionIdleSeconds?.() || 0;
       } catch (idleErr) {
-        console.warn('⚠️ [TRACKING-MANAGER] Could not compute idle_seconds:', idleErr.message);
+        console.warn('⚠️ [TRACKING-MANAGER] Could not read session idle seconds:', idleErr.message);
       }
 
       // Offline temp sessions were never inserted — create a completed row now
@@ -2152,25 +2096,20 @@ try {
         };
 
         try {
-          if (useBackendTimeLogs) {
-            const orgId =
-              global.currentOrganizationId ||
-              this.config.organization_id ||
-              null;
-            await backendTimeLogs.createTimeLog(
-              {
-                ...createPayload,
-                id: timeLogId,
-                organization_id: orgId,
-              },
-              this.config,
-            );
-          } else {
-            // Fall through to existing supabase path below via create in queue only
-            this._queueOfflineTimeLogCreate({ ...createPayload, id: timeLogId });
-          }
+          const orgId =
+            global.currentOrganizationId ||
+            this.config.organization_id ||
+            null;
+          await backendTimeLogs.createTimeLog(
+            {
+              ...createPayload,
+              id: timeLogId,
+              organization_id: orgId,
+            },
+            this.config,
+          );
           this._clearSessionCheckpoint();
-          return { success: true, offline: !useBackendTimeLogs };
+          return { success: true, offline: false };
         } catch (createErr) {
           console.warn('⚠️ [TRACKING-MANAGER] Temp session create failed — kept in offline queue:', createErr?.message || createErr);
           this._queueOfflineTimeLogCreate({ ...createPayload, id: timeLogId });
@@ -2179,28 +2118,16 @@ try {
       }
 
       try {
-        if (useBackendTimeLogs) {
-          await backendTimeLogs.updateTimeLog(
-            timeLogId,
-            {
-              end_time: endTime,
-              status: 'completed',
-              idle_seconds: idleSeconds || 0,
-              ...(idleCutSeconds ? { authorized_idle_cut: true } : {}),
-            },
-            this.config,
-          );
-        } else {
-          const { error } = await supabase
-            .from('time_logs')
-            .update({
-              end_time: endTime,
-              status: 'completed',
-              idle_seconds: idleSeconds || 0,
-            })
-            .eq('id', timeLogId);
-          if (error) throw error;
-        }
+        await backendTimeLogs.updateTimeLog(
+          timeLogId,
+          {
+            end_time: endTime,
+            status: 'completed',
+            idle_seconds: idleSeconds || 0,
+            ...(idleCutSeconds ? { authorized_idle_cut: true } : {}),
+          },
+          this.config,
+        );
         this._clearPendingSessionClose?.(timeLogId);
         this._clearSessionCheckpoint();
         console.log(`✅ [TRACKING-MANAGER] Closed time log ${timeLogId}`);
@@ -2261,99 +2188,6 @@ try {
     }
   }
 
-  /**
-   * End the current time log in database with retry logic and offline queue support
-   * FIXED: Uses authenticated supabaseService instead of raw fetch with wrong config names
-   */
-  async _endCurrentTimeLog() {
-    if (!this.currentTimeLogId) {
-      console.log('ℹ️ [TRACKING-MANAGER] No active time log to end');
-      return { success: false, reason: 'no_time_log_id' };
-    }
-
-    const timeLogId = this.currentTimeLogId;
-    const endTime = new Date().toISOString();
-    const userId = this.config.user_id;
-    
-    console.log(`🔄 [TRACKING-MANAGER] Closing current time log ${timeLogId}`);
-    
-    // Store pending session close in local storage for backend cleanup fallback
-    this._storePendingSessionClose(timeLogId, endTime, userId);
-
-    // Get the authenticated Supabase client
-    const supabase = this.supabaseService || global.supabaseService || global.supabaseClient;
-    
-    if (!supabase) {
-      console.error('❌ [TRACKING-MANAGER] No Supabase client available');
-      // Queue for offline sync
-      if (global.offlineQueue && global.offlineQueue.timeLogs) {
-        global.offlineQueue.timeLogs.push({
-          id: timeLogId,
-          user_id: userId,
-          end_time: endTime,
-          status: 'completed',
-          action: 'update'
-        });
-      }
-      return { success: false, reason: 'no_supabase_client' };
-    }
-
-    const MAX_RETRIES = 3;
-    const BASE_DELAY_MS = 500;
-    
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        console.log(`🔄 [TRACKING-MANAGER] Closing time log attempt ${attempt}/${MAX_RETRIES}...`);
-        
-        const { error } = await supabase
-          .from('time_logs')
-          .update({
-            end_time: endTime,
-            status: 'completed',
-            idle_seconds: 0
-          })
-          .eq('id', timeLogId);
-        
-        if (!error) {
-          console.log('✅ [TRACKING-MANAGER] Current time log ended successfully');
-          this._clearPendingSessionClose(timeLogId);
-          return { success: true };
-        }
-        
-        console.error(`❌ [TRACKING-MANAGER] Attempt ${attempt} failed:`, error.message);
-        
-        // Wait before retry with exponential backoff
-        if (attempt < MAX_RETRIES) {
-          const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-          console.log(`⏳ [TRACKING-MANAGER] Waiting ${delay}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-      } catch (error) {
-        console.error(`❌ [TRACKING-MANAGER] Attempt ${attempt} exception:`, error.message || error);
-        
-        // Wait before retry with exponential backoff
-        if (attempt < MAX_RETRIES) {
-          const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-          console.log(`⏳ [TRACKING-MANAGER] Waiting ${delay}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-    
-    // All retries failed - queue for offline sync
-    console.error('❌ [TRACKING-MANAGER] All retry attempts failed, queuing for offline sync');
-    if (global.offlineQueue && global.offlineQueue.timeLogs) {
-      global.offlineQueue.timeLogs.push({
-        id: timeLogId,
-        user_id: userId,
-        end_time: endTime,
-        status: 'completed',
-        action: 'update'
-      });
-    }
-  }
-  
   /**
    * Store pending session close in local storage for backend cleanup fallback
    */
@@ -2503,60 +2337,29 @@ try {
     try {
       if (!userId) return;
 
-      if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
-        const {
-          closeOpenSessionsAfterExplicitStop,
-          resolveExplicitStopEndTime,
-        } = require('../utils/session-recovery');
-        const result = await closeOpenSessionsAfterExplicitStop({
-          userId,
-          deviceId,
-          end_time: resolveExplicitStopEndTime(),
-          config: this.config,
-        });
-        console.log(
-          `🔒 [TRACKING-MANAGER] Force-closed open sessions: closed=${result?.closed ?? 0}`,
+      if (!backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+        console.warn(
+          '⚠️ [TRACKING-MANAGER] Cannot force-close open sessions — backend API not configured',
         );
         return;
       }
 
-      if (!this.supabaseService) return;
-
-      // Strategy 1: Use SECURITY DEFINER RPC (bypasses RLS reliably)
-      // Pass p_device_id to close only this device's sessions (multi-device safe)
-      try {
-        const rpcParams = { p_user_id: userId };
-        if (deviceId) rpcParams.p_device_id = deviceId;
-        const { data: rpcCount, error: rpcError } = await this.supabaseService
-          .rpc('close_user_active_sessions', rpcParams);
-        if (!rpcError) {
-          const closed = typeof rpcCount === 'number' ? rpcCount : 0;
-          console.log(`🔒 [TRACKING-MANAGER] RPC close_user_active_sessions: closed ${closed} session(s) for ${userId} device=${deviceId || 'all'}`);
-          if (closed > 0) return;
-        } else {
-          console.warn('⚠️ [TRACKING-MANAGER] RPC close_user_active_sessions failed, falling back to direct UPDATE:', rpcError.message || rpcError);
-        }
-      } catch (rpcErr) {
-        console.warn('⚠️ [TRACKING-MANAGER] RPC call threw, falling back to direct UPDATE:', rpcErr.message || rpcErr);
-      }
-
-      // Strategy 2: Direct UPDATE fallback (may be blocked by RLS on anon client)
-      const now = new Date().toISOString();
-      let query = this.supabaseService
-        .from('time_logs')
-        .update({ end_time: now, status: 'completed', idle_seconds: 0 })
-        .eq('user_id', userId)
-        .or('end_time.is.null,status.eq.active');
-      if (deviceId) {
-        query = query.eq('device_id', deviceId);
-      }
-      const { data, error } = await query.select('id');
-      if (error) {
-        console.error('❌ [TRACKING-MANAGER] _forceCloseActiveSessions UPDATE error:', error.message || error);
-      } else {
-        const count = data ? data.length : 0;
-        console.log(`🔒 [TRACKING-MANAGER] _forceCloseActiveSessions UPDATE: ${count} row(s) affected for ${userId} device=${deviceId || 'all'}`);
-      }
+      const {
+        closeOpenSessionsAfterExplicitStop,
+        resolveExplicitStopEndTime,
+      } = require('../utils/session-recovery');
+      const result = await closeOpenSessionsAfterExplicitStop({
+        userId,
+        deviceId,
+          // No id: this closes every open row on the device, so no single
+          // session's checkpoint applies. Falls through to each row's own
+          // last_alive_at on the server.
+          end_time: resolveExplicitStopEndTime() || undefined,
+        config: this.config,
+      });
+      console.log(
+        `🔒 [TRACKING-MANAGER] Force-closed open sessions: closed=${result?.closed ?? 0}`,
+      );
     } catch (err) {
       console.error('❌ [TRACKING-MANAGER] _forceCloseActiveSessions exception:', err.message || err);
     }
@@ -3053,16 +2856,8 @@ try {
                 }
               }
             } else {
-              if (!this.supabaseService) {
-                throw new Error('No Supabase client for offline time log sync');
-              }
-              const { data, error } = await this.supabaseService
-                .from('time_logs')
-                .upsert([timeLogData], { onConflict: 'id' })
-                .select()
-                .single();
-              if (error) throw error;
-              timeLog = data;
+              // Throwing keeps the item queued and retried — never dropped.
+              throw new Error('Backend API not configured for offline time log sync');
             }
 
             console.log('✅ [TRACKING-MANAGER] Synced offline time log:', timeLog.id);
@@ -3145,13 +2940,8 @@ try {
                   { ...createPayload, organization_id: orgId },
                   this.config,
                 );
-              } else if (this.supabaseService) {
-                const { error } = await this.supabaseService
-                  .from('time_logs')
-                  .upsert([createPayload], { onConflict: 'id' });
-                if (error) throw error;
               } else {
-                throw new Error('No DB client for offline completed create');
+                throw new Error('Backend API not configured for offline completed create');
               }
               console.log('✅ [TRACKING-MANAGER] Synced offline completed temp session');
               this._appendTimeLedger({
@@ -3215,15 +3005,8 @@ try {
                 end_time: updates.end_time || null,
                 status: updates.status || null,
               });
-            } else if (this.supabaseService) {
-              const { error } = await this.supabaseService
-                .from('time_logs')
-                .update(updates)
-                .eq('id', id);
-              if (error) throw error;
-              console.log('✅ [TRACKING-MANAGER] Synced offline time log update:', id);
             } else {
-              throw new Error('No DB client for offline time log update');
+              throw new Error('Backend API not configured for offline time log update');
             }
           } else {
             // Unknown item types are kept so we never silently discard payroll data

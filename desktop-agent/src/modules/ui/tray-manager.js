@@ -957,13 +957,12 @@ class TrayManager {
     try {
       this._maybeRolloverLocalDay();
       const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
-      const supabase = global.supabaseClient || global.supabaseService || global.supabase;
       const userId = global.currentUserId || global.trackingManager?.currentSession?.user_id;
       const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
       const currentTimeLogId = isTracking
         ? (global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null)
         : null;
-      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
+      const agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
       const prevBase = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
       const nextBase = Math.max(0, Math.floor(Number(agg.completedClosedSeconds) || 0));
       // Forward-only base — never rewind tray cumulative on the same work day.

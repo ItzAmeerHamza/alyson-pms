@@ -80,8 +80,7 @@ class URLTrackingDiagnostic {
       isTracking: global.isTracking,
       currentTimeLogId: global.currentTimeLogId,
       currentUserId: global.currentUserId,
-      hasSupabase: !!global.supabaseService,
-      hasSupabaseClient: !!global.supabaseClient
+      hasBackendApi: !!global.syncManager
     };
 
     console.log('   Global State:', JSON.stringify(state, null, 6));
@@ -101,9 +100,9 @@ class URLTrackingDiagnostic {
       this.recommendations.push('Ensure user is logged in properly');
     }
 
-    if (!state.hasSupabase && !state.hasSupabaseClient) {
-      this.issues.push('No Supabase client available');
-      this.recommendations.push('Check Supabase initialization');
+    if (!state.hasBackendApi) {
+      this.issues.push('No sync manager available for backend writes');
+      this.recommendations.push('Check sync manager / backend API initialization');
     }
   }
 
@@ -167,7 +166,7 @@ class URLTrackingDiagnostic {
         }
       }
       
-      console.log(`     supabaseService: ${!!instance.supabaseService}`);
+      console.log(`     backendApiUrl: ${instance.config?.backend_api_url || 'unset'}`);
     });
 
     if (syncManagers.length === 0) {
@@ -182,23 +181,15 @@ class URLTrackingDiagnostic {
   async checkDatabaseConnectivity() {
     console.log('\n🔍 Checking database connectivity...');
 
-    const supabase = global.supabaseService || global.supabaseClient || global.supabase;
-    
-    if (!supabase) {
-      this.issues.push('No Supabase client available for testing');
-      return;
-    }
-
     try {
-      // Test basic connectivity
-      const { data, error } = await supabase
-        .from('url_logs')
-        .select('id')
-        .limit(1);
+      // RDS is only reachable through the NestJS API.
+      const { checkBackendHealth } = require('./modules/utils/backend-health');
+      const health = await checkBackendHealth(global.config);
 
-      if (error) {
-        this.issues.push(`Database connectivity error: ${error.message}`);
-        console.log(`   ❌ Database test failed: ${error.message}`);
+      if (!health.ok) {
+        const reason = health.error || (health.status ? `HTTP ${health.status}` : 'unreachable');
+        this.issues.push(`Database connectivity error: ${reason}`);
+        console.log(`   ❌ Database test failed: ${reason}`);
       } else {
         console.log('   ✅ Database connectivity OK');
       }

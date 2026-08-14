@@ -66,8 +66,6 @@ class EventManager {
     app.on('before-quit', async () => {
       if (global.isInstallingUpdate) return;
       try {
-        const supabase = global.supabaseService;
-        const userId = global?.sessionManager?.getUserId?.();
         // Debounce flaps and tag reason in diagnostics
         await new Promise((r) => setTimeout(r, 300));
         try { console.log(JSON.stringify({ category: 'URL', event: 'CLOSE_ONLY', reason: 'shutdown', ts: new Date().toISOString() })); } catch {}
@@ -75,21 +73,8 @@ class EventManager {
         if (global.urlCaptureManager?.trackCloseOnly) {
           global.urlCaptureManager.trackCloseOnly('shutdown');
         }
-        if (supabase && userId) {
-          const { error } = await supabase
-            .from('url_logs')
-            .insert([
-              { user_id: userId, url: null, site_url: null, title: '', browser: 'unknown', timestamp: new Date().toISOString() }
-            ], { returning: 'minimal' });
-          if (error) {
-            // Persist for offline replay
-            if (!global.offlineQueue) global.offlineQueue = { urlLogs: [] };
-            global.offlineQueue.urlLogs.push({ user_id: userId, url: null, site_url: null, title: '', browser: 'unknown', timestamp: new Date().toISOString() });
-          } else {
-            // Short flush wait to improve landing probability
-            await new Promise((r) => setTimeout(r, 500));
-          }
-        }
+        // Stamping ended_at on the open url_logs slice is GracefulShutdownManager's job
+        // (closeOpenUrlLogs). This hook stays telemetry-only so shutdown has one writer.
       } catch {}
     });
 

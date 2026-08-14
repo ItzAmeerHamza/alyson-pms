@@ -23,7 +23,6 @@ describe('ActivityManager', () => {
     // Clear global state
     global.displayActivityStats = null;
     global.mainWindow = null;
-    global.supabaseService = null;
 
     activityManager = new ActivityManager(mockConfig);
     jest.clearAllMocks();
@@ -51,6 +50,19 @@ describe('ActivityManager', () => {
 
     it('should make stats globally available', () => {
       expect(global.displayActivityStats).toBe(activityManager.displayActivityStats);
+    });
+  });
+
+  describe('activity stats persistence', () => {
+    it('should be a local no-op and keep counters intact', async () => {
+      activityManager.recordActivity('click', 'test');
+      const clicksBefore = activityManager.displayActivityStats.totalClicks;
+
+      // activity_stats has no RDS equivalent: the backend derives activity from
+      // screenshot and idle rows, so this must not throw or clear local counters.
+      await expect(activityManager.saveActivityStatsToDatabase()).resolves.toBeUndefined();
+
+      expect(activityManager.displayActivityStats.totalClicks).toBe(clicksBefore);
     });
   });
 

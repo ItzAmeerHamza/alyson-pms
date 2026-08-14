@@ -5,6 +5,7 @@ import {
   SCREENSHOT_IS_VIDEO_MEETING_SQL,
   applyMeetingActivityFloor,
 } from '../pulse/meeting-context';
+import { getWorkTimezone } from '../lib/work-timezone';
 
 /**
  * Time Doctor Classic (v1.1) compatible read API, served from time_doctor.* on
@@ -144,7 +145,7 @@ export class TimeDoctorService {
          t.status,
          GREATEST(
            0,
-           EXTRACT(EPOCH FROM (COALESCE(t.end_time, NOW()) - t.start_time))::int
+           EXTRACT(EPOCH FROM (COALESCE(t.end_time, t.last_alive_at, NOW()) - t.start_time))::int
              - COALESCE(t.deducted_seconds, 0)
          ) AS length
        FROM time_doctor.time_logs t
@@ -418,10 +419,10 @@ export class TimeDoctorService {
          t.id,
          t.user_id,
          t.start_time,
-         COALESCE(t.end_time, NOW()) AS end_time,
+         COALESCE(t.end_time, t.last_alive_at, NOW()) AS end_time,
          GREATEST(
            0,
-           EXTRACT(EPOCH FROM (COALESCE(t.end_time, NOW()) - t.start_time))::int
+           EXTRACT(EPOCH FROM (COALESCE(t.end_time, t.last_alive_at, NOW()) - t.start_time))::int
              - COALESCE(t.deducted_seconds, 0)
          ) AS length
        FROM time_doctor.time_logs t
@@ -520,6 +521,11 @@ export class TimeDoctorService {
     params.push(offset);
     const offsetParam = params.length;
 
+    // Interpolated, not bound: a timezone name cannot be a query parameter
+    // inside AT TIME ZONE. Comes from server config, never from the request,
+    // and quotes are escaped.
+    const workTz = getWorkTimezone().replace(/'/g, "''");
+
     const result = await this.database.query(
       `WITH days AS (
          SELECT generate_series($${startParam}::date, $${endParam}::date, INTERVAL '1 day')::date AS day
@@ -528,14 +534,36 @@ export class TimeDoctorService {
          SELECT ext.user_id FROM time_doctor.user_extensions ext
          WHERE ${extWs} ${userClause}
        ),
+       -- Credit each day the time that actually falls inside it.
+       --
+       -- Bucketing by DATE(start_time) and summing the whole session gave the
+       -- start day everything: someone working 23:00-02:00 was present on the
+       -- first day and ABSENT on the second, having worked two hours into it.
+       -- 225 sessions cross work-day midnight, carrying 375 hours onto a day
+       -- that was not credited with them.
+       --
+       -- Overlapping against each day also removes any dependence on the agent
+       -- splitting sessions at midnight, which it cannot do while asleep or
+       -- offline. Boundaries are work-timezone midnights, not the server's.
        worked AS (
-         SELECT t.user_id, DATE(t.start_time) AS day,
-                SUM(EXTRACT(EPOCH FROM (COALESCE(t.end_time, NOW()) - t.start_time))) AS secs
+         SELECT t.user_id, d.day,
+                SUM(EXTRACT(EPOCH FROM (
+                  LEAST(
+                    COALESCE(t.end_time, t.last_alive_at, NOW()),
+                    ((d.day + INTERVAL '1 day')::timestamp AT TIME ZONE '${workTz}')
+                  )
+                  - GREATEST(t.start_time, (d.day::timestamp AT TIME ZONE '${workTz}'))
+                ))) AS secs
          FROM time_doctor.time_logs t
+         JOIN days d
+           ON t.start_time < ((d.day + INTERVAL '1 day')::timestamp AT TIME ZONE '${workTz}')
+          AND COALESCE(t.end_time, t.last_alive_at, NOW()) > (d.day::timestamp AT TIME ZONE '${workTz}')
          WHERE ${tWs}
-           AND t.start_time >= $${startParam}::date
+           -- One day of slack so a session that began before the range but runs
+           -- into it still credits the days it covers.
+           AND t.start_time >= ($${startParam}::date - INTERVAL '1 day')
            AND t.start_time < ($${endParam}::date + INTERVAL '1 day')
-         GROUP BY t.user_id, DATE(t.start_time)
+         GROUP BY t.user_id, d.day
        )
        SELECT
          emp.user_id,

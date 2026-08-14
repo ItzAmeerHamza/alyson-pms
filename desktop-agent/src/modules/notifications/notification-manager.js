@@ -15,7 +15,6 @@ const cleanupRegistry = require('../core/cleanup-registry');
 class NotificationManager {
   constructor(dependencies = {}) {
     this.tray = dependencies.tray;
-    this.supabase = dependencies.supabase;
     this.config = dependencies.config;
     this.getInterval = dependencies.getInterval;
     this.windowUIManager = dependencies.windowUIManager;
@@ -27,21 +26,16 @@ class NotificationManager {
   }
 
   /**
-   * Start checking for notifications at regular intervals
+   * No-op: the inbox this polled was the Supabase `notifications` table, which has no
+   * RDS read action. Nothing is scheduled so we do not burn a timer on an empty poll.
    */
   startNotificationChecking() {
     if (this.notificationInterval) {
       clearInterval(this.notificationInterval);
+      this.notificationInterval = null;
     }
-    
-    console.log(`🔔 Starting notification checking every ${this.appSettings.notification_frequency_seconds}s`);
-    
-    this.notificationInterval = setInterval(async () => {
-      await this.checkNotifications();
-    }, this.getInterval('NOTIFICATIONS'));
-    
-    // PERFORMANCE OPTIMIZATION: Register interval with cleanup registry
-    cleanupRegistry.registerInterval(this.notificationInterval, 'Notification Checking');
+
+    console.log('🔔 [NOTIFICATIONS] Server-side inbox unavailable (no RDS equivalent) — polling disabled');
   }
 
   /**
@@ -55,37 +49,16 @@ class NotificationManager {
   }
 
   /**
-   * Check for new notifications and display them
+   * Always empty: server-pushed notifications lived in the Supabase `notifications`
+   * table and there is no RDS action to read or acknowledge them. Locally raised
+   * notifications still go out through showTrayNotification().
    */
   async checkNotifications() {
-    try {
-      const { data: notifications } = await this.supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', this.config.user_id)
-        .eq('read', false)
-        .order('created_at', { ascending: false });
-
-      if (notifications && notifications.length > 0) {
-        // Update tray badge
-        this.tray.setTitle(`${notifications.length}`);
-        
-        for (const notification of notifications) {
-          this.showTrayNotification(notification.message, notification.type);
-          
-          // Mark as read
-          await this.supabase
-            .from('notifications')
-            .update({ read: true })
-            .eq('id', notification.id);
-        }
-        
-        // Clear badge after showing notifications
-        setTimeout(() => this.tray.setTitle(''), 5000);
-      }
-    } catch (error) {
-      console.error('❌ Notification check failed:', error);
+    if (!this._inboxUnavailableWarned) {
+      this._inboxUnavailableWarned = true;
+      console.warn('⚠️ [NOTIFICATIONS] notifications table has no RDS equivalent — no server notifications will be shown');
     }
+    return [];
   }
 
   /**

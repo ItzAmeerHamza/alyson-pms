@@ -50,31 +50,6 @@ function loadConfig() {
   }
   
   // Merge configurations with priority: process.env > .env > embedded > config.json
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || 
-                      process.env.SUPABASE_URL || 
-                      envConfig.VITE_SUPABASE_URL ||
-                      envConfig.SUPABASE_URL || 
-                      embeddedConfig.VITE_SUPABASE_URL ||
-                      embeddedConfig.SUPABASE_URL || 
-                      jsonConfig.supabase_url || '';
-  
-  const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 
-                      process.env.SUPABASE_ANON_KEY || 
-                      envConfig.VITE_SUPABASE_ANON_KEY ||
-                      envConfig.SUPABASE_ANON_KEY || 
-                      embeddedConfig.VITE_SUPABASE_ANON_KEY ||
-                      embeddedConfig.SUPABASE_ANON_KEY || 
-                      jsonConfig.supabase_key || '';
-  
-  const authProvider =
-    process.env.VITE_AUTH_PROVIDER ||
-    process.env.AUTH_PROVIDER ||
-    envConfig.VITE_AUTH_PROVIDER ||
-    envConfig.AUTH_PROVIDER ||
-    embeddedConfig.VITE_AUTH_PROVIDER ||
-    embeddedConfig.AUTH_PROVIDER ||
-    jsonConfig.auth_provider ||
-    'supabase';
 
   const cognitoRegion =
     process.env.VITE_COGNITO_REGION ||
@@ -134,20 +109,11 @@ function loadConfig() {
     jsonConfig.backend_api_key ||
     '';
 
-  const useCognito =
-    authProvider === 'cognito' && Boolean(cognitoUserPoolId && cognitoClientId);
+  const cognitoReady = Boolean(cognitoUserPoolId && cognitoClientId);
 
   const config = {
     ...jsonConfig,
-    supabase_url: supabaseUrl,
-    supabase_key: supabaseKey,
-    VITE_SUPABASE_URL: supabaseUrl,
-    VITE_SUPABASE_ANON_KEY: supabaseKey,
-    SUPABASE_URL: supabaseUrl,
-    SUPABASE_ANON_KEY: supabaseKey,
-    supabase_service_key: '',
-    SUPABASE_SERVICE_ROLE_KEY: '',
-    auth_provider: useCognito ? 'cognito' : 'supabase',
+    auth_provider: 'cognito',
     cognito_region: cognitoRegion,
     cognito_user_pool_id: cognitoUserPoolId,
     cognito_client_id: cognitoClientId,
@@ -156,22 +122,20 @@ function loadConfig() {
     backend_api_key: internalApiKey,
   };
 
-  if (!useCognito && (!config.supabase_url || !config.supabase_key)) {
-    console.error('❌ Missing Supabase credentials (or set VITE_AUTH_PROVIDER=cognito with Cognito vars)');
-    throw new Error('Missing required Supabase environment variables');
+  // Warn, never throw. A missing credential must not stop the agent from
+  // starting — the offline queue still records hours and syncs them later.
+  // Throwing here meant a config problem silently cost employees their day.
+  if (!cognitoReady) {
+    console.warn('⚠️ Cognito not fully configured — sign-in will fail until COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID are set');
   }
 
   console.log('✅ Configuration loaded successfully');
   console.log(`   Auth provider: ${config.auth_provider}`);
-  if (useCognito) {
-    console.log(`   Cognito pool: ${cognitoUserPoolId}`);
-    console.log(`   API base: ${resolvedApiBaseUrl}`);
-    const backendReady = Boolean(backendApiUrl && internalApiKey);
-    console.log(`   Backend sync: ${backendReady ? 'configured' : 'MISSING (projects/time logs need BACKEND_API_URL + INTERNAL_API_KEY)'}`);
-  } else {
-    console.log(`   Using Supabase URL: ${config.supabase_url}`);
-  }
-  
+  console.log(`   Cognito pool: ${cognitoUserPoolId || 'MISSING'}`);
+  console.log(`   API base: ${resolvedApiBaseUrl}`);
+  const backendReady = Boolean(backendApiUrl && internalApiKey);
+  console.log(`   Backend sync: ${backendReady ? 'configured' : 'MISSING (projects/time logs need BACKEND_API_URL + INTERNAL_API_KEY)'}`);
+
   return config;
 }
 

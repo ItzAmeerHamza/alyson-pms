@@ -18,7 +18,6 @@ class SessionManager {
     
     // Session state
     this.currentSession = null;
-    this.supabaseService = null;
     
     // Register for cleanup
     cleanupRegistry.registerResource({
@@ -68,7 +67,7 @@ class SessionManager {
       const organizationSlug = incomingUser?.organization_slug || incomingSession?.organization_slug || null;
       const isOrgAdmin = incomingUser?.is_org_admin || false;
       const isSuperAdmin = incomingUser?.is_super_admin || false;
-      const authProvider = incomingSession?.auth_provider || userData.auth_provider || 'supabase';
+      const authProvider = incomingSession?.auth_provider || userData.auth_provider || 'cognito';
 
       // Ensure expires_at is in milliseconds
       if (expiresAt && expiresAt < 9999999999) {
@@ -113,20 +112,6 @@ class SessionManager {
       global.currentUserRole = role;
       global.currentOrganizationId = organizationId;
 
-      // Forward Supabase session only for legacy Supabase auth (not Cognito JWT)
-      try {
-        if (
-          sessionToSave.auth_provider !== 'cognito' &&
-          this.supabaseService?.auth?.setSession &&
-          accessToken &&
-          refreshToken
-        ) {
-          await this.supabaseService.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-        }
-      } catch (e) {
-        console.log('⚠️ [SESSION] Failed to set Supabase session in main process:', e?.message || e);
-      }
-
       console.log('✅ [SESSION] User login handled and session persisted for:', email, organizationSlug ? `(org: ${organizationSlug})` : '');
       try {
         const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('../utils/workspace-settings');
@@ -159,11 +144,11 @@ class SessionManager {
   }
 
   /**
-   * Initialize with dependencies
+   * Initialize with dependencies.
+   * Kept as an explicit no-op: the session store is the API + on-disk session
+   * file, so there is nothing left to inject, but startup still calls this.
    */
-  initialize(dependencies) {
-    this.supabaseService = dependencies.supabaseService;
-  }
+  initialize(_dependencies = {}) {}
 
   /**
    * Save desktop agent session to file
@@ -236,34 +221,17 @@ class SessionManager {
           session.refresh_expires_at && Date.now() > session.refresh_expires_at;
 
         if (session.refresh_token && !refreshSoftExpired) {
-          if (session.auth_provider === 'cognito') {
-            console.log(
-              '⚠️ Cognito access token expired — keeping session for refresh-token restore',
-            );
-            return session;
-          }
-
-          console.log('⚠️ Desktop agent session expired, attempting recovery...');
-          const recoveredSession = await this.recoverExpiredSession(session);
-          if (recoveredSession) {
-            console.log('✅ Session recovered successfully');
-            return recoveredSession;
-          }
-
-          // Supabase recovery failed but refresh token still present — hand to renderer
+          // Refresh is a renderer/Cognito concern — keep the session on disk so
+          // login is restored instead of forcing the employee to sign in again.
           console.log(
-            '⚠️ Access token expired — keeping session for renderer refresh restore',
+            '⚠️ Access token expired — keeping session for refresh-token restore',
           );
           return session;
         }
 
-        // CRITICAL FIX: Check for active database sessions before clearing
-        const activeSession = await this.syncWithActiveTrackingSession(session);
-        if (activeSession) {
-          console.log('✅ Session synchronized with active tracking');
-          return activeSession;
-        }
-        
+        // No usable refresh token left: the main process has no authenticated
+        // identity, so it cannot check for an open session here. Rows still open
+        // are closed server-side at their last proof-of-life, never at NOW.
         console.log('⚠️ Desktop agent session expired (no usable refresh token), clearing...');
         await this.clearDesktopAgentSession();
         return null;
@@ -278,131 +246,6 @@ class SessionManager {
       }
     }
     return null;
-  }
-
-  /**
-   * CRITICAL FIX: Try to recover expired session using refresh token
-   */
-  async recoverExpiredSession(expiredSession) {
-    try {
-      if (!expiredSession.refresh_token || !this.supabaseService) {
-        return null;
-      }
-      
-      console.log('🔄 Attempting to refresh expired session...');
-      
-      // Try to refresh the session
-      const { data, error } = await this.supabaseService.auth.setSession({
-        access_token: expiredSession.access_token,
-        refresh_token: expiredSession.refresh_token
-      });
-      
-      if (!error && data.session) {
-        // Session refreshed successfully, save new tokens
-        const refreshedSession = {
-          ...expiredSession,
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-          expires_at: data.session.expires_at * 1000 // Convert to milliseconds
-        };
-        
-        await this.saveDesktopAgentSession(refreshedSession);
-        
-        // Update globals
-        global.currentUserId = expiredSession.id;
-        global.currentOrganizationId = expiredSession.organization_id || null;
-        if (global.config) {
-          global.config.user_id = expiredSession.id;
-          global.config.organization_id = expiredSession.organization_id || null;
-        }
-        
-        console.log('✅ Session refreshed and saved');
-        return refreshedSession;
-      }
-      
-      console.log('⚠️ Session refresh failed:', error?.message);
-      return null;
-    } catch (error) {
-      console.warn('⚠️ Session recovery error:', error.message);
-      return null;
-    }
-  }
-
-  /**
-   * CRITICAL FIX: Sync with active tracking sessions in database
-   */
-  async syncWithActiveTrackingSession(expiredSession) {
-    try {
-      if (!this.supabaseService || !expiredSession.id) {
-        return null;
-      }
-      
-      console.log('🔍 Checking for active tracking sessions in database...');
-      
-      // Check for active time logs for this user
-      const { data: activeLogs, error } = await this.supabaseService
-        .from('time_logs')
-        .select('*')
-        .eq('user_id', expiredSession.id)
-        .is('end_time', null)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.warn('⚠️ Failed to check active sessions:', error.message);
-        return null;
-      }
-      
-      if (activeLogs && activeLogs.length > 0) {
-        const activeLog = activeLogs[0];
-        
-        // CRITICAL FIX: Don't restore tracking if we're in the middle of stopping
-        if (global.isStopping) {
-          console.log('⏸️ Skipping session restoration - stop in progress');
-          return null;
-        }
-        
-        console.log('✅ Found active tracking session:', activeLog.id);
-        
-        // Restore session with extended expiry (24 hours from now)
-        const restoredSession = {
-          ...expiredSession,
-          expires_at: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
-          restored_from_db: true
-        };
-        
-        await this.saveDesktopAgentSession(restoredSession);
-        
-        // Update globals to restore tracking state
-        global.currentUserId = expiredSession.id;
-        global.currentTimeLogId = activeLog.id;
-        global.currentProjectId = activeLog.project_id;
-        global.currentOrganizationId = expiredSession.organization_id || null;
-        global.isTracking = true;
-        global.isPaused = false;
-        
-        if (global.config) {
-          global.config.user_id = expiredSession.id;
-          global.config.organization_id = expiredSession.organization_id || null;
-        }
-        
-        console.log('🎯 Restored tracking state from database:', {
-          userId: global.currentUserId,
-          timeLogId: global.currentTimeLogId,
-          projectId: global.currentProjectId,
-          isTracking: global.isTracking
-        });
-        
-        return restoredSession;
-      }
-      
-      console.log('ℹ️ No active tracking sessions found');
-      return null;
-    } catch (error) {
-      console.warn('⚠️ Database sync error:', error.message);
-      return null;
-    }
   }
 
   /**
@@ -437,7 +280,24 @@ class SessionManager {
   async handleUserLogout() {
     try {
       console.log('👤 [SESSION] User logout requested');
-      
+
+      // Logging out must stop the clock. This has to happen BEFORE user state is
+      // cleared below — once currentUserId is null there is no way to identify
+      // which sessions to close, and they stayed open accruing time.
+      try {
+        if (global.isTracking || global.trackingManager?.isTracking) {
+          console.log('🛑 [SESSION] Stopping tracking before logout');
+          await global.stopTracking?.('user_logout', 'Signed out — session closed');
+        }
+        const userId = global.currentUserId || this.config?.user_id;
+        if (userId) {
+          const { closeOpenSessionsAfterExplicitStop } = require('../utils/session-recovery');
+          await closeOpenSessionsAfterExplicitStop({ userId, reason: 'user_logout' });
+        }
+      } catch (stopErr) {
+        console.warn('⚠️ [SESSION] Stop-on-logout failed:', stopErr?.message || stopErr);
+      }
+
       // Clear current session
       this.currentSession = null;
       
@@ -465,16 +325,6 @@ class SessionManager {
         console.log('ℹ️ [SESSION] No saved session file to clear');
       }
       
-      // Clear Supabase session if available
-      try {
-        if (this.supabaseService?.auth?.signOut) {
-          await this.supabaseService.auth.signOut();
-          console.log('✅ [SESSION] Cleared Supabase session');
-        }
-      } catch (error) {
-        console.log('⚠️ [SESSION] Failed to clear Supabase session:', error?.message || error);
-      }
-      
       console.log('✅ [SESSION] User logout completed successfully');
       return { success: true, message: 'User logged out successfully' };
       
@@ -485,65 +335,25 @@ class SessionManager {
   }
 
   /**
-   * Clean up stale active sessions
-   * CRITICAL FIX: Sets end_time to start_time + 1 hour (not NOW) to prevent inflated hours
+   * Clean up stale active sessions.
+   *
+   * There is no RDS equivalent of the user-wide sweep this used to run, and there
+   * must not be one from here: it had no device scope, so it could close a session
+   * this employee is still running on another machine — at that row's own
+   * start_time, billing zero for real work. Stale rows are reconciled per device
+   * by session-recovery, and server-side by the liveness ceiling / stale-session
+   * job, both of which close at the last proof-of-life.
    */
   async cleanupStaleActiveSessions() {
-    try {
-      // Skip cleanup if no user is logged in (first-time user scenario)
-      if (!this.config.user_id) {
-        console.log('🧹 [CLEANUP] Skipping cleanup - no user session found (first-time user)');
-        return;
-      }
-      
-      if (!this.supabaseService) {
-        console.log('⚠️ [CLEANUP] Supabase not initialized - skipping session cleanup');
-        return;
-      }
-      
-      console.log('🧹 [CLEANUP] Cleaning up any stale active sessions...');
-      
-      // First, get all unclosed sessions to close them with proper end times
-      const { data: staleSessions, error: fetchError } = await this.supabaseService
-        .from('time_logs')
-        .select('id, start_time')
-        .eq('user_id', this.config.user_id)
-        .is('end_time', null)
-        .neq('status', 'completed');
-      
-      if (fetchError) {
-        console.log('⚠️ [CLEANUP] Failed to fetch stale sessions:', fetchError);
-        return;
-      }
-      
-      if (!staleSessions || staleSessions.length === 0) {
-        console.log('✅ [CLEANUP] No stale sessions found');
-        return;
-      }
-      
-      console.log(`🧹 [CLEANUP] Found ${staleSessions.length} stale sessions to close`);
-      
-      // Close each session at stop time (not start+1h — that silently ate hours)
-      const nowIso = new Date().toISOString();
-      for (const session of staleSessions) {
-        const { error: updateError } = await this.supabaseService
-          .from('time_logs')
-          .update({
-            end_time: nowIso,
-            status: 'completed'
-          })
-          .eq('id', session.id);
-        
-        if (updateError) {
-          console.log(`⚠️ [CLEANUP] Failed to close session ${session.id}:`, updateError);
-        }
-      }
-      
-      console.log(`✅ [CLEANUP] Closed ${staleSessions.length} stale active sessions`);
-    } catch (error) {
-      console.error('❌ [CLEANUP] Cleanup error (non-critical):', error);
-      // Don't throw - this is a non-critical cleanup operation
+    if (!this.config.user_id) {
+      console.log('🧹 [CLEANUP] Skipping cleanup - no user session found (first-time user)');
+      return { success: true, closedCount: 0, skipped: 'no_user' };
     }
+
+    console.warn(
+      '⚠️ [CLEANUP] Startup stale-session sweep is not performed here — device-scoped reconcile (session-recovery) and the server-side stale-session job own this',
+    );
+    return { success: true, closedCount: 0, skipped: 'delegated_to_reconcile' };
   }
   
   /**
@@ -554,104 +364,33 @@ class SessionManager {
   async closeExistingSessionsBeforeStart() {
     try {
       const userId = this.config.user_id;
-      const client = this.supabaseService || global.supabaseClient || global.supabase;
       if (!userId) {
         console.warn('⚠️ [SESSION] Cannot close existing sessions - missing user_id');
         return { success: false, closedCount: 0 };
       }
 
+      const { isBackendTimeLogsEnabled, closeActiveSessions } = require('../utils/backend-time-logs');
+      if (!isBackendTimeLogsEnabled()) {
+        console.warn('⚠️ [SESSION] Cannot close existing sessions - backend API not configured');
+        return { success: false, closedCount: 0 };
+      }
+
       console.log('🔄 [SESSION] Closing any existing unclosed sessions before starting new one...');
 
-      // Tenant integer ids (e.g. "1195") are not UUIDs — Supabase RPC/uuid columns fail.
-      // Prefer Nest/RDS close when enabled.
-      const { isBackendTimeLogsEnabled, closeActiveSessions } = require('../utils/backend-time-logs');
-      const { isTenantUserId } = require('../utils/tenant-user-id');
-      if (isBackendTimeLogsEnabled()) {
-        try {
-          const { getDeviceId } = require('../utils/device-id');
-          const deviceId = getDeviceId();
-          // Inspect/flag only — never invent end_time from heartbeat.
-          const result = await closeActiveSessions(userId, deviceId, global.config, {
-            prefer_recover: false,
-          });
-          const flagged = result?.flagged_count ?? 0;
-          console.log(`🚩 [SESSION] RDS inspect/flag open sessions: flagged=${flagged}`);
-          return { success: true, closedCount: 0, flaggedCount: flagged };
-        } catch (rdsErr) {
-          console.warn('⚠️ [SESSION] RDS close failed:', rdsErr.message || rdsErr);
-          if (isTenantUserId(userId)) {
-            // Don't call uuid-typed Supabase RPC with an integer id.
-            return { success: false, closedCount: 0 };
-          }
-        }
-      }
-
-      if (!client) {
-        console.warn('⚠️ [SESSION] Cannot close existing sessions - missing supabase client');
-        return { success: false, closedCount: 0 };
-      }
-
-      if (isTenantUserId(userId)) {
-        console.warn('⚠️ [SESSION] Skipping Supabase UUID RPC for tenant user id', userId);
-        return { success: false, closedCount: 0 };
-      }
-
-      // Strategy 1: SECURITY DEFINER RPC (bypasses RLS) — UUID users only
       try {
-        const { data: rpcCount, error: rpcError } = await client
-          .rpc('close_user_active_sessions', { p_user_id: userId });
-        if (!rpcError) {
-          const closed = typeof rpcCount === 'number' ? rpcCount : 0;
-          console.log(`🔒 [SESSION] RPC close_user_active_sessions: closed ${closed} session(s)`);
-          return { success: true, closedCount: closed };
-        }
-        console.warn('⚠️ [SESSION] RPC failed, falling back to direct UPDATE:', rpcError.message || rpcError);
-      } catch (rpcErr) {
-        console.warn('⚠️ [SESSION] RPC threw, falling back to direct UPDATE:', rpcErr.message || rpcErr);
-      }
-
-      // Strategy 2: Direct UPDATE fallback (may be blocked by RLS on anon client)
-      const { data: existingSessions, error: fetchError } = await client
-        .from('time_logs')
-        .select('id, start_time')
-        .eq('user_id', userId)
-        .or('end_time.is.null,status.eq.active');
-      
-      if (fetchError) {
-        console.warn('⚠️ [SESSION] Failed to query existing sessions:', fetchError.message || fetchError);
+        const { getDeviceId } = require('../utils/device-id');
+        const deviceId = getDeviceId();
+        // Inspect: stale rows are closed at last heartbeat (never NOW).
+        const result = await closeActiveSessions(userId, deviceId, global.config, {
+          prefer_recover: false,
+        });
+        const flagged = result?.flagged_count ?? 0;
+        console.log(`🚩 [SESSION] RDS inspect/flag open sessions: flagged=${flagged}`);
+        return { success: true, closedCount: 0, flaggedCount: flagged };
+      } catch (rdsErr) {
+        console.warn('⚠️ [SESSION] RDS close failed:', rdsErr.message || rdsErr);
         return { success: false, closedCount: 0 };
       }
-
-      if (!existingSessions || existingSessions.length === 0) {
-        console.log('🔒 [SESSION] No unclosed sessions found via direct query (RLS may be filtering)');
-        return { success: true, closedCount: 0 };
-      }
-      
-      console.log(`🔄 [SESSION] Found ${existingSessions.length} unclosed sessions - closing them now`);
-      
-      const now = new Date();
-      let closedCount = 0;
-      for (const session of existingSessions) {
-        const endTime = now;
-        
-        const { error: updateError } = await client
-          .from('time_logs')
-          .update({
-            end_time: endTime.toISOString(),
-            status: 'completed'
-          })
-          .eq('id', session.id);
-        
-        if (updateError) {
-          console.log(`⚠️ [SESSION] Failed to close session ${session.id}:`, updateError.message || updateError);
-        } else {
-          closedCount++;
-        }
-      }
-      
-      const allClosed = closedCount === existingSessions.length;
-      console.log(`${allClosed ? '✅' : '⚠️'} [SESSION] Closed ${closedCount}/${existingSessions.length} existing sessions`);
-      return { success: allClosed, closedCount };
     } catch (error) {
       console.error('⚠️ [SESSION] Error closing existing sessions:', error);
       return { success: false, closedCount: 0 };

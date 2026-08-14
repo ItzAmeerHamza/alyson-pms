@@ -38,106 +38,21 @@ class TrackingController {
   }
 
   /**
-   * Start tracking with the given project ID
+   * Disabled fallback: this opened and closed time_logs rows directly through
+   * syncManager.supabaseService. It is deliberately NOT rewired to the RDS write
+   * actions — TrackingManager owns session create/close, and a second writer would
+   * produce duplicate payroll rows. Refuse loudly instead of inventing sessions.
    */
   async startTracking(projectId = null) {
-    console.log(`🚀 Starting tracking for project ${projectId || 'default'}`);
-    
-    if (this.isTracking && !this.isPaused) {
-      console.log('⚠️ Already tracking');
-      return;
-    }
-
-    // Resume if paused
-    if (this.isPaused) {
-      return this.resumeTracking();
-    }
-
-    try {
-      // Validate user and project
-      if (!this.config.user_id) {
-        throw new Error('No user logged in');
-      }
-
-      const finalProjectId = projectId || this.config.project_id || '00000000-0000-0000-0000-000000000001';
-      
-      const now = new Date().toISOString();
-
-      // Close any stale active sessions before creating a new one
-      await this.syncManager.supabaseService
-        .from('time_logs')
-        .update({ end_time: now, status: 'completed' })
-        .eq('user_id', this.config.user_id)
-        .or('end_time.is.null,status.eq.active');
-
-      const timeLogData = {
-        user_id: this.config.user_id,
-        project_id: finalProjectId,
-        start_time: now,
-        description: null,
-        is_manual: false
-      };
-
-      const { data: timeLog, error } = await this.syncManager.supabaseService
-        .from('time_logs')
-        .insert([timeLogData])
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      // Update tracking state
-      this.currentTimeLogId = timeLog.id;
-      this.currentSession = {
-        timeLogId: timeLog.id,
-        projectId: finalProjectId,
-        startTime: Date.now()
-      };
-      this.isTracking = true;
-      this.isPaused = false;
-
-      // Save state
-      if (this.onTrackingStateChange) {
-        this.onTrackingStateChange({
-          isTracking: true,
-          isPaused: false,
-          currentTimeLogId: timeLog.id,
-          currentSession: this.currentSession
-        });
-      }
-
-      console.log(`✅ Tracking started with time log ID: ${timeLog.id}`);
-      
-      // Notify UI
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('tracking-started', this.currentSession);
-      }
-
-      // Send monitoring status update after 2 seconds
-      setTimeout(() => {
-        if (this.onMonitoringStatusUpdate && this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.onMonitoringStatusUpdate({
-            screenshot: { status: 'ACTIVE', message: 'Screenshots scheduled' },
-            urlDetection: { status: 'ACTIVE', message: 'URL monitoring active' },
-            appDetection: { status: 'ACTIVE', message: 'App monitoring active' }
-          });
-        }
-      }, 2000);
-
-      return this.currentSession;
-
-    } catch (error) {
-      console.error('❌ Failed to start tracking:', error);
-      
-      this.isTracking = false;
-      throw error;
-    }
+    console.error('❌ [TRACKING-CONTROLLER] startTracking is disabled — TrackingManager owns RDS sessions');
+    throw new Error(
+      'TrackingController.startTracking is disabled — start sessions through TrackingManager',
+    );
   }
 
   /**
-   * Stop tracking
+   * Stop tracking. The remote close is TrackingManager's job (see startTracking);
+   * this only tears down the local state this controller owns.
    */
   async stopTracking(reason = 'manual', details = null) {
     console.log(`🛑 Stopping tracking (reason: ${reason})`);
@@ -148,18 +63,9 @@ class TrackingController {
     }
 
     try {
-      // Update time log with end time
-      const { error } = await this.syncManager.supabaseService
-        .from('time_logs')
-        .update({
-          end_time: new Date().toISOString(),
-          status: 'completed'
-        })
-        .eq('id', this.currentTimeLogId);
-
-      if (error) {
-        console.error('Error updating time log:', error);
-      }
+      console.warn(
+        '⚠️ [TRACKING-CONTROLLER] Local stop only — remote session close is owned by TrackingManager',
+      );
 
       // Clear tracking state
       this.isTracking = false;

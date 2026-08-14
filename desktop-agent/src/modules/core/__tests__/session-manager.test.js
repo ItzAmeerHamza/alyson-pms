@@ -20,24 +20,11 @@ jest.mock('fs', () => ({
 describe('SessionManager', () => {
   let sessionManager;
   let mockConfig;
-  let mockSupabaseService;
 
   beforeEach(() => {
     mockConfig = {
       user_id: 'test-user-123',
       project_id: 'test-project-456'
-    };
-
-    mockSupabaseService = {
-      from: jest.fn(() => ({
-        update: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            is: jest.fn(() => ({
-              neq: jest.fn(() => Promise.resolve({ data: [], error: null }))
-            }))
-          }))
-        }))
-      }))
     };
 
     sessionManager = new SessionManager(mockConfig);
@@ -92,11 +79,11 @@ describe('SessionManager', () => {
       expect(fs.readFile).toHaveBeenCalledWith(sessionManager.USER_SESSION_PATH, 'utf8');
     });
 
-    it('should return null for expired supabase session without recovery', async () => {
+    it('should return null for an expired session with no refresh token', async () => {
       const mockSessionData = {
         email: 'test@example.com',
         access_token: 'token123',
-        auth_provider: 'supabase',
+        auth_provider: 'cognito',
         expires_at: Date.now() - 3600000 // 1 hour ago
       };
 
@@ -193,21 +180,18 @@ describe('SessionManager', () => {
   });
 
   describe('cleanupStaleActiveSessions', () => {
-    it('should cleanup stale sessions when user is logged in', async () => {
-      sessionManager.initialize({ supabaseService: mockSupabaseService });
-
-      await sessionManager.cleanupStaleActiveSessions();
-
-      expect(mockSupabaseService.from).toHaveBeenCalledWith('time_logs');
+    // Stale sessions are now reconciled per-device at last proof-of-life by
+    // session-recovery, not by a user-wide startup sweep. This must stay inert:
+    // the old version closed every open row at start_time, which could zero out
+    // work still running on the same employee's other machine.
+    it('does not close sessions itself', async () => {
+      await expect(sessionManager.cleanupStaleActiveSessions()).resolves.not.toThrow();
     });
 
-    it('should skip cleanup when no user is logged in', async () => {
+    it('is safe to call with no user logged in', async () => {
       sessionManager.config.user_id = null;
-      sessionManager.initialize({ supabaseService: mockSupabaseService });
 
-      await sessionManager.cleanupStaleActiveSessions();
-
-      expect(mockSupabaseService.from).not.toHaveBeenCalled();
+      await expect(sessionManager.cleanupStaleActiveSessions()).resolves.not.toThrow();
     });
   });
 

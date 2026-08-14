@@ -270,48 +270,13 @@ class ActivityManager {
   }
 
   /**
-   * Save activity stats to database
+   * No-op: activity_stats was a Supabase-only table. The backend derives activity
+   * from screenshot and idle rows, so there is nothing to persist from here.
    */
   async saveActivityStatsToDatabase() {
-    if (!global.supabaseService || !this.config.user_id) {
-      return;
-    }
-
-    if (!global.isTracking) {
-      return;
-    }
-
-    try {
-      const activityData = this.getDefaultActivityData();
-      
-      // Save to activity_stats table or similar
-      // Attempt to save into activity_stats if table exists; otherwise avoid log spam
-      const { error } = await global.supabaseService
-        .from('activity_stats')
-        .insert({
-          user_id: this.config.user_id,
-          mouse_movements: activityData.mouseMovements || 0,
-          mouse_clicks: activityData.clicks || 0,
-          keystrokes: activityData.keystrokes || 0,
-          session_duration_seconds: activityData.sessionDuration || 0,
-          period_start: new Date(activityData.lastActivity).toISOString(),
-          period_end: new Date().toISOString()
-        });
-
-      if (error) {
-        const msg = String(error.message || 'Unknown error');
-        if (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("column") || msg.includes("row-level security")) {
-          // Suppress repeated schema/RLS noise — log only once per session
-          if (!this._activitySaveWarned) {
-            console.log('⚠️ [ACTIVITY] activity_stats save not available:', msg);
-            this._activitySaveWarned = true;
-          }
-        } else {
-          console.log('⚠️ [ACTIVITY] Database save error:', msg);
-        }
-      }
-    } catch (error) {
-      console.log('⚠️ [ACTIVITY] Failed to save activity stats:', error.message);
+    if (!this._activitySaveWarned) {
+      console.log('⚠️ [ACTIVITY] activity_stats persistence removed — backend derives activity from screenshots/idle logs');
+      this._activitySaveWarned = true;
     }
   }
 

@@ -136,8 +136,8 @@ function diagnoseScreenshotIssue() {
     console.log('✅ No obvious issues detected');
     console.log('\nIf screenshots are still not capturing properly:');
     console.log('1. Check the console logs for errors');
-    console.log('2. Verify network connectivity to Supabase');
-    console.log('3. Check if screenshot storage bucket is accessible');
+    console.log('2. Verify network connectivity to the backend API');
+    console.log('3. Check if screenshot storage is accessible');
     console.log('4. Try: global.enhancedScreenshotManager.requestScreenshot("manual-test")');
   } else {
     console.log('⚠️ Issues Found:');

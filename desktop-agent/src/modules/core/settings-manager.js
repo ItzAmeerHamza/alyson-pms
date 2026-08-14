@@ -151,7 +151,8 @@ class SettingsManager {
    * @returns {Object} Safe configuration object
    */
   getSafeConfig() {
-    const { supabase_key, supabase_service_key, ...safeConfig } = this.config;
+    // The renderer must never receive credentials it can exfiltrate.
+    const { backend_api_key, INTERNAL_API_KEY, ...safeConfig } = this.config;
     return safeConfig;
   }
 

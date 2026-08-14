@@ -10,7 +10,6 @@ const { startLogUploadSchedule } = require('../utils/log-uploader');
 class StartupManager {
   constructor(electronModules, dependencies = {}) {
     this.electronModules = electronModules;
-    this.supabaseService = dependencies.supabaseService;
     this.cleanupRegistry = dependencies.cleanupRegistry;
     this.wrappers = dependencies.wrappers;
     this.sessionManager = dependencies.sessionManager;
@@ -176,7 +175,6 @@ class StartupManager {
       // CRITICAL FIX: Initialize the enhanced screenshot manager with dependencies
       global.enhancedScreenshotManager.initialize({
         wrappers: global.wrappers,
-        supabaseService: this.supabaseService,
         mainWindow: null, // Will be set when window is created
         systemPreferences: systemPreferences
       });
@@ -184,9 +182,9 @@ class StartupManager {
       global.screenshotManager = global.enhancedScreenshotManager;
       // EnhancedIdleDetector removed - using EnhancedIdleMonitor only
       global.monitoringManager = new managers.MonitoringManager(global.configManager.config);
-      global.databaseManager = new managers.DatabaseManager(global.configManager.config, this.supabaseService);
+      global.databaseManager = new managers.DatabaseManager(global.configManager.config);
       global.enhancedActivityManager = new managers.EnhancedActivityManager(global.configManager.config);
-      global.enhancedSyncManager = new managers.EnhancedSyncManager(global.configManager.config, this.supabaseService);
+      global.enhancedSyncManager = new managers.EnhancedSyncManager(global.configManager.config);
 
       // Create BrowserUrlManager for legacy compatibility
       global.browserUrlManager = new managers.BrowserUrlManager(global.configManager.config);
@@ -267,13 +265,11 @@ console.log('🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER:', { url: evt?.url, so
         console.log('🔍 [URL] DEBUG - Available services:', {
           enhancedSyncManager: !!global.enhancedSyncManager,
           enhancedSyncManagerAddToQueue: !!(global.enhancedSyncManager && global.enhancedSyncManager.addToQueue),
-          supabaseService: !!global.supabaseService,
-          supabaseServiceFrom: !!(global.supabaseService && typeof global.supabaseService.from === 'function'),
           trackingManager: !!global.trackingManager,
           currentTimeLogId: global.trackingManager?.currentTimeLogId || null
         });
         
-        // Try to save via enhancedSyncManager first
+        // Save via enhancedSyncManager (offline queue + backend sync)
         let queued = false;
         if (global.enhancedSyncManager && global.enhancedSyncManager.addToQueue) {
           console.log('🌐 [URL] Using enhancedSyncManager.addToQueue');
@@ -290,40 +286,9 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
           }
         }
 
-        // Fallback to direct Supabase service ONLY if not queued
         if (!queued) {
-          if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-            console.log('🌐 [URL] Using direct Supabase service');
-            try {
-              const appUrlPayload = {
-                organization_id: null,
-                user_id: payload.user_id,
-                device_id: null,
-                time_log_id: payload.time_log_id,
-                site_url: payload.site_url,
-                domain: payload.domain,
-                title: payload.title,
-                browser: payload.browser,
-                confidence: 'high',
-                privacy_flags: payload.privacy_flags,
-                started_at: payload.started_at,
-                ended_at: null
-              };
-              global.supabaseService.from('app_url_activity').insert([appUrlPayload]).then(({ error }) => {
-                if (error) {
-                  console.error('❌ [URL] Direct DB insert to app_url_activity failed:', error.message);
-                } else {
-                  console.log('✅ [URL] Direct DB insert to app_url_activity succeeded:', payload.domain);
-                }
-              });
-            } catch (e) {
-              console.error('❌ [URL] Direct DB insert error:', e.message);
-            }
-          } else {
-            console.log('❌ [URL] No sync manager or Supabase service available');
-            console.log('🌐 [URL] DEBUG - enhancedSyncManager exists:', !!global.enhancedSyncManager);
-            console.log('🌐 [URL] DEBUG - supabaseService exists:', !!global.supabaseService);
-          }
+          console.log('❌ [URL] No sync manager available — URL not persisted');
+          console.log('🌐 [URL] DEBUG - enhancedSyncManager exists:', !!global.enhancedSyncManager);
         }
         } catch (handlerError) {
           console.error('❌ [URL] Event handler error (startup-manager):', handlerError?.message || handlerError);
@@ -357,20 +322,17 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       const properConfig = global.configManager.config || loadConfig();
       
       console.log('🔍 [STARTUP] Config for DataStatsManager:', {
-        hasSupabaseUrl: !!properConfig.supabase_url,
-        hasSupabaseKey: !!properConfig.supabase_key,
-        urlValue: properConfig.supabase_url
+        hasBackendApiUrl: !!properConfig.backend_api_url,
+        hasBackendApiKey: !!properConfig.backend_api_key
       });
       
       global.dataStatsManager = new managers.DataStatsManager({
         ipcMain,
         config: properConfig,
         appSettings: global.configManager.appSettings || {},
-        supabaseService: this.supabaseService,
         global
       });
       global.trackingManager = new managers.TrackingManager(global.configManager.config, { 
-        supabaseService: this.supabaseService,
         systemMonitor: global.systemMonitor
       });
 
@@ -391,69 +353,6 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
     } catch (error) {
       console.error('❌ [STARTUP-MANAGER] Error creating managers:', error);
       throw error;
-    }
-  }
-
-  /**
-   * Recover from crash by closing stale URL slices
-   */
-  async _recoverStaleUrlSlices() {
-    try {
-      if (!global.supabaseClient) {
-        console.log('⚠️ [STARTUP] Skipping URL crash recovery - no Supabase client');
-        return;
-      }
-
-      // Find open URL slices from before last known heartbeat
-      const lastHeartbeat = global.lastHeartbeat || new Date(Date.now() - 3600000); // Default to 1 hour ago
-      
-      const { data: staleSlices, error } = await global.supabaseClient
-        .from('app_url_activity')
-        .select('id, user_id, started_at')
-        .is('ended_at', null)
-        .lt('started_at', lastHeartbeat.toISOString())
-        .limit(100);
-
-      if (error) {
-        console.error('❌ [STARTUP] URL crash recovery query failed:', error);
-        return;
-      }
-
-      if (!staleSlices || staleSlices.length === 0) {
-        console.log('✅ [STARTUP] No stale URL slices to recover');
-        return;
-      }
-
-      console.log(`🔧 [STARTUP] Found ${staleSlices.length} stale URL slices to close`);
-
-      // Close each stale slice with the last heartbeat time (clamped to now if future)
-      const now = new Date();
-      for (const slice of staleSlices) {
-        try {
-          // Clamp ended_at to now if heartbeat is in the future (clock skew)
-          const clampedEndTime = lastHeartbeat > now ? now : lastHeartbeat;
-          
-          const { error: updateError } = await global.supabaseClient
-            .from('app_url_activity')
-            .update({ 
-              ended_at: clampedEndTime.toISOString()
-            })
-            .eq('id', slice.id)
-            .eq('user_id', slice.user_id)
-            .is('ended_at', null);
-
-          if (updateError) {
-            console.error(`❌ [STARTUP] Failed to close stale slice ${slice.id}:`, updateError);
-          }
-        } catch (e) {
-          console.error(`❌ [STARTUP] Exception closing stale slice ${slice.id}:`, e);
-        }
-      }
-
-      console.log('✅ [STARTUP] URL crash recovery completed');
-    } catch (error) {
-      console.error('❌ [STARTUP] URL crash recovery failed:', error);
-      // Non-critical, continue startup
     }
   }
 
@@ -501,15 +400,12 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       
       global.enhancedScreenshotManager.initialize({ 
         wrappers: this.wrappers || global.wrappers, 
-        supabaseService: this.supabaseService, 
         mainWindow,
         systemPreferences: this.electronModules.systemPreferences 
       });
             // EnhancedIdleDetector initialization removed - using EnhancedIdleMonitor only
       global.databaseManager.initialize({ isTracking: false });
       
-      // Crash recovery: close stale URL slices
-      await this._recoverStaleUrlSlices();
       global.enhancedActivityManager.initialize({ 
         isTracking: false, 
         activityStats, 
@@ -563,16 +459,13 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
           let projectId = global.currentProjectId || null;
           if (!projectId) {
             try {
-              const supabase = this.supabaseService || global.supabaseService || global.supabaseClient;
+              const { listUserProjects } = require('../utils/backend-time-logs');
               const userId = global.currentUserId || global.configManager?.config?.user_id;
-              if (supabase && userId) {
-                const { data, error } = await supabase
-                  .from('employee_project_assignments')
-                  .select('project_id')
-                  .eq('user_id', userId);
-                if (!error && Array.isArray(data) && data.length > 0) {
-                  const randomIndex = Math.floor(Math.random() * data.length);
-                  projectId = data[randomIndex].project_id;
+              if (userId) {
+                const projects = await listUserProjects(userId, global.configManager?.config);
+                if (Array.isArray(projects) && projects.length > 0) {
+                  const randomIndex = Math.floor(Math.random() * projects.length);
+                  projectId = projects[randomIndex].project_id || projects[randomIndex].id;
                   console.log('🎲 [STARTUP-MANAGER] Auto-selected random project for AUTO_START:', projectId);
                 }
               }
@@ -656,10 +549,12 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
         console.error('❌ [STARTUP-MANAGER] Error stack:', trayError.stack);
       }
       
-      // Clean up stale sessions
+      // Stale sessions are reconciled by startSessionHealthCheck() below — per
+      // device, at each row's own last proof-of-life. The old startup sweep was
+      // user-wide and closed at start_time, so it could zero out real work still
+      // running on the employee's other machine.
       if (this.sessionManager) {
-        this.sessionManager.initialize({ supabaseService: this.supabaseService });
-        await this.sessionManager.cleanupStaleActiveSessions();
+        this.sessionManager.initialize();
       }
 
       try {

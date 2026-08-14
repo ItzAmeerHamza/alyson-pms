@@ -180,7 +180,7 @@ class URLTrackingIntegrator {
     console.log(`  isTracking: ${global.isTracking}`);
     console.log(`  currentTimeLogId: ${global.currentTimeLogId}`);
     console.log(`  currentUserId: ${global.currentUserId}`);
-    console.log(`  supabaseService: ${!!global.supabaseService}`);
+    console.log(`  syncManager: ${!!global.syncManager}`);
     console.log('');
     
     // Count URL processing systems

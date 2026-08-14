@@ -322,7 +322,7 @@ class SystemMonitor {
     try {
       // Use global.config (set by load-config.js in main.js) with env-config.js fallback
       let config = global.config;
-      if (!config || (!config.supabase_url && !config.SUPABASE_URL)) {
+      if (!config || !(config.api_base_url || config.backend_api_url)) {
         try {
           config = require('../../../env-config.js');
         } catch (requireErr) {
@@ -330,74 +330,43 @@ class SystemMonitor {
           config = {};
         }
       }
-      
-      const supabaseUrl = config.supabase_url || config.SUPABASE_URL || config.VITE_SUPABASE_URL || '';
-      const supabaseKey = config.supabase_key || config.SUPABASE_ANON_KEY || config.VITE_SUPABASE_ANON_KEY || '';
-      
-      const hasUrl = !!supabaseUrl;
-      const hasKey = !!supabaseKey;
-      const isConnected = hasUrl && hasKey;
-      
+
+      // RDS is reachable only through the NestJS API, so its /health endpoint is the
+      // single honest signal for "can we persist payroll data right now".
+      const { resolveApiBase, checkBackendHealth } = require('../utils/backend-health');
+      const apiBase = resolveApiBase(config);
+      const urlPreview = apiBase ? apiBase.substring(0, 30) + '...' : 'missing';
+
+      const health = await checkBackendHealth(config, 5000);
+      const isConnected = !!health.ok;
+
       this.systemState.features.database.connected = isConnected;
       this.systemState.features.database.status = isConnected ? 'active' : 'inactive';
       this.systemState.features.database.lastUpdate = Date.now();
-      
-      const urlPreview = hasUrl ? supabaseUrl.substring(0, 30) + '...' : 'missing';
-      
-      // If config exists, test ACTUAL database connectivity
+
       if (isConnected) {
-        try {
-          // Use a simple fetch to the Supabase REST endpoint (no auth/RLS needed)
-          const testPromise = fetch(`${supabaseUrl}/rest/v1/`, {
-            method: 'HEAD',
-            headers: {
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`
-            }
-          });
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Database connectivity timeout (5s)')), 5000)
-          );
-          
-          const response = await Promise.race([testPromise, timeoutPromise]);
-          
-          return {
-            status: 'pass',
-            details: {
-              hasUrl: true,
-              hasKey: true,
-              connectivity: 'verified',
-              httpStatus: response.status,
-              url: urlPreview
-            },
-            message: 'Database configuration and connectivity verified'
-          };
-        } catch (dbError) {
-          // PAYROLL CRITICAL: network/DB outages must never block the timer.
-          // Tracking continues offline and syncs when connectivity returns.
-          return {
-            status: 'warn',
-            details: {
-              hasUrl: true,
-              hasKey: true,
-              connectivity: 'failed',
-              error: dbError.message,
-              url: urlPreview
-            },
-            message: `Database configured but connectivity test failed: ${dbError.message}`
-          };
-        }
+        return {
+          status: 'pass',
+          details: {
+            connectivity: 'verified',
+            httpStatus: health.status,
+            url: urlPreview
+          },
+          message: 'Database configuration and connectivity verified'
+        };
       }
-      
-      // Config not ready yet – treat as warning to avoid CRITICAL false alarm at boot
+
+      // PAYROLL CRITICAL: network/DB outages must never block the timer.
+      // Tracking continues offline and syncs when connectivity returns.
+      const failure = health.error || (health.status ? `HTTP ${health.status}` : 'unreachable');
       return {
         status: 'warn',
         details: {
-          hasUrl,
-          hasKey,
+          connectivity: 'failed',
+          error: failure,
           url: urlPreview
         },
-        message: 'Database configuration not ready yet'
+        message: `Database configured but connectivity test failed: ${failure}`
       };
     } catch (error) {
       // Never fail-closed on connectivity exceptions — offline tracking is required for payroll.

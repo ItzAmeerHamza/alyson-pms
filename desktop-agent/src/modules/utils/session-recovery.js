@@ -2,22 +2,13 @@
  * Session Recovery Utility
  * Syncs open RDS sessions with the desktop agent using heartbeat/evidence liveness.
  *
- * Intentional Stop: when the employee stops Time Doctor, any remaining open
- * session on this device MUST be closed (pending end / checkpoint / NOW) —
- * flag-only left orphans that kept accruing until admin intervention.
+ * Intentional Stop: close remaining open sessions at pending end / checkpoint.
+ * Stale / sleep / crash: close at last heartbeat — never wall-clock NOW.
  */
 
 const { createFeatureLogger } = require('./logger');
 const { getDeviceId } = require('./device-id');
 const log = createFeatureLogger('SESSION', { adapter: 'recovery' });
-
-function resolveSupabaseClient() {
-  const svc = global.supabaseService;
-  if (!svc) return null;
-  if (typeof svc.from === 'function') return svc;
-  if (svc.client && typeof svc.client.from === 'function') return svc.client;
-  return null;
-}
 
 function appDataDir() {
   const path = require('path');
@@ -42,17 +33,48 @@ function readLocalCheckpoint() {
   }
 }
 
-function readLocalCheckpointAt() {
-  return readLocalCheckpoint()?.checkpointAt || null;
+/**
+ * Checkpoint time for a session.
+ *
+ * MUST be scoped by time log id. The checkpoint file holds whichever session
+ * wrote it last, so an unscoped read hands the PREVIOUS session's timestamp to
+ * the one being closed. That end precedes the new session's start, the server
+ * floors it to start + 30s, and you get a 30-second session that never happened.
+ * 278 of 352 sub-minute sessions in production were exactly 30.0s from this.
+ *
+ * Passing no id returns the raw value — only valid for liveness checks
+ * ("has anything checkpointed recently"), never for choosing an end_time.
+ */
+function readLocalCheckpointAt(timeLogId = null) {
+  const cp = readLocalCheckpoint();
+  if (!cp?.checkpointAt) return null;
+  if (timeLogId && String(cp.timeLogId || '') !== String(timeLogId)) return null;
+  return cp.checkpointAt;
 }
 
-/** Newest end_time from pending_sessions/*.json (intentional stop that may not have synced). */
-function readPendingSessionEndTime() {
+/** Pending end_time for a session — that session's file only, never the newest of all. */
+function readPendingSessionEndTime(timeLogId = null) {
   try {
     const fs = require('fs');
     const path = require('path');
     const dir = path.join(appDataDir(), 'pending_sessions');
     if (!fs.existsSync(dir)) return null;
+
+    if (timeLogId) {
+      const filePath = path.join(dir, `${timeLogId}.json`);
+      if (!fs.existsSync(filePath)) return null;
+      try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const end = data?.endTime || data?.end_time;
+        const ms = end ? new Date(end).getTime() : NaN;
+        return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // No id: newest across all pending files. Recovery sweeps only — a close
+    // that targets one session must pass its id.
     let best = null;
     let bestMs = 0;
     for (const file of fs.readdirSync(dir)) {
@@ -73,17 +95,51 @@ function readPendingSessionEndTime() {
   }
 }
 
+const STALE_CHECKPOINT_MS = 15 * 60 * 1000;
+
+function isIsoRecent(iso, maxAgeMs = STALE_CHECKPOINT_MS) {
+  if (!iso) return false;
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) && Date.now() - ms <= maxAgeMs;
+}
+
 /**
- * Best durable end_time for closing after an intentional stop.
- * Prefer pending close → checkpoint → caller fallback (usually NOW).
+ * Best durable end_time. Prefer pending close → checkpoint → caller fallback.
+ * NOW is allowed only for a live Stop click (employee is ending right now).
+ * Orphan / sleep / crash recovery must never invent wall-clock NOW.
  */
-function resolveExplicitStopEndTime(fallbackIso = null) {
-  return (
-    readPendingSessionEndTime() ||
-    readLocalCheckpointAt() ||
-    fallbackIso ||
-    new Date().toISOString()
-  );
+function resolveExplicitStopEndTime(fallbackIso = null, { liveStop = false, timeLogId = null } = {}) {
+  return resolveExplicitStopEnd(fallbackIso, { liveStop, timeLogId }).endTime;
+}
+
+/**
+ * Same resolution, but reports WHERE the end came from.
+ *
+ * Provenance decides which confirmation the server gets. Sending
+ * allow_unconfirmed_end unconditionally made the gate meaningless — it claims
+ * "nothing corroborates this" even when a durable on-disk checkpoint does.
+ * A pending close or checkpoint IS local-checkpoint confirmation; say so.
+ */
+function resolveExplicitStopEnd(fallbackIso = null, { liveStop = false, timeLogId = null } = {}) {
+  // Scoped to this session. An unscoped read returns the previous session's
+  // timestamp, which lands before this one's start and gets floored to 30s.
+  const pending = readPendingSessionEndTime(timeLogId);
+  if (pending) return { endTime: pending, source: 'pending_close' };
+
+  const checkpoint = readLocalCheckpointAt(timeLogId);
+  if (checkpoint) return { endTime: checkpoint, source: 'local_checkpoint' };
+
+  if (fallbackIso) return { endTime: fallbackIso, source: 'caller_supplied' };
+
+  return {
+    endTime: liveStop ? new Date().toISOString() : null,
+    source: liveStop ? 'live_stop_now' : 'none',
+  };
+}
+
+/** True when the end time is backed by a durable local record. */
+function isLocallyConfirmed(source) {
+  return source === 'pending_close' || source === 'local_checkpoint';
 }
 
 function explicitStopFlagPath() {
@@ -143,7 +199,11 @@ function loadUserExplicitlyStoppedFromDisk() {
 
 /**
  * Close all still-open sessions on this device after an intentional Stop.
- * Uses allow_unconfirmed_end so Nest mutates (inspect/flag alone left orphans).
+ *
+ * The server is told how the end time was established — local checkpoint,
+ * server-side liveness, or neither — rather than always claiming it is
+ * unconfirmed. The liveness ceiling clamps the value either way, so the flag
+ * exists to make the audit trail honest about provenance.
  */
 async function closeOpenSessionsAfterExplicitStop(options = {}) {
   const backendTimeLogs = require('./backend-time-logs');
@@ -153,36 +213,133 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
     return { success: false, closed: 0, reason: 'no_user' };
   }
   const deviceId = options.deviceId !== undefined ? options.deviceId : getDeviceId();
-  const endTime = resolveExplicitStopEndTime(options.end_time || null);
 
-  if (!backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
-    // Legacy Supabase: close open rows for this device at endTime.
-    const supabase = resolveSupabaseClient();
-    if (!supabase) return { success: false, closed: 0, reason: 'no_client' };
-    let query = supabase
-      .from('time_logs')
-      .update({ end_time: endTime, status: 'completed' })
-      .eq('user_id', userId)
-      .is('end_time', null);
-    if (deviceId) query = query.eq('device_id', deviceId);
-    const { data, error } = await query.select('id');
-    if (error) throw error;
-    const closed = data?.length || 0;
+  // Offline: the end time is already durable on disk (pending close + offline
+  // queue) and will sync. Chaining more network calls here only makes the
+  // employee wait to be told what we already know.
+  if (backendTimeLogs.isLikelyOffline()) {
     log.info({
-      step: 'EXPLICIT_STOP_CLOSED_LEGACY',
-      message: 'Closed open sessions after intentional stop',
-      ctx: { closed, endTime, deviceId },
+      step: 'EXPLICIT_STOP_OFFLINE',
+      message: 'Offline — stop recorded locally, sessions will close on next sync',
     });
-    return { success: true, closed, closed_ids: (data || []).map((r) => r.id), end_time: endTime };
+    return { success: true, closed: 0, offline: true, deferred: true };
   }
 
+  // KILL ALL: every open row on this device closes at its own last proof-of-life.
+  //
+  // This runs for any sweep that does not name a session, INCLUDING one that was
+  // handed an end_time. A device-wide close applies a single timestamp to every
+  // open row, so an ambient end — typically the running session's checkpoint —
+  // gets stamped onto an unrelated orphan that died hours earlier, ending it
+  // after the current session already began. That produced 84 overlapping pairs
+  // sitting 0-29s (0-3 checkpoint intervals) past the newer session's start.
+  //
+  // One timestamp cannot be correct for several independent sessions. A caller
+  // that genuinely knows one session's end names it via timeLogId; everyone else
+  // gets per-row liveness, which is right for every row by construction.
+  const targetsOneSession = options.timeLogId != null;
+  if (!targetsOneSession && backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
+    try {
+      const killed = await backendTimeLogs.killAllSessions(
+        userId,
+        deviceId,
+        options.config || global.config,
+        { reason: options.reason || 'explicit_stop', timeoutMs: options.timeoutMs },
+      );
+      log.info({
+        step: 'EXPLICIT_STOP_CLOSED',
+        message: 'Killed all open sessions at their own last proof-of-life',
+        ctx: { closed: killed?.closed ?? 0, closed_ids: killed?.closed_ids || [], deviceId },
+      });
+      return killed;
+    } catch (killErr) {
+      log.warn({
+        step: 'KILL_ALL_FAILED',
+        message: killErr?.message || String(killErr),
+      });
+      // Fall through to the durable-end path below.
+    }
+  }
+
+  let { endTime, source: endSource } = resolveExplicitStopEnd(options.end_time || null, {
+    liveStop: options.liveStop === true,
+    // Without an id the durable readers would hand back a PREVIOUS session's
+    // timestamp. Callers closing one session pass it; sweeps pass none and fall
+    // through to each row's own last_alive_at instead.
+    timeLogId: options.timeLogId || null,
+  });
+  if (!endTime) {
+    try {
+      const inspect = await backendTimeLogs.reconcileOpenSessions(
+        userId,
+        deviceId,
+        options.config || global.config,
+        {
+          prefer_recover: false,
+          client_last_seen_at: readLocalCheckpointAt(),
+          freshness_minutes: 15,
+          timeoutMs: options.timeoutMs || 12000,
+        },
+      );
+      endTime =
+        inspect?.closed?.[0]?.end_time ||
+        inspect?.flagged?.[0]?.suggested_end_at ||
+        inspect?.flagged?.[0]?.last_heartbeat_at ||
+        inspect?.flagged?.[0]?.last_evidence_at ||
+        inspect?.open?.[0]?.suggested_end_at ||
+        inspect?.open?.[0]?.last_heartbeat_at ||
+        null;
+      if (endTime) endSource = 'server_liveness';
+      if (inspect?.closed_count > 0 && !options.end_time) {
+        log.info({
+          step: 'EXPLICIT_STOP_ALREADY_CLOSED',
+          message: 'Server already closed stale session(s) at last heartbeat',
+          ctx: { closed: inspect.closed_count, endTime },
+        });
+        return {
+          success: true,
+          closed: inspect.closed_count,
+          closed_ids: (inspect.closed || []).map((r) => r.id),
+          end_time: endTime,
+        };
+      }
+    } catch (inspectErr) {
+      log.warn({
+        step: 'EXPLICIT_STOP_INSPECT_FAILED',
+        message: inspectErr?.message || String(inspectErr),
+      });
+    }
+  }
+  if (!endTime) {
+    log.warn({
+      step: 'EXPLICIT_STOP_NO_DURABLE_END',
+      message: 'Refusing to close at NOW — no checkpoint, pending, or heartbeat',
+    });
+    return { success: false, closed: 0, reason: 'no_durable_end' };
+  }
+
+  if (!backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
+    // PAYROLL: never pretend a close happened. The end time is already durable on
+    // disk (pending close + offline queue) and syncs when the API is reachable.
+    log.warn({
+      step: 'EXPLICIT_STOP_NO_BACKEND',
+      message: 'Backend not configured — close stays queued locally',
+      ctx: { endTime, deviceId },
+    });
+    return { success: false, closed: 0, reason: 'backend_not_configured', end_time: endTime };
+  }
+
+  // A pending close or on-disk checkpoint IS local-checkpoint confirmation.
+  // Only a server-derived or caller-supplied end is genuinely unconfirmed.
+  const locallyConfirmed = isLocallyConfirmed(endSource);
   const result = await backendTimeLogs.closeActiveSessions(
     userId,
     deviceId,
     options.config || global.config,
     {
       end_time: endTime,
-      allow_unconfirmed_end: true,
+      confirm_with_local_checkpoint: locallyConfirmed,
+      allow_unconfirmed_end: !locallyConfirmed,
       prefer_recover: false,
       client_last_seen_at: readLocalCheckpointAt(),
       timeoutMs: options.timeoutMs || 12000,
@@ -192,6 +349,8 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
     step: 'EXPLICIT_STOP_CLOSED',
     message: 'Closed open sessions after intentional stop',
     ctx: {
+      end_source: endSource,
+      confirmed: locallyConfirmed,
       closed: result?.closed ?? 0,
       closed_ids: result?.closed_ids || [],
       endTime,
@@ -282,14 +441,83 @@ function startSessionHealthCheck() {
       }
 
       if (global.isTracking && global.currentTimeLogId) {
-        log.debug({
-          step: 'HEALTH_CHECK_OK',
-          ctx: {
-            userId: global.currentUserId,
-            timeLogId: global.currentTimeLogId,
-            isTracking: global.isTracking,
-          },
+        const checkpointAt = readLocalCheckpointAt();
+        try {
+          const start =
+            global.sessionStartTime ||
+            global.trackingManager?.sessionStartTime ||
+            global.currentSession?.start_time ||
+            null;
+          if (start) {
+            const { workDateKey, endOfWorkDayExclusive } = require('./work-timezone');
+            const startKey = workDateKey(new Date(start));
+            const todayKey = workDateKey();
+            if (startKey && todayKey && startKey !== todayKey) {
+              const dayEnd = endOfWorkDayExclusive(new Date(start)).toISOString();
+              log.warn({
+                step: 'HEALTH_CHECK_CROSS_MIDNIGHT',
+                message: 'Open session crossed company midnight — closing at day boundary',
+                ctx: { startKey, todayKey, dayEnd, timeLogId: global.currentTimeLogId },
+              });
+              try {
+                global.trackingManager?._stopTimeLogCheckpoint?.();
+              } catch (_) { /* ignore */ }
+              const projectId =
+                global.currentProjectId || global.trackingManager?.currentProjectId || null;
+              // Names the session: the day boundary is a real end for THIS row,
+              // not a value that should be stamped across every open row.
+              await closeOpenSessionsAfterExplicitStop({
+                end_time: dayEnd,
+                timeLogId: global.currentTimeLogId,
+              });
+              clearLocalTrackingAfterStaleClose();
+              if (projectId && typeof global.startTracking === 'function') {
+                try {
+                  await global.startTracking(projectId);
+                } catch (startErr) {
+                  log.warn({
+                    step: 'HEALTH_CHECK_MIDNIGHT_RESTART_FAILED',
+                    message: startErr?.message || String(startErr),
+                  });
+                }
+              }
+              return;
+            }
+          }
+        } catch (dayErr) {
+          log.warn({
+            step: 'HEALTH_CHECK_DAY_SPLIT_FAILED',
+            message: dayErr?.message || String(dayErr),
+          });
+        }
+        if (isIsoRecent(checkpointAt, STALE_CHECKPOINT_MS)) {
+          log.debug({
+            step: 'HEALTH_CHECK_OK',
+            ctx: {
+              userId: global.currentUserId,
+              timeLogId: global.currentTimeLogId,
+              isTracking: global.isTracking,
+            },
+          });
+          return;
+        }
+        log.warn({
+          step: 'HEALTH_CHECK_STALE_WHILE_TRACKING',
+          message: 'Tracking flag set but checkpoint is stale — closing at last durable mark',
+          ctx: { timeLogId: global.currentTimeLogId, checkpointAt },
         });
+        try {
+          global.trackingManager?._stopTimeLogCheckpoint?.();
+        } catch (_) { /* ignore */ }
+        try {
+          await closeOpenSessionsAfterExplicitStop({ end_time: checkpointAt || undefined });
+        } catch (closeErr) {
+          log.warn({
+            step: 'HEALTH_CHECK_STALE_CLOSE_FAILED',
+            message: closeErr?.message || String(closeErr),
+          });
+        }
+        clearLocalTrackingAfterStaleClose();
         return;
       }
 
@@ -336,6 +564,8 @@ function startSessionHealthCheck() {
             try {
               const suggested =
                 result.flagged?.[0]?.suggested_end_at ||
+                result.flagged?.[0]?.last_heartbeat_at ||
+                result.flagged?.[0]?.last_evidence_at ||
                 result.flagged?.[0]?.client_checkpoint_at ||
                 null;
               await closeOpenSessionsAfterExplicitStop({ end_time: suggested || undefined });
@@ -349,44 +579,10 @@ function startSessionHealthCheck() {
           return;
         }
 
-        // Legacy Supabase path
-        const supabase = resolveSupabaseClient();
-        if (!supabase) {
-          log.warn({ step: 'HEALTH_CHECK_NO_CLIENT' });
-          return;
-        }
-
-        const deviceId = getDeviceId();
-        let query = supabase
-          .from('time_logs')
-          .select('*')
-          .eq('user_id', global.currentUserId)
-          .is('end_time', null)
-          .eq('status', 'active')
-          .limit(1);
-        if (deviceId) query = query.eq('device_id', deviceId);
-        const { data: activeLogs } = await query;
-        const activeLog = activeLogs?.[0] ?? null;
-        if (!activeLog) return;
-
-        const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
-        const MAX_FRESH_MS = 15 * 60 * 1000;
-        if (sessionAge > MAX_FRESH_MS) {
-          const checkpointAt = readLocalCheckpointAt();
-          const endTime = checkpointAt || activeLog.start_time;
-          await supabase
-            .from('time_logs')
-            .update({ end_time: endTime, status: 'auto_closed' })
-            .eq('id', activeLog.id);
-          log.info({
-            step: 'SYNC_CLOSED_STALE',
-            message: 'Closed stale session at last checkpoint (legacy)',
-            ctx: { timeLogId: activeLog.id, endTime },
-          });
-          return;
-        }
-
-        applyRecoveredSession(activeLog);
+        log.warn({
+          step: 'HEALTH_CHECK_NO_BACKEND',
+          message: 'Backend not configured — cannot reconcile open sessions',
+        });
       }
     } catch (error) {
       log.warn({ step: 'HEALTH_CHECK_ERROR', message: error.message });
@@ -445,6 +641,8 @@ async function forceSyncSessionState() {
         try {
           const suggested =
             result.flagged?.[0]?.suggested_end_at ||
+            result.flagged?.[0]?.last_heartbeat_at ||
+            result.flagged?.[0]?.last_evidence_at ||
             result.flagged?.[0]?.client_checkpoint_at ||
             null;
           await closeOpenSessionsAfterExplicitStop({ end_time: suggested || undefined });
@@ -455,57 +653,10 @@ async function forceSyncSessionState() {
       return false;
     }
 
-    if (!global.sessionManager) {
-      log.warn({ step: 'FORCE_SYNC_SKIP', message: 'Missing dependencies' });
-      return false;
-    }
-
-    log.info({ step: 'FORCE_SYNC_START' });
-    const supabase = resolveSupabaseClient();
-    if (!supabase) {
-      log.warn({ step: 'FORCE_SYNC_NO_CLIENT' });
-      return false;
-    }
-
-    const session = await global.sessionManager.loadDesktopAgentSession();
-    if (!session) {
-      log.warn({ step: 'FORCE_SYNC_NO_SESSION', message: 'No session available' });
-      return false;
-    }
-
-    global.currentUserId = session.id;
-    if (global.config) global.config.user_id = session.id;
-
-    const deviceId = getDeviceId();
-    let activeQuery = supabase
-      .from('time_logs')
-      .select('*')
-      .eq('user_id', session.id)
-      .is('end_time', null)
-      .eq('status', 'active')
-      .limit(1);
-    if (deviceId) activeQuery = activeQuery.eq('device_id', deviceId);
-    const { data: activeLogs } = await activeQuery;
-
-    if (activeLogs && activeLogs.length > 0) {
-      const activeLog = activeLogs[0];
-      const sessionAge = Date.now() - new Date(activeLog.start_time).getTime();
-      if (sessionAge > 15 * 60 * 1000) {
-        const endTime = readLocalCheckpointAt() || activeLog.start_time;
-        await supabase
-          .from('time_logs')
-          .update({ end_time: endTime, status: 'auto_closed' })
-          .eq('id', activeLog.id);
-        log.info({
-          step: 'FORCE_SYNC_CLOSED_STALE',
-          message: 'Closed stale session at checkpoint',
-          ctx: { timeLogId: activeLog.id, endTime },
-        });
-        return false;
-      }
-      applyRecoveredSession(activeLog);
-      return true;
-    }
+    log.warn({
+      step: 'FORCE_SYNC_NO_BACKEND',
+      message: 'Backend not configured — nothing to reconcile against',
+    });
     return false;
   } catch (error) {
     log.warn({ step: 'FORCE_SYNC_ERROR', message: error.message });
@@ -513,15 +664,65 @@ async function forceSyncSessionState() {
   }
 }
 
+function clearLocalTrackingAfterStaleClose() {
+  global.isTracking = false;
+  global.currentTimeLogId = null;
+  global.currentSession = null;
+  global.sessionStartTime = null;
+  try {
+    if (global.trackingManager) {
+      global.trackingManager.isTracking = false;
+      global.trackingManager.currentTimeLogId = null;
+      global.trackingManager.currentSession = null;
+      global.trackingManager.sessionStartTime = null;
+      global.trackingManager._stopTimeLogCheckpoint?.();
+    }
+  } catch (_) { /* ignore */ }
+}
+
+/**
+ * Lid-open / wake: if the last checkpoint is stale, close at that mark
+ * BEFORE any new heartbeat/checkpoint can stamp NOW and re-freshen the orphan.
+ */
+async function reconcileAfterWake() {
+  const checkpointAt = readLocalCheckpointAt();
+  const stale = !isIsoRecent(checkpointAt, STALE_CHECKPOINT_MS);
+  if (!stale && (global.isTracking || global.trackingManager?.isTracking)) {
+    log.info({ step: 'WAKE_CONTINUE', message: 'Checkpoint is fresh — keeping session' });
+    return { continued: true };
+  }
+  if (!stale && !global.isTracking && !global.trackingManager?.isTracking) {
+    return { ok: true };
+  }
+
+  log.warn({
+    step: 'WAKE_STALE_SESSION',
+    message: 'Closing stale open session at last checkpoint/heartbeat (not NOW)',
+    ctx: { checkpointAt, isTracking: !!global.isTracking },
+  });
+  try {
+    global.trackingManager?._stopTimeLogCheckpoint?.();
+  } catch (_) { /* ignore */ }
+  try {
+    await closeOpenSessionsAfterExplicitStop({ end_time: checkpointAt || undefined });
+  } catch (err) {
+    log.warn({ step: 'WAKE_STALE_CLOSE_FAILED', message: err?.message || String(err) });
+  }
+  clearLocalTrackingAfterStaleClose();
+  return { closedStale: true, end_time: checkpointAt || null };
+}
+
 module.exports = {
   startSessionHealthCheck,
   forceSyncSessionState,
-  resolveSupabaseClient,
   reconcileDeviceSessions,
   closeOpenSessionsAfterExplicitStop,
   markUserExplicitlyStopped,
   clearUserExplicitlyStopped,
   loadUserExplicitlyStoppedFromDisk,
   resolveExplicitStopEndTime,
+  resolveExplicitStopEnd,
   readLocalCheckpointAt,
+  reconcileAfterWake,
+  clearLocalTrackingAfterStaleClose,
 };

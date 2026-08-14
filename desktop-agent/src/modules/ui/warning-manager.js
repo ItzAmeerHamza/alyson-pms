@@ -2,8 +2,7 @@ const { BrowserWindow } = require('electron');
 const path = require('path');
 
 class WarningManager {
-  constructor(supabaseClient, config) {
-    this.supabase = supabaseClient;
+  constructor(config) {
     this.config = config;
     this.warningWindow = null;
     this.currentWarnings = [];
@@ -21,81 +20,20 @@ class WarningManager {
   }
 
   /**
-   * Initialize permanent warning tracking from database
+   * No-op: `warning_logs` was a Supabase-only table with no RDS read action, so the
+   * "already shown" set cannot survive a restart. It stays in-memory for this session.
    */
   async initializePermanentTracking() {
-    if (!this.config.user_id) {
-      console.log('⚠️ [WARNING] No user ID available for permanent tracking initialization');
-      return;
-    }
-
-    try {
-      console.log('🔄 [WARNING] Initializing permanent warning tracking...');
-      
-      // Get all warnings this user has already been shown
-      const { data, error } = await this.supabase
-        .from('warning_logs')
-        .select('warning_id')
-        .eq('user_id', this.config.user_id)
-        .in('action', ['acknowledged', 'dismissed', 'shown']);
-
-      if (error) {
-        console.error('❌ [WARNING] Error loading permanent tracking:', error);
-        return;
-      }
-
-      // Store all previously shown warning IDs
-      if (data && data.length > 0) {
-        data.forEach(log => {
-          this.permanentWarningsShown.add(log.warning_id);
-        });
-        console.log(`✅ [WARNING] Loaded ${data.length} permanently shown warnings`);
-      } else {
-        console.log('✅ [WARNING] No previously shown warnings found');
-      }
-    } catch (error) {
-      console.error('❌ [WARNING] Exception initializing permanent tracking:', error);
-    }
+    console.warn('⚠️ [WARNING] warning_logs has no RDS equivalent — permanent tracking is session-only');
   }
 
   /**
-   * Check for active warnings for the current user
+   * Always empty: active warnings came from the Supabase `get_active_warnings_for_user`
+   * RPC and no backend action replaces it.
    */
   async getActiveWarnings() {
-    if (!this.config.user_id) {
-      console.log('⚠️ [WARNING] No user ID available for warning check');
-      return [];
-    }
-
-    try {
-      console.log('🚨 [WARNING] Checking for active warnings for user:', this.config.user_id);
-      
-      const { data, error } = await this.supabase.rpc('get_active_warnings_for_user', {
-        target_user_id: this.config.user_id
-      });
-
-      if (error) {
-        console.error('❌ [WARNING] Error fetching warnings:', error);
-        return [];
-      }
-
-      console.log(`🚨 [WARNING] Found ${data?.length || 0} active warnings`);
-      
-      // Filter out warnings already shown permanently for 'once' frequency
-      const filteredWarnings = (data || []).filter(warning => {
-        if (warning.display_frequency === 'once' && this.permanentWarningsShown.has(warning.warning_id)) {
-          console.log(`⏭️ [WARNING] Skipping warning "${warning.title}" - already shown permanently`);
-          return false;
-        }
-        return true;
-      });
-      
-      console.log(`🚨 [WARNING] After permanent filtering: ${filteredWarnings.length} warnings to show`);
-      return filteredWarnings;
-    } catch (error) {
-      console.error('❌ [WARNING] Exception fetching warnings:', error);
-      return [];
-    }
+    console.warn('⚠️ [WARNING] Active warnings have no RDS equivalent — returning none');
+    return [];
   }
 
   /**
@@ -352,33 +290,13 @@ class WarningManager {
   }
 
   /**
-   * Log warning interaction to database
+   * No-op: the `log_warning_shown` RPC was Supabase-only and no backend action accepts
+   * these rows. The interaction is traced locally instead of being silently dropped.
    */
   async logWarningShown(warningId, action, userResponse = null) {
-    try {
-      const context = {
-        trigger: 'timer_start',
-        timestamp: new Date().toISOString(),
-        desktop_agent: true,
-        platform: process.platform
-      };
-
-      const { error } = await this.supabase.rpc('log_warning_shown', {
-        warning_id: warningId,
-        target_user_id: this.config.user_id,
-        action: action,
-        response: userResponse,
-        warning_context: context
-      });
-
-      if (error) {
-        console.error('❌ [WARNING] Error logging warning interaction:', error);
-      } else {
-        console.log(`✅ [WARNING] Logged warning interaction: ${action}`);
-      }
-    } catch (error) {
-      console.error('❌ [WARNING] Exception logging warning:', error);
-    }
+    console.warn(
+      `⚠️ [WARNING] Cannot persist warning interaction (no RDS equivalent): ${warningId} → ${action}`,
+    );
   }
 
   /**

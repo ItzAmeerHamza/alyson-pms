@@ -1,4 +1,3 @@
-const { resolveSupabaseClient } = require('./session-recovery');
 const { createFeatureLogger } = require('./logger');
 const { computeDHash } = require('./perceptual-hash');
 
@@ -155,7 +154,6 @@ async function uploadScreenshotViaS3Api({
 }
 
 async function uploadScreenshotBuffer({
-  supabase,
   buffer,
   userId,
   capturedAt,
@@ -206,82 +204,41 @@ async function uploadScreenshotBuffer({
 
     const capturedIso = capturedAt || new Date().toISOString();
     const s3Config = resolveDesktopSyncConfig();
-    if (s3Config) {
-      log.info({ step: 'S3_PATH', message: 'Uploading via backend presigned URL' });
-      const s3Result = await uploadScreenshotViaS3Api({
-        userId,
-        uploadBuffer,
-        contentType,
-        ext,
-        capturedAt: capturedIso,
-        timeLogId,
-        activityPercent,
-        focusPercent,
-        clicks,
-        keys,
-        moves,
-        appName,
-        windowTitle,
-        agentVersion,
-        perceptualHash,
-      });
-      if (!s3Result.error) {
-        log.info({ step: 'S3_UPLOAD_OK', ctx: { id: s3Result.id, s3_key: s3Result.s3_key } });
-        return s3Result;
-      }
-      log.warn({ step: 'S3_UPLOAD_FALLBACK', message: s3Result.error });
-      console.warn(`⚠️ [SCREENSHOT-UPLOAD] S3 failed, trying Supabase fallback: ${s3Result.error}`);
-    } else if (!s3Config) {
-      console.warn(
-        '⚠️ [SCREENSHOT-UPLOAD] S3 not configured (BACKEND_API_URL + INTERNAL_API_KEY) — using Supabase',
-      );
+    // S3 via the backend presigned URL is the only upload path — a missing config
+    // must surface as an error so the caller retries instead of losing the capture.
+    if (!s3Config) {
+      const message = 'S3 not configured (BACKEND_API_URL + INTERNAL_API_KEY)';
+      log.error({ step: 'S3_NOT_CONFIGURED', message });
+      console.error(`❌ [SCREENSHOT-UPLOAD] ${message}`);
+      return { error: message };
     }
 
-    const client = supabase || resolveSupabaseClient();
-    if (!client) {
-      return { error: 'Supabase client not available' };
-    }
-
-    const timestamp = new Date(capturedIso).toISOString().replace(/[:.]/g, '-');
-    const fileName = `${userId}/${timestamp}.${ext}`;
-
-    const uploadResponse = await client.storage.from('screenshots').upload(fileName, uploadBuffer, {
+    log.info({ step: 'S3_PATH', message: 'Uploading via backend presigned URL' });
+    const s3Result = await uploadScreenshotViaS3Api({
+      userId,
+      uploadBuffer,
       contentType,
-      upsert: true,
+      ext,
+      capturedAt: capturedIso,
+      timeLogId,
+      activityPercent,
+      focusPercent,
+      clicks,
+      keys,
+      moves,
+      appName,
+      windowTitle,
+      agentVersion,
+      perceptualHash,
     });
-
-    if (uploadResponse.error) {
-      log.error({ step: 'UPLOAD_FAILED', message: uploadResponse.error.message });
-      return { error: uploadResponse.error.message };
+    if (s3Result.error) {
+      log.error({ step: 'S3_UPLOAD_FAILED', message: s3Result.error });
+      console.error(`❌ [SCREENSHOT-UPLOAD] S3 upload failed: ${s3Result.error}`);
+      return s3Result;
     }
 
-    const publicUrl = client.storage.from('screenshots').getPublicUrl(fileName).data?.publicUrl || null;
-
-    const insertPayload = {
-      user_id: userId,
-      time_log_id: timeLogId,
-      image_url: publicUrl,
-      file_path: fileName,
-      file_size: uploadBuffer.length,
-      captured_at: capturedIso,
-      activity_percent: activityPercent || 0,
-      focus_percent: focusPercent || 0,
-      mouse_clicks: clicks || 0,
-      keystrokes: keys || 0,
-      mouse_movements: moves || 0,
-      app_name: appName || null,
-      window_title: windowTitle || null,
-      agent_version: agentVersion || null,
-      perceptual_hash: perceptualHash,
-    };
-
-    const { data, error } = await client.from('screenshots').insert(insertPayload).select('id').single();
-    if (error) {
-      log.error({ step: 'INSERT_FAILED', message: error.message });
-      return { error: error.message };
-    }
-
-    return { id: data.id, url: publicUrl };
+    log.info({ step: 'S3_UPLOAD_OK', ctx: { id: s3Result.id, s3_key: s3Result.s3_key } });
+    return s3Result;
   } catch (error) {
     const msg =
       error?.name === 'AbortError'

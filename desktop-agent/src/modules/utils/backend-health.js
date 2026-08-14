@@ -1,5 +1,5 @@
 /**
- * Backend API health check (RDS via NestJS) — avoids probing legacy Supabase public.users.
+ * Backend API health check (RDS via NestJS).
  */
 
 function resolveApiBase(config = global.config) {

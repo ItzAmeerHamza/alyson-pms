@@ -98,8 +98,7 @@ function applyUrlPollingFixes() {
   console.log('🔧 [URL-FIX] Setting up URL polling fixes...');
   console.log('🔧 [URL-FIX] Global objects check:', {
     urlCaptureManager: !!global.urlCaptureManager,
-    enhancedSyncManager: !!global.enhancedSyncManager,
-    supabaseService: !!global.supabaseService
+    enhancedSyncManager: !!global.enhancedSyncManager
   });
 
   // Wait for UrlCaptureManager to be created
@@ -306,27 +305,9 @@ console.log('\n═════════════════════�
                 }
               }
 
-              // Fallback to direct database
               if (!queued) {
-                if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-                  try {
-                    global.supabaseService.from('app_url_activity').insert([payload]).then(({ error }) => {
-                      if (error) {
-                        console.log('❌ [URL-STEP-5] Database error:', error.message);
-                        console.log('═══════════════════════════════════════════════════════════\n');
-                      } else {
-                        console.log('✅ [URL-STEP-5] SAVED to database successfully');
-                        console.log('═══════════════════════════════════════════════════════════\n');
-                      }
-                    });
-                  } catch (e) {
-                    console.log('❌ [URL-STEP-5] Save error:', e.message);
-                    console.log('═══════════════════════════════════════════════════════════\n');
-                  }
-                } else {
-                  console.log('❌ [URL-STEP-5] No save mechanism available!');
-                  console.log('═══════════════════════════════════════════════════════════\n');
-                }
+                console.log('❌ [URL-STEP-5] No save mechanism available!');
+                console.log('═══════════════════════════════════════════════════════════\n');
               }
             } catch (handlerError) {
               console.error('❌ [URL] Event handler error (main.js fallback):', handlerError?.message || handlerError);
@@ -618,10 +599,7 @@ if (isElectronMain) {
       try {
         const { logger } = require('./modules/utils/logger'); logger && logger.info({
           category: 'SYSTEM', step: 'TRACKING INIT CONFIG', ctx: {
-            hasViteUrl: !!actualConfig.VITE_SUPABASE_URL,
-            hasSupabaseUrl: !!actualConfig.SUPABASE_URL,
-            hasAnonKey: !!actualConfig.VITE_SUPABASE_ANON_KEY,
-            usesEdgeFunction: true,
+            hasBackendApiUrl: !!actualConfig.BACKEND_API_URL,
             hasUserId: !!actualConfig.USER_ID
           }
         });
@@ -632,33 +610,30 @@ if (isElectronMain) {
       // Make tracking controller globally accessible for fallback mode
       global.trackingController = trackingController;
 
-      // Initialize dependencies (ensure Supabase client is available)
       // Create a minimal syncManager if it doesn't exist
       if (!syncManager) {
         const SyncManager = require('./modules/sync/sync-manager');
 
         // Map config properties to what SyncManager expects - ensure envConfig is used
-        const configToUse = actualConfig.VITE_SUPABASE_URL ? actualConfig : envConfig;
         const syncConfig = {
-          supabase_url: configToUse.VITE_SUPABASE_URL || configToUse.SUPABASE_URL,
-          supabase_key: configToUse.VITE_SUPABASE_ANON_KEY || configToUse.SUPABASE_ANON_KEY,
-          // SECURITY: No service_role key — writes go through desktop-sync edge function
-          user_id: configToUse.USER_ID
+          backend_api_url:
+            actualConfig.backend_api_url || actualConfig.BACKEND_API_URL || envConfig.BACKEND_API_URL,
+          backend_api_key:
+            actualConfig.backend_api_key || actualConfig.INTERNAL_API_KEY || envConfig.INTERNAL_API_KEY,
+          user_id: actualConfig.user_id || actualConfig.USER_ID || envConfig.USER_ID
         };
 
         try {
           const { logger } = require('./modules/utils/logger'); logger && logger.info({
             category: 'SYNC', step: 'INIT CONFIG', ctx: {
-              supabase_url: syncConfig.supabase_url,
-              has_anon_key: !!syncConfig.supabase_key,
-              has_service_key: !!syncConfig.supabase_service_key,
+              backend_api_url: syncConfig.backend_api_url,
+              has_api_key: !!syncConfig.backend_api_key,
               user_id: syncConfig.user_id
             }
           });
         } catch { }
 
         syncManager = new SyncManager(syncConfig);
-        // Don't override supabase - let SyncManager create its own client
       }
 
       trackingController.initialize({
@@ -736,29 +711,23 @@ if (isElectronMain) {
 
       // Fallback implementation for when TrackingManager is not initialized
       try {
-        const supabase = global.supabaseService || global.supabase;
-        if (!supabase) {
-          throw new Error('Supabase client not available');
+        const { isBackendTimeLogsEnabled, createTimeLog } = require('./modules/utils/backend-time-logs');
+        if (!isBackendTimeLogsEnabled()) {
+          throw new Error('Backend API not configured');
         }
 
         const userId = global.currentUserId || '0c3d3092-913e-436f-a352-3378e558c34f';
         const startTime = new Date().toISOString();
 
-        // Create time log entry in database
-        const { data: timeLog, error } = await supabase
-          .from('time_logs')
-          .insert({
-            user_id: userId,
-            project_id: projectId,
-            start_time: startTime,
-            is_idle: false
-          })
-          .select()
-          .single();
+        const timeLog = await createTimeLog({
+          user_id: userId,
+          project_id: projectId,
+          start_time: startTime,
+          is_idle: false
+        });
 
-        if (error) {
-          console.error('❌ [WRAPPER] Database error:', error);
-          throw error;
+        if (!timeLog || !timeLog.id) {
+          throw new Error('Backend did not return a time log id');
         }
 
         // Update tracking state (both local and global) so all guards pass
@@ -951,7 +920,6 @@ const screenshot = require('screenshot-desktop');
 // const activeWin = require('active-win'); // Removed to avoid dependency issues
 const cron = require('node-cron');
 const axios = require('axios');
-const { createClient } = require('@supabase/supabase-js');
 // Note: SyncManager will be imported dynamically when needed
 const AntiCheatDetector = require('./modules/activity/anti-cheat-detector');
 const IntervalManager = require('./interval-manager');
@@ -1062,12 +1030,24 @@ try {
 // Load configuration using our new environment variable loader
 const { loadConfig } = require('../load-config');
 let config;
-let supabase;
-let supabaseService;
 let configDataManager;
 try {
   config = loadConfig();
   global.config = config;
+
+  // Four call sites stamp telemetry with `global.appVersion` and nothing ever
+  // assigned it, so every agent_version reaching the API was null — 3,157 audit
+  // events with no build attached, leaving no way to tell which version wrote a
+  // bad row. app.getVersion() is unavailable outside Electron (tests, scripts),
+  // hence the package.json fallback.
+  try {
+    global.appVersion =
+      (isElectronContext && app?.getVersion?.()) || require('../package.json').version || null;
+    console.log(`🏷️ [MAIN] Agent version: ${global.appVersion}`);
+  } catch (verErr) {
+    console.warn('⚠️ [MAIN] Could not resolve agent version:', verErr?.message || verErr);
+  }
+
   try {
     const { initWorkTimezone } = require('./modules/utils/work-timezone');
     initWorkTimezone(config);
@@ -1076,179 +1056,20 @@ try {
     console.warn('⚠️ [TIMEZONE] Could not init work timezone:', tzErr?.message || tzErr);
   }
 
-  // Initialize Supabase client with proper error handling
-  if (!config.supabase_url || !config.supabase_key) {
-    throw new Error('Missing required Supabase configuration');
+  // Backend API is the only data path. Missing credentials must not block boot —
+  // tracking keeps recording into the offline queue until they are available.
+  if (!config.backend_api_url || !config.backend_api_key) {
+    console.warn('⚠️ [MAIN] Backend API not configured (BACKEND_API_URL + INTERNAL_API_KEY) — running offline-only');
   }
-
-  // Validate URL format
-  try {
-    new URL(config.supabase_url);
-  } catch (urlError) {
-    throw new Error(`Invalid Supabase URL format: ${config.supabase_url}`);
-  }
-
-  // Proxy fallback: if direct Supabase is unreachable, rewrite URLs through proxy
-  const SUPABASE_PROXY_URL = 'https://timeflow-sb-proxy.vercel.app';
-  let useProxy = false;
-  let proxyCheckDone = false;
-  global.SUPABASE_PROXY_URL = SUPABASE_PROXY_URL;
-  global.supabaseDirectUrl = config.supabase_url;
-  Object.defineProperty(global, 'useSupabaseProxy', { get: () => useProxy });
-
-  const { getSupabaseRealtimeOptions } = require('./lib/supabase-realtime-transport');
-
-  // Initialize Supabase client with extended timeout settings for better connectivity
-  const supabaseOptions = {
-    ...getSupabaseRealtimeOptions(),
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false
-    },
-    global: {
-      // Ensure API key header is always present (fixes DMG: No API key found)
-      // NOTE: Do NOT set Authorization here — the Supabase client manages it
-      // and overriding it with the anon key breaks auth.uid() in RLS policies.
-      headers: {
-        apikey: config.supabase_key
-      },
-      fetch: async (url, options = {}) => {
-        // Lazy connectivity check on first request
-        if (!proxyCheckDone) {
-          proxyCheckDone = true;
-          try {
-            const ctrl = new AbortController();
-            const t = setTimeout(() => ctrl.abort(), 5000);
-            await fetch(`${config.supabase_url}/rest/v1/`, {
-              method: 'HEAD', signal: ctrl.signal,
-              headers: { apikey: config.supabase_key }
-            });
-            clearTimeout(t);
-            console.log('✅ [MAIN] Direct Supabase URL reachable');
-          } catch (_) {
-            console.warn('⚠️ [MAIN] Direct Supabase URL unreachable, enabling proxy fallback');
-            useProxy = true;
-          }
-        }
-        if (useProxy) {
-          url = url.replace(config.supabase_url, SUPABASE_PROXY_URL);
-        }
-        // Set longer timeouts for better connectivity on slower networks
-        // CRITICAL: Convert Headers object to plain object to preserve all
-        // Supabase-set headers (Content-Type, Accept, Prefer, Authorization).
-        // Spreading a Headers instance yields {} — only plain objects work.
-        let existingHeaders = {};
-        if (options.headers) {
-          if (typeof options.headers.forEach === 'function') {
-            // It's a Headers object — iterate to extract all entries
-            options.headers.forEach((value, key) => { existingHeaders[key] = value; });
-          } else {
-            existingHeaders = { ...options.headers };
-          }
-        }
-
-        const customOptions = {
-          ...options,
-          timeout: 60000, // 1 minute timeout instead of default 10s (increased for high latency)
-          headers: {
-            // Start with Supabase client headers (includes Content-Type, Authorization with user JWT, etc.)
-            ...existingHeaders,
-            // Only set apikey — do NOT override Authorization (the Supabase client sets it to the user's JWT)
-            'apikey': existingHeaders['apikey'] || config.supabase_key,
-            'User-Agent': 'Alyson-Work-Time-Agent/1.0'
-          }
-        };
-
-        // Add retry logic for failed requests
-        return fetch(url, customOptions).catch(async (error) => {
-          if (error.name === 'TimeoutError' ||
-            error.code === 'UND_ERR_CONNECT_TIMEOUT' ||
-            error.code === 'ENOTFOUND' ||
-            error.message.includes('fetch failed')) {
-            console.log(`🔄 Retrying request to ${url} after error: ${error.message}`);
-
-            // Special handling for DNS resolution errors
-            if (error.code === 'ENOTFOUND') {
-              console.log(`🌐 DNS resolution failed for ${url}, attempting to resolve manually...`);
-              try {
-                // Try to resolve the hostname manually
-                const urlObj = new URL(url);
-                const { execSync } = require('child_process');
-                const result = execSync(`nslookup ${urlObj.hostname} 8.8.8.8`, { encoding: 'utf8' });
-                const match = result.match(/Address:\s*(\d+\.\d+\.\d+\.\d+)/);
-                if (match) {
-                  console.log(`✅ Manual DNS resolution successful: ${urlObj.hostname} -> ${match[1]}`);
-                  // Replace hostname with IP address
-                  const ipUrl = url.replace(urlObj.hostname, match[1]);
-                  return fetch(ipUrl, customOptions);
-                }
-              } catch (dnsError) {
-                console.log(`⚠️ Manual DNS resolution failed: ${dnsError.message}`);
-              }
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            // On retry failure, activate proxy for all future requests
-            return fetch(url, customOptions).catch((retryErr) => {
-              if (!useProxy && (retryErr.code === 'UND_ERR_CONNECT_TIMEOUT' || retryErr.message.includes('fetch failed'))) {
-                console.warn('⚠️ [MAIN] Retry also failed, activating proxy fallback for all future requests');
-                useProxy = true;
-                const proxyUrl = url.replace(config.supabase_url, SUPABASE_PROXY_URL);
-                return fetch(proxyUrl, customOptions);
-              }
-              throw retryErr;
-            });
-          }
-          throw error;
-        });
-      }
-    }
-  };
-
-  // Initialize Supabase client - use anonymous key for user operations
-  // URL rewriting to proxy (if needed) happens inside the custom fetch wrapper
-  supabase = createClient(config.supabase_url, config.supabase_key, supabaseOptions);
-
-  // Create service client for admin operations if service key is available
-  supabaseService = config.supabase_service_key ?
-    createClient(config.supabase_url, config.supabase_service_key, {
-      ...getSupabaseRealtimeOptions(),
-      auth: {
-        autoRefreshToken: false, // Service role doesn't need token refresh
-        persistSession: false,  // Service role doesn't need session persistence
-        detectSessionInUrl: false
-      },
-      // Explicitly set headers for packaged builds
-      global: {
-        headers: {
-          apikey: config.supabase_service_key,
-          Authorization: `Bearer ${config.supabase_service_key}`
-        }
-      }
-    }) :
-    supabase;
-
-  // Make Supabase clients globally accessible for IPC handlers
-  global.supabase = supabase;
-  global.supabaseClient = supabase;
-  global.supabaseService = supabaseService;
 
   // Register in ServiceContainer (migration path: managers will gradually use container instead of globals)
   const { container } = require('./core/service-container');
   const { eventBus } = require('./core/event-bus');
   container.start();
   eventBus.start();
-  container.register('supabase', supabase);
-  container.register('supabaseService', supabaseService);
   container.register('eventBus', eventBus);
 
-  console.log('✅ Supabase client initialized successfully');
   console.log('✅ ServiceContainer and EventBus initialized');
-  console.log(`🔧 [DEBUG] Service client type: ${config.supabase_service_key ? 'service role' : 'anonymous fallback'}`);
-  console.log(`🔧 [DEBUG] Service client URL: ${config.supabase_url}`);
-  console.log(`🔧 [DEBUG] Service key present: ${!!config.supabase_service_key}`);
-  console.log(`🔧 [DEBUG] Service key length: ${config.supabase_service_key ? config.supabase_service_key.length : 'N/A'}`);
 
   // STARTUP RECOVERY: Process any pending session closes from previous crashes
   // This ensures sessions that failed to close properly are cleaned up on restart
@@ -1280,8 +1101,7 @@ try {
   const SessionManager = require('./modules/core/session-manager');
   let sessionManager = new SessionManager(config);
 
-  // Initialize SessionManager with Supabase service
-  sessionManager.initialize({ supabaseService });
+  sessionManager.initialize();
 
   // Make session manager globally accessible
   global.sessionManager = sessionManager;
@@ -1308,7 +1128,7 @@ try {
     }
   };
 
-  // Load existing session and set it in the main Supabase client
+  // Restore the persisted session so user id / workspace settings are available at boot
   (async () => {
     try {
       const existingSession = await sessionManager.loadDesktopAgentSession();
@@ -1331,16 +1151,6 @@ try {
           console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
         }
 
-        console.log('🔐 [SESSION] Setting existing user session in main Supabase client...');
-        const { data, error } = await supabase.auth.setSession({
-          access_token: existingSession.access_token,
-          refresh_token: existingSession.refresh_token
-        });
-        if (error) {
-          console.warn('⚠️ [SESSION] Failed to set session:', error.message);
-        }
-        console.log('✅ [SESSION] User session set in main Supabase client');
-
         // CRITICAL FIX: Initialize input detection after session is loaded
         console.log('🎮 [SESSION] Initializing input detection system after session load...');
         try {
@@ -1350,8 +1160,7 @@ try {
           console.error('❌ [SESSION] Failed to initialize input detection:', error);
         }
 
-        // SECURITY FIX: Now that session is restored, process any pending session closes
-        // This ensures we have a valid JWT for RLS-protected updates
+        // Now that the session is restored, process any pending session closes
         if (global._runPendingSessionRecovery) {
           await global._runPendingSessionRecovery();
         }
@@ -1482,14 +1291,6 @@ console.log(`   📊 Idle: ${intervals.getInterval('IDLE_CHECK')}ms (${intervals
 console.log(`   🌐 URL: ${intervals.getInterval('URL_CAPTURE_THROTTLE')}ms (${intervals.getInterval('URL_CAPTURE_THROTTLE') / 1000}s)`);
 console.log(`   🔄 Sync: ${intervals.getInterval('SYNC_RETRY')}ms (${intervals.getInterval('SYNC_RETRY') / 60000}min)`);
 
-console.log(`🔧 [DEBUG] Service key available: ${!!config.supabase_service_key}`);
-if (config.supabase_service_key) {
-  console.log(`🔧 [DEBUG] Using service role key for admin operations`);
-  console.log(`🔧 [DEBUG] Service key length: ${config.supabase_service_key.length}`);
-} else {
-  console.log(`🔧 [DEBUG] Using anonymous key - some operations may be limited`);
-  console.log(`🔧 [DEBUG] Desktop agent will queue failed operations for later`);
-}
 let syncManager;
 let antiCheatDetector;
 let intervalManager;
@@ -3058,7 +2859,7 @@ function registerDeveloperConsoleHandlers() {
         },
         config: {
           userId: config?.user_id || 'N/A',
-          supabaseUrl: config?.supabase_url || 'N/A',
+          backendApiUrl: config?.backend_api_url || 'N/A',
           isProduction: process.env.NODE_ENV === 'production'
         },
         trackingState: {
@@ -3072,8 +2873,7 @@ function registerDeveloperConsoleHandlers() {
           activityManager: !!global.activityManager,
           urlCaptureManager: !!global.urlCaptureManager,
           screenshotManager: !!global.screenshotManager,
-          sessionManager: !!global.sessionManager,
-          supabaseService: !!global.supabaseService
+          sessionManager: !!global.sessionManager
         },
         pythonDiagnostics: global.pythonDiagnostics || { foundPath: null, message: 'No Python detection run' },
         healthCheck: global.systemMonitor?.systemState?.health || {},
@@ -3514,17 +3314,13 @@ if (isElectronContext && ipcMain) {
     console.log('⚙️ [EARLY-IPC] get-config called - returning config');
     console.log('🔍 [DEBUG] config variable type:', typeof config);
     console.log('🔍 [DEBUG] config value:', config);
-    console.log('🔍 [DEBUG] process.env.VITE_SUPABASE_URL:', process.env.VITE_SUPABASE_URL);
-    console.log('🔍 [DEBUG] process.env.VITE_SUPABASE_ANON_KEY:', process.env.VITE_SUPABASE_ANON_KEY ? '[REDACTED]' : 'undefined');
 
     try {
       // Try to use loaded config first
-      if (config && (config.auth_provider === 'cognito' || (config.supabase_url && config.supabase_key))) {
+      if (config) {
         console.log('✅ [EARLY-IPC] Using loaded config');
         return {
-          supabase_url: config.supabase_url,
-          supabase_key: config.supabase_key,
-          auth_provider: config.auth_provider || 'supabase',
+          auth_provider: config.auth_provider || 'cognito',
           cognito_region: config.cognito_region || '',
           cognito_user_pool_id: config.cognito_user_pool_id || '',
           cognito_client_id: config.cognito_client_id || '',
@@ -3540,51 +3336,29 @@ if (isElectronContext && ipcMain) {
       }
 
       // Try to reload config if it's undefined
-      if (!config) {
-        console.log('⚠️ [EARLY-IPC] Config is undefined, attempting to reload...');
-        try {
-          const { loadConfig } = require('../load-config');
-          config = loadConfig();
-          console.log('✅ [EARLY-IPC] Config reloaded successfully');
-          if (config && config.supabase_url && config.supabase_key) {
-            return {
-              supabase_url: config.supabase_url,
-              supabase_key: config.supabase_key,
-              user_id: config.user_id || null,
-              project_id: config.project_id || null,
-              isTracking: global.isTracking || false,
-              currentTimeLogId: global.currentTimeLogId || null,
-              NODE_ENV: config.NODE_ENV || process.env.NODE_ENV || 'production'
-            };
-          }
-        } catch (reloadError) {
-          console.error('❌ [EARLY-IPC] Failed to reload config:', reloadError);
-        }
+      console.log('⚠️ [EARLY-IPC] Config is undefined, attempting to reload...');
+      try {
+        const { loadConfig } = require('../load-config');
+        config = loadConfig();
+        console.log('✅ [EARLY-IPC] Config reloaded successfully');
+      } catch (reloadError) {
+        console.error('❌ [EARLY-IPC] Failed to reload config:', reloadError);
       }
 
-      // Fallback to environment variables if config not loaded
-      const supabase_url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-      const supabase_key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-
-      console.log('🔍 [DEBUG] Environment variables check:');
-      console.log('   VITE_SUPABASE_URL:', supabase_url || 'not found');
-      console.log('   VITE_SUPABASE_ANON_KEY:', supabase_key ? '[REDACTED]' : 'not found');
-
-      if (!supabase_url || !supabase_key) {
-        console.error('❌ [EARLY-IPC] No Supabase configuration available in any source');
-        console.error('❌ [EARLY-IPC] Config object:', config);
-        console.error('❌ [EARLY-IPC] Env vars checked: VITE_SUPABASE_URL, SUPABASE_URL, VITE_SUPABASE_ANON_KEY, SUPABASE_ANON_KEY');
-        throw new Error('Missing Supabase configuration');
-      }
-
-      console.log('⚠️ [EARLY-IPC] Using environment variables as fallback');
+      // Env vars are the last resort so the renderer can still reach Cognito/backend
       return {
-        supabase_url: supabase_url,
-        supabase_key: supabase_key,
-        user_id: null,
-        project_id: null,
-        isTracking: false,
-        currentTimeLogId: null
+        auth_provider: config?.auth_provider || process.env.VITE_AUTH_PROVIDER || 'cognito',
+        cognito_region: config?.cognito_region || process.env.VITE_COGNITO_REGION || '',
+        cognito_user_pool_id: config?.cognito_user_pool_id || process.env.VITE_COGNITO_USER_POOL_ID || '',
+        cognito_client_id: config?.cognito_client_id || process.env.VITE_COGNITO_CLIENT_ID || '',
+        api_base_url: config?.api_base_url || process.env.VITE_API_BASE_URL || 'http://localhost:3000',
+        backend_api_url: config?.backend_api_url || process.env.BACKEND_API_URL || '',
+        backend_api_key: config?.backend_api_key || process.env.INTERNAL_API_KEY || '',
+        user_id: config?.user_id || null,
+        project_id: config?.project_id || null,
+        isTracking: global.isTracking || false,
+        currentTimeLogId: global.currentTimeLogId || null,
+        NODE_ENV: config?.NODE_ENV || process.env.NODE_ENV || 'production'
       };
     } catch (error) {
       console.error('❌ [EARLY-IPC] Error in get-config:', error);
@@ -3592,8 +3366,6 @@ if (isElectronContext && ipcMain) {
 
       // Return null values to show the exact problem to the renderer
       return {
-        supabase_url: null,
-        supabase_key: null,
         user_id: null,
         project_id: null,
         isTracking: false,
@@ -3719,7 +3491,6 @@ if (isElectronContext && ipcMain) {
 
     console.log('🔧 [MAIN] Initializing Reports IPC handlers with dependencies:', {
       ipcMain: !!ipcMain,
-      supabaseService: !!global.supabaseService,
       activityManager: !!global.activityManager,
       trackingManager: !!global.trackingManager,
       config: !!config,
@@ -3728,7 +3499,6 @@ if (isElectronContext && ipcMain) {
 
     const reportsIPCHandlers = new ReportsIPCHandlers({
       ipcMain,
-      supabaseService: global.supabaseService,
       activityManager: global.activityManager,
       trackingManager: global.trackingManager,
       config,
@@ -4610,7 +4380,7 @@ if (isElectronContext && ipcMain) {
           const StartupManager = require('./modules/core/startup-manager');
           const startupManager = new StartupManager(
             { app, BrowserWindow, screen, powerMonitor, systemPreferences, ipcMain, desktopCapturer, Tray, Menu, Notification },
-            { supabaseService, cleanupRegistry, wrappers, sessionManager }
+            { cleanupRegistry, wrappers, sessionManager }
           );
 
           global.startupManager = startupManager;
@@ -4779,27 +4549,9 @@ if (isElectronContext && ipcMain) {
                     }
                   }
 
-                  // Fallback to direct database
                   if (!queued) {
-                    if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-                      try {
-                        global.supabaseService.from('app_url_activity').insert([payload]).then(({ error }) => {
-                          if (error) {
-                            console.log('❌ [URL-STEP-5] Database error:', error.message);
-                            console.log('═══════════════════════════════════════════════════════════\n');
-                          } else {
-                            console.log('✅ [URL-STEP-5] SAVED to database successfully');
-                            console.log('═══════════════════════════════════════════════════════════\n');
-                          }
-                        });
-                      } catch (e) {
-                        console.log('❌ [URL-STEP-5] Save error:', e.message);
-                        console.log('═══════════════════════════════════════════════════════════\n');
-                      }
-                    } else {
-                      console.log('❌ [URL-STEP-5] No save mechanism available!');
-                      console.log('═══════════════════════════════════════════════════════════\n');
-                    }
+                    console.log('❌ [URL-STEP-5] No save mechanism available!');
+                    console.log('═══════════════════════════════════════════════════════════\n');
                   }
                 } catch (handlerError) {
                   console.error('❌ [URL] Event handler error:', handlerError?.message || handlerError);
@@ -5000,24 +4752,8 @@ if (isElectronContext && ipcMain) {
                     }
                   }
 
-                  // Fallback to direct Supabase service ONLY if not queued
                   if (!queued) {
-                    if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-                      console.log('🌐 [URL] Using direct Supabase service (fallback)');
-                      try {
-                        global.supabaseService.from('app_url_activity').insert([payload]).then(({ error }) => {
-                          if (error) {
-                            console.error('❌ [URL] Direct DB insert to app_url_activity failed (fallback):', error.message);
-                          } else {
-                            console.log('✅ [URL] Direct DB insert to app_url_activity succeeded (fallback):', payload.domain);
-                          }
-                        });
-                      } catch (e) {
-                        console.error('❌ [URL] Direct DB insert error (fallback):', e.message);
-                      }
-                    } else {
-                      console.log('❌ [URL] No save mechanism available in fallback mode - URL will be lost!');
-                    }
+                    console.log('❌ [URL] No save mechanism available in fallback mode - URL will be lost!');
                   }
                 } catch (handlerError) {
                   console.error('❌ [URL] Fallback event handler error:', handlerError?.message || handlerError);
@@ -5188,8 +4924,8 @@ if (isElectronContext && ipcMain) {
                 const processedConfig = config || loadConfig();
 
                 console.log('🔍 [FALLBACK] Using config for DataStatsManager:', {
-                  hasSupabaseUrl: !!processedConfig.supabase_url,
-                  hasSupabaseKey: !!processedConfig.supabase_key,
+                  hasBackendApiUrl: !!processedConfig.backend_api_url,
+                  hasBackendApiKey: !!processedConfig.backend_api_key,
                   configSource: 'loadConfig()'
                 });
 
@@ -5198,7 +4934,6 @@ if (isElectronContext && ipcMain) {
                   ipcMain,
                   config: processedConfig,
                   appSettings: appSettings || {},
-                  supabaseService: global.supabaseService || global.supabase,
                   global: global,
                   process: process,
                   require: require,
@@ -5233,89 +4968,11 @@ if (isElectronContext && ipcMain) {
             // Skip fetch-screenshots-enhanced - handled by DataStatsManager now
             console.log('✅ [FALLBACK] DataStatsManager will handle fetch-screenshots-enhanced');
 
-            // Only register handlers that DataStatsManager doesn't handle
-            if (false) { // Disabled - DataStatsManager handles this
-              ipcMain.handle('fetch-screenshots-enhanced', async (event, params) => {
-                try {
-                  const { user_id, date, activity_filter = 'all', limit = 50 } = params || {};
-                  const effectiveUserId = global.currentUserId || user_id || (config && (config.user_id || config.userId));
-
-                  if (!supabaseService) {
-                    return { success: false, error: 'Database service not available', screenshots: [], total: 0 };
-                  }
-                  if (!effectiveUserId) {
-                    return { success: false, error: 'User ID not available', screenshots: [], total: 0 };
-                  }
-
-                  // Compute local-day UTC range to avoid timezone off-by-one issues
-                  let startUTC, endUTC;
-                  if (date) {
-                    const localStart = new Date(date + 'T00:00:00');
-                    const localEnd = new Date(date + 'T23:59:59.999');
-                    startUTC = new Date(localStart.getTime() - localStart.getTimezoneOffset() * 60000).toISOString();
-                    endUTC = new Date(localEnd.getTime() - localEnd.getTimezoneOffset() * 60000).toISOString();
-                  }
-
-                  let query = supabaseService
-                    .from('screenshots')
-                    .select('id, file_path, captured_at, activity_percent, mouse_clicks, keystrokes, mouse_movements, time_log_id')
-                    .eq('user_id', effectiveUserId)
-                    .order('captured_at', { ascending: false })
-                    .limit(limit);
-
-                  if (startUTC && endUTC) {
-                    query = query.gte('captured_at', startUTC).lte('captured_at', endUTC);
-                  }
-
-                  if (activity_filter === 'high') {
-                    query = query.gte('activity_percent', 70);
-                  } else if (activity_filter === 'medium') {
-                    query = query.gte('activity_percent', 30).lt('activity_percent', 70);
-                  } else if (activity_filter === 'low') {
-                    query = query.lt('activity_percent', 30);
-                  }
-
-                  const { data, error } = await query;
-                  if (error) {
-                    console.error('❌ [FALLBACK] Enhanced screenshot fetch failed:', error);
-                    return { success: false, error: error.message, screenshots: [], total: 0 };
-                  }
-
-                  const screenshots = (data || []).map(s => ({
-                    ...s,
-                    image_url: s.file_path,
-                    timestamp: s.captured_at
-                  }));
-
-                  return { success: true, screenshots, total: screenshots.length };
-                } catch (error) {
-                  console.error('❌ Error in fetch-screenshots-enhanced handler:', error);
-                  return { success: false, error: error.message, screenshots: [], total: 0 };
-                }
-              });
-            } // End of disabled fetch-screenshots-enhanced handler
-
             // Register get-url-activity handler (fallback minimal) — only if DataStatsManager not present
+            // DataStatsManager owns the real backend-backed reads; this fallback has no data source.
             if (!global.dataStatsManager) ipcMain.handle('get-url-activity', async () => {
-              try {
-                console.log('🌐 [FALLBACK] get-url-activity called');
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
-                const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
-                if (!effectiveUserId) return { success: false, error: 'User ID not available' };
-                const { data, error } = await supabaseService
-                  .from('url_logs')
-                  .select('url, title, browser, timestamp, time_log_id, domain, user_id')
-                  .gte('timestamp', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-                  .not('url', 'ilike', '%browser-activity-detected.local%')
-                  .eq('user_id', effectiveUserId)
-                  .order('timestamp', { ascending: false })
-                  .limit(50);
-                if (error) return { success: false, error: error.message };
-                return { success: true, data: data || [] };
-              } catch (error) {
-                console.error('❌ [FALLBACK] Error in get-url-activity handler:', error);
-                return { success: false, error: error.message };
-              }
+              console.log('🌐 [FALLBACK] get-url-activity called');
+              return { success: false, error: 'Database service not available' };
             });
 
             // Register get-app-activity handler — only if DataStatsManager not present
@@ -5342,67 +4999,8 @@ if (isElectronContext && ipcMain) {
 
             // Fallback: get-today-stats — only if DataStatsManager not present
             if (!global.dataStatsManager) ipcMain.handle('get-today-stats', async () => {
-              try {
-                console.log("📊 [FALLBACK] get-today-stats called");
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
-                const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
-                if (!effectiveUserId) return { success: false, error: 'User ID not available' };
-
-                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-
-                const [timeLogsResult, screenshotsResult, appLogsResult, urlLogsResult] = await Promise.all([
-                  supabaseService.from('time_logs').select('start_time, end_time, is_idle, idle_seconds')
-                    .eq('user_id', effectiveUserId)
-                    .gte('start_time', todayStart.toISOString())
-                    .lte('start_time', todayEnd.toISOString()),
-                  supabaseService.from('screenshots').select('id, keystrokes, mouse_clicks, mouse_movements')
-                    .eq('user_id', effectiveUserId)
-                    .gte('captured_at', todayStart.toISOString())
-                    .lte('captured_at', todayEnd.toISOString()),
-                  supabaseService.from('app_logs').select('app_name')
-                    .eq('user_id', effectiveUserId)
-                    .gte('timestamp', todayStart.toISOString())
-                    .lte('timestamp', todayEnd.toISOString()),
-                  supabaseService.from('url_logs').select('url')
-                    .eq('user_id', effectiveUserId)
-                    .gte('timestamp', todayStart.toISOString())
-                    .lte('timestamp', todayEnd.toISOString())
-                ]);
-
-                const timeLogs = timeLogsResult.data || [];
-                const screenshots = screenshotsResult.data || [];
-                const appLogs = appLogsResult.data || [];
-                const urlLogs = urlLogsResult.data || [];
-
-                let activeTime = 0, idleTime = 0, totalTime = 0;
-                timeLogs.forEach(log => {
-                  if (log.start_time && log.end_time) {
-                    const duration = (new Date(log.end_time) - new Date(log.start_time)) / 1000;
-                    totalTime += duration;
-                    if (log.is_idle) idleTime += duration; else activeTime += duration;
-                  }
-                  if (log.idle_seconds) idleTime += log.idle_seconds;
-                });
-
-                const stats = {
-                  activeTime: Math.round(activeTime),
-                  idleTime: Math.round(idleTime),
-                  totalTime: Math.round(totalTime),
-                  screenshotCount: screenshots.length,
-                  appCount: new Set(appLogs.map(l => l.app_name).filter(Boolean)).size,
-                  totalClicks: screenshots.reduce((s, x) => s + (x.mouse_clicks || 0), 0),
-                  totalKeystrokes: screenshots.reduce((s, x) => s + (x.keystrokes || 0), 0),
-                  totalMouseMovements: screenshots.reduce((s, x) => s + (x.mouse_movements || 0), 0),
-                  urlCount: urlLogs.length,
-                  domainCount: new Set(urlLogs.map(l => { try { return new URL(l.url).hostname; } catch { return null; } }).filter(Boolean)).size
-                };
-
-                return { success: true, data: stats };
-              } catch (error) {
-                console.error('❌ [FALLBACK] get-today-stats error:', error);
-                return { success: false, error: error.message };
-              }
+              console.log("📊 [FALLBACK] get-today-stats called");
+              return { success: false, error: 'Database service not available' };
             });
 
             // Fallback: get-today-screenshots — only if DataStatsManager not present
@@ -5415,20 +5013,7 @@ if (isElectronContext && ipcMain) {
                   console.log("📸 [FALLBACK] get-today-screenshots called");
                   global.__lastTodayShotsLog = now;
                 }
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
-                const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
-                if (!effectiveUserId) return { success: false, error: 'User ID not available' };
-                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-                const { data, error } = await supabaseService
-                  .from('screenshots')
-                  .select('captured_at, file_path, image_url, activity_percent, mouse_clicks, keystrokes, mouse_movements')
-                  .eq('user_id', effectiveUserId)
-                  .gte('captured_at', todayStart.toISOString())
-                  .lte('captured_at', todayEnd.toISOString())
-                  .order('captured_at', { ascending: false });
-                if (error) return { success: false, error: error.message };
-                return { success: true, data: data || [] };
+                return { success: false, error: 'Database service not available' };
               } catch (error) {
                 console.error('❌ [FALLBACK] get-today-screenshots error:', error);
                 return { success: false, error: error.message };
@@ -5439,143 +5024,7 @@ if (isElectronContext && ipcMain) {
             if (!global.dataStatsManager) ipcMain.handle('get-today-activity-log', async () => {
               try {
                 console.log("📝 [FALLBACK] get-today-activity-log called");
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
-                const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
-                if (!effectiveUserId) return { success: false, error: 'User ID not available' };
-                const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
-
-                // Use allSettled for better error handling (dual queries for app/url)
-                const [
-                  screenshotResult,
-                  appTsRes,
-                  appCrRes,
-                  urlTsRes,
-                  urlCrRes,
-                  timeResult
-                ] = await Promise.allSettled([
-                  supabaseService.from('screenshots').select('id, captured_at, created_at, app_name, activity_percent')
-                    .eq('user_id', effectiveUserId)
-                    .gte('captured_at', todayStart.toISOString())
-                    .lte('captured_at', todayEnd.toISOString())
-                    .order('captured_at', { ascending: false }),
-                  supabaseService.from('app_logs').select('id, timestamp, created_at, app_name, window_title')
-                    .eq('user_id', effectiveUserId)
-                    .gte('timestamp', todayStart.toISOString())
-                    .lte('timestamp', todayEnd.toISOString())
-                    .order('timestamp', { ascending: false }),
-                  supabaseService.from('app_logs').select('id, timestamp, created_at, app_name, window_title')
-                    .eq('user_id', effectiveUserId)
-                    .is('timestamp', null)
-                    .gte('created_at', todayStart.toISOString())
-                    .lte('created_at', todayEnd.toISOString())
-                    .order('created_at', { ascending: false }),
-                  supabaseService.from('url_logs').select('id, timestamp, url, site_url, browser, domain')
-                    .eq('user_id', effectiveUserId)
-                    .gte('timestamp', todayStart.toISOString())
-                    .lte('timestamp', todayEnd.toISOString())
-                    .order('timestamp', { ascending: false }),
-                  supabaseService.from('url_logs').select('id, timestamp, url, site_url, browser, domain')
-                    .eq('user_id', effectiveUserId)
-                    .is('timestamp', null)
-                    .order('timestamp', { ascending: false }),
-                  supabaseService.from('time_logs').select('id, start_time, end_time, is_idle, idle_seconds')
-                    .eq('user_id', effectiveUserId)
-                    .gte('start_time', todayStart.toISOString())
-                    .lte('start_time', todayEnd.toISOString())
-                    .order('start_time', { ascending: false })
-                ]);
-
-                // Process results with error handling
-                const screenshots = screenshotResult.status === 'fulfilled' ? (screenshotResult.value.data || []) : [];
-                const appByTs = appTsRes.status === 'fulfilled' ? (appTsRes.value.data || []) : [];
-                const appByCr = appCrRes.status === 'fulfilled' ? (appCrRes.value.data || []) : [];
-                const urlByTs = urlTsRes.status === 'fulfilled' ? (urlTsRes.value.data || []) : [];
-                const urlByCr = urlCrRes.status === 'fulfilled' ? (urlCrRes.value.data || []) : [];
-                const timeLogs = timeResult.status === 'fulfilled' ? (timeResult.value.data || []) : [];
-
-                // Merge + dedupe
-                const dedupe = (rows, keyFn) => { const s = new Set(); return rows.filter(r => { const k = keyFn(r); if (s.has(k)) return false; s.add(k); return true; }); };
-                const appLogs = dedupe([...appByTs, ...appByCr], r => r.id ?? `${r.app_name}|${r.timestamp || r.created_at}`);
-                const urlLogs = dedupe([...urlByTs, ...urlByCr], r => r.id ?? `${r.url || r.site_url}|${r.timestamp}`);
-
-                const activities = [];
-
-                // Screenshots with timestamp fallback
-                screenshots.forEach(log => {
-                  const timestamp = log.captured_at || log.created_at;
-                  if (timestamp) {
-                    activities.push({
-                      timestamp,
-                      type: 'Screenshot',
-                      details: `${log.app_name || 'Unknown App'} - ${log.activity_percent || 0}% activity`,
-                      synced: true
-                    });
-                  }
-                });
-
-                // App logs with proper details
-                appLogs.forEach(log => {
-                  const timestamp = log.timestamp;
-                  if (timestamp && log.app_name) {
-                    let details = log.app_name;
-                    if (log.window_title) details += ` - ${log.window_title}`;
-                    activities.push({ timestamp, type: 'App Switch', details, synced: true });
-                  }
-                });
-
-                // URL logs with robust domain extraction
-                urlLogs.forEach(log => {
-                  const timestamp = log.timestamp || log.created_at;
-                  const url = log.url || log.site_url;
-                  if (timestamp && url) {
-                    let domain = log.domain;
-                    if (!domain) {
-                      try { domain = new URL(url).hostname; }
-                      catch { domain = url.substring(0, 50) + (url.length > 50 ? '...' : ''); }
-                    }
-                    activities.push({
-                      timestamp,
-                      type: 'Website Visit',
-                      details: `${domain} via ${log.browser || 'Unknown Browser'}`,
-                      synced: true
-                    });
-                  }
-                });
-
-                // Time logs with calculated durations
-                timeLogs.forEach(log => {
-                  if (log.start_time) {
-                    let activeDuration = 0;
-                    if (log.end_time) {
-                      const totalDuration = (new Date(log.end_time) - new Date(log.start_time)) / 1000;
-                      if (!log.is_idle) activeDuration = totalDuration - (log.idle_seconds || 0);
-                    }
-                    activities.push({
-                      timestamp: log.start_time,
-                      type: 'Tracking Session',
-                      details: `Started session${activeDuration > 0 ? ` (${Math.floor(activeDuration / 60)} min active)` : ''}`,
-                      synced: true
-                    });
-                    if (log.end_time) {
-                      activities.push({
-                        timestamp: log.end_time,
-                        type: 'Tracking Session',
-                        details: 'Ended session',
-                        synced: true
-                      });
-                    }
-                  }
-                });
-
-                // Sort with timestamp fallbacks for consistency
-                activities.sort((a, b) => {
-                  const at = new Date(a.timestamp || a.captured_at || a.started_at || a.created_at || 0);
-                  const bt = new Date(b.timestamp || b.captured_at || b.started_at || b.created_at || 0);
-                  return bt - at;
-                });
-                console.log(`✅ [FALLBACK] Compiled ${activities.length} activity entries`);
-                return { success: true, data: activities };
+                return { success: false, error: 'Database service not available' };
               } catch (error) {
                 console.error('❌ [FALLBACK] get-today-activity-log error:', error);
                 return { success: false, error: error.message };
@@ -5586,54 +5035,7 @@ if (isElectronContext && ipcMain) {
             if (!global.dataStatsManager) ipcMain.handle('get-url-history', async (event, params) => {
               try {
                 console.log('📅 [FALLBACK] get-url-history called', params);
-                if (!supabaseService) {
-                  return { success: false, error: 'Database service not available' };
-                }
-                const effectiveUserId = global.currentUserId || config?.user_id || config?.userId;
-                if (!effectiveUserId) {
-                  return { success: false, error: 'User ID not available' };
-                }
-
-                const { startDate, endDate } = params || {};
-                const start = startDate ? new Date(startDate) : new Date();
-                if (!startDate) start.setHours(0, 0, 0, 0);
-                const end = endDate ? new Date(endDate) : new Date();
-                if (!endDate) end.setHours(23, 59, 59, 999);
-
-                // Select both url and site_url, and include normalization + noise filtering
-                let query = supabaseService
-                  .from('url_logs')
-                  .select('id, url, site_url, title, domain, browser, timestamp, time_log_id, user_id')
-                  .gte('timestamp', start.toISOString())
-                  .lte('timestamp', end.toISOString())
-                  .eq('user_id', effectiveUserId)
-                  .order('timestamp', { ascending: false })
-                  .limit(500);
-
-                // Filter out internal noise markers on either column
-                query = query
-                  .not('site_url', 'ilike', '%browser-activity-detected.local%')
-                  .not('url', 'ilike', '%browser-activity-detected.local%');
-
-                const { data, error } = await query;
-                console.log('📅 [FALLBACK] get-url-history DB response:', {
-                  error: !!error,
-                  rows: data ? data.length : 0,
-                  first: data && data[0] ? { url: data[0].url, site_url: data[0].site_url, timestamp: data[0].timestamp } : null,
-                });
-                if (error) {
-                  return { success: false, error: error.message };
-                }
-
-                const normalized = (data || [])
-                  .filter(row => row.url || row.site_url)  // Drop rows where both are null
-                  .map(row => ({
-                    ...row,
-                    url: row.url || row.site_url || null,
-                  }));
-
-                console.log('📅 [FALLBACK] get-url-history normalized count:', normalized.length);
-                return { success: true, data: normalized };
+                return { success: false, error: 'Database service not available' };
               } catch (error) {
                 console.error('❌ [FALLBACK] get-url-history error:', error);
                 return { success: false, error: error.message };
@@ -5661,18 +5063,7 @@ if (isElectronContext && ipcMain) {
                   });
                   return { success: true, data: rows || [] };
                 }
-                if (!supabaseService) return { success: false, error: 'Database service not available' };
-                const { data, error } = await supabaseService
-                  .from('app_logs')
-                  .select('id, app_name, window_title, app_path, timestamp, started_at, ended_at, time_log_id, user_id')
-                  .gte('timestamp', start.toISOString())
-                  .lte('timestamp', end.toISOString())
-                  .not('app_name', 'is', null)
-                  .eq('user_id', effectiveUserId)
-                  .order('timestamp', { ascending: false })
-                  .limit(1000);
-                if (error) return { success: false, error: error.message };
-                return { success: true, data: data || [] };
+                return { success: false, error: 'Database service not available' };
               } catch (error) {
                 console.error('❌ [FALLBACK] get-app-history error:', error);
                 return { success: false, error: error.message };
@@ -6011,7 +5402,6 @@ if (isElectronContext && ipcMain) {
     const appInitManager = new AppInitializationManager({
       systemPreferences,
       screen,
-      supabaseService,
       config,
       loadSystemState,
       loadOfflineQueue,
@@ -6355,7 +5745,6 @@ if (isElectronContext && ipcMain) {
       // Do not re-init from cold config here — that wiped workspace timezone
       // (set after login via refreshWorkspaceSettings) back to Pacific.
       const { workDateKey } = require('./modules/utils/work-timezone');
-      const supabase = global.supabaseService || global.supabase;
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);
       if (!userId) {
@@ -6374,10 +5763,10 @@ if (isElectronContext && ipcMain) {
 
       // No remote DB yet — still compute from local offline queue so the clock
       // keeps recording smoothly until connectivity returns.
-      if (!supabase && !isBackendTimeLogsEnabled()) {
+      if (!isBackendTimeLogsEnabled()) {
         console.log('⚠️ [TODAY-TIME-STATS] No remote DB — using offline queue / last-good');
         try {
-          const offlineAgg = await computeTodayTimeLogSeconds(null, userId, currentTimeLogId, isTracking);
+          const offlineAgg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
           if ((offlineAgg.timeLogsCount || 0) > 0 || (offlineAgg.totalTime || 0) > 0) {
             const completedClosedSeconds = offlineAgg.completedClosedSeconds;
             const totalTime = isTracking
@@ -6424,7 +5813,7 @@ if (isElectronContext && ipcMain) {
         });
       }
 
-      const agg = await computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking);
+      const agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
 
       // Source of truth = remote time_logs + local offline queue (merged).
       // Frozen stop floors only paper over a true empty/failed read (0s).
@@ -6486,7 +5875,6 @@ if (isElectronContext && ipcMain) {
           userId,
           totalSeconds: totalTime,
           config,
-          supabase,
         });
         effectiveSeconds = eff.effectiveSeconds;
         nonEffectiveSeconds = eff.nonEffectiveSeconds;
@@ -6550,231 +5938,18 @@ if (isElectronContext && ipcMain) {
     try {
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
       const { buildMonthlyReportData } = require('./modules/utils/monthly-report-data');
-      if (!global.supabaseService && !global.supabase && !isBackendTimeLogsEnabled()) {
+      if (!isBackendTimeLogsEnabled()) {
         return { error: 'No database connection' };
       }
       return await buildMonthlyReportData({
         global,
         config,
-        supabaseService: global.supabaseService || global.supabase,
       });
     } catch (error) {
       console.error('❌ [MONTHLY-REPORT] get-monthly-report-data error:', error);
       return { error: error.message };
     }
   });
-
-  // Get weekly time statistics for dashboard
-  // DataStatsManager handles weekly stats - fallback removed
-  if (false) { // Disabled - DataStatsManager handles this
-    console.log('⚠️ [MAIN] DataStatsManager not available, registering fallback weekly handler');
-    ipcMain.handle('get-weekly-time-stats', async () => {
-      try {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-weekly-time-stats' } }); } catch { }
-
-        if (!global.supabaseService && !global.supabase) {
-          console.log('⚠️ [WEEKLY-TIME-STATS] No Supabase service available');
-          return { totalTime: 0, dailyBreakdown: [], error: 'No database connection' };
-        }
-
-        const supabase = global.supabaseService || global.supabase;
-        const userId = global.currentUserId || config.user_id || '0c3d3092-913e-436f-a352-3378e558c34f';
-
-        // Get this week's date range (Sunday to Saturday)
-        const today = new Date();
-        const dayOfWeek = today.getDay();
-        const sundayOffset = -dayOfWeek; // Sunday is 0, so go back by dayOfWeek days
-        const sunday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + sundayOffset);
-        const saturday = new Date(sunday.getTime() + 6 * 24 * 60 * 60 * 1000);
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT weekly time_logs', ctx: { userId, sunday: sunday.toISOString(), saturday: saturday.toISOString() } }); } catch { }
-
-        // Query time logs that overlap this week
-        // We fetch a slightly wider window and clamp in JS to handle boundary-spanning sessions
-        const weekStartIso = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate()).toISOString();
-        const weekEndExclusive = new Date(saturday.getFullYear(), saturday.getMonth(), saturday.getDate() + 1); // next day 00:00
-        const weekEndIso = weekEndExclusive.toISOString();
-        const { data: timeLogs, error } = await supabase
-          .from('time_logs')
-          .select('start_time, end_time')
-          .eq('user_id', userId)
-          .gte('start_time', weekStartIso) // started after or on week start
-          .lt('start_time', weekEndIso) // started before week end
-          .order('start_time', { ascending: true });
-
-        if (error) {
-          console.error('❌ [WEEKLY-TIME-STATS] Database error:', error);
-          return { totalTime: 0, dailyBreakdown: [], error: error.message };
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT WEEKLY RESULT', ctx: { rows: timeLogs?.length || 0 } }); } catch { }
-
-        let totalSeconds = 0;
-        const dailyBreakdown = [];
-
-        // Initialize daily breakdown for the week
-        for (let i = 0; i < 7; i++) {
-          const date = new Date(sunday.getTime() + i * 24 * 60 * 60 * 1000);
-          dailyBreakdown.push({
-            date: date.toISOString().split('T')[0],
-            dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-            totalTime: 0,
-            sessions: 0
-          });
-        }
-
-        const clampSeconds = (a, b, c, d) => {
-          const start = Math.max(a, c);
-          const end = Math.min(b, d);
-          return Math.max(0, end - start);
-        };
-        if (timeLogs && timeLogs.length > 0) {
-          const weekStartMs = new Date(weekStartIso).getTime();
-          const weekEndMs = new Date(weekEndIso).getTime();
-          timeLogs.forEach(log => {
-            if (!log.start_time) return;
-            const startMs = new Date(log.start_time).getTime();
-            const endMs = log.end_time ? new Date(log.end_time).getTime() : Date.now();
-            // Skip logs that end before week start
-            if (endMs <= weekStartMs) return;
-            // Skip logs that start after week end
-            if (startMs >= weekEndMs) return;
-
-            // Distribute duration across each day in the week
-            for (let i = 0; i < 7; i++) {
-              const dayStart = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i).getTime();
-              const dayEnd = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i + 1).getTime();
-              const sec = Math.floor(clampSeconds(startMs, endMs, dayStart, dayEnd) / 1000);
-              if (sec > 0) {
-                dailyBreakdown[i].totalTime += sec;
-                dailyBreakdown[i].sessions += 1;
-                totalSeconds += sec;
-              }
-            }
-          });
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-weekly-time-stats', total_seconds: totalSeconds, rows: timeLogs?.length || 0 } }); } catch { }
-
-        return {
-          totalTime: totalSeconds,
-          dailyBreakdown: dailyBreakdown,
-          timeLogsCount: timeLogs?.length || 0,
-          userId: userId,
-          weekStart: monday.toISOString().split('T')[0],
-          weekEnd: sunday.toISOString().split('T')[0]
-        };
-
-      } catch (error) {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-weekly-time-stats' } }); } catch { }
-        return { totalTime: 0, dailyBreakdown: [], error: error.message };
-      }
-    });
-  }
-
-  // Get monthly time statistics for dashboard
-  // DataStatsManager handles monthly stats - fallback removed
-  if (false) { // Disabled - DataStatsManager handles this
-    console.log('⚠️ [MAIN] DataStatsManager not available, registering fallback monthly handler');
-    ipcMain.handle('get-monthly-time-stats', async () => {
-      try {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-monthly-time-stats' } }); } catch { }
-
-        if (!global.supabaseService && !global.supabase) {
-          console.log('⚠️ [MONTHLY-TIME-STATS] No Supabase service available');
-          return { totalTime: 0, weeklyBreakdown: [], error: 'No database connection' };
-        }
-
-        const supabase = global.supabaseService || global.supabase;
-        const userId = global.currentUserId || config.user_id || '0c3d3092-913e-436f-a352-3378e558c34f';
-
-        // Get this month's date range
-        const today = new Date();
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT monthly time_logs', ctx: { userId, startOfMonth: startOfMonth.toISOString(), endOfMonth: endOfMonth.toISOString() } }); } catch { }
-
-        // Query time logs that overlap this month, clamp in JS
-        const monthStartIso = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), 1).toISOString();
-        const monthEndExclusive = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() + 1);
-        const monthEndIso = monthEndExclusive.toISOString();
-        const { data: timeLogs, error } = await supabase
-          .from('time_logs')
-          .select('start_time, end_time')
-          .eq('user_id', userId)
-          .gte('start_time', monthStartIso) // started after or on month start
-          .lt('start_time', monthEndIso)
-          .order('start_time', { ascending: true });
-
-        if (error) {
-          console.error('❌ [MONTHLY-TIME-STATS] Database error:', error);
-          return { totalTime: 0, weeklyBreakdown: [], error: error.message };
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'DB', step: 'SELECT MONTHLY RESULT', ctx: { rows: timeLogs?.length || 0 } }); } catch { }
-
-        let totalSeconds = 0;
-        const weeklyBreakdown = [];
-
-        // Calculate weeks in the month
-        const firstDay = new Date(startOfMonth);
-        const lastDay = new Date(endOfMonth);
-        let currentWeek = new Date(firstDay);
-
-        while (currentWeek <= lastDay) {
-          const weekStart = new Date(currentWeek);
-          const weekEnd = new Date(Math.min(currentWeek.getTime() + 6 * 24 * 60 * 60 * 1000, lastDay.getTime()));
-
-          weeklyBreakdown.push({
-            weekStart: weekStart.toISOString().split('T')[0],
-            weekEnd: weekEnd.toISOString().split('T')[0],
-            totalTime: 0,
-            days: 0
-          });
-
-          currentWeek.setDate(currentWeek.getDate() + 7);
-        }
-
-        if (timeLogs && timeLogs.length > 0) {
-          const monthStartMs = new Date(monthStartIso).getTime();
-          const monthEndMs = new Date(monthEndIso).getTime();
-          timeLogs.forEach(log => {
-            if (!log.start_time) return;
-            const startMs = new Date(log.start_time).getTime();
-            const endMs = log.end_time ? new Date(log.end_time).getTime() : Date.now();
-            if (endMs <= monthStartMs || startMs >= monthEndMs) return;
-
-            // Distribute across weeks in this month breakdown
-            weeklyBreakdown.forEach((week) => {
-              const wStartMs = new Date(week.weekStart + 'T00:00:00.000Z').getTime();
-              const wEndMs = new Date(week.weekEnd + 'T23:59:59.999Z').getTime();
-              const sec = Math.max(0, Math.floor((Math.min(endMs, wEndMs + 1) - Math.max(startMs, wStartMs)) / 1000));
-              if (sec > 0) {
-                week.totalTime += sec;
-                totalSeconds += sec;
-              }
-            });
-          });
-        }
-
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-monthly-time-stats', total_seconds: totalSeconds, rows: timeLogs?.length || 0 } }); } catch { }
-
-        return {
-          totalTime: totalSeconds,
-          weeklyBreakdown: weeklyBreakdown,
-          timeLogsCount: timeLogs?.length || 0,
-          userId: userId,
-          monthStart: startOfMonth.toISOString().split('T')[0],
-          monthEnd: endOfMonth.toISOString().split('T')[0]
-        };
-
-      } catch (error) {
-        try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-monthly-time-stats' } }); } catch { }
-        return { totalTime: 0, weeklyBreakdown: [], error: error.message };
-      }
-    });
-  }
 
   // Get user profile information
   ipcMain.handle('get-user-profile', async () => {
@@ -6833,51 +6008,16 @@ if (isElectronContext && ipcMain) {
     }
   });
 
-  // Authentication: Set user session in main process Supabase clients for RLS compliance
+  // Authentication: no main-process client holds a session anymore (backend API uses
+  // the internal API key). Kept only as the trigger point for pending session recovery.
   try { ipcMain.removeHandler('auth:set-session'); } catch { }
-  ipcMain.handle('auth:set-session', async (event, { access_token, refresh_token }) => {
+  ipcMain.handle('auth:set-session', async () => {
     try {
-      // Set session on all Supabase clients in main process
-      const clients = [
-        global.supabase,
-        global.supabaseService,
-        global.enhancedSyncManager?.supabase,
-        global.syncManager?.supabase
-      ].filter(Boolean);
-
-      const results = [];
-      for (const client of clients) {
-        if (client?.auth?.setSession) {
-          const result = await client.auth.setSession({
-            access_token,
-            refresh_token: refresh_token || null
-          });
-          results.push({ client: client.constructor.name || 'unknown', success: !result.error, error: result.error?.message });
-        }
-      }
-
-      // NEW: resolve current user and sync globals/config
-      try {
-        const { data: { user } = {} } = await (global.supabase || global.supabaseService).auth.getUser();
-        if (user?.id) {
-          global.currentUserId = user.id;
-          if (global.config) global.config.user_id = user.id;
-          console.log('🔐 [AUTH] Current user set:', user.id);
-        } else {
-          console.log('⚠️ [AUTH] Could not resolve user after setSession');
-        }
-      } catch (e) {
-        console.log('⚠️ [AUTH] getUser failed:', e.message);
-      }
-
-      console.log('🔐 [AUTH] Set session on Supabase clients:', results.length);
-
-      // Trigger pending session recovery now that auth is established
       if (global._runPendingSessionRecovery) {
         global._runPendingSessionRecovery().catch(() => {});
       }
 
-      return { success: true, results };
+      return { success: true };
     } catch (error) {
       console.log('❌ [AUTH] Failed to set session:', error.message);
       return { success: false, error: error.message };
@@ -7250,7 +6390,7 @@ if (isElectronContext && ipcMain) {
         }
 
         // Initialize sync manager
-        if (config && config.supabase_url && config.supabase_key) {
+        if (config && config.backend_api_url && config.backend_api_key) {
           try {
             syncManager = new SyncManager(config);
             console.log('✅ Sync manager initialized');
@@ -7289,26 +6429,18 @@ if (isElectronContext && ipcMain) {
           try {
             isTracking = true;
             // Create a real time log entry for testing
-            const { createClient } = require('@supabase/supabase-js');
-            const supabase = createClient(config.supabase_url, config.supabase_key);
+            const { createTimeLog } = require('./modules/utils/backend-time-logs');
 
-            const timeLogData = {
+            const data = await createTimeLog({
               user_id: config.user_id,
               project_id: null, // No project for testing
               start_time: new Date().toISOString(),
               is_idle: false,
               status: 'active',
               description: 'Node.js Testing Session'
-            };
+            }, config);
 
-            const { data, error } = await supabase
-              .from('time_logs')
-              .insert([timeLogData])
-              .select()
-              .single();
-
-            if (error) {
-              console.log('⚠️ Failed to create time log entry:', error.message);
+            if (!data || !data.id) {
               console.error('❌ Cannot create tracking session without database connection');
               isTracking = false;
               return;

@@ -683,28 +683,6 @@ class EnhancedAppDetector {
     return Date.now() - this.lastDuplicateAppLogTime > 5 * 60 * 1000;
   }
 
-  /**
-   * Wait for Supabase client to be available
-   * Returns the client when ready or null if timeout
-   */
-  async waitForSupabase(timeoutMs = 5000) {
-    const startTime = Date.now();
-    
-    while (Date.now() - startTime < timeoutMs) {
-      // Check for any available Supabase client
-      const client = global.supabaseService || global.supabase || global.supabaseClient;
-      
-      if (client && typeof client.from === 'function') {
-        return client;
-      }
-      
-      // Wait 100ms before checking again
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    return null; // Timeout reached
-  }
-
   // === HEALTH CHECK FUNCTIONS ===
   
   getHealthStatus() {
@@ -911,32 +889,9 @@ class EnhancedAppDetector {
         await global.enhancedSyncManager.addToQueue('appLogs', [log]);
         console.log('✅ [DWELL] App queued via enhanced sync manager:', appName);
       } else {
-        const supabaseClient = await this.waitForSupabase();
-        if (supabaseClient) {
-          const { data, error } = await supabaseClient.from('app_logs').insert(log).select('id');
-          if (error) {
-            // Handle network errors gracefully
-            if (error.message && (error.message.includes('fetch failed') || 
-                                  error.message.includes('network') || 
-                                  error.message.includes('timeout'))) {
-              // Queue for later sync
-              if (global.offlineQueue && global.offlineQueue.appLogs) {
-                global.offlineQueue.appLogs.push(log);
-                console.log('📴 [DWELL] App queued for offline sync:', appName);
-              } else {
-                console.log('📴 [DWELL] Network issue - app data may be lost:', appName);
-              }
-            } else {
-              // Non-network errors should still be logged
-              console.error('❌ [DWELL] DB error:', error.message);
-            }
-          } else {
-            savedEntryId = data?.[0]?.id || null;
-            console.log('✅ [DWELL] App saved directly to DB:', appName, savedEntryId ? `(id: ${savedEntryId})` : '');
-          }
-        } else {
-          console.log('⚠️ [DWELL] Supabase not ready; skipping');
-        }
+        // Sync managers own every write path to RDS; there is no direct-insert
+        // fallback, so drop the sample rather than pretend it was stored.
+        console.warn('⚠️ [DWELL] No sync manager available; app not saved:', appName);
       }
       
       // 🔧 FIX: Track current entry for duration calculation on next app switch
@@ -996,49 +951,13 @@ class EnhancedAppDetector {
           this.previousAppEntry = null;
           return;
         }
+        // closeOpenAppLogs is the only way to stamp ended_at; without backend
+        // credentials or a user_id the row stays open for the server to reconcile.
+        console.warn('⚠️ [DWELL] Backend not configured or no user_id; previous app session left open');
       } catch (backendCloseErr) {
         console.warn('⚠️ [DWELL] Backend close failed:', backendCloseErr?.message || backendCloseErr);
       }
 
-      // Legacy Supabase fallback
-      if (this.previousAppEntry.id) {
-        const supabaseClient = await this.waitForSupabase();
-        if (supabaseClient) {
-          const { error } = await supabaseClient
-            .from('app_logs')
-            .update({
-              ended_at: endedAt
-            })
-            .eq('id', this.previousAppEntry.id);
-          
-          if (error) {
-            console.warn('⚠️ [DWELL] Failed to close previous app entry:', error.message);
-          } else if (process.env.DEBUG_APP) {
-            console.log(`✅ [DWELL] Closed previous app: ${this.previousAppEntry.appName} (${durationSeconds}s)`);
-          }
-        }
-      } else {
-        const supabaseClient = await this.waitForSupabase();
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || ''));
-
-        if (supabaseClient && userId && isUuid) {
-          const previousStartedAt = new Date(this.previousAppEntry.startedAt).toISOString();
-          const { error } = await supabaseClient
-            .from('app_logs')
-            .update({
-              ended_at: endedAt
-            })
-            .eq('user_id', userId)
-            .eq('app_name', this.previousAppEntry.appName)
-            .eq('started_at', previousStartedAt)
-            .is('ended_at', null);
-          
-          if (error) {
-            console.warn('⚠️ [DWELL] Failed to close previous app entry (fallback):', error.message);
-          }
-        }
-      }
-      
       this.previousAppEntry = null;
       
     } catch (error) {

@@ -15,7 +15,6 @@ class ConfigUIManager {
     this.config = dependencies.config;
     this.appSettings = dependencies.appSettings;
     this.mainWindow = dependencies.mainWindow;
-    this.axios = dependencies.axios;
     this.Tray = dependencies.Tray;
     this.Menu = dependencies.Menu;
     this.app = dependencies.app;
@@ -26,47 +25,19 @@ class ConfigUIManager {
   }
 
   /**
-   * Fetch application settings from server
+   * Push the current application settings to the renderer.
+   *
+   * Remote overrides came from the Supabase `get_app_settings` RPC and have no RDS
+   * action behind /sync/desktop-action, so the locally configured values stand as-is
+   * rather than being silently replaced by fabricated "server" values.
    */
   async fetchSettings() {
     try {
-      this.console.log('⚙️ Fetching settings from server...');
-      
-      // Get settings from localStorage (admin panel settings)
-      const settingsResponse = await this.axios.get(`${this.config.supabase_url}/rest/v1/rpc/get_app_settings`, {
-        headers: {
-          'apikey': this.config.supabase_key,
-          'Authorization': `Bearer ${this.config.supabase_key}`
-        }
-      }).catch(() => null);
+      this.console.log(
+        '⚠️ [CONFIG-UI] Remote app settings unavailable (no RDS equivalent) — using local settings',
+      );
 
-      if (settingsResponse?.data) {
-        const settings = settingsResponse.data;
-        this.appSettings = {
-          screenshot_interval_seconds: settings.screenshot_interval || 30,
-          idle_threshold_seconds: settings.idle_threshold || 60,
-          idle_detection_threshold_seconds: settings.idle_detection_threshold_seconds || 60,
-          idle_checkpoint_interval_seconds: settings.idle_checkpoint_interval_seconds || 60,
-          blur_screenshots: settings.blur_screenshots || false,
-          track_urls: settings.track_urls !== false,
-          track_applications: settings.track_applications !== false,
-          auto_start_tracking: settings.auto_start_tracking || false,
-          max_idle_time_seconds: settings.max_idle_time || 2400,
-          screenshot_quality: settings.screenshot_quality || 80,
-          notification_frequency_seconds: settings.notification_frequency || 120,
-          enable_anti_cheat: settings.enable_anti_cheat || true,
-          suspicious_activity_threshold: settings.suspicious_activity_threshold || 10,
-          pattern_detection_window_minutes: settings.pattern_detection_window_minutes || 15,
-          minimum_mouse_distance: settings.minimum_mouse_distance || 50,
-          keyboard_diversity_threshold: settings.keyboard_diversity_threshold || 5,
-          max_laptop_closed_hours: settings.max_laptop_closed_hours || 1
-        };
-        this.console.log('✅ Settings loaded from server');
-      } else {
-        this.console.log('⚠️ Using default settings');
-      }
-
-      // Update UI with new settings
+      // Update UI with current settings
       this.mainWindow?.webContents.send('settings-updated', this.appSettings);
 
     } catch (error) {
@@ -314,23 +285,20 @@ class ConfigUIManager {
    */
   async _fetchProjectListForTray() {
     try {
-      const supabase = this.global.supabaseClient || this.global.supabase || this.global.supabaseService;
       const userId = this.global.currentUserId || this.config?.user_id;
-      if (!supabase || !userId) {
-        console.log('⚠️ [CONFIG-UI] Cannot fetch projects for tray — missing supabase or userId');
+      if (!userId) {
+        console.log('⚠️ [CONFIG-UI] Cannot fetch projects for tray — missing userId');
         return;
       }
-      const { data, error } = await supabase
-        .from('employee_project_assignments')
-        .select('project_id, projects:project_id ( id, name )')
-        .eq('user_id', userId);
-      if (error || !data) {
-        console.warn('⚠️ [CONFIG-UI] Failed to fetch projects for tray:', error?.message);
+      const { listUserProjects } = require('./backend-time-logs');
+      const assignments = await listUserProjects(userId, this.config);
+      if (!Array.isArray(assignments)) {
+        console.warn('⚠️ [CONFIG-UI] Failed to fetch projects for tray: unexpected response');
         return;
       }
-      const projects = data.map(a => ({
-        project_id: a.project_id,
-        name: a.projects?.name || 'Unknown Project'
+      const projects = assignments.map(a => ({
+        project_id: a.project_id || a.projects?.id,
+        name: a.name || a.projects?.name || 'Unknown Project'
       }));
       if (this.global.trayManager) {
         this.global.trayManager.setProjectList(projects);

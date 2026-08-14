@@ -11,7 +11,6 @@ class AppInitializationManager {
   constructor(dependencies = {}) {
     this.systemPreferences = dependencies.systemPreferences;
     this.screen = dependencies.screen;
-    this.supabaseService = dependencies.supabaseService;
     this.config = dependencies.config;
     this.loadSystemState = dependencies.loadSystemState;
     this.loadOfflineQueue = dependencies.loadOfflineQueue;
@@ -69,7 +68,7 @@ class AppInitializationManager {
     
     // Initialize warning manager
     const WarningManager = require('../ui/warning-manager');
-    this.warningManager = new WarningManager(this.supabaseService, this.config);
+    this.warningManager = new WarningManager(this.config);
     
     console.log('📱 Alyson PM Agent initialized');
     

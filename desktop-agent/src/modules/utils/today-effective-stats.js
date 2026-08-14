@@ -56,7 +56,7 @@ function sumLowActivitySecondsFromScreenshots(screenshots, intervalSeconds, dayS
 }
 
 /**
- * @param {{ userId: string|number, totalSeconds: number, config?: object, supabase?: object }} opts
+ * @param {{ userId: string|number, totalSeconds: number, config?: object }} opts
  */
 async function computeTodayEffectiveStats(opts = {}) {
   const config = opts.config || global.config;
@@ -94,14 +94,10 @@ async function computeTodayEffectiveStats(opts = {}) {
         config,
       );
       idleSeconds = sumIdleSecondsFromLogs(logs, dayStartMs, dayEndMs);
-    } else if (opts.supabase) {
-      const { data } = await opts.supabase
-        .from('time_logs')
-        .select('id, start_time, end_time, idle_seconds')
-        .eq('user_id', userId)
-        .gte('start_time', dayStartIso)
-        .lt('start_time', dayEndIso);
-      idleSeconds = sumIdleSecondsFromLogs(data || [], dayStartMs, dayEndMs);
+    } else {
+      // RDS is the only source for idle_seconds; without it we report 0 rather
+      // than guessing, so effective time can never be inflated downstream.
+      console.warn('⚠️ [TODAY-EFFECTIVE] RDS reads disabled — idle reported as 0');
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-EFFECTIVE] Idle fetch failed:', err?.message || err);
@@ -121,15 +117,6 @@ async function computeTodayEffectiveStats(opts = {}) {
           endIso: dayEndIso,
           limit: 500,
         }) || [];
-      } else if (opts.supabase) {
-        const { data } = await opts.supabase
-          .from('screenshots')
-          .select('captured_at, activity_percent')
-          .eq('user_id', userId)
-          .gte('captured_at', dayStartIso)
-          .lt('captured_at', dayEndIso)
-          .limit(500);
-        screenshots = data || [];
       }
     }
     lowActivitySeconds = sumLowActivitySecondsFromScreenshots(

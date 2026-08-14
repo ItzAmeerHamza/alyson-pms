@@ -738,15 +738,12 @@ class IPCEventMap {
           let projectId = global.currentProjectId || null;
           if (!projectId) {
             try {
-              const supabase = global.supabaseService || global.supabaseClient;
-              if (supabase && userId) {
-                const { data, error } = await supabase
-                  .from('employee_project_assignments')
-                  .select('project_id')
-                  .eq('user_id', userId);
-                if (!error && Array.isArray(data) && data.length > 0) {
-                  const randomIndex = Math.floor(Math.random() * data.length);
-                  projectId = data[randomIndex].project_id;
+              if (userId) {
+                const { listUserProjects } = require('../utils/backend-time-logs');
+                const projects = await listUserProjects(userId, global.config);
+                if (Array.isArray(projects) && projects.length > 0) {
+                  const randomIndex = Math.floor(Math.random() * projects.length);
+                  projectId = projects[randomIndex].project_id;
                   console.log('🎲 [IPC-EVENT-MAP] Auto-selected random project for AUTO_START:', projectId);
                 }
               }
@@ -864,61 +861,37 @@ class IPCEventMap {
       const corrId = `${global.currentTimeLogId || 'no-session'}-${Date.now()}`;
       console.log(`🔍 [FETCH_REQUEST] corrId:${corrId} userId:${global.currentUserId} params:`, params);
       
-      if (!global.supabaseService || !global.currentUserId) {
+      const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
+      if (!isBackendRdsEnabled(global.config) || !global.currentUserId) {
         console.log(`❌ [FETCH_REQUEST] corrId:${corrId} Missing service or user`);
         return { success: false, error: 'Database service or user not available' };
       }
 
-      const { user_id, date, activity_filter = 'all', limit = 50 } = params || {};
-      
-      // Work-calendar day (Pacific by default) → UTC range
-      let startUTC, endUTC;
-      if (date) {
-        const { workDayBoundsForYmd, getWorkTimezone } = require('../utils/work-timezone');
-        const [y, mo, d] = String(date).split('-').map(Number);
-        const { startMs, endMs } = workDayBoundsForYmd(y, mo, d);
-        startUTC = new Date(startMs).toISOString();
-        endUTC = new Date(endMs - 1).toISOString();
-        console.log(
-          `🌍 [FETCH_REQUEST] corrId:${corrId} workTz:${getWorkTimezone()} date:${date} UTC range: ${startUTC} to ${endUTC}`,
-        );
+      const { date, activity_filter = 'all', limit = 50 } = params || {};
+
+      const {
+        fetchScreenshotsFromBackend,
+        applyActivityFilter,
+      } = require('../utils/backend-screenshots');
+      const rows = await fetchScreenshotsFromBackend(global.currentUserId, global.config, {
+        date,
+        limit,
+      });
+
+      if (!Array.isArray(rows)) {
+        console.error(`❌ [FETCH_REQUEST] corrId:${corrId} Backend fetch failed`);
+        return { success: false, error: 'Screenshot fetch failed' };
       }
 
-      // Build query with proper column names (removed file_size - doesn't exist in schema)
-      let query = global.supabaseService
-        .from('screenshots')
-        .select('id, file_path, captured_at, activity_percent, mouse_clicks, keystrokes, mouse_movements, time_log_id')
-        .eq('user_id', global.currentUserId)
-        .order('captured_at', { ascending: false })
-        .limit(limit);
-
-      // Add date filters if provided
-      if (startUTC && endUTC) {
-        query = query.gte('captured_at', startUTC).lte('captured_at', endUTC);
-      }
-
-      // Add activity filter
-      if (activity_filter === 'high') {
-        query = query.gte('activity_percent', 70);
-      } else if (activity_filter === 'medium') {
-        query = query.gte('activity_percent', 30).lt('activity_percent', 70);
-      } else if (activity_filter === 'low') {
-        query = query.lt('activity_percent', 30);
-      }
-
-      const { data: screenshots, error } = await query;
-
-      if (error) {
-        console.error(`❌ [FETCH_REQUEST] corrId:${corrId} Database error:`, error);
-        return { success: false, error: error.message };
-      }
+      const screenshots = applyActivityFilter(rows, activity_filter);
 
       console.log(`✅ [FETCH_RESULT] corrId:${corrId} count:${screenshots?.length || 0}`);
       
       // Transform data to include image_url for renderer compatibility
       const transformedScreenshots = (screenshots || []).map(screenshot => ({
         ...screenshot,
-        image_url: screenshot.file_path, // Map file_path to image_url for renderer
+        // Backend rows already carry a presigned image_url; file_path is the fallback
+        image_url: screenshot.image_url || screenshot.file_path,
         timestamp: screenshot.captured_at  // Add timestamp alias
       }));
 
@@ -946,12 +919,13 @@ class IPCEventMap {
   }
 
   async _getDebugStatus() {
+    const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
     return {
       status: 'operational',
       systems: {
         tracking: global.isTracking || false,
         monitoring: true,
-        database: !!global.supabaseService
+        database: isBackendRdsEnabled(global.config)
       },
       timestamp: new Date().toISOString()
     };
@@ -978,7 +952,8 @@ class IPCEventMap {
 
   _getSafeConfig() {
     const config = global.config || {};
-    const { supabase_key, supabase_service_key, ...safeConfig } = config;
+    // The renderer must never receive credentials it can exfiltrate.
+    const { backend_api_key, INTERNAL_API_KEY, ...safeConfig } = config;
     return safeConfig;
   }
 
@@ -1185,88 +1160,7 @@ class IPCEventMap {
       }
     }
 
-    const { normalizeTenantUserId } = require('../utils/tenant-user-id');
-    if (
-      (effectiveConfig?.auth_provider === 'cognito' || global.config?.auth_provider === 'cognito') &&
-      normalizeTenantUserId(userId)
-    ) {
-      console.log('⚠️ [IPC-EVENT-MAP] Cognito/RDS mode — skipping legacy Supabase project query');
-      return this._getFallbackProjects();
-    }
-
-    console.log('🔍 [IPC-EVENT-MAP] Global state check:', {
-      hasCurrentUserId: !!global.currentUserId,
-      hasConfigUserId: !!global.config?.user_id,
-      userId: userId
-    });
-    
-    try {
-      // Get Supabase client from global scope
-      const supabase = global.supabaseService || global.supabaseClient;
-      console.log('🔍 [IPC-EVENT-MAP] Supabase client check:', {
-        hasSupabaseService: !!global.supabaseService,
-        hasSupabaseClient: !!global.supabaseClient,
-        selectedClient: supabase === global.supabaseService ? 'service' : supabase === global.supabaseClient ? 'client' : 'unknown'
-      });
-      
-      if (!supabase) {
-        console.error('❌ [IPC-EVENT-MAP] No Supabase client available');
-        return this._getFallbackProjects();
-      }
-      
-      // Query real project assignments from database
-      console.log('🔍 [IPC-EVENT-MAP] About to query employee_project_assignments for user:', userId);
-      const { data, error } = await supabase
-        .from('employee_project_assignments')
-        .select(`
-          id,
-          project_id,
-          projects:project_id (
-            id,
-            name,
-            description
-          )
-        `)
-        .eq('user_id', userId);
-      
-      console.log('🔍 [IPC-EVENT-MAP] Query result:', {
-        hasData: !!data,
-        dataLength: data ? data.length : 0,
-        hasError: !!error,
-        errorMessage: error ? error.message : null,
-        errorCode: error ? error.code : null
-      });
-      
-      if (error) {
-        console.error('❌ [IPC-EVENT-MAP] Database error:', error);
-        return this._getFallbackProjects();
-      }
-      
-      if (!data || data.length === 0) {
-        console.log('⚠️ [IPC-EVENT-MAP] No project assignments found for user');
-        return this._getFallbackProjects();
-      }
-      
-      // Format data for UI-Manager
-      const formattedProjects = data.map(assignment => ({
-        project_id: assignment.project_id,
-        name: assignment.projects.name,
-        description: assignment.projects.description,
-        projects: {
-          id: assignment.projects.id,
-          name: assignment.projects.name
-        }
-      }));
-      
-      console.log(`✅ [IPC-EVENT-MAP] Found ${formattedProjects.length} project assignments from database`);
-      return formattedProjects;
-      
-    } catch (error) {
-      console.error('❌ [IPC-EVENT-MAP] Error getting project assignments:', error);
-      console.error('❌ [IPC-EVENT-MAP] Error stack:', error.stack);
-      console.log('🔄 [IPC-EVENT-MAP] Falling back to default projects due to error');
-      return this._getFallbackProjects();
-    }
+    return this._getFallbackProjects();
   }
   
   _getFallbackProjects() {
@@ -1335,30 +1229,30 @@ class IPCEventMap {
       // Step 5: Check if we got URL history in last 5 minutes
       console.log('[WIN-DEBUG] Checking URL history from last 5 minutes...');
       
-      if (!global.supabaseService) {
+      const { isBackendRdsEnabled, listUrlLogs } = require('../utils/backend-rds-reads');
+      if (!isBackendRdsEnabled(global.config)) {
         return {
           success: false,
           message: 'Database service not available',
           step: 'db_check',
-          details: 'Supabase service not initialized'
+          details: 'Backend sync not configured (BACKEND_API_URL / INTERNAL_API_KEY)'
         };
       }
 
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const { data: urlHistory, error } = await global.supabaseService
-        .from('app_url_activity')
-        .select('id, site_url, title, browser, started_at')
-        .eq('user_id', userId)
-        .gte('started_at', fiveMinutesAgo.toISOString())
-        .order('started_at', { ascending: false })
-        .limit(10);
-
-      if (error) {
+      let urlHistory;
+      try {
+        urlHistory = await listUrlLogs(
+          userId,
+          { start: fiveMinutesAgo.toISOString(), end: new Date().toISOString(), limit: 10 },
+          global.config,
+        );
+      } catch (queryErr) {
         return {
           success: false,
           message: 'Database query failed',
           step: 'db_query',
-          error: error.message
+          error: queryErr.message
         };
       }
 
@@ -1374,10 +1268,10 @@ class IPCEventMap {
             userId: userId,
             urlCount: urlHistory.length,
             latestUrls: urlHistory.slice(0, 3).map(url => ({
-              site_url: url.site_url,
+              site_url: url.url,
               title: url.title,
               browser: url.browser,
-              time: url.started_at
+              time: url.timestamp
             }))
           }
         };

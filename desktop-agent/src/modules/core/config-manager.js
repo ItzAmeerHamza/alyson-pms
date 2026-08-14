@@ -80,8 +80,6 @@ class ConfigManager {
       // Override with process.env variables
       this.envConfig = {
         ...this.envConfig,
-        VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || this.envConfig.VITE_SUPABASE_URL,
-        VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || this.envConfig.VITE_SUPABASE_ANON_KEY,
         BACKEND_API_URL: process.env.BACKEND_API_URL || this.envConfig.BACKEND_API_URL,
         INTERNAL_API_KEY: process.env.INTERNAL_API_KEY || this.envConfig.INTERNAL_API_KEY,
         USER_ID: process.env.USER_ID || this.envConfig.USER_ID,
@@ -138,21 +136,11 @@ class ConfigManager {
     this.config = {
       ...prior,
       ...this.envConfig,
-      supabase_url:
-        prior.supabase_url ||
-        this.envConfig.VITE_SUPABASE_URL ||
-        this.envConfig.SUPABASE_URL ||
-        '',
-      supabase_key:
-        prior.supabase_key ||
-        this.envConfig.VITE_SUPABASE_ANON_KEY ||
-        this.envConfig.SUPABASE_ANON_KEY ||
-        '',
       auth_provider:
         prior.auth_provider ||
         this.envConfig.VITE_AUTH_PROVIDER ||
         this.envConfig.AUTH_PROVIDER ||
-        'supabase',
+        'cognito',
       cognito_region: prior.cognito_region || this.envConfig.VITE_COGNITO_REGION || '',
       cognito_user_pool_id:
         prior.cognito_user_pool_id || this.envConfig.VITE_COGNITO_USER_POOL_ID || '',
@@ -192,7 +180,7 @@ class ConfigManager {
    * Validate configuration
    */
   validateConfiguration() {
-    const requiredFields = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'];
+    const requiredFields = ['backend_api_url', 'backend_api_key'];
     const missingFields = requiredFields.filter(field => !this.config[field]);
     
     if (missingFields.length > 0) {
@@ -312,46 +300,16 @@ class ConfigManager {
   }
 
   /**
-   * Fetch settings from database
+   * Fetch settings
+   * Remote settings now arrive via workspace-settings against the backend API;
+   * this manager only owns the locally-held copy.
    */
   async fetchSettings() {
-    try {
-      if (!this.config.user_id || !global.supabaseService) {
-        console.log('⚠️ [CONFIG] Cannot fetch settings: no user or database connection');
-        return this.appSettings;
-      }
-
-      const { data, error } = await global.supabaseService
-        .from('settings')
-        .select('*')
-        .eq('user_id', this.config.user_id)
-        .single();
-
-      if (error) {
-        console.log('⚠️ [CONFIG] Failed to fetch settings from database:', error.message);
-        return this.appSettings;
-      }
-
-      if (data) {
-        // Merge database settings with defaults
-        this.appSettings = {
-          ...this.defaultSettings,
-          ...data.settings
-        };
-        
-        global.appSettings = this.appSettings;
-        console.log('✅ [CONFIG] Settings fetched from database');
-      }
-
-      return this.appSettings;
-    } catch (error) {
-      console.log('⚠️ [CONFIG] Error fetching settings:', error.message);
-      return this.appSettings;
-    }
+    return this.appSettings;
   }
 
   /**
-   * Update settings in database
+   * Update settings
    */
   async updateSettings(newSettings) {
     try {
@@ -363,23 +321,6 @@ class ConfigManager {
 
       // Validate updated settings
       this.validateConfiguration();
-
-      // Save to database
-      if (this.config.user_id && global.supabaseService) {
-        const { error } = await global.supabaseService
-          .from('settings')
-          .upsert({
-            user_id: this.config.user_id,
-            settings: this.appSettings,
-            updated_at: new Date().toISOString()
-          });
-
-        if (error) {
-          console.log('⚠️ [CONFIG] Failed to update settings in database:', error.message);
-        } else {
-          console.log('✅ [CONFIG] Settings updated in database');
-        }
-      }
 
       // Update global reference
       global.appSettings = this.appSettings;
@@ -408,9 +349,8 @@ class ConfigManager {
    */
   getDatabaseConfig() {
     return {
-      supabaseUrl: this.config.VITE_SUPABASE_URL,
-      supabaseKey: this.config.VITE_SUPABASE_ANON_KEY,
-      // serviceRoleKey removed — edge function handles writes server-side
+      apiBaseUrl: this.config.api_base_url,
+      backendApiUrl: this.config.backend_api_url,
       userId: this.config.USER_ID
     };
   }
@@ -443,8 +383,8 @@ class ConfigManager {
   exportConfig() {
     const safeConfig = { ...this.config };
     
-    // Remove sensitive data
-    delete safeConfig.VITE_SUPABASE_ANON_KEY;
+    delete safeConfig.INTERNAL_API_KEY;
+    delete safeConfig.backend_api_key;
     
     return {
       config: safeConfig,

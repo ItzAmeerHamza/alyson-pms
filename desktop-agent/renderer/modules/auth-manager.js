@@ -24,8 +24,7 @@ function wrongCompanyMessage(org) {
 }
 
 class AuthManager {
-  constructor(supabaseClient, ipcRenderer, uiManager, notificationManager) {
-    this.supabaseClient = supabaseClient;
+  constructor(ipcRenderer, uiManager, notificationManager) {
     this.ipcRenderer = ipcRenderer;
     this.uiManager = uiManager;
     this.notificationManager = notificationManager;
@@ -34,7 +33,6 @@ class AuthManager {
     this.credentialManager = null;
     this.isAuthenticated = false;
     this.authConfig = null;
-    this.useCognito = false;
     // Initialization deferred until renderer completes mandatory update check
   }
 
@@ -48,11 +46,10 @@ class AuthManager {
 
     try {
       this.authConfig = await this.ipcRenderer.invoke('get-config');
-      this.useCognito = isCognitoAuthEnabled(this.authConfig);
       console.log(
-        this.useCognito
+        isCognitoAuthEnabled(this.authConfig)
           ? '✅ [AUTH] Using Amazon Cognito (same as web portal)'
-          : 'ℹ️ [AUTH] Using Supabase sign-in',
+          : '⚠️ [AUTH] Cognito config incomplete — sign-in will fail until the build embeds Cognito settings',
       );
     } catch (e) {
       console.warn('⚠️ [AUTH] Could not load auth config:', e?.message || e);
@@ -168,97 +165,12 @@ class AuthManager {
       if (savedUserSession && savedUserSession.success && savedUserSession.session && savedUserSession.session.remember_me) {
         const session = savedUserSession.session;
 
-        if (session.auth_provider === 'cognito' || (this.useCognito && session.access_token)) {
-          return await this.tryAutoLoginCognito(session);
-        }
-
-        if (!this.supabaseClient) {
-          console.warn('⚠️ [AUTH] Supabase client unavailable for session restore');
-          return false;
-        }
-
         console.log('📂 [AUTH] Found saved user session, attempting auto-login...', {
           email: session.email,
           remember_me: session.remember_me
         });
-        
-        // Restore Supabase session with proper error handling
-        const { data: sessionData, error: sessionError } = await this.supabaseClient.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token
-        });
-        
-        if (!sessionError && sessionData.session && sessionData.user) {
-          // Forward session to main process so main Supabase clients carry the JWT for RLS
-          try {
-            await this.ipcRenderer.invoke('auth:set-session', {
-              access_token: sessionData.session.access_token,
-              refresh_token: sessionData.session.refresh_token
-            });
-            console.log('🔐 [AUTH] Session forwarded to main process (auto-login)');
-          } catch (e) {
-            console.warn('⚠️ [AUTH] Failed to forward session to main process (auto-login):', e?.message || e);
-          }
-          const savedUser = session.user || (() => {
-            try { return JSON.parse(localStorage.getItem('alyson_user') || 'null'); } catch { return null; }
-          })();
-          this.currentUser = {
-            id: savedUser?.id || sessionData.user.id,
-            email: sessionData.user.email,
-            name: savedUser?.name || sessionData.user.email.split('@')[0],
-            role: savedUser?.role || 'employee',
-          };
-          
-          console.log('👤 User restored from saved session:', this.currentUser);
-          
-          // Set current user ID in main process for database operations
-          console.log('🔑 [AUTH] Attempting to set user ID in main process...');
-          const setResult = await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
-          console.log('📊 [AUTH] Set user ID result:', setResult);
-          
-          // Update localStorage for UI consistency
-          localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
-          localStorage.setItem('alyson_remember_email', this.currentUser.email);
-          localStorage.setItem('alyson_remember_me', 'true');
-          
-          // CHECK FOR UPDATES before proceeding to main app
-          console.log('🔄 [AUTH] Checking for updates after auto-login...');          try {
-            const updateStatus = await this.ipcRenderer.invoke('check-for-update');
-            console.log('📊 [AUTH] Auto-login update check result:', updateStatus);            
-            if (updateStatus && updateStatus.updateAvailable) {
-              console.log('🆕 [AUTH] Update required, showing update modal');
-              window.__updateGateActive = true;
-              if (this.uiManager?.showMandatoryUpdateGate) {
-                this.uiManager.showMandatoryUpdateGate({
-                  newVersion: updateStatus.newVersion,
-                  currentVersion: updateStatus.currentVersion,
-                  updateDownloaded: updateStatus.updateDownloaded,
-                  manualInstallRequired: updateStatus.manualInstallRequired,
-                  dmgInstallReady: updateStatus.dmgInstallReady,
-                  manualDownloadUrl: updateStatus.manualDownloadUrl,
-                });
-              }
-              this.notificationManager.showNotification('Update required before continuing.', 'warning');
-              console.log('✅ Auto-login successful (update modal shown)');
-              // Return true to indicate login success, but update modal is blocking
-              return true;
-            }
-          } catch (updateError) {
-            console.log('⚠️ [AUTH] Auto-login update check failed, proceeding anyway:', updateError.message);            // If update check fails, proceed to app (network issues, etc.)
-          }
-          
-          // Auto-login successful - go directly to main app
-          this.uiManager.showMainApp();
-          this.notificationManager.showNotification('Welcome back! Automatically signed in.', 'success');
-          
-          console.log('✅ Auto-login successful');
-          return true;
-        } else {
-          console.log('⚠️ Failed to restore session:', sessionError);
-          // Clear invalid session
-          await this.ipcRenderer.invoke('user-logged-out');
-          return false;
-        }
+
+        return await this.tryAutoLoginCognito(session);
       }
       return false;
     } catch (error) {
@@ -551,17 +463,13 @@ class AuthManager {
       }
     }
 
-    console.log(
-      this.useCognito
-        ? '🔐 Starting Cognito authentication...'
-        : '🔐 Starting Supabase authentication...',
-    );
+    console.log('🔐 Starting Cognito authentication...');
     console.log('📊 Login attempt details:', {
       company: company || '(none)',
       email: email,
       passwordLength: password.length,
       rememberMe: rememberMe,
-      provider: this.useCognito ? 'cognito' : 'supabase',
+      provider: 'cognito',
     });
 
     // Show loading state
@@ -571,176 +479,7 @@ class AuthManager {
     if (errorDiv) errorDiv.style.display = 'none';
 
     try {
-      if (this.useCognito) {
-        await this.handleCognitoLogin(email, password, company, rememberMe);
-        return;
-      }
-
-      if (!this.supabaseClient) {
-        throw new Error('Supabase is not configured. Set VITE_AUTH_PROVIDER=cognito in desktop-agent/.env');
-      }
-
-      const LOGIN_TIMEOUT_MS = 15000;
-      const withTimeout = (promise, ms) => Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('CONNECTION_TIMEOUT')), ms))
-      ]);
-
-      // Clear any existing session first (non-blocking)
-      try { await withTimeout(this.supabaseClient.auth.signOut(), 5000); } catch (_) {}
-      
-      // Attempt to sign in
-      const { data, error } = await withTimeout(
-        this.supabaseClient.auth.signInWithPassword({ email, password }),
-        LOGIN_TIMEOUT_MS
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      if (data.user) {
-        console.log('✅ Supabase authentication successful:', data.user.id);
-        // Forward session to main process immediately to satisfy RLS for subsequent inserts
-        try {
-          await this.ipcRenderer.invoke('auth:set-session', {
-            access_token: data.session?.access_token,
-            refresh_token: data.session?.refresh_token
-          });
-          console.log('🔐 [AUTH] Session forwarded to main process (login)');
-        } catch (e) {
-          console.warn('⚠️ [AUTH] Failed to forward session to main process (login):', e?.message || e);
-        }
-        
-        const userDetails = {
-          id: data.user.id,
-          email: data.user.email,
-          full_name: data.user.user_metadata?.full_name || data.user.email.split('@')[0],
-          role: data.user.user_metadata?.role || 'employee',
-          organization_id: data.user.user_metadata?.organization_id || null,
-          is_active: true,
-        };
-
-        if (company && userDetails?.organization_id) {
-          try {
-            const org = await fetchOrganizationBySlug(company, this.authConfig);
-            if (org && String(org.id) !== String(userDetails.organization_id)) {
-              await this.supabaseClient.auth.signOut();
-              throw new Error('You are not a member of this organization. Please check the company name.');
-            }
-            if (org && org.is_active === false) {
-              await this.supabaseClient.auth.signOut();
-              throw new Error('This organization is not active. Please contact your administrator.');
-            }
-            console.log('✅ [AUTH] Organization verified via backend:', org?.name);
-          } catch (orgCheckError) {
-            if (orgCheckError.message.includes('not a member') || orgCheckError.message.includes('not active')) {
-              throw orgCheckError;
-            }
-            console.warn('⚠️ [AUTH] Organization check failed, proceeding anyway:', orgCheckError.message);
-          }
-        }
-
-        // Set current user (with organization info)
-        this.currentUser = {
-          id: data.user.id,
-          email: data.user.email,
-          name: userDetails?.full_name || data.user.email.split('@')[0],
-          role: userDetails?.role || 'employee',
-          organization_id: userDetails?.organization_id || null,
-          organization_slug: company || null,
-          is_org_admin: userDetails?.is_org_admin || false,
-          is_super_admin: userDetails?.is_super_admin || false,
-        };
-
-        console.log('👤 User details retrieved:', this.currentUser);
-
-        // Set current user ID in main process for database operations
-        console.log('🔑 [AUTH] Attempting to set user ID in main process...');
-        const setResult = await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
-        console.log('📊 [AUTH] Set user ID result:', setResult);
-
-        // Store in localStorage
-        localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
-
-        // Always save credentials securely (default behavior)
-        if (this.credentialManager) {
-          const saveSuccess = await this.credentialManager.saveCredentials(email, password);
-          if (saveSuccess) {
-            console.log('✅ Credentials saved securely');
-          } else {
-            console.warn('⚠️ Failed to save credentials securely, using localStorage fallback');
-            localStorage.setItem('alyson_remember_email', email);
-            localStorage.setItem('alyson_remember_me', 'true');
-          }
-        } else {
-          // Fallback to localStorage
-          localStorage.setItem('alyson_remember_email', email);
-          localStorage.setItem('alyson_remember_me', 'true');
-        }
-        
-        // Store company for next login
-        if (company) {
-          localStorage.setItem('alyson_remember_company', company);
-        }
-        
-        // Save session for auto-login using IPC (remember_me enforced true)
-        const sessionSaveResult = await this.ipcRenderer.invoke('user-logged-in', {
-          user: this.currentUser,
-          session: {
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token,
-            // Save expiry in milliseconds (SessionManager compares against Date.now())
-            expires_at: (data.session.expires_at || 0) * 1000,
-            email: email,
-            remember_me: true,
-            // Multi-tenant organization info
-            organization_id: this.currentUser.organization_id,
-            organization_slug: this.currentUser.organization_slug
-          }
-        });
-        console.log('💾 [AUTH] Session save result:', sessionSaveResult);
-
-        // Clear any auth failure count on successful login
-        localStorage.removeItem('auth_failure_count');
-        
-        // CHECK FOR UPDATES before proceeding
-        console.log('🔄 [AUTH] Checking for updates after login...');
-        try {
-          const updateStatus = await this.ipcRenderer.invoke('check-for-update');
-          console.log('📊 [AUTH] Update check result:', updateStatus);
-          
-          if (updateStatus && updateStatus.updateAvailable) {
-            console.log('🆕 [AUTH] Update required, showing update modal');
-            window.__updateGateActive = true;
-            if (this.uiManager?.showMandatoryUpdateGate) {
-              this.uiManager.showMandatoryUpdateGate({
-                newVersion: updateStatus.newVersion,
-                currentVersion: updateStatus.currentVersion,
-                updateDownloaded: updateStatus.updateDownloaded,
-                manualInstallRequired: updateStatus.manualInstallRequired,
-                dmgInstallReady: updateStatus.dmgInstallReady,
-                manualDownloadUrl: updateStatus.manualDownloadUrl,
-              });
-            }
-            this.notificationManager.showNotification('Update required before continuing.', 'warning');
-            // Don't proceed to main app - update modal is blocking
-            return;
-          }
-        } catch (updateError) {
-          console.log('⚠️ [AUTH] Update check failed, proceeding anyway:', updateError.message);
-          // If update check fails, proceed to app (network issues, etc.)
-        }
-        
-        // Trigger onboarding guide for first-time user experience
-        // Note: The userLoggedIn event listener in renderer-modular.js will handle showing main app
-        window.dispatchEvent(new Event('userLoggedIn'));
-        this.notificationManager.showNotification('Login successful! Welcome to Alyson Time Doctor.', 'success');
-
-      } else {
-        throw new Error('No user data returned from authentication');
-      }
-
+      await this.handleCognitoLogin(email, password, company, rememberMe);
     } catch (error) {
       console.error('❌ Login failed:', error);
       
@@ -798,16 +537,6 @@ class AuthManager {
       ) {
         errorMessage =
           'Your account setup is incomplete. Ask your admin to fix your employee profile, then try again.';
-      } else if (error.message.includes('Email not confirmed')) {
-        // Supabase email verification required. Attempt to resend the confirmation email (best-effort).
-        try {
-          await this.supabaseClient.auth.resend({ type: 'signup', email });
-          console.log('📨 [AUTH] Verification email re-sent (best effort)');
-        } catch (resendError) {
-          console.warn('⚠️ [AUTH] Failed to resend verification email:', resendError?.message || resendError);
-        }
-
-        errorMessage = 'Your account email is not verified yet. Please check your inbox (and spam) for the verification email. If you didn’t get it, try again to resend the email or ask your admin to confirm your account.';
       } else if (error.message.includes('Too many requests')) {
         errorMessage = 'Too many login attempts. Please wait before trying again.';
       }
@@ -830,11 +559,7 @@ class AuthManager {
     try {
       console.log('🚪 Logging out user...');
       
-      if (this.useCognito) {
-        cognitoAuth.signOutCognito(this.authConfig);
-      } else if (this.supabaseClient) {
-        await this.supabaseClient.auth.signOut();
-      }
+      cognitoAuth.signOutCognito(this.authConfig);
       
       // Clear stored credentials securely (optional - user can choose to keep them)
       // We don't automatically delete credentials on logout, only on explicit "forget me" action

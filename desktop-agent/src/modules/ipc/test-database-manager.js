@@ -11,7 +11,6 @@ class TestDatabaseManager {
   constructor(dependencies = {}) {
     this.ipcMain = dependencies.ipcMain;
     this.config = dependencies.config;
-    this.supabaseService = dependencies.supabaseService;
     this.crypto = dependencies.crypto || require('crypto');
     
     console.log('✅ TestDatabaseManager initialized');
@@ -32,135 +31,45 @@ class TestDatabaseManager {
    */
   registerDatabaseConnectionTest() {
     this.ipcMain.handle('test-database-connection', async () => {
-      console.log('🧪 [IPC] REAL Database test - testing ACTUAL failing operations...');
+      console.log('🧪 [IPC] Database test - checking RDS backend reachability...');
       const startTime = Date.now();
       
       try {
-        // Check config first
-        if (!this.config.supabase_url || !this.config.supabase_key) {
-          console.log('❌ [IPC] Missing Supabase configuration');
-          return { success: false, error: 'Missing Supabase configuration' };
+        const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
+        const { checkBackendHealth } = require('../utils/backend-health');
+
+        if (!isBackendRdsEnabled(this.config)) {
+          console.log('❌ [IPC] Backend sync not configured');
+          return { success: false, error: 'Missing BACKEND_API_URL / INTERNAL_API_KEY configuration' };
         }
-        
-        console.log('📋 [IPC] Config check passed');
-        console.log('📊 [IPC] URL:', this.config.supabase_url);
-        console.log('📊 [IPC] Key length:', this.config.supabase_key.length);
-        
-        // Test 1: REAL Network connectivity with same timeout settings
-        console.log('📡 [IPC] Testing connectivity with REAL timeout settings (60s)...');
-        try {
-          const connectResponse = await fetch(`${this.config.supabase_url}/rest/v1/`, {
-            method: 'GET',
-            headers: {
-              'apikey': this.config.supabase_key,
-              'Authorization': `Bearer ${this.config.supabase_key}`,
-              'Content-Type': 'application/json'
-            },
-            signal: AbortSignal.timeout(60000) // 60 second timeout like production
-          });
-          
-          console.log('📡 [IPC] Network response status:', connectResponse.status);
-          
-          if (!connectResponse.ok) {
-            console.log('❌ [IPC] Network connectivity failed:', connectResponse.status);
-            return { success: false, error: `Network error: ${connectResponse.status}` };
-          }
-          
-          console.log('✅ [IPC] Network connectivity passed');
-          
-        } catch (networkError) {
-          console.log('❌ [IPC] Network connectivity test failed:', networkError.message);
-          return { success: false, error: `Network connectivity failed: ${networkError.message}` };
+
+        // Test 1: backend + database reachability
+        console.log('📡 [IPC] Testing backend health endpoint...');
+        const health = await checkBackendHealth(this.config);
+        if (!health.ok) {
+          console.log('❌ [IPC] Backend health check failed:', health.error || health.status);
+          return { success: false, error: `Backend health check failed: ${health.error || health.status}` };
         }
-        
-        // Test 2: ACTUAL TIME LOG OPERATIONS (test exact failing functions)
-        console.log('🕐 [IPC] Testing REAL time log operations (CREATE + UPDATE like ending tracking)...');
-        try {
-          // Test the EXACT same operation that fails when ending tracking
-          const testTimeLogId = this.crypto.randomUUID();
-          const testTimeLog = {
-            id: testTimeLogId,
-            user_id: this.config.user_id,
-            project_id: this.config.project_id || '00000000-0000-0000-0000-000000000000',
-            start_time: new Date().toISOString(),
-            status: 'active',
-            created_at: new Date().toISOString()
-          };
-          
-          // Test CREATE operation
-          const { error: insertError } = await this.supabaseService
-            .from('time_logs')
-            .insert(testTimeLog);
-            
-          if (insertError) {
-            console.log('❌ [IPC] Time log CREATE failed:', insertError.message);
-            return { success: false, error: `Time log creation failed: ${insertError.message}` };
-          }
-          
-          // Test UPDATE operation (THIS IS WHAT FAILS IN REAL USAGE)
-          const { error: updateError } = await this.supabaseService
-            .from('time_logs')
-            .update({
-              end_time: new Date().toISOString(),
-              status: 'completed'
-            })
-            .eq('id', testTimeLogId);
-            
-          if (updateError) {
-            console.log('❌ [IPC] Time log UPDATE failed:', updateError.message);
-            return { success: false, error: `Time log update failed: ${updateError.message}` };
-          }
-          
-          // Test DELETE (cleanup)
-          const { error: deleteError } = await this.supabaseService
-            .from('time_logs')
-            .delete()
-            .eq('id', testTimeLogId);
-            
-          if (deleteError) {
-            console.log('⚠️ [IPC] Time log cleanup failed:', deleteError.message);
-            // Don't fail the test for cleanup issues
-          }
-          
-          console.log('✅ [IPC] Time log operations test passed');
-          
-        } catch (timeLogError) {
-          console.log('❌ [IPC] Time log operations test failed:', timeLogError.message);
-          return { success: false, error: `Time log operations failed: ${timeLogError.message}` };
-        }
-        
-        // Test 3: Row Level Security (RLS) test
-        console.log('🔒 [IPC] Testing Row Level Security...');
-        try {
-          const { data: testData, error: rlsError } = await this.supabaseService
-            .from('time_logs')
-            .select('id')
-            .eq('user_id', this.config.user_id)
-            .limit(1);
-            
-          if (rlsError && rlsError.code === 'PGRST116') {
-            console.log('❌ [IPC] RLS test failed - permission denied:', rlsError.message);
-            return { success: false, error: `RLS permission denied: ${rlsError.message}` };
-          }
-          
-          console.log('✅ [IPC] RLS test passed');
-          
-        } catch (rlsTestError) {
-          console.log('❌ [IPC] RLS test failed:', rlsTestError.message);
-          return { success: false, error: `RLS test failed: ${rlsTestError.message}` };
-        }
-        
+        console.log('✅ [IPC] Backend connectivity passed');
+
+        // The CREATE/UPDATE/DELETE round-trip and RLS probe wrote throwaway rows into
+        // time_logs via Supabase. That is deliberately not reproduced against RDS —
+        // time_logs is payroll data and there is no sandboxed write action.
+        console.warn(
+          '⚠️ [IPC] time_log write round-trip and RLS probe were Supabase-only — skipped',
+        );
+
         const duration = Date.now() - startTime;
-        console.log(`✅ [IPC] Complete database test passed in ${duration}ms`);
+        console.log(`✅ [IPC] Database test passed in ${duration}ms`);
         
         return { 
           success: true, 
-          message: 'All database operations working correctly',
+          message: 'RDS backend connection successful (time_doctor schema)',
           duration: duration,
           tests: {
             connectivity: 'passed',
-            timeLogOperations: 'passed', 
-            rls: 'passed'
+            timeLogOperations: 'skipped', 
+            rls: 'skipped'
           }
         };
         

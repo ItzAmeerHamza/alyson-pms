@@ -408,38 +408,8 @@ class BrowserUrlManager extends EventEmitter {
       } else if (global.syncManager?.addUrlLogs) {
         await global.syncManager.addUrlLogs([urlLog]);
         console.log(`🌐 ✅ [URL] Queued via global syncManager: ${urlLog.domain}`);
-      } else if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-        // Last-resort direct insert using existing Supabase service
-        try {
-          // Close previous open slice for this user+browser before inserting
-          if (urlLog.user_id && urlLog.browser) {
-            await global.supabaseService.from('app_url_activity')
-              .update({ ended_at: urlLog.timestamp })
-              .eq('user_id', urlLog.user_id)
-              .eq('browser', urlLog.browser)
-              .is('ended_at', null)
-              .lt('started_at', urlLog.timestamp);
-          }
-          const { error } = await global.supabaseService.from('app_url_activity').insert([{
-            organization_id: null,
-            user_id: urlLog.user_id,
-            device_id: null,
-            time_log_id: urlLog.time_log_id || null,
-            site_url: urlLog.site_url || urlLog.url,
-            domain: urlLog.domain,
-            title: urlLog.title,
-            browser: urlLog.browser,
-            confidence: 'high',
-            privacy_flags: null,
-            started_at: urlLog.timestamp,
-            ended_at: null
-          }]);
-          if (error) console.log('❌ [URL] Direct DB insert to app_url_activity failed:', error.message);
-          else console.log('✅ [URL] Direct DB insert to app_url_activity succeeded');
-        } catch (e) {
-          console.log('❌ [URL] Direct DB insert error:', e.message);
-        }
       } else {
+        // Sync managers own every write path to RDS — no direct-insert fallback.
         console.log('❌ [URL-CAPTURE] No sync manager available to save URL');
       }
       
@@ -897,25 +867,8 @@ class BrowserUrlManager extends EventEmitter {
       } else if (global.syncManager?.addUrlLogs) {
         await global.syncManager.addUrlLogs([urlLog]);
         console.log(`🌐 ✅ URL captured via global syncManager: ${urlLog.domain}`);
-      } else if (global.supabaseService && typeof global.supabaseService.from === 'function') {
-        // Last-resort direct insert using existing Supabase service
-        try {
-          const { error } = await global.supabaseService.from('url_logs').insert([{
-            user_id: urlLog.user_id,
-            time_log_id: urlLog.time_log_id || null,
-            url: urlLog.url,
-            site_url: urlLog.site_url,
-            title: urlLog.title,
-            domain: urlLog.domain,
-            browser: urlLog.browser,
-            timestamp: urlLog.timestamp
-          }]);
-          if (error) console.log('❌ [URL] Direct DB insert failed:', error.message);
-          else console.log('✅ [URL] Direct DB insert succeeded');
-        } catch (e) {
-          console.log('❌ [URL] Direct DB insert error:', e.message);
-        }
       } else {
+        // Sync managers own every write path to RDS — no direct-insert fallback.
         console.log('❌ [URL-CAPTURE] No sync manager available to save URL');
       }
       

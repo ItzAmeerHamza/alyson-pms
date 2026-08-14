@@ -19,6 +19,12 @@ class EnhancedIdleMonitor {
     this._consecutiveZeroActivityShots = 0;
     /** End timestamp of the last idle chunk persisted to idle_logs (ms). */
     this._lastIdleCheckpointTime = null;
+    /**
+     * Idle seconds accrued in the CURRENT session. We already compute every idle
+     * chunk here — keeping the running total means the stop path can write
+     * time_logs.idle_seconds without querying idle_logs back out of the database.
+     */
+    this._sessionIdleSeconds = 0;
     /** Last time we saw a real keystroke or click (ms). Used when OS idle is unreliable. */
     this._lastInputActivityAt = null;
     this._lastSeenKeystrokesForIdle = 0;
@@ -616,6 +622,7 @@ class EnhancedIdleMonitor {
     try {
       const durationSeconds = Math.round(duration / 1000);
       const durationMinutes = Math.floor(duration / 60000);
+      this._sessionIdleSeconds += Math.max(0, durationSeconds);
       console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
       
       const userId = this._resolveUserId();
@@ -646,18 +653,14 @@ class EnhancedIdleMonitor {
       const cfg = this.config || global.config;
 
       const persistIdleLog = async (payload) => {
-        if (isBackendTimeLogsEnabled(cfg)) {
-          await insertIdleLog(payload, cfg);
-          console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
-          return;
+        // RDS is the only backend — throwing keeps the log in the offline queue
+        // below instead of dropping payroll-relevant idle time.
+        if (!isBackendTimeLogsEnabled(cfg)) {
+          throw new Error('Backend not configured for idle logs');
         }
 
-        const row = { ...payload };
-        delete row.duration_minutes;
-        delete row.organization_id;
-        const { error } = await global.supabaseService.from('idle_logs').insert(row);
-        if (error) throw new Error(error.message);
-        console.log('✅ [IDLE-LOG] Idle period saved to idle_logs table');
+        await insertIdleLog(payload, cfg);
+        console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
       };
 
       try {
@@ -844,6 +847,16 @@ class EnhancedIdleMonitor {
       currentIdleStartTime: this.currentIdleStartTime,
       wasIdleLastCheck: this.wasIdleLastCheck
     };
+  }
+
+  /** Idle seconds accrued in the current session (for time_logs.idle_seconds on stop). */
+  getSessionIdleSeconds() {
+    return Math.max(0, Math.floor(this._sessionIdleSeconds || 0));
+  }
+
+  /** Call on Start so idle does not carry over from the previous session. */
+  resetSessionIdleSeconds() {
+    this._sessionIdleSeconds = 0;
   }
 
   resetIdleState() {

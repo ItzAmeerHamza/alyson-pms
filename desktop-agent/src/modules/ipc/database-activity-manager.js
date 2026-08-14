@@ -10,7 +10,6 @@
 class DatabaseActivityManager {
   constructor(dependencies = {}) {
     this.ipcMain = dependencies.ipcMain;
-    this.supabaseService = dependencies.supabaseService;
     this.global = dependencies.global || global;
     this.activityStats = dependencies.activityStats;
     this.activityStatsCache = dependencies.activityStatsCache;
@@ -35,52 +34,16 @@ class DatabaseActivityManager {
   registerGetActivityStatsFromDb() {
     this.ipcMain.handle('get-activity-stats-from-db', async () => {
       try {
-        if (!this.supabaseService || !this.global.currentUserId) {
+        if (!this.global.currentUserId) {
           return { error: 'Database not available or user not authenticated' };
         }
 
-        const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        // The rolled-up `activity_stats` table was Supabase-only and has no RDS
+        // equivalent, so the in-process counters are the only source now.
+        console.warn(
+          '⚠️ [DatabaseActivityManager] activity_stats has no RDS equivalent — using local counters',
+        );
 
-        // Get recent activity stats from database
-        const { data: activityStatsData, error: statsError } = await this.supabaseService
-          .from('activity_stats')
-          .select('*')
-          .eq('user_id', this.global.currentUserId)
-          .gte('period_start', last24Hours.toISOString())
-          .order('period_start', { ascending: false })
-          .limit(1);
-
-        if (statsError) {
-          console.error('Error fetching activity stats:', statsError);
-          // Fallback to local data
-          const localStats = (this.activityStatsCache && this.activityStatsCache.data) || {
-            mouseMovements: (this.activityStats && this.activityStats.mouseMovements) || 0,
-            keyPresses: (this.activityStats && this.activityStats.keystrokes) || 0,
-            mouseClicks: (this.activityStats && this.activityStats.mouseClicks) || 0,
-            activeTime: 0,
-            appsCount: 0,
-            screenshotCount: 0
-          };
-          return localStats;
-        }
-
-        // If we have recent database data, use it
-        if (activityStatsData && activityStatsData.length > 0) {
-          const dbStats = activityStatsData[0];
-          return {
-            mouseMovements: dbStats.mouse_movements || 0,
-            keyPresses: dbStats.keystrokes || 0,
-            mouseClicks: dbStats.mouse_clicks || 0,
-            activeTime: dbStats.active_time_seconds || 0,
-            appsCount: dbStats.apps_count || 0,
-            screenshotCount: dbStats.screenshot_count || 0,
-            sessionDuration: dbStats.session_duration_seconds || 0,
-            productivity: dbStats.productivity_score || 0
-          };
-        }
-
-        // Fallback to local stats if no database data
         return {
           mouseMovements: (this.activityStats && this.activityStats.mouseMovements) || 0,
           keyPresses: (this.activityStats && this.activityStats.keystrokes) || 0,
@@ -105,68 +68,20 @@ class DatabaseActivityManager {
   registerGetAntiCheatReportFromDb() {
     this.ipcMain.handle('get-anti-cheat-report-from-db', async () => {
       try {
-        if (!this.supabaseService || !this.global.currentUserId) {
-          return { 
-            currentRiskLevel: 'LOW',
-            totalSuspiciousEvents: 0,
-            lastCheck: new Date().toISOString(),
-            status: 'offline',
-            message: 'Database not available'
-          };
-        }
-
-        const now = new Date();
-        const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-        // Get recent fraud alerts from database
-        const { data: fraudAlerts, error: fraudError } = await this.supabaseService
-          .from('fraud_alerts')
-          .select('*')
-          .eq('user_id', this.global.currentUserId)
-          .gte('detected_at', last24Hours.toISOString())
-          .order('detected_at', { ascending: false });
-
-        // Get recent suspicious activity as fallback
-        const { data: suspiciousActivity, error: suspiciousError } = await this.supabaseService
-          .from('suspicious_activity')
-          .select('*')
-          .eq('user_id', this.global.currentUserId)
-          .gte('timestamp', last24Hours.toISOString())
-          .order('timestamp', { ascending: false })
-          .limit(10);
-
-        // Calculate risk level based on recent activities
-        let totalSuspiciousEvents = 0;
-        let currentRiskLevel = 'LOW';
-
-        if (!fraudError && fraudAlerts && fraudAlerts.length > 0) {
-          totalSuspiciousEvents += fraudAlerts.length;
-          const highRiskAlerts = fraudAlerts.filter(alert => alert.severity === 'HIGH' || alert.severity === 'CRITICAL');
-          if (highRiskAlerts.length > 0) {
-            currentRiskLevel = 'HIGH';
-          } else if (fraudAlerts.length > 2) {
-            currentRiskLevel = 'MEDIUM';
-          }
-        }
-
-        if (!suspiciousError && suspiciousActivity && suspiciousActivity.length > 0) {
-          totalSuspiciousEvents += suspiciousActivity.length;
-          const highRiskActivities = suspiciousActivity.filter(activity => activity.risk_score && activity.risk_score > 7);
-          if (highRiskActivities.length > 0 && currentRiskLevel === 'LOW') {
-            currentRiskLevel = 'MEDIUM';
-          }
-        }
+        // `fraud_alerts` and `suspicious_activity` were Supabase-only tables with no RDS
+        // read action, so no stored risk history can be reported.
+        console.warn(
+          '⚠️ [DatabaseActivityManager] fraud_alerts / suspicious_activity have no RDS equivalent — reporting no stored events',
+        );
 
         return {
-          currentRiskLevel: currentRiskLevel,
-          totalSuspiciousEvents: totalSuspiciousEvents,
-          lastCheck: now.toISOString(),
-          status: 'monitoring',
-          message: totalSuspiciousEvents > 0 
-            ? `${totalSuspiciousEvents} suspicious events detected in last 24 hours`
-            : 'No suspicious activity detected',
-          fraudAlerts: fraudAlerts || [],
-          suspiciousActivity: suspiciousActivity || []
+          currentRiskLevel: 'LOW',
+          totalSuspiciousEvents: 0,
+          lastCheck: new Date().toISOString(),
+          status: 'offline',
+          message: 'Stored security history unavailable',
+          fraudAlerts: [],
+          suspiciousActivity: []
         };
 
       } catch (error) {

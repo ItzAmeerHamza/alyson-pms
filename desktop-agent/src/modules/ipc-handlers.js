@@ -126,88 +126,7 @@ class IPCHandlers {
           return { success: false, error: 'Project required to start timer' };
         }
         
-        // Try the tracking manager first
-        let result = await this.trackingManager.startTracking(finalProjectId);
-        
-        // If tracking manager fails with Content-Type error, try direct PostgREST fallback
-        if (!result || !result.success) {
-          const errorMsg = (result && result.error) || '';
-          if (errorMsg.includes('Content-Type not acceptable') || errorMsg.includes('406')) {
-            console.log('🛠️ [IPC-HANDLERS] Applying direct PostgREST fallback for start-timer');
-            try {
-              const userId = global.currentUserId || global.config?.user_id;
-              const timeLogData = {
-                user_id: userId,
-                project_id: finalProjectId,
-                start_time: new Date().toISOString(),
-                status: 'active',
-                is_idle: false,
-                is_manual: false
-              };
-              
-              // Close stale active sessions before inserting
-              const supaClient = global.supabaseClient || global.supabaseService || global.supabase;
-              if (supaClient && userId) {
-                await supaClient
-                  .from('time_logs')
-                  .update({ end_time: timeLogData.start_time, status: 'completed' })
-                  .eq('user_id', userId)
-                  .or('end_time.is.null,status.eq.active');
-              }
-
-              const fetchImpl = global.fetch || require('node-fetch');
-              const supabaseUrl = global.config?.supabase_url || global.config?.SUPABASE_URL || global.config?.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://fkpiqcxkmrtaetvfgcli.supabase.co';
-              if (!supabaseUrl) {
-                throw new Error('Supabase URL not available in config');
-              }
-              const url = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/time_logs`;
-              // SECURITY: Use the authenticated user's access token (not the service key)
-              const anonKey = global.config.supabase_key || global.config.VITE_SUPABASE_ANON_KEY || global.config.SUPABASE_ANON_KEY;
-              let bearerToken = anonKey;
-              try {
-                if (supaClient) {
-                  const { data: sess } = await supaClient.auth.getSession();
-                  if (sess?.session?.access_token) bearerToken = sess.session.access_token;
-                }
-              } catch (_) { /* use anon key if session unavailable */ }
-              const headers = {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Prefer': 'return=representation',
-                'apikey': anonKey,
-                'Authorization': `Bearer ${bearerToken}`
-              };
-              
-              const res = await fetchImpl(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify([timeLogData])
-              });
-              
-              if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Direct insert failed (${res.status}): ${text}`);
-              }
-              
-              const json = await res.json();
-              const timeLog = Array.isArray(json) ? json[0] : json;
-              
-              if (timeLog && timeLog.id) {
-                // Update global tracking state
-                global.isTracking = true;
-                global.currentTimeLogId = timeLog.id;
-                global.currentProjectId = finalProjectId;
-                global.trackingStartTime = new Date(timeLog.start_time);
-                
-                console.log('✅ [IPC-HANDLERS] Direct PostgREST timer start succeeded');
-                return { success: true, timeLogId: timeLog.id, message: 'Timer started via direct API' };
-              }
-            } catch (directErr) {
-              console.error('❌ [IPC-HANDLERS] Direct PostgREST fallback failed:', directErr);
-              return { success: false, error: `Timer start failed: ${directErr.message}` };
-            }
-          }
-        }
+        const result = await this.trackingManager.startTracking(finalProjectId);
         
         return result || { success: true };
       } catch (e) {
@@ -247,16 +166,13 @@ class IPCHandlers {
               let projectId = global.currentProjectId || null;
               if (!projectId) {
                 try {
-                  const supabase = global.supabaseService || global.supabaseClient;
                   const userId = global.currentUserId || global.config?.user_id;
-                  if (supabase && userId) {
-                    const { data, error } = await supabase
-                      .from('employee_project_assignments')
-                      .select('project_id')
-                      .eq('user_id', userId);
-                    if (!error && Array.isArray(data) && data.length > 0) {
-                      const randomIndex = Math.floor(Math.random() * data.length);
-                      projectId = data[randomIndex].project_id;
+                  if (userId) {
+                    const { listUserProjects } = require('./utils/backend-time-logs');
+                    const projects = await listUserProjects(userId, global.config);
+                    if (Array.isArray(projects) && projects.length > 0) {
+                      const randomIndex = Math.floor(Math.random() * projects.length);
+                      projectId = projects[randomIndex].project_id;
                       console.log('🎲 [IPC-HANDLERS] Auto-selected random project (login):', projectId);
                     }
                   }
@@ -287,16 +203,13 @@ class IPCHandlers {
               let projectId = global.currentProjectId || null;
               if (!projectId) {
                 try {
-                  const supabase = global.supabaseService || global.supabaseClient;
                   const userId = global.currentUserId || global.config?.user_id;
-                  if (supabase && userId) {
-                    const { data, error } = await supabase
-                      .from('employee_project_assignments')
-                      .select('project_id')
-                      .eq('user_id', userId);
-                    if (!error && Array.isArray(data) && data.length > 0) {
-                      const randomIndex = Math.floor(Math.random() * data.length);
-                      projectId = data[randomIndex].project_id;
+                  if (userId) {
+                    const { listUserProjects } = require('./utils/backend-time-logs');
+                    const projects = await listUserProjects(userId, global.config);
+                    if (Array.isArray(projects) && projects.length > 0) {
+                      const randomIndex = Math.floor(Math.random() * projects.length);
+                      projectId = projects[randomIndex].project_id;
                       console.log('🎲 [IPC-HANDLERS] Auto-selected random project (fallback login):', projectId);
                     }
                   }
@@ -413,120 +326,7 @@ class IPCHandlers {
         }
       }
 
-      const { normalizeTenantUserId } = require('./utils/tenant-user-id');
-      if (
-        (effectiveConfig?.auth_provider === 'cognito' || global.config?.auth_provider === 'cognito') &&
-        normalizeTenantUserId(effectiveUserId)
-      ) {
-        console.log('⚠️ [IPC-PROJECTS] Cognito/RDS mode — skipping legacy Supabase project query');
-        return this._getFallbackProjects();
-      }
-      
-      try {
-        // Prefer authenticated client; fallback to service role strictly for the SAME user
-        const supabase = (global.supabaseClient || global.supabase || global.supabaseService);
-        console.log('🔍 [IPC-DEBUG] Supabase client check:', {
-          hasSupabaseClient: !!global.supabaseClient,
-          hasSupabase: !!global.supabase,
-          hasSupabaseService: !!global.supabaseService,
-          selectedClient: supabase === global.supabaseClient ? 'client' : supabase === global.supabase ? 'supabase' : supabase === global.supabaseService ? 'service' : 'unknown'
-        });
-        if (!supabase) {
-          console.error('❌ [IPC] No Supabase client available, using fallback');
-          return this._getFallbackProjects();
-        }
-        
-        console.log('🔍 [IPC-DEBUG] About to query employee_project_assignments for user:', effectiveUserId);
-        console.log('🔍 [IPC-DEBUG] Using Supabase client type:', supabase === global.supabaseService ? 'service' : supabase === global.supabaseClient ? 'client' : 'other');
-        let { data, error } = await supabase
-          .from('employee_project_assignments')
-          .select(`
-            id,
-            project_id,
-            projects:project_id (
-              id,
-              name,
-              description
-            )
-          `)
-          .eq('user_id', effectiveUserId);
-        
-        console.log('🔍 [IPC-DEBUG] Initial query result:', {
-          hasData: !!data,
-          dataLength: data ? data.length : 0,
-          hasError: !!error,
-          errorMessage: error ? error.message : null,
-          errorCode: error ? error.code : null
-        });
-        
-        // If no data and service role exists, try once with service role for the same user
-        if ((!data || data.length === 0) && global.supabaseService && supabase !== global.supabaseService) {
-          console.log('🔄 [IPC] Retrying with service role client for visibility check...');
-          const retry = await global.supabaseService
-            .from('employee_project_assignments')
-            .select(`
-              id,
-              project_id,
-              projects:project_id (
-                id,
-                name,
-                description
-              )
-            `)
-            .eq('user_id', effectiveUserId);
-          data = retry.data; error = retry.error;
-        }
-        
-        console.log('🔍 [IPC-DEBUG] Final database query result:', {
-          hasData: !!data,
-          dataLength: data ? data.length : 0,
-          hasError: !!error,
-          errorMessage: error ? error.message : null
-        });
-        
-        if (error) {
-          console.error('❌ [IPC] Database error:', error);
-          return this._getFallbackProjects();
-        }
-        
-        if (!data || data.length === 0) {
-          console.log(`⚠️ [IPC-PROJECTS] No project assignments found for user: ${effectiveUserId}`);
-          console.log(`⚠️ [IPC-PROJECTS] This user may not be assigned to any projects in the admin panel.`);
-          console.log(`⚠️ [IPC-PROJECTS] Check employee_project_assignments table for this user.`);
-          return this._getFallbackProjects();
-        }
-        
-        const formattedProjects = data.map(assignment => ({
-          project_id: assignment.project_id,
-          name: assignment.projects?.name || 'Unknown Project',
-          description: assignment.projects?.description || '',
-          projects: {
-            id: assignment.projects?.id || assignment.project_id,
-            name: assignment.projects?.name || 'Unknown Project'
-          }
-        }));
-        
-        // Detailed logging for debugging missing projects
-        const projectNames = formattedProjects.map(p => p.name).join(', ');
-        console.log(`✅ [IPC-PROJECTS] Found ${formattedProjects.length} project assignments for user ${effectiveUserId}`);
-        console.log(`📋 [IPC-PROJECTS] Assigned projects: ${projectNames}`);
-        console.log('📋 [IPC-PROJECTS] Full project list:', formattedProjects.map(p => ({
-          id: p.project_id,
-          name: p.name
-        })));
-        
-        // Cache project list on tray manager for the project selection submenu
-        if (global.trayManager && global.trayManager.setProjectList) {
-          global.trayManager.setProjectList(formattedProjects);
-        }
-        
-        return formattedProjects;
-      } catch (error) {
-        console.error('❌ [IPC] Error getting project assignments:', error);
-        console.error('❌ [IPC] Error stack:', error.stack);
-        console.log('🔄 [IPC] Falling back to default projects due to error');
-        return this._getFallbackProjects();
-      }
+      return this._getFallbackProjects();
     });
     
     // Helper method for fallback projects
@@ -612,43 +412,6 @@ class IPCHandlers {
     console.log('⚙️ Registering configuration handlers...');
     
     // Skip get-config - already registered early in main.js to prevent conflicts
-    /*
-    this.ipcMain.handle('get-config', () => {
-      try {
-        const config = this.configManager.getConfig();
-        const trackingStatus = this.trackingManager.getTrackingStatus();
-        
-        return {
-          success: true,
-          supabase_url: config.supabase_url,
-          supabase_key: config.supabase_key,
-          user_id: config.user_id || config.userId,
-          userEmail: config.userEmail,
-          project_id: config.project_id || config.projectId,
-          screenshotInterval: config.screenshotInterval || 300000,
-          idleThreshold: config.idleThreshold || 60000,
-          isTracking: trackingStatus.isTracking,
-          isPaused: trackingStatus.isPaused,
-          platform: process.platform,
-          version: require('../../package.json').version || '1.0.0',
-          NODE_ENV: config.NODE_ENV || process.env.NODE_ENV || 'production',
-          settings: this.getAppSettings()
-        };
-      } catch (error) {
-        console.error('❌ [IPC] Error getting config:', error);
-        return { 
-          success: false, 
-          error: error.message,
-          supabase_url: '',
-          supabase_key: '',
-          platform: process.platform,
-          isTracking: false,
-          isPaused: false,
-          settings: {}
-        };
-      }
-    });
-    */
 
     this.ipcMain.handle('get-app-settings', () => {
       try {
@@ -811,30 +574,21 @@ class IPCHandlers {
 
     this.ipcMain.handle('test-database-connection', async () => {
       try {
-        const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
-        const { checkBackendHealth } = require('../utils/backend-health');
+        const { isBackendRdsEnabled } = require('./utils/backend-rds-reads');
+        const { checkBackendHealth } = require('./utils/backend-health');
 
-        if (isBackendRdsEnabled(this.configManager?.config || global.config)) {
-          const health = await checkBackendHealth(this.configManager?.config || global.config);
-          if (!health.ok) {
-            throw new Error(health.error || 'Backend health check failed');
-          }
-          return {
-            success: true,
-            message: 'RDS backend connection successful (time_doctor schema)',
-          };
+        const effectiveConfig = this.configManager?.config || global.config;
+        if (!isBackendRdsEnabled(effectiveConfig)) {
+          throw new Error('Missing BACKEND_API_URL / INTERNAL_API_KEY configuration');
         }
 
-        const supabase = this.configManager.getSupabaseClient();
-        const { error } = await supabase.from('time_logs').select('id').limit(1);
-
-        if (error) {
-          throw error;
+        const health = await checkBackendHealth(effectiveConfig);
+        if (!health.ok) {
+          throw new Error(health.error || 'Backend health check failed');
         }
-
         return {
           success: true,
-          message: 'Database connection successful',
+          message: 'RDS backend connection successful (time_doctor schema)',
         };
       } catch (error) {
         return {

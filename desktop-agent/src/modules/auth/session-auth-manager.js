@@ -15,7 +15,6 @@ class SessionAuthManager {
     this.ipcMain = dependencies.ipcMain;
     this.systemPreferences = dependencies.systemPreferences;
     this.shell = dependencies.shell;
-    this.supabase = dependencies.supabase;
     this.config = dependencies.config;
     this.saveDesktopAgentSession = dependencies.saveDesktopAgentSession;
     this.loadDesktopAgentSession = dependencies.loadDesktopAgentSession;
@@ -62,34 +61,9 @@ class SessionAuthManager {
         console.log('🚀 [ONBOARDING] Going directly to main app (no permission checks)');
       }, 500); // Reduced delay for faster transition
       
-      // Set the user's session in the main Supabase client for proper authentication
-      if (userData.session) {
-        try {
-          const { data, error } = await this.supabase.auth.setSession({
-            access_token: userData.session.access_token,
-            refresh_token: userData.session.refresh_token
-          });
-          
-          if (error) {
-            console.error('❌ Failed to set user session:', error);
-            console.error('Session set error details:', error);
-          } else {
-            console.log('✅ User session set in Supabase client');
-            console.log('✅ Authenticated user ID:', data?.user?.id);
-            
-            // Verify the session is actually set
-            const { data: currentUser } = await this.supabase.auth.getUser();
-            if (currentUser?.user) {
-              console.log('✅ Session verification successful:', currentUser.user.email);
-            } else {
-              console.warn('⚠️ Session verification failed - user not authenticated');
-            }
-          }
-        } catch (error) {
-          console.error('❌ Error setting user session:', error);
-        }
-      }
-      
+      // Cognito owns the session (renderer/modules/cognito-auth.js); the main process
+      // only persists it below. Nothing here re-authenticates the token.
+
       // Save user session if remember_me is true
       if (userData.session && userData.session.remember_me) {
         try {
@@ -199,36 +173,16 @@ class SessionAuthManager {
         const session = await this.loadDesktopAgentSession();
         
         if (session && session.access_token) {
-          // Verify the session is still valid
-          try {
-            const { data, error } = await this.supabase.auth.setSession({
-              access_token: session.access_token,
-              refresh_token: session.refresh_token
-            });
-            
-            if (error) {
-              console.error('❌ Saved session is invalid:', error);
-              return { success: false, error: 'Session expired' };
-            }
-            
-            console.log('✅ Saved session restored successfully');
-            
-            // Set user ID for tracking
-            this.config.user_id = session.id;
-            global.currentUserId = session.id; // NEW: keep globals in sync on startup
-            console.log('✅ User ID restored from session:', session.id);
-            
-            return { 
-              success: true, 
-              session: {
-                user: data.user,
-                session: data.session
-              }
-            };
-          } catch (error) {
-            console.error('❌ Error validating saved session:', error);
-            return { success: false, error: 'Session validation failed' };
-          }
+          // Token validity is Cognito's to decide: the renderer hydrates and refreshes
+          // this session against the user pool on auto-login. The main process only
+          // restores the stored identity so tracking has a user_id.
+          console.log('✅ Saved session restored successfully');
+
+          this.config.user_id = session.id;
+          global.currentUserId = session.id; // NEW: keep globals in sync on startup
+          console.log('✅ User ID restored from session:', session.id);
+
+          return { success: true, session };
         } else {
           console.log('ℹ️ No saved session found');
           return { success: false, error: 'No saved session' };
@@ -248,9 +202,9 @@ class SessionAuthManager {
       try {
         console.log('👤 User logged out - cleaning up session');
         
-        // Clear the Supabase session
-        await this.supabase.auth.signOut();
-        
+        // Cognito sign-out happens in the renderer (ilAuth.signOutCognito); here we
+        // only drop the locally cached identity.
+
         // Clear user ID from config
         this.config.user_id = null;
         

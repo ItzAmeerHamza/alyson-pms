@@ -3,11 +3,11 @@
  * Replaces global.* assignments with a structured registry.
  *
  * Usage:
- *   container.register('supabaseService', supabaseInstance);
- *   const supa = container.get('supabaseService');
+ *   container.register('syncManager', syncManagerInstance);
+ *   const sync = container.get('syncManager');
  *
  * During migration, managers can check container first, then fall back to global:
- *   const supa = container.get('supabaseService') || global.supabaseService;
+ *   const sync = container.get('syncManager') || global.syncManager;
  */
 class ServiceContainer {
   constructor() {

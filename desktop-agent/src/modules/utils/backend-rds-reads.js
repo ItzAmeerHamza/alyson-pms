@@ -1,6 +1,5 @@
 /**
  * Read time_doctor.* data via NestJS /sync/desktop-action (INTERNAL_API_KEY).
- * Avoids legacy Supabase public.* table queries (users, time_logs, etc.).
  */
 
 const { normalizeTenantUserId } = require('./tenant-user-id');
@@ -66,10 +65,26 @@ async function listUrlLogs(userId, { start, end, limit } = {}, config = global.c
   return result.url_logs || [];
 }
 
+async function listIdleLogs(userId, { start, end, timeLogId, limit } = {}, config = global.config) {
+  const result = await callDesktopAction(
+    'list_idle_logs',
+    {
+      user_id: requireTenantUserId(userId),
+      start,
+      end,
+      time_log_id: timeLogId,
+      limit,
+    },
+    config,
+  );
+  return result.idle_logs || [];
+}
+
 module.exports = {
   isBackendRdsEnabled,
   resolveSyncUrl,
   getTimeLogsInRange,
   listAppLogs,
   listUrlLogs,
+  listIdleLogs,
 };

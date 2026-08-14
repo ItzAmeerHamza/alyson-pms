@@ -31,6 +31,31 @@ function parseUserIdParam(raw: unknown): number {
 @SkipThrottle({ default: true, strict: true })
 export class ForceSyncController {
   private readonly logger = new Logger(ForceSyncController.name);
+
+  /**
+   * Last moment a session can be proven to have been alive, for `time_logs t`.
+   *
+   * last_alive_at is the dead-man's switch and is normally the answer, but
+   * agents on older builds never stamp it. Closing those at COALESCE(.., start)
+   * would collapse real work to a zero-length session, so this falls back to the
+   * same evidence migration 022 backfilled from. Bounded by NOW() so a bad
+   * ended_at in a log row cannot push a session into the future.
+   */
+  private static readonly LAST_PROOF_OF_LIFE_SQL = `LEAST(
+    NOW(),
+    GREATEST(
+      t.start_time,
+      COALESCE(t.last_alive_at, t.start_time),
+      COALESCE((SELECT MAX(h.seen_at) FROM time_doctor.session_heartbeats h
+                 WHERE h.time_log_id = t.id), t.start_time),
+      COALESCE((SELECT MAX(s.captured_at) FROM time_doctor.screenshots s
+                 WHERE s.time_log_id = t.id), t.start_time),
+      COALESCE((SELECT MAX(COALESCE(a.ended_at, a.started_at, a.timestamp))
+                 FROM time_doctor.app_logs a WHERE a.time_log_id = t.id), t.start_time),
+      COALESCE((SELECT MAX(COALESCE(u.ended_at, u.started_at))
+                 FROM time_doctor.url_logs u WHERE u.time_log_id = t.id), t.start_time)
+    )
+  )`;
   constructor(
     private readonly db: DatabaseService,
     private readonly s3: S3Service,
@@ -188,8 +213,11 @@ export class ForceSyncController {
   }
 
   /**
-   * Inspect liveness for an open session (telemetry + optional local checkpoint).
-   * Heartbeat is NEVER used alone as an automatic hard stop for end_time.
+   * Where an open session ends, and how long ago it went quiet.
+   *
+   * last_alive_at is the answer — the agent stamps it every 10s while alive, so
+   * there is nothing to infer. Heartbeats are read only as a fallback for agents
+   * older than that change; the 022 backfill already seeded last_alive_at for them.
    */
   private async inspectSessionLiveness(
     timeLogId: string,
@@ -197,31 +225,18 @@ export class ForceSyncController {
     clientLastSeenAt?: string | null,
   ): Promise<{
     last_heartbeat_at: string | null;
-    last_evidence_at: string | null;
-    evidence_source: string | null;
     client_checkpoint_at: string | null;
-    suggested_end_at: string | null;
-    suggested_end_source: string | null;
+    suggested_end_at: string;
     age_seconds: number | null;
   }> {
     const result = await this.db.query<{
+      last_alive_at: Date | string | null;
       heartbeat_at: Date | string | null;
-      shot_at: Date | string | null;
-      app_at: Date | string | null;
-      url_at: Date | string | null;
-      idle_at: Date | string | null;
     }>(
-      `SELECT
-         (SELECT MAX(h.seen_at) FROM time_doctor.session_heartbeats h
-           WHERE h.time_log_id = $1) AS heartbeat_at,
-         (SELECT MAX(s.captured_at) FROM time_doctor.screenshots s
-           WHERE s.time_log_id = $1) AS shot_at,
-         (SELECT MAX(COALESCE(a.ended_at, a.started_at, a.timestamp))
-           FROM time_doctor.app_logs a WHERE a.time_log_id = $1) AS app_at,
-         (SELECT MAX(COALESCE(u.ended_at, u.started_at))
-           FROM time_doctor.url_logs u WHERE u.time_log_id = $1) AS url_at,
-         (SELECT MAX(COALESCE(i.idle_end, i.idle_start))
-           FROM time_doctor.idle_logs i WHERE i.time_log_id = $1) AS idle_at`,
+      `SELECT t.last_alive_at,
+              (SELECT MAX(h.seen_at) FROM time_doctor.session_heartbeats h
+                WHERE h.time_log_id = t.id) AS heartbeat_at
+       FROM time_doctor.time_logs t WHERE t.id = $1`,
       [timeLogId],
     );
     const row = result.rows[0] || {};
@@ -230,48 +245,21 @@ export class ForceSyncController {
       const ms = new Date(raw as string | Date).getTime();
       return Number.isFinite(ms) ? ms : null;
     };
+    const startMs = toMs(startTimeIso) ?? Date.now();
     const heartbeatMs = toMs(row.heartbeat_at);
-    const evidence: Array<{ at: number; source: string }> = [];
-    const push = (raw: unknown, source: string) => {
-      const ms = toMs(raw);
-      if (ms != null) evidence.push({ at: ms, source });
-    };
-    push(row.shot_at, 'screenshot');
-    push(row.app_at, 'app_log');
-    push(row.url_at, 'url_log');
-    push(row.idle_at, 'idle_log');
-    evidence.sort((a, b) => b.at - a.at);
-    const bestEvidence = evidence[0] || null;
     const clientMs = toMs(clientLastSeenAt);
-
-    // Suggested end for confirmation UI / confirmed close:
-    // ONLY local durable checkpoint (or later admin-chosen time). Not heartbeat.
-    let suggestedEndAt: string | null = null;
-    let suggestedEndSource: string | null = null;
-    if (clientMs != null) {
-      const startMs = new Date(startTimeIso).getTime();
-      const minMs = Number.isFinite(startMs) ? startMs + 30_000 : clientMs;
-      const clamped = Math.min(Date.now(), Math.max(minMs, clientMs));
-      suggestedEndAt = new Date(clamped).toISOString();
-      suggestedEndSource = 'client_checkpoint';
-    }
-
-    const freshnessAnchor = Math.max(
+    const aliveMs = Math.max(
+      toMs(row.last_alive_at) ?? 0,
       heartbeatMs ?? 0,
-      bestEvidence?.at ?? 0,
       clientMs ?? 0,
-      new Date(startTimeIso).getTime() || 0,
+      startMs,
     );
-    const ageSeconds =
-      freshnessAnchor > 0 ? Math.max(0, Math.round((Date.now() - freshnessAnchor) / 1000)) : null;
+    const ageSeconds = Math.max(0, Math.round((Date.now() - aliveMs) / 1000));
 
     return {
       last_heartbeat_at: heartbeatMs != null ? new Date(heartbeatMs).toISOString() : null,
-      last_evidence_at: bestEvidence ? new Date(bestEvidence.at).toISOString() : null,
-      evidence_source: bestEvidence?.source ?? null,
       client_checkpoint_at: clientMs != null ? new Date(clientMs).toISOString() : null,
-      suggested_end_at: suggestedEndAt,
-      suggested_end_source: suggestedEndSource,
+      suggested_end_at: new Date(Math.max(aliveMs, startMs + 30_000)).toISOString(),
       age_seconds: ageSeconds,
     };
   }
@@ -300,9 +288,52 @@ export class ForceSyncController {
   }
 
   /**
-   * Inspect open sessions. Recover if fresh. Flag if stale.
-   * Does NOT mutate time_logs.end_time from heartbeat.
-   * Confirmed close (local checkpoint / admin) is a separate action.
+   * Close one open session at a durable suggested end (heartbeat / checkpoint /
+   * evidence). Never uses wall-clock NOW.
+   */
+  private async closeOpenSessionAtSuggestedEnd(
+    timeLogId: string,
+    userId: number,
+    endTimeIso: string,
+    reason: string,
+    meta: Record<string, unknown> = {},
+  ): Promise<boolean> {
+    const updated = await this.db.query<{ id: string }>(
+      `UPDATE time_doctor.time_logs t
+       SET end_time = GREATEST(
+             COALESCE(t.end_time, t.start_time),
+             COALESCE(t.last_alive_at, t.start_time),
+             LEAST($2::timestamptz, NOW())
+           ),
+           status = 'auto_closed',
+           updated_at = NOW()
+       WHERE t.id = $1
+         AND t.user_id = $3
+         AND t.end_time IS NULL
+       RETURNING t.id`,
+      [timeLogId, endTimeIso, userId],
+    );
+    if (!updated.rows[0]) return false;
+    try {
+      await this.db.query(
+        `INSERT INTO time_doctor.time_log_events
+          (user_id, time_log_id, workspace_id, action, source, device_id, meta,
+           new_end_time, new_status, shortened)
+         SELECT t.user_id, t.id, t.workspace_id, $2, 'closed_at_last_alive',
+                t.device_id, $3::jsonb, t.end_time, t.status, TRUE
+         FROM time_doctor.time_logs t WHERE t.id = $1`,
+        [timeLogId, reason, JSON.stringify({ confirmed_end: endTimeIso, ...meta })],
+      );
+    } catch (_) {
+      /* audit is best-effort */
+    }
+    return true;
+  }
+
+  /**
+   * Inspect open sessions. Recover if fresh.
+   * Stale (no heartbeat/evidence/checkpoint within freshness) is closed at
+   * last heartbeat — not flagged-only, and never at wall-clock NOW.
    */
   private async inspectOpenSessionsInternal(opts: {
     userId: number;
@@ -317,8 +348,8 @@ export class ForceSyncController {
     flagged: Array<Record<string, unknown>>;
     flagged_count: number;
     open: Array<Record<string, unknown>>;
-    closed: [];
-    closed_count: 0;
+    closed: Array<Record<string, unknown>>;
+    closed_count: number;
   }> {
     const params: unknown[] = [opts.userId];
     let deviceClause = '';
@@ -351,6 +382,7 @@ export class ForceSyncController {
     const freshnessMs = opts.freshnessMinutes * 60_000;
     const flagged: Array<Record<string, unknown>> = [];
     const open: Array<Record<string, unknown>> = [];
+    const closed: Array<Record<string, unknown>> = [];
     let recovered: Record<string, unknown> | null = null;
 
     for (const row of openRows.rows) {
@@ -382,22 +414,31 @@ export class ForceSyncController {
       }
 
       if (!isFresh) {
-        if (opts.flagStale) {
+        const didClose = await this.closeOpenSessionAtSuggestedEnd(
+          row.id,
+          opts.userId,
+          live.suggested_end_at,
+          'closed_at_last_alive',
+          {
+            age_seconds: live.age_seconds,
+            last_heartbeat_at: live.last_heartbeat_at,
+            client_checkpoint_at: live.client_checkpoint_at,
+          },
+        );
+        if (didClose) {
+          closed.push({ ...base, end_time: live.suggested_end_at, status: 'auto_closed' });
+          this.logger.log(
+            `inspect_open_sessions: auto-closed stale ${row.id} at ${live.suggested_end_at} (last_alive) ageSec=${live.age_seconds}`,
+          );
+        } else if (opts.flagStale) {
           await this.flagStaleSession(row.id, {
             age_seconds: live.age_seconds,
             last_heartbeat_at: live.last_heartbeat_at,
-            last_evidence_at: live.last_evidence_at,
-            evidence_source: live.evidence_source,
-            client_checkpoint_at: live.client_checkpoint_at,
             suggested_end_at: live.suggested_end_at,
-            suggested_end_source: live.suggested_end_source,
-            note: 'Flagged only — time_logs not modified. Close requires confirmation.',
+            note: 'Stale close did not mutate — session may already be closed',
           });
+          flagged.push(base);
         }
-        flagged.push(base);
-        this.logger.log(
-          `inspect_open_sessions: flagged stale ${row.id} ageSec=${live.age_seconds} (no auto-close)`,
-        );
       }
     }
 
@@ -407,8 +448,8 @@ export class ForceSyncController {
       flagged,
       flagged_count: flagged.length,
       open,
-      closed: [],
-      closed_count: 0,
+      closed,
+      closed_count: closed.length,
     };
   }
 
@@ -798,8 +839,8 @@ export class ForceSyncController {
         // start_time only moves earlier; end_time only moves later (or stays).
         await this.db.query(
           `INSERT INTO time_doctor.time_logs
-            (id, user_id, project_id, start_time, end_time, status, idle_seconds, deducted_seconds, workspace_id, device_id, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+            (id, user_id, project_id, start_time, end_time, status, idle_seconds, deducted_seconds, workspace_id, device_id, agent_version, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
            ON CONFLICT (id) DO UPDATE SET
              project_id = COALESCE(EXCLUDED.project_id, time_doctor.time_logs.project_id),
              start_time = LEAST(time_doctor.time_logs.start_time, EXCLUDED.start_time),
@@ -823,6 +864,7 @@ export class ForceSyncController {
              ),
              workspace_id = COALESCE(EXCLUDED.workspace_id, time_doctor.time_logs.workspace_id),
              device_id = COALESCE(EXCLUDED.device_id, time_doctor.time_logs.device_id),
+             agent_version = COALESCE(EXCLUDED.agent_version, time_doctor.time_logs.agent_version),
              updated_at = NOW()`,
           [
             payload.id,
@@ -835,6 +877,7 @@ export class ForceSyncController {
             payload.deducted_seconds ?? 0,
             workspaceId,
             payload.device_id || null,
+            payload.agent_version ? String(payload.agent_version).slice(0, 64) : null,
           ],
         );
         return { success: true, id: payload.id };
@@ -845,20 +888,41 @@ export class ForceSyncController {
         if (!id) throw new HttpException('Missing time log id', HttpStatus.BAD_REQUEST);
         const clientEnd = updates.end_time || null;
         const authorizedIdleCut = updates.authorized_idle_cut === true;
-        // - authorized_idle_cut: allow exactly the alert timeout cut (now − 10m) while completing
-        // - otherwise: end_time only moves FORWARD, including when already completed
-        //   (offline/pending recovery must be able to extend a premature short close)
+        // The agent computes this end while it is alive, so it is taken at face
+        // value, bounded by the row's own start and last proof-of-life.
+        // The floor is last_alive_at rather than a fixed interval: a client end
+        // that precedes the start is garbage, and padding it to a constant
+        // fabricates work. last_alive_at is the last moment we know the session
+        // existed, so it is the only defensible answer.
+        const proposedEnd = `GREATEST(t.start_time, COALESCE(t.last_alive_at, t.start_time), LEAST($2::timestamptz, NOW()))`;
+        // Re-opening an already-completed row is retroactive: the agent is no
+        // longer living that session, so its clock is not evidence about it.
+        // Offline/pending recovery still needs to extend a premature short
+        // close, but only as far as the session can be PROVEN to have been
+        // alive. Capped only by NOW(), a write carrying the current time
+        // extended sessions that had been cleanly closed hours earlier — one by
+        // 4.69h, having genuinely run 91 seconds.
+        //
+        // GREATEST keeps this from shortening: proof-of-life below the stored
+        // end leaves the row untouched (shortening has its own path). Postgres
+        // evaluates SET expressions against the pre-update row, so the
+        // last_alive_at written below cannot widen this cap for its own write.
+        const provenExtension = `GREATEST(t.end_time, LEAST(${proposedEnd}, ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL}))`;
+        // authorized_idle_cut: the alert timeout cut (now − 10m) while completing.
         const endTimeSql = authorizedIdleCut
           ? `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
-                 ELSE GREATEST(t.start_time + interval '30 seconds', $2::timestamptz)
+                 ELSE ${proposedEnd}
                END`
           : `CASE
                  WHEN $2::timestamptz IS NULL THEN t.end_time
-                 WHEN t.end_time IS NULL THEN GREATEST(t.start_time + interval '30 seconds', $2::timestamptz)
-                 ELSE GREATEST(t.end_time, t.start_time + interval '30 seconds', $2::timestamptz)
+                 -- Live stop: the agent is running this session right now, so
+                 -- the request itself is the proof. Capping at the last 10s
+                 -- checkpoint here would shave time off every honest stop.
+                 WHEN t.end_time IS NULL THEN ${proposedEnd}
+                 ELSE ${provenExtension}
                END`;
-        const result = await this.db.query(
+        const result = await this.db.query<{ id: string; end_time: Date | string | null }>(
           `UPDATE time_doctor.time_logs t
            SET end_time = ${endTimeSql},
                status = CASE
@@ -867,16 +931,38 @@ export class ForceSyncController {
                END,
                idle_seconds = GREATEST(COALESCE(t.idle_seconds, 0), COALESCE($4, 0)),
                deducted_seconds = GREATEST(COALESCE(t.deducted_seconds, 0), COALESCE($5, 0)),
+               -- Dead-man's switch: monotonic, never in the future, and frozen
+               -- once the session is over. A completed session is not alive, so
+               -- a late checkpoint from an agent still holding a stale id must
+               -- not advance it — proposedEnd reads last_alive_at, so letting it
+               -- creep forward on a finished row drags end_time along with it.
+               -- t.end_time here is the pre-update value, so a live stop that
+               -- completes the row in this same statement still records its own.
+               last_alive_at = CASE
+                 WHEN t.end_time IS NOT NULL THEN t.last_alive_at
+                 ELSE GREATEST(
+                   COALESCE(t.last_alive_at, t.start_time),
+                   LEAST(COALESCE($6::timestamptz, t.last_alive_at, t.start_time), NOW())
+                 )
+               END,
                updated_at = NOW()
-           WHERE t.id = $1`,
-          [id, clientEnd, updates.status || null, updates.idle_seconds ?? null, updates.deducted_seconds ?? null],
+           WHERE t.id = $1
+           RETURNING t.id, t.end_time`,
+          [
+            id,
+            clientEnd,
+            updates.status || null,
+            updates.idle_seconds ?? null,
+            updates.deducted_seconds ?? null,
+            updates.last_alive_at || data?.last_alive_at || null,
+          ],
         );
         const rowCount = Number(result?.rowCount || 0);
         if (rowCount === 0) {
           // Caller must fall back to create — pretending success drops offline hours.
           return { success: false, id, updated: 0, reason: 'no_row' };
         }
-        return { success: true, id, updated: rowCount };
+        return { success: true, id, updated: rowCount, end_time: result.rows[0]?.end_time ?? null };
       }
       case 'create_time_log': {
         const log = data?.log;
@@ -942,7 +1028,59 @@ export class ForceSyncController {
         const deviceId = data?.device_id || null;
         const explicitEnd = data?.end_time || null;
 
-        // Without an explicit end_time: inspect/flag only — never mutate from heartbeat.
+        // KILL ALL: stop / lid-close / quit. Every open row is closed at ITS OWN
+        // last proof-of-life, so one caller's stop time is never stamped onto a
+        // session that died hours earlier. Needs no confirmation because it can
+        // only ever shorten — there is no caller-supplied end to inflate with.
+        if (data?.close_at_own_liveness === true) {
+          const p: unknown[] = [uid];
+          let devClause = '';
+          if (deviceId) {
+            p.push(deviceId);
+            devClause = ` AND t.device_id = $${p.length}`;
+          }
+          const killed = await this.db.query<{ id: string; end_time: Date | string }>(
+            `UPDATE time_doctor.time_logs t
+             SET end_time = ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL},
+                 status = 'completed',
+                 updated_at = NOW()
+             WHERE t.user_id = $1
+               AND t.end_time IS NULL
+               ${devClause}
+             RETURNING t.id AS id, t.end_time`,
+            p,
+          );
+          for (const r of killed.rows) {
+            try {
+              await this.db.query(
+                `INSERT INTO time_doctor.time_log_events
+                  (user_id, time_log_id, workspace_id, action, source, device_id, meta,
+                   new_end_time, new_status, shortened)
+                 SELECT t.user_id, t.id, t.workspace_id, 'closed_at_own_liveness', $2,
+                        t.device_id, $3::jsonb, t.end_time, t.status, TRUE
+                 FROM time_doctor.time_logs t WHERE t.id = $1`,
+                [
+                  r.id,
+                  data?.reason ? String(data.reason).slice(0, 64) : 'kill_all',
+                  JSON.stringify({ closed_at: 'last_alive_at' }),
+                ],
+              );
+            } catch (_) {
+              /* audit is best-effort */
+            }
+          }
+          this.logger.log(
+            `close_at_own_liveness: killed ${killed.rowCount} session(s) for user ${uid}${deviceId ? ` device ${deviceId}` : ' (ALL DEVICES)'}`,
+          );
+          return {
+            success: true,
+            closed: killed.rowCount ?? killed.rows.length,
+            closed_ids: killed.rows.map((r) => r.id),
+            reason: 'closed_at_own_liveness',
+          };
+        }
+
+        // Without an explicit end_time: inspect. Stale rows close at last heartbeat.
         if (!explicitEnd) {
           return this.inspectOpenSessionsInternal({
             userId: uid,
@@ -986,11 +1124,13 @@ export class ForceSyncController {
         }
         params.push(explicitEnd);
         params.push(status);
-        const closeResult = await this.db.query<{ id: string }>(
+        // Per row, take whichever is later: the caller's end, or that row's own
+        // last_alive_at. One session's stop time can therefore never shorten a
+        // different session that was alive later.
+        const closeResult = await this.db.query<{ id: string; end_time: Date | string }>(
           `UPDATE time_doctor.time_logs t
            SET end_time = GREATEST(
-                 COALESCE(t.end_time, t.start_time),
-                 t.start_time + interval '30 seconds',
+                 ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL},
                  LEAST($${params.length - 1}::timestamptz, NOW())
                ),
                status = $${params.length},
@@ -998,7 +1138,7 @@ export class ForceSyncController {
            WHERE t.user_id = $1
              AND t.end_time IS NULL
              ${deviceClause}
-           RETURNING t.id AS id`,
+           RETURNING t.id AS id, t.end_time`,
           params,
         );
         for (const row of closeResult.rows) {
@@ -1034,7 +1174,7 @@ export class ForceSyncController {
       }
       case 'inspect_open_sessions':
       case 'reconcile_open_sessions': {
-        // Alias kept for older desktop builds. Flag-only — never auto-closes from heartbeat.
+        // Alias kept for older desktop builds. Stale rows close at last heartbeat.
         const userId = data?.user_id;
         if (!userId) {
           throw new HttpException('Missing user_id', HttpStatus.BAD_REQUEST);
@@ -1078,7 +1218,7 @@ export class ForceSyncController {
           `UPDATE time_doctor.time_logs t
            SET end_time = GREATEST(
                  COALESCE(t.end_time, t.start_time),
-                 t.start_time + interval '30 seconds',
+                 COALESCE(t.last_alive_at, t.start_time),
                  LEAST($2::timestamptz, NOW())
                ),
                status = $3,
@@ -1332,6 +1472,43 @@ export class ForceSyncController {
           params,
         );
         return { success: true, app_logs: result.rows };
+      }
+      case 'list_idle_logs': {
+        // The agent could write idle_logs but never read them back, so its own
+        // session summary had no source for idle/active seconds once the legacy
+        // path was removed. Read-side counterpart to insert_idle_log.
+        const userId = data?.user_id;
+        if (!userId) {
+          throw new HttpException('Missing user_id', HttpStatus.BAD_REQUEST);
+        }
+        const uid = parseUserIdParam(userId);
+        const filters: string[] = ['user_id = $1'];
+        const params: unknown[] = [uid];
+        if (data?.start) {
+          params.push(data.start);
+          filters.push(`COALESCE(idle_end, idle_start) >= $${params.length}`);
+        }
+        if (data?.end) {
+          params.push(data.end);
+          filters.push(`idle_start <= $${params.length}`);
+        }
+        if (data?.time_log_id) {
+          const tlId = await this.resolveTimeLogId(data.time_log_id);
+          if (tlId) {
+            params.push(tlId);
+            filters.push(`time_log_id = $${params.length}`);
+          }
+        }
+        const idleLimit = Math.min(Math.max(Number(data?.limit) || 500, 1), 5000);
+        const idleResult = await this.db.query(
+          `SELECT id, time_log_id, idle_start, idle_end, duration_seconds
+           FROM time_doctor.idle_logs
+           WHERE ${filters.join(' AND ')}
+           ORDER BY idle_start DESC
+           LIMIT ${idleLimit}`,
+          params,
+        );
+        return { success: true, idle_logs: idleResult.rows };
       }
       case 'list_url_logs': {
         const userId = data?.user_id;

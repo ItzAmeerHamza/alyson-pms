@@ -1,5 +1,5 @@
 /**
- * Palisade tenant.user ids are integers (not Supabase UUIDs).
+ * Palisade tenant.user ids are integers, not UUIDs.
  */
 
 function isTenantUserId(value) {

@@ -10,6 +10,13 @@ jest.mock('../../core/cleanup-registry', () => ({
   registerInterval: jest.fn()
 }));
 
+jest.mock('../../utils/backend-time-logs', () => ({
+  isBackendTimeLogsEnabled: jest.fn().mockReturnValue(true),
+  insertIdleLog: jest.fn().mockResolvedValue({})
+}));
+
+const backendTimeLogs = require('../../utils/backend-time-logs');
+
 describe('EnhancedIdleMonitor', () => {
   let monitor;
   let mockConfig;
@@ -30,7 +37,9 @@ describe('EnhancedIdleMonitor', () => {
     global.appSettings = null;
     global.stopTracking = jest.fn();
     global.enhancedActivityManager = null;
-    global.supabaseService = { from: jest.fn().mockReturnValue({ insert: jest.fn().mockResolvedValue({}) }) };
+
+    backendTimeLogs.isBackendTimeLogsEnabled.mockReturnValue(true);
+    backendTimeLogs.insertIdleLog.mockResolvedValue({});
 
     jest.useFakeTimers();
   });
@@ -317,6 +326,21 @@ describe('EnhancedIdleMonitor', () => {
       expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
       expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(45000);
       expect(monitor._lastIdleCheckpointTime).toBe(idleStart + 45000);
+    });
+
+    test('logIdlePeriod persists idle time through the RDS backend action', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+
+      const end = Date.now();
+      const start = end - 45000;
+      await monitor.logIdlePeriod(start, end, 45000);
+
+      expect(backendTimeLogs.insertIdleLog).toHaveBeenCalledTimes(1);
+      const [payload] = backendTimeLogs.insertIdleLog.mock.calls[0];
+      expect(payload.user_id).toBe('1195');
+      expect(payload.duration_seconds).toBe(45);
+      expect(payload.idle_start).toBe(new Date(start).toISOString());
+      expect(payload.idle_end).toBe(new Date(end).toISOString());
     });
 
     test('flushIdleCheckpoint skips duplicate slices on resume', async () => {

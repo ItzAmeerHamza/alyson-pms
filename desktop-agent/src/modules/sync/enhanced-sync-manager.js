@@ -13,9 +13,8 @@ const {
 } = require('../utils/backend-time-logs');
 
 class EnhancedSyncManager {
-  constructor(config, supabaseService) {
+  constructor(config) {
     this.config = config;
-    this.supabaseService = supabaseService;
     this.activitySyncInterval = null;
     this.consolidatedIPCInterval = null;
     this.urlSyncInterval = null;
@@ -430,145 +429,17 @@ class EnhancedSyncManager {
       throw new Error(`Database in backoff, retry in ${remainingMs}ms`);
     }
 
-    if (isBackendTimeLogsEnabled(this.config)) {
-      // Backend forceUrlInsert closes *other* open URLs and skips insert when the
-      // same site_url is already open — do NOT close-all here (that caused
-      // close+reinsert spam for the same link every flush).
-      await insertUrlLogsBatch(batch, this.config);
-      this.clearDbBackoff();
-      console.log(`✅ [URL-SYNC] Synced ${batch.length} URL session(s) via backend RDS`);
-      return;
+    // RDS is the only backend — throwing lets the caller re-queue the batch.
+    if (!isBackendTimeLogsEnabled(this.config)) {
+      throw new Error('Backend not configured for URL log sync');
     }
-    
-    let perfPost = null;
-    try { if (global.performanceMonitor) { perfPost = global.performanceMonitor.trackSyncPost(); } } catch {}
-    try {
-      if (!this.supabaseService) {
-        console.error('❌ [URL-SYNC] Supabase service not available');
-        return;
-      }
-      
-      // Sanitize each row defensively to avoid schema errors - FIXED for app_url_activity
-      const sanitizeUrlLog = (row) => {
-        // Normalize array payloads like [urlLog]
-        const base = Array.isArray(row) ? row[0] : row;
-        const { attempts, queuedAt, ...rest } = base || {};
-        // Whitelist only known columns for app_url_activity table
-        const allowed = {
-          organization_id: null, // Will be set by database trigger
-          user_id: rest?.user_id || rest?.userId,
-          device_id: null, // Will be set by database trigger
-          time_log_id: rest?.time_log_id ?? rest?.timeLogId ?? null,
-          site_url: (rest?.site_url || rest?.url) || null,
-          domain: rest?.domain || null,
-          title: rest?.title || null,
-          browser: rest?.browser || null,
-          confidence: 'high',
-          privacy_flags: rest?.privacy_flags || null,
-          started_at: rest?.timestamp || new Date().toISOString(),
-          ended_at: null // Will be closed by next URL or cleanup
-        };
-        // Remove undefined values so PostgREST doesn't see unknowns
-        Object.keys(allowed).forEach(k => allowed[k] === undefined && delete allowed[k]);
-        return allowed;
-      };
 
-      const payload = batch.map(sanitizeUrlLog);
-
-      // Close other open URL slices (different site_url only). Same continuous URL
-      // stays open — never close+reinsert the active visit.
-      const toInsert = [];
-      try {
-        for (const row of payload) {
-          if (!row.user_id || !row.site_url) continue;
-          const { data: openSame } = await this.supabaseService
-            .from('app_url_activity')
-            .select('id')
-            .eq('user_id', row.user_id)
-            .eq('site_url', row.site_url)
-            .is('ended_at', null)
-            .limit(1);
-          if (openSame && openSame.length > 0) {
-            // Already recording this link — refresh title only.
-            await this.supabaseService
-              .from('app_url_activity')
-              .update({
-                title: row.title || undefined,
-                domain: row.domain || undefined,
-                browser: row.browser || undefined,
-              })
-              .eq('id', openSame[0].id);
-            continue;
-          }
-          await this.supabaseService
-            .from('app_url_activity')
-            .update({ ended_at: row.started_at })
-            .eq('user_id', row.user_id)
-            .is('ended_at', null)
-            .neq('site_url', row.site_url)
-            .lt('started_at', row.started_at);
-          toInsert.push(row);
-        }
-      } catch (closeErr) {
-        console.warn('⚠️ [URL-SYNC] Failed to dedupe/close previous URL slices (non-fatal):', closeErr?.message);
-        toInsert.push(...payload);
-      }
-
-      if (toInsert.length === 0) {
-        this.clearDbBackoff();
-        console.log('✅ [URL-SYNC] No new URL rows (same visits already open)');
-        return;
-      }
-
-      // Add statement timeout wrapper - FIXED: Insert into app_url_activity TABLE
-      const insertPromise = this.supabaseService
-        .from('app_url_activity')
-        .insert(toInsert, { returning: 'minimal' });
-        
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Statement timeout')), this.batchConfig.statementTimeoutMs);
-      });
-      
-      const { error } = await Promise.race([insertPromise, timeoutPromise]);
-        
-      if (error) {
-        const message = (error && (error.message || error.error_description)) ? (error.message || error.error_description) : String(error);
-        const status = (typeof error.status === 'number') ? error.status : undefined;
-        const msgLower = (message || '').toLowerCase();
-        const isTimeout = msgLower.includes('timeout') || msgLower.includes('statement timeout');
-        const isTransient = (status && status >= 500) || msgLower.includes('fetch failed') || msgLower.includes('timeout') || msgLower.includes('network');
-        
-        if (isTimeout || isTransient) {
-          this.activateDbBackoff(isTimeout);
-          
-          // Drop diagnostic verbosity during backoff
-          if (!this.dbBackoff.verbosityDropped) {
-            console.warn('⚠️ [URL-SYNC] Database issues detected, dropping diagnostic verbosity during backoff');
-            this.dbBackoff.verbosityDropped = true;
-          }
-          
-          if (this.dbBackoff.retryCount === 0) {
-            console.warn('⚠️ [URL-SYNC] Database error, activating exponential backoff:', { status, message });
-          }
-        } else {
-          console.error('❌ [URL-SYNC] Persistent database error:', { status, message });
-        }
-        throw error;
-      }
-      
-      // Success - clear backoff
-      this.clearDbBackoff();
-      
-      if (!this.dbBackoff.verbosityDropped) {
-        console.log(`✅ [URL-SYNC] Inserted ${batch.length} URL logs`);
-      }
-      
-    } catch (error) {
-      // Let caller decide how to log/requeue. Avoid double logging here.
-      throw error;
-    } finally {
-      try { if (global.performanceMonitor && perfPost) { global.performanceMonitor.endTimer(perfPost); } } catch {}
-    }
+    // Backend forceUrlInsert closes *other* open URLs and skips insert when the
+    // same site_url is already open — do NOT close-all here (that caused
+    // close+reinsert spam for the same link every flush).
+    await insertUrlLogsBatch(batch, this.config);
+    this.clearDbBackoff();
+    console.log(`✅ [URL-SYNC] Synced ${batch.length} URL session(s) via backend RDS`);
   }
   
   // Activate exponential backoff for database issues
@@ -850,12 +721,11 @@ class EnhancedSyncManager {
     for (const item of pending) {
       const { attempts, queuedAt, duration_minutes, ...log } = item;
       try {
-        if (isBackendTimeLogsEnabled(this.config)) {
-          await insertIdleLog(log, this.config);
-        } else if (global.supabaseService) {
-          const { error } = await global.supabaseService.from('idle_logs').insert(log);
-          if (error) throw new Error(error.message);
+        if (!isBackendTimeLogsEnabled(this.config)) {
+          // RDS is the only backend — throw so the log stays queued for retry.
+          throw new Error('Backend not configured for idle log sync');
         }
+        await insertIdleLog(log, this.config);
         console.log('✅ [IDLE-SYNC] Flushed queued idle log');
       } catch (error) {
         console.warn('⚠️ [IDLE-SYNC] Queued idle log failed, will retry:', error?.message || error);
@@ -909,27 +779,15 @@ class EnhancedSyncManager {
     try {
       console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
 
-      if (isBackendTimeLogsEnabled(this.config)) {
-        // Backend forceAppInsert closes *other* open apps and skips when the same
-        // app_name is already open — avoid close-all+reinsert spam here.
-        await insertAppLogsBatch(items, this.config);
-        console.log(`✅ [SYNC] Successfully synced ${items.length} app session(s) via backend RDS`);
-        return;
+      // RDS is the only backend — throwing lets the caller re-queue the batch.
+      if (!isBackendTimeLogsEnabled(this.config)) {
+        throw new Error('Backend not configured for app log sync');
       }
-      
-      // Filter out queue-specific fields before inserting
-      const rows = items.map(row => {
-        const { attempts, queuedAt, ...clean } = row;
-        return clean;
-      });
-      
-      const { error } = await this.supabaseService
-        .from('app_logs')
-        .insert(rows, { returning: 'minimal' });
 
-      if (error) throw error;
-      
-      console.log(`✅ [SYNC] Successfully inserted ${rows.length} app logs`);
+      // Backend forceAppInsert closes *other* open apps and skips when the same
+      // app_name is already open — avoid close-all+reinsert spam here.
+      await insertAppLogsBatch(items, this.config);
+      console.log(`✅ [SYNC] Successfully synced ${items.length} app session(s) via backend RDS`);
     } catch (error) {
       console.error('❌ [SYNC] App logs batch insert failed:', error);
       throw error;
@@ -1008,73 +866,19 @@ class EnhancedSyncManager {
   }
 
   /**
-   * Flush fraud alerts to database
+   * Drains the fraud alert queue without persisting: fraud_alerts was a
+   * Supabase-only table and no backend action accepts these rows. Alerts are
+   * dropped (with a warning) instead of growing the queue forever.
    */
   async flushFraudAlerts() {
     if (!global.offlineQueue?.fraudAlerts || global.offlineQueue.fraudAlerts.length === 0) {
       return;
     }
-    
+
     const alerts = [...global.offlineQueue.fraudAlerts];
     global.offlineQueue.fraudAlerts = [];
-    
-    try {
-      console.log(`🔄 [ENHANCED-SYNC] Flushing ${alerts.length} fraud alerts to database...`);
-      
-      // Sanitize column names before insert (B3 fix: details -> detection_details)
-      const sanitizedAlerts = alerts.map(alert => {
-        const sanitized = { ...alert };
-        // Fix column name mismatch: 'details' should be 'detection_details'
-        if ('details' in sanitized && !('detection_details' in sanitized)) {
-          sanitized.detection_details = sanitized.details;
-          delete sanitized.details;
-        }
-        // Remove any unknown columns that could cause schema errors
-        delete sanitized._retryCount;
-        return sanitized;
-      });
-      
-      const { error } = await this.supabaseService
-        .from('fraud_alerts')
-        .insert(sanitizedAlerts);
-      
-      if (error) {
-        console.error('❌ [ENHANCED-SYNC] Failed to insert fraud alerts:', error);
-        
-        // Schema errors (PGRST204) are permanent - discard rather than re-queue
-        if (error.code === 'PGRST204') {
-          console.warn(`⚠️ [ENHANCED-SYNC] Schema error (${error.code}): ${error.message} - discarding ${alerts.length} alerts`);
-          return;
-        }
-        
-        // Transient errors: re-queue with retry counter, discard after 3 attempts
-        const retriableAlerts = alerts
-          .map(a => ({ ...a, _retryCount: (a._retryCount || 0) + 1 }))
-          .filter(a => a._retryCount <= 3);
-        
-        const discarded = alerts.length - retriableAlerts.length;
-        if (discarded > 0) {
-          console.warn(`⚠️ [ENHANCED-SYNC] Discarded ${discarded} fraud alerts after 3 failed retries`);
-        }
-        
-        if (retriableAlerts.length > 0) {
-          global.offlineQueue.fraudAlerts.unshift(...retriableAlerts);
-        }
-      } else {
-        console.log(`✅ [ENHANCED-SYNC] Successfully flushed ${alerts.length} fraud alerts`);
-      }
-    } catch (error) {
-      console.error('❌ [ENHANCED-SYNC] Exception while flushing fraud alerts:', error);
-      
-      // Re-queue with retry counter, discard after 3 attempts
-      const retriableAlerts = alerts
-        .map(a => ({ ...a, _retryCount: (a._retryCount || 0) + 1 }))
-        .filter(a => a._retryCount <= 3);
-      
-      if (retriableAlerts.length > 0) {
-        global.offlineQueue.fraudAlerts.unshift(...retriableAlerts);
-      }
-    }
+
+    console.warn(`⚠️ [ENHANCED-SYNC] Dropping ${alerts.length} fraud alert(s) — no backend action for fraud_alerts`);
   }
 
   shutdown() {

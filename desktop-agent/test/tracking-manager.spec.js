@@ -49,7 +49,9 @@ describe('TrackingManager', () => {
 
     // Mock config
     mockConfig = {
-      user_id: 'test-user',
+      // Tenant ids are integers; a non-numeric value is rejected before any
+      // network call, the same way the backend helpers reject it.
+      user_id: '1224',
       project_id: 'test-project'
     };
 

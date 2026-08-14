@@ -717,7 +717,7 @@ export class DataService {
       params.push(end);
       const endIdx = params.length;
       filters.push(`t.start_time < $${endIdx}::timestamptz`);
-      filters.push(`COALESCE(t.end_time, NOW()) > $${startIdx}::timestamptz`);
+      filters.push(`COALESCE(t.end_time, t.last_alive_at, NOW()) > $${startIdx}::timestamptz`);
       filters.push(
         `t.start_time >= ($${startIdx}::timestamptz - INTERVAL '3 days')`,
       );

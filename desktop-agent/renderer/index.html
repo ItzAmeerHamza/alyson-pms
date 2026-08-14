@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alyson Time Doctor</title>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -6308,8 +6307,8 @@
                         endDate: endDate.toISOString()
                     });
                 } catch (ipcErr) {
-                    console.warn('⚠️ [URL-HISTORY] IPC invoke failed, falling back to direct Supabase query:', ipcErr?.message || ipcErr);
-                    response = null; // Trigger direct Supabase fallback below
+                    console.warn('⚠️ [URL-HISTORY] IPC invoke failed:', ipcErr?.message || ipcErr);
+                    response = null;
                 }
 
                 console.log('🛰️ [URL-HISTORY] IPC response:', response);
@@ -6320,56 +6319,8 @@
                     updateHistoryDisplay();
                     updateHistoryStats();
                 } else {
-                    console.log('📭 No URL history data available (response empty or zero rows) – trying direct Supabase fallback');
-                    // Fallback: query directly via authenticated Supabase client (RLS-safe)
-                    try {
-                        // Use the initialized client from modular renderer
-                        const supa = (window.RendererModules && window.RendererModules.supabaseClient) || (window.supabaseClient) || null;
-                        if (!supa || !supa.from) throw new Error('Supabase client not available');
-                        // Determine user id
-                        let userId = null;
-                        try {
-                            const stored = localStorage.getItem('alyson_user');
-                            if (stored) userId = JSON.parse(stored).id;
-                        } catch(_) {}
-                        if (!userId) {
-                            // Ask main for config as fallback
-                            const cfg = await ipc.invoke('get-config');
-                            userId = cfg?.user_id || cfg?.userId || null;
-                        }
-                        if (!userId) throw new Error('User ID not available for direct query');
-
-                        let q = supa
-                            .from('url_logs')
-                            .select('id, url, site_url, title, domain, browser, timestamp, user_id')
-                            .gte('timestamp', startDate.toISOString())
-                            .lte('timestamp', endDate.toISOString())
-                            // Removed problematic .or() clause - will filter in JS instead
-                            .eq('user_id', userId)
-                            .order('timestamp', { ascending: false })
-                            .limit(500);
-                        q = q
-                            .not('site_url', 'ilike', '%browser-activity-detected.local%')
-                            .not('url', 'ilike', '%browser-activity-detected.local%');
-                        const { data, error } = await q;
-                        console.log('🛰️ [URL-HISTORY] Direct Supabase result:', { error, rows: data?.length || 0, first: data?.[0] });
-                        if (error) throw error;
-                        if (data && data.length > 0) {
-                            // Filter out rows where both url and site_url are null
-                            urlHistoryData = data
-                                .filter(r => r.url || r.site_url)
-                                .map(r => ({ ...r, url: r.url || r.site_url || null }));
-                            console.log('🧭 [URL-HISTORY] Normalized first rows:', urlHistoryData.slice(0,3));
-                            applyHistoryFilters();
-                            updateHistoryDisplay();
-                            updateHistoryStats();
-                        } else {
-                            showNoHistoryMessage();
-                        }
-                    } catch (fallbackErr) {
-                        console.error('❌ Direct Supabase fallback failed:', fallbackErr);
-                        showNoHistoryMessage();
-                    }
+                    console.log('📭 No URL history data available (response empty or zero rows)');
+                    showNoHistoryMessage();
                 }
                 
             } catch (error) {
@@ -6973,17 +6924,14 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 [RENDERER] Initializing App History Manager...');
             
-            // Wait for Supabase to be available
+            // Wait for IPC to be available
             const initAppHistory = () => {
-                if (typeof window.supabase !== 'undefined' && window.electronAPI) {
+                if (window.electronAPI) {
                     try {
                         // Initialize App History Manager
                         try { window.logger = window.RendererLogger || window.logger; } catch {}
                         const ipcInvoker = (window.electronAPI && window.electronAPI.ipcRenderer) || window.electronAPI || (window.require ? window.require('electron').ipcRenderer : null);
-                        const appHistoryManager = window.initializeAppHistoryManager(
-                            window.supabase, 
-                            ipcInvoker
-                        );
+                        const appHistoryManager = window.initializeAppHistoryManager(ipcInvoker);
                         
                         console.log('✅ [RENDERER] App History Manager initialized successfully');
                         
@@ -7036,7 +6984,7 @@
                         console.error('❌ [RENDERER] Failed to initialize App History Manager:', error);
                     }
                 } else {
-                    console.log('⏳ [RENDERER] Waiting for Supabase and IPC to be available...');
+                    console.log('⏳ [RENDERER] Waiting for IPC to be available...');
                     setTimeout(initAppHistory, 500);
                 }
             };

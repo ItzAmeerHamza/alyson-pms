@@ -20,38 +20,27 @@ function usesRdsBackend(config) {
   }
 }
 
-async function fetchTimeLogs(userId, opts, config, supabaseService) {
-  if (usesRdsBackend(config)) {
-    try {
-      const data = await getTimeLogsInRange(
-        userId,
-        { start: opts.start, end: opts.end },
-        config,
-      );
-      return { data, error: null };
-    } catch (err) {
-      return { data: [], error: { message: err?.message || String(err) } };
-    }
-  }
-  if (!supabaseService) {
+async function fetchTimeLogs(userId, opts, config) {
+  if (!usesRdsBackend(config)) {
     return { data: [], error: { message: 'Database service not available' } };
   }
-  const { data, error } = await supabaseService
-    .from('time_logs')
-    .select('id, start_time, end_time, project_id, status, idle_seconds, projects(name)')
-    .eq('user_id', userId)
-    .gte('start_time', opts.start)
-    .lt('start_time', opts.end)
-    .order('start_time', { ascending: false });
-  return { data, error };
+  try {
+    const data = await getTimeLogsInRange(
+      userId,
+      { start: opts.start, end: opts.end },
+      config,
+    );
+    return { data, error: null };
+  } catch (err) {
+    return { data: [], error: { message: err?.message || String(err) } };
+  }
 }
 
 /**
- * @param {{ global: object, config: object, supabaseService?: object }} deps
+ * @param {{ global: object, config: object }} deps
  */
-async function buildMonthlyReportData({ global, config, supabaseService }) {
-  const useRds = usesRdsBackend(config);
-  if (!useRds && !supabaseService) {
+async function buildMonthlyReportData({ global, config }) {
+  if (!usesRdsBackend(config)) {
     return { error: 'Database service not available' };
   }
 
@@ -88,11 +77,11 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
   let screenshots = [];
   const projectNameById = {};
 
-  if (useRds) {
+  {
     const { data, error } = await fetchTimeLogs(userId, {
       start: monthStartIso,
       end: monthEndExclusive,
-    }, config, supabaseService);
+    }, config);
     if (error) return { error: error.message };
     timeLogs = data || [];
 
@@ -116,26 +105,6 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
     } catch (projectErr) {
       console.warn('⚠️ [MONTHLY-REPORT] Projects fetch failed:', projectErr.message);
     }
-  } else {
-    const [timeLogsResult, screenshotsResult] = await Promise.all([
-      supabaseService
-        .from('time_logs')
-        .select('id, start_time, end_time, project_id, status, idle_seconds, projects(name)')
-        .eq('user_id', userId)
-        .gte('start_time', monthStartIso)
-        .lt('start_time', monthEndExclusive)
-        .order('start_time', { ascending: false }),
-      supabaseService
-        .from('screenshots')
-        .select('activity_percent, captured_at')
-        .eq('user_id', userId)
-        .gte('captured_at', monthStartIso)
-        .lt('captured_at', monthEndExclusive),
-    ]);
-
-    if (timeLogsResult.error) return { error: timeLogsResult.error.message };
-    timeLogs = timeLogsResult.data || [];
-    screenshots = screenshotsResult.data || [];
   }
 
   const isTracking = !!(global.isTracking || global.trackingManager?.isTracking);
@@ -258,7 +227,6 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
       // Align chart "today" to the same helper as the big clock, then take the
       // MAX so we never paint Month below what the employee already sees (or vice versa).
       const todayAgg = await computeTodayTimeLogSeconds(
-        supabaseService,
         userId,
         currentTimeLogId,
         isTracking,
@@ -285,7 +253,6 @@ async function buildMonthlyReportData({ global, config, supabaseService }) {
         userId,
         totalSeconds: todayTotal,
         config: config || global.config,
-        supabase: supabaseService,
         screenshots, // same rows Month already fetched — no second divergent query
       });
       dailyBreakdown[todayIdx].idleSeconds = todayEff.idleSeconds || 0;

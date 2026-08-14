@@ -1187,7 +1187,16 @@ class IPCManager {
         return result;
       }
       console.log('✅ [IPC-DESYNC-FIX] Stop successful, updating UI state to stopped');
-      
+
+      // Stopped offline: the end time is on disk and will sync. Tell the employee
+      // their time is safe rather than leaving them guessing.
+      if (result.synced === false) {
+        this.notificationManager?.showNotification?.(
+          result.message || 'Tracking stopped. Your time is saved and will sync when you are back online.',
+          'info',
+        );
+      }
+
       // Update UI after successful stop
       this.isTracking = false;
       this.trackingStatus = 'stopped';

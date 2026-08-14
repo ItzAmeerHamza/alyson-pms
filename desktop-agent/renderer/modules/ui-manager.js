@@ -1382,7 +1382,7 @@ class UIManager {
     return first || 'User';
   }
 
-  /** Apply welcome text from renderer auth state (Cognito path — no Supabase profile). */
+  /** Apply welcome text from renderer auth state (Cognito profile). */
   syncWelcomeFromAuthManager() {
     try {
       const authUser =
@@ -2916,7 +2916,7 @@ class UIManager {
       const currentUser = JSON.parse(savedUser);
       console.log('👤 [UI-MANAGER] Current user:', currentUser.id);
       
-      // Use IPC to get Supabase instance and query projects
+      // Use IPC to query project assignments from the main process
       const projectData = await this.ipcRenderer.invoke('get-user-project-assignments', currentUser.id);
       console.log('📋 [UI-MANAGER] Received project assignments:', projectData);
       

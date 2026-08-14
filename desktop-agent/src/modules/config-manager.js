@@ -1,13 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
-const { getSupabaseRealtimeOptions } = require('../lib/supabase-realtime-transport');
 
 class ConfigManager {
   constructor() {
     this.config = null;
-    this.supabase = null;
-    this.supabaseService = null;
     this.appSettings = {};
   }
 
@@ -34,10 +30,7 @@ class ConfigManager {
       const { loadConfig } = require(configPath);
       
       this.config = loadConfig();
-      
-      // Initialize Supabase clients
-      this.initializeSupabaseClients();
-      
+
       console.log('✅ Configuration loaded successfully');
       return this.config;
       
@@ -47,49 +40,8 @@ class ConfigManager {
     }
   }
 
-  initializeSupabaseClients() {
-    if (!this.config.supabase_url || !this.config.supabase_key) {
-      throw new Error('Missing required Supabase configuration');
-    }
-
-    // Validate URL format
-    try {
-      new URL(this.config.supabase_url);
-    } catch (urlError) {
-      throw new Error(`Invalid Supabase URL format: ${this.config.supabase_url}`);
-    }
-
-    const realtimeOpts = getSupabaseRealtimeOptions();
-
-    // Initialize Supabase client - use anonymous key for user operations
-    this.supabase = createClient(this.config.supabase_url, this.config.supabase_key, realtimeOpts);
-
-    // Create service client for admin operations if service key is available
-    this.supabaseService = this.config.supabase_service_key ? 
-      createClient(this.config.supabase_url, this.config.supabase_service_key, realtimeOpts) :
-      this.supabase;
-
-    console.log('✅ Supabase clients initialized successfully');
-    
-    if (this.config.supabase_service_key) {
-      console.log(`🔧 [DEBUG] Using service role key for admin operations`);
-      console.log(`🔧 [DEBUG] Service key length: ${this.config.supabase_service_key.length}`);
-    } else {
-      console.log(`🔧 [DEBUG] Using anonymous key - some operations may be limited`);
-      console.log(`🔧 [DEBUG] Desktop agent will queue failed operations for later`);
-    }
-  }
-
   getConfig() {
     return this.config;
-  }
-
-  getSupabaseClient() {
-    return this.supabase;
-  }
-
-  getSupabaseServiceClient() {
-    return this.supabaseService;
   }
 
   updateConfig(updates) {
@@ -98,7 +50,7 @@ class ConfigManager {
   }
 
   validateConfig() {
-    const required = ['supabase_url', 'supabase_key'];
+    const required = ['backend_api_url', 'backend_api_key'];
     const missing = required.filter(key => !this.config[key]);
     
     if (missing.length > 0) {

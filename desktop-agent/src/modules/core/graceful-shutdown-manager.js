@@ -306,11 +306,19 @@ class GracefulShutdownManager {
       // STEP 9: Tell renderer DB save finished so reports can refresh
       this._notifySessionDataUpdated(reason);
 
-      const allSuccess = results.database; // Database is the critical one
-      return { 
-        success: allSuccess, 
+      // Stopping is a LOCAL operation. It succeeds as soon as the end time is on
+      // disk; syncing is a separate, retryable concern. Treating an unreachable
+      // API as a failed stop left the UI tracking with the clock still running.
+      const allSuccess = results.database;
+      const synced = this._lastStopSynced !== false;
+      return {
+        success: allSuccess,
+        synced,
         results,
-        reason: allSuccess ? undefined : 'database_update_failed'
+        message: allSuccess && !synced
+          ? 'Tracking stopped. Your time is saved and will sync when you are back online.'
+          : undefined,
+        reason: allSuccess ? undefined : 'stop_not_recorded'
       };
 
     } catch (error) {
@@ -348,7 +356,9 @@ class GracefulShutdownManager {
    */
   async _updateDatabase(reason) {
     console.log('🔄 [GRACEFUL-SHUTDOWN] Updating database...');
-    
+    this._lastStopDurablyRecorded = false;
+    this._lastStopSynced = false;
+
     try {
       // Use captured timeLogId if available (captured before local state was cleared)
       const timeLogId = this._capturedTimeLogId || 
@@ -360,13 +370,11 @@ class GracefulShutdownManager {
         return true; // Not a failure - just no session to close
       }
 
-      // Get database client(s)
       const backendTimeLogs = require('../utils/backend-time-logs');
       const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
-      const supabase = global.supabaseService || global.supabaseClient;
-      
-      if (!useBackend && !supabase) {
-        console.error('❌ [GRACEFUL-SHUTDOWN] No database client available');
+
+      if (!useBackend) {
+        console.error('❌ [GRACEFUL-SHUTDOWN] Backend API not configured — close kept on disk');
         this._storePendingClose(timeLogId, reason, global._stopEndTimeOverride || new Date().toISOString());
         return false;
       }
@@ -395,8 +403,21 @@ class GracefulShutdownManager {
       global._stopAuthorizedIdleCut = false;
       global._idlePromptTimeCutSeconds = 0;
       
-      // Store pending close first (for recovery if this fails)
-      this._storePendingClose(timeLogId, reason, endTime);
+      // Idle seconds for this session. The idle monitor already totals every idle
+      // chunk it logs, so this is a read — no query back out of idle_logs, and it
+      // works offline. Previously nothing wrote this column at all and it sat at 0
+      // on every row: the code that computed it lived in trackingManager.stopTracking,
+      // which stopped being called once this manager became the single stop path.
+      let idleSeconds = 0;
+      try {
+        idleSeconds = global.enhancedIdleMonitor?.getSessionIdleSeconds?.() || 0;
+      } catch (_) { /* idle monitor optional */ }
+
+      // Store pending close first (for recovery if this fails).
+      // Once this is on disk the stop has SUCCEEDED — the employee's end time is
+      // recorded. Reaching the API is a separate, retryable concern.
+      const storedPending = this._storePendingClose(timeLogId, reason, endTime);
+      let queuedOffline = false;
 
       // Also mirror into tracking-manager offline queue when available
       try {
@@ -422,34 +443,68 @@ class GracefulShutdownManager {
             start_time: startTime,
             end_time: endTime,
             status: 'completed',
+            // The agent was demonstrably alive until endTime — it was running when
+            // it wrote it. Without this the server's liveness ceiling would clamp a
+            // late offline flush back to the last heartbeat it received before the
+            // network died, silently eating genuine offline work.
+            last_alive_at: endTime,
+            client_last_seen_at: endTime,
+            idle_seconds: idleSeconds,
             ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
           });
+          queuedOffline = true;
         }
       } catch (_) { /* ignore */ }
 
-      if (useBackend) {
-        await backendTimeLogs.updateTimeLog(timeLogId, {
+      // Instance field so the catch below (different scope) can tell whether the
+      // end time reached disk before the network call blew up.
+      const durablyRecorded = storedPending || queuedOffline;
+      this._lastStopDurablyRecorded = durablyRecorded;
+
+      await backendTimeLogs.updateTimeLog(
+        timeLogId,
+        {
           end_time: endTime,
           status: 'completed',
+          last_alive_at: endTime,
+          client_last_seen_at: endTime,
+          idle_seconds: idleSeconds,
           ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
-        });
-      } else {
-        const { error } = await supabase
-          .from('time_logs')
-          .update({
-            end_time: endTime,
-            status: 'completed',
-          })
-          .eq('id', timeLogId);
+        },
+        undefined,
+        // Known-offline: fail fast. Stop must feel instant; the close is
+        // already durable and the queue will sync it.
+        { timeoutMs: backendTimeLogs.isLikelyOffline() ? 2000 : 8000 },
+      );
 
-        if (error) {
-          console.error('❌ [GRACEFUL-SHUTDOWN] Database update failed — pending/offline queue retains hours:', error.message);
-          return false;
+      console.log('✅ [GRACEFUL-SHUTDOWN] Database updated successfully');
+      this._lastStopSynced = true;
+
+      // Close app/url rows still open at the stop moment. Without this they stay
+      // open until the NEXT app switch and get stamped with an ended_at long
+      // after tracking ended (observed bleeding 13–22 minutes past session end,
+      // and as far as wake time across a sleep). That inflates app-usage reports
+      // and — because ended_at feeds the liveness ceiling — silently raised the
+      // ceiling above the real end of work.
+      if (useBackend) {
+        try {
+          const userId =
+            (this._capturedSessionMeta || {}).user_id ||
+            global.currentUserId ||
+            global.config?.user_id;
+          if (userId && !backendTimeLogs.isLikelyOffline()) {
+            await backendTimeLogs.closeOpenUrlLogs({ user_id: userId, ended_at: endTime });
+            await backendTimeLogs.closeOpenAppLogs({ user_id: userId, ended_at: endTime });
+            console.log('✅ [GRACEFUL-SHUTDOWN] Closed open app/URL rows at stop time');
+          }
+        } catch (logErr) {
+          console.warn(
+            '⚠️ [GRACEFUL-SHUTDOWN] Could not close open app/URL rows:',
+            logErr?.message || logErr,
+          );
         }
       }
 
-      console.log('✅ [GRACEFUL-SHUTDOWN] Database updated successfully');
-      
       // Clear pending close since we succeeded
       this._clearPendingClose(timeLogId);
       try {
@@ -484,8 +539,15 @@ class GracefulShutdownManager {
       return true;
 
     } catch (error) {
-      console.error('❌ [GRACEFUL-SHUTDOWN] Database update error:', error);
-      return false;
+      // Offline / timeout / API down. The end time is already on disk and in the
+      // offline queue, so the session IS stopped — it just is not synced yet.
+      // Reporting this as a failure kept the UI tracking and the clock running.
+      const recovered = this._lastStopDurablyRecorded === true;
+      console.warn(
+        `⚠️ [GRACEFUL-SHUTDOWN] DB unreachable — close saved locally, will sync: ${error?.message || error}`,
+      );
+      this._lastStopSynced = false;
+      return recovered;
     }
   }
 
@@ -520,8 +582,10 @@ class GracefulShutdownManager {
       fs.renameSync(tmpFile, pendingFile);
       
       console.log('📁 [GRACEFUL-SHUTDOWN] Stored pending session close:', timeLogId);
+      return true;
     } catch (error) {
       console.warn('⚠️ [GRACEFUL-SHUTDOWN] Failed to store pending session:', error.message);
+      return false;
     }
   }
 
@@ -869,15 +933,14 @@ class GracefulShutdownManager {
         : [];
       const backendTimeLogs = require('../utils/backend-time-logs');
       const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
-      const supabase = global.supabaseService || global.supabaseClient;
 
       if (files.length === 0) {
         console.log('✅ [GRACEFUL-SHUTDOWN] No pending session files');
       } else {
         console.log(`🔄 [GRACEFUL-SHUTDOWN] Found ${files.length} pending session(s) to close`);
 
-        if (!useBackend && !supabase) {
-          console.warn('⚠️ [GRACEFUL-SHUTDOWN] No database client - will retry later');
+        if (!useBackend) {
+          console.warn('⚠️ [GRACEFUL-SHUTDOWN] Backend not configured - will retry later');
           return;
         }
 
@@ -906,23 +969,10 @@ class GracefulShutdownManager {
           
           console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId} at ${data.endTime}`);
           
-          if (useBackend) {
-            await backendTimeLogs.updateTimeLog(
-              data.timeLogId,
-              { end_time: data.endTime, status: 'completed' },
-            );
-          } else {
-            const { error } = await supabase
-              .from('time_logs')
-              .update({
-                end_time: data.endTime,
-                status: 'completed'
-              })
-              .eq('id', data.timeLogId);
-            if (error) {
-              throw error;
-            }
-          }
+          await backendTimeLogs.updateTimeLog(
+            data.timeLogId,
+            { end_time: data.endTime, status: 'completed' },
+          );
 
           console.log(`✅ [GRACEFUL-SHUTDOWN] Closed pending session: ${data.timeLogId}`);
           fs.unlinkSync(filePath);
@@ -951,7 +1001,12 @@ class GracefulShutdownManager {
           await closeOpenSessionsAfterExplicitStop({
             userId,
             deviceId,
-            end_time: resolveExplicitStopEndTime(),
+            end_time: resolveExplicitStopEndTime(null, {
+              liveStop: true,
+              timeLogId: this._capturedTimeLogId || null,
+            }),
+            timeLogId: this._capturedTimeLogId || null,
+            liveStop: true,
           });
           console.log('✅ [GRACEFUL-SHUTDOWN] Closed remaining open time_logs via RDS');
           const reconcileResult = await backendTimeLogs.reconcileInflatedTimeLogs(

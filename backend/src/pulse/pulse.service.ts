@@ -219,7 +219,7 @@ export class PulseService {
        LEFT JOIN tenant."user" u ON u.id = t.user_id
        WHERE ${scope.clause}
          AND t.start_time < $${scope.params.length + 2}::timestamptz
-         AND COALESCE(t.end_time, NOW()) > $${scope.params.length + 1}::timestamptz
+         AND COALESCE(t.end_time, t.last_alive_at, NOW()) > $${scope.params.length + 1}::timestamptz
          AND t.start_time >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
          ${userFilter}
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
@@ -1114,7 +1114,7 @@ export class PulseService {
          ROUND((
            SUM(
              EXTRACT(EPOCH FROM (
-               LEAST(COALESCE(t.end_time, NOW()), $${endIdx}::timestamptz)
+               LEAST(COALESCE(t.end_time, t.last_alive_at, NOW()), $${endIdx}::timestamptz)
                - GREATEST(t.start_time, $${startIdx}::timestamptz)
              ))
            ) / 3600.0
@@ -1124,16 +1124,16 @@ export class PulseService {
        LEFT JOIN tenant."user" u ON u.id = t.user_id
        WHERE ${scope.clause}
          AND t.start_time < $${endIdx}::timestamptz
-         AND COALESCE(t.end_time, NOW()) > $${startIdx}::timestamptz
+         AND COALESCE(t.end_time, t.last_alive_at, NOW()) > $${startIdx}::timestamptz
          AND t.start_time >= ($${startIdx}::timestamptz - INTERVAL '3 days')
-         AND LEAST(COALESCE(t.end_time, NOW()), $${endIdx}::timestamptz)
+         AND LEAST(COALESCE(t.end_time, t.last_alive_at, NOW()), $${endIdx}::timestamptz)
              > GREATEST(t.start_time, $${startIdx}::timestamptz)
          ${userFilter}
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
        GROUP BY 1, 2
        HAVING SUM(
          EXTRACT(EPOCH FROM (
-           LEAST(COALESCE(t.end_time, NOW()), $${endIdx}::timestamptz)
+           LEAST(COALESCE(t.end_time, t.last_alive_at, NOW()), $${endIdx}::timestamptz)
            - GREATEST(t.start_time, $${startIdx}::timestamptz)
          ))
        ) > 0

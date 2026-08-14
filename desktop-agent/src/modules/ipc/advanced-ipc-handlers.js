@@ -10,7 +10,6 @@
 class AdvancedIPCHandlers {
   constructor(dependencies = {}) {
     this.ipcMain = dependencies.ipcMain;
-    this.supabaseService = dependencies.supabaseService;
     this.config = dependencies.config;
     this.safeLog = dependencies.safeLog;
     this.global = dependencies.global || global;
@@ -41,24 +40,24 @@ class AdvancedIPCHandlers {
       try {
         this.safeLog('📊 Fetching recent activity logs from database...');
         
-        if (!this.supabaseService || !this.global.currentUserId) {
-          console.warn('⚠️ Cannot fetch activity logs: missing Supabase service or user ID');
+        const { isBackendRdsEnabled, listAppLogs, listUrlLogs } = require('../utils/backend-rds-reads');
+        if (!isBackendRdsEnabled(this.config) || !this.global.currentUserId) {
+          console.warn('⚠️ Cannot fetch activity logs: backend not configured or missing user ID');
           return this.generateFallbackLogs();
         }
 
         const logs = [];
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const nowIso = new Date().toISOString();
         const currentUser = this.global.currentUserId;
 
         try {
           // Fetch recent app logs
-          const { data: appLogs } = await this.supabaseService
-            .from('app_logs')
-            .select('app_name, window_title, timestamp, time_log_id')
-            .eq('user_id', currentUser)
-            .gte('timestamp', oneDayAgo)
-            .order('timestamp', { ascending: false })
-            .limit(5);
+          const appLogs = await listAppLogs(
+            currentUser,
+            { start: oneDayAgo, end: nowIso, limit: 5 },
+            this.config,
+          );
 
           if (appLogs?.length) {
             appLogs.forEach(log => {
@@ -73,13 +72,11 @@ class AdvancedIPCHandlers {
           }
 
           // Fetch recent URL logs
-          const { data: urlLogs } = await this.supabaseService
-            .from('url_logs')
-            .select('url, title, domain, browser, timestamp, time_log_id')
-            .eq('user_id', currentUser)
-            .gte('timestamp', oneDayAgo)
-            .order('timestamp', { ascending: false })
-            .limit(5);
+          const urlLogs = await listUrlLogs(
+            currentUser,
+            { start: oneDayAgo, end: nowIso, limit: 5 },
+            this.config,
+          );
 
           if (urlLogs?.length) {
             urlLogs.forEach(log => {
@@ -93,20 +90,19 @@ class AdvancedIPCHandlers {
             });
           }
 
-          // Fetch recent screenshots with activity data
-          const { data: screenshots } = await this.supabaseService
-            .from('screenshots')
-            .select('timestamp, activity_percent, mouse_clicks, keystrokes, mouse_movements, time_log_id')
-            .eq('user_id', currentUser)
-            .gte('timestamp', oneDayAgo)
-            .order('timestamp', { ascending: false })
-            .limit(3);
+          // Fetch recent screenshots with activity data — RDS names the capture time `captured_at`
+          const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+          const screenshots = await fetchScreenshotsFromBackend(currentUser, this.config, {
+            startIso: oneDayAgo,
+            endIso: nowIso,
+            limit: 3,
+          });
 
           if (screenshots?.length) {
             screenshots.forEach(log => {
               logs.push({
-                id: `screenshot_${log.timestamp}`,
-                timestamp: log.timestamp,
+                id: `screenshot_${log.captured_at}`,
+                timestamp: log.captured_at,
                 type: 'Screenshot',
                 description: `Activity: ${log.activity_percent}% - ${log.mouse_clicks || 0} clicks, ${log.keystrokes || 0} keys, ${log.mouse_movements || 0} moves`,
                 metadata: { 
@@ -120,44 +116,8 @@ class AdvancedIPCHandlers {
             });
           }
 
-          // Fetch recent activities (mouse/keyboard events)
-          const { data: activities } = await this.supabaseService
-            .from('activities')
-            .select('activity_type, x_position, y_position, key_pressed, created_at, time_log_id')
-            .eq('user_id', currentUser)
-            .gte('created_at', oneDayAgo)
-            .order('created_at', { ascending: false })
-            .limit(5);
-
-          if (activities?.length) {
-            activities.forEach(log => {
-              let description = '';
-              switch (log.activity_type) {
-                case 'mouse_click':
-                  description = `Mouse click at (${log.x_position}, ${log.y_position})`;
-                  break;
-                case 'keystroke':
-                  description = `Key pressed: ${log.key_pressed || 'Unknown'}`;
-                  break;
-                case 'mouse_move':
-                  description = `Mouse moved to (${log.x_position}, ${log.y_position})`;
-                  break;
-                default:
-                  description = `${log.activity_type} activity`;
-              }
-
-              logs.push({
-                id: `activity_${log.created_at}`,
-                timestamp: log.created_at,
-                type: 'Input Activity',
-                description: description,
-                metadata: { 
-                  activityType: log.activity_type,
-                  timeLogId: log.time_log_id 
-                }
-              });
-            });
-          }
+          // 'Input Activity' entries came from the Supabase `activities` table (raw
+          // mouse/keyboard events); there is no RDS equivalent, so they are omitted.
 
         } catch (dbError) {
           console.error('❌ Database error fetching activity logs:', dbError);
@@ -309,53 +269,7 @@ class AdvancedIPCHandlers {
    * Register enhanced screenshot handler - DISABLED (using ipc-event-map version)
    */
   registerEnhancedScreenshotHandler() {
-    /* this.ipcMain.handle('fetch-screenshots-enhanced', async (event, params) => {
-      try {
-        if (!this.supabaseService || !this.global.currentUserId) {
-          return { success: false, error: 'Database service not available' };
-        }
-
-        const { page = 1, limit = 20, startDate, endDate } = params || {};
-        const offset = (page - 1) * limit;
-
-        // Build query
-        let query = this.supabaseService
-          .from('screenshots')
-          .select('id, screenshot_path, timestamp, activity_percent, mouse_clicks, keystrokes, mouse_movements, time_log_id')
-          .eq('user_id', this.global.currentUserId)
-          .order('timestamp', { ascending: false })
-          .range(offset, offset + limit - 1);
-
-        // Add date filters if provided
-        if (startDate) {
-          query = query.gte('timestamp', startDate);
-        }
-        if (endDate) {
-          query = query.lte('timestamp', endDate);
-        }
-
-        const { data: screenshots, error } = await query;
-
-        if (error) {
-          console.error('❌ Database error fetching screenshots:', error);
-          return { success: false, error: error.message };
-        }
-
-        return { 
-          success: true, 
-          screenshots: screenshots || [],
-          pagination: {
-            page,
-            limit,
-            hasMore: screenshots?.length === limit
-          }
-        };
-
-      } catch (error) {
-        console.error('❌ Error fetching enhanced screenshots:', error);
-        return { success: false, error: error.message };
-      }
-    }); */
+    // 'fetch-screenshots-enhanced' is owned by DataStatsManager (RDS + S3).
   }
 
   /**

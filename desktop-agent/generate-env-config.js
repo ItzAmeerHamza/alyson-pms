@@ -27,11 +27,7 @@ const apiBaseFromBackend = backendApiUrlRaw
   : '';
 
 const credentials = {
-  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
-  VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-  SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '',
-  SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '',
-  VITE_AUTH_PROVIDER: process.env.VITE_AUTH_PROVIDER || process.env.AUTH_PROVIDER || 'supabase',
+  VITE_AUTH_PROVIDER: 'cognito',
   VITE_COGNITO_REGION: process.env.VITE_COGNITO_REGION || process.env.COGNITO_REGION || '',
   VITE_COGNITO_USER_POOL_ID: process.env.VITE_COGNITO_USER_POOL_ID || process.env.COGNITO_USER_POOL_ID || '',
   VITE_COGNITO_CLIENT_ID: process.env.VITE_COGNITO_CLIENT_ID || process.env.COGNITO_CLIENT_ID || '',
@@ -49,40 +45,22 @@ const credentials = {
 if (isBuildProcess) {
   console.log('ðŸ—ï¸ Build process detected - validating credentials...');
   
-  const cognitoBuild =
-    credentials.VITE_AUTH_PROVIDER === 'cognito' &&
-    credentials.VITE_COGNITO_USER_POOL_ID &&
-    credentials.VITE_COGNITO_CLIENT_ID;
-
-  if (!cognitoBuild && (!credentials.VITE_SUPABASE_URL || !credentials.VITE_SUPABASE_ANON_KEY)) {
-    console.error('âŒ Missing required environment variables for build:');
-    console.error('   VITE_SUPABASE_URL or SUPABASE_URL');
-    console.error('   VITE_SUPABASE_ANON_KEY or SUPABASE_ANON_KEY');
-    console.error('   OR VITE_AUTH_PROVIDER=cognito with VITE_COGNITO_*');
-    console.error('');
-    console.error('ðŸ’¡ For builds, set these environment variables:');
-    console.error('   export VITE_SUPABASE_URL="your_url"');
-    console.error('   export VITE_SUPABASE_ANON_KEY="your_key"');
-    console.error('   OR create a .env file in desktop-agent/');
+  const apiBase = credentials.VITE_API_BASE_URL.replace(/\/$/, '');
+  const missing = [];
+  if (!credentials.VITE_COGNITO_USER_POOL_ID) missing.push('VITE_COGNITO_USER_POOL_ID');
+  if (!credentials.VITE_COGNITO_CLIENT_ID) missing.push('VITE_COGNITO_CLIENT_ID');
+  if (!credentials.VITE_COGNITO_REGION) missing.push('VITE_COGNITO_REGION');
+  if (!credentials.BACKEND_API_URL) missing.push('BACKEND_API_URL');
+  if (!credentials.INTERNAL_API_KEY) missing.push('INTERNAL_API_KEY');
+  if (apiBase.includes('localhost') || apiBase.includes('127.0.0.1')) {
+    missing.push('VITE_API_BASE_URL (or BACKEND_API_URL to derive it)');
+  }
+  if (missing.length) {
+    console.error('Missing required release variables:');
+    missing.forEach((key) => console.error(`   ${key}`));
     process.exit(1);
   }
 
-  if (cognitoBuild) {
-    const apiBase = credentials.VITE_API_BASE_URL.replace(/\/$/, '');
-    const missingCognito = [];
-    if (!credentials.VITE_COGNITO_REGION) missingCognito.push('VITE_COGNITO_REGION');
-    if (!credentials.BACKEND_API_URL) missingCognito.push('BACKEND_API_URL');
-    if (!credentials.INTERNAL_API_KEY) missingCognito.push('INTERNAL_API_KEY');
-    if (apiBase.includes('localhost') || apiBase.includes('127.0.0.1')) {
-      missingCognito.push('VITE_API_BASE_URL (or BACKEND_API_URL to derive it)');
-    }
-    if (missingCognito.length) {
-      console.error('Missing Cognito release variables:');
-      missingCognito.forEach((key) => console.error(`   ${key}`));
-      process.exit(1);
-    }
-  }
-  
   console.log('âœ… Build credentials validated');
 } else {
   console.log('ðŸ”§ Development mode - will use fallback loading');
@@ -105,8 +83,8 @@ const outputPath = path.join(process.cwd(), 'env-config.js');
 fs.writeFileSync(outputPath, configContent);
 
 console.log('âœ… Environment configuration generated successfully');
-console.log(`   Using Supabase URL: ${credentials.VITE_SUPABASE_URL}`);
-console.log(`   Anon key length: ${credentials.VITE_SUPABASE_ANON_KEY.length} characters`);
+console.log(`   Cognito pool: ${credentials.VITE_COGNITO_USER_POOL_ID || 'MISSING'}`);
+console.log(`   API base: ${credentials.VITE_API_BASE_URL}`);
 console.log(`   Service key: NOT EMBEDDED (uses edge function)`);
 console.log(`   NODE_ENV: ${credentials.NODE_ENV}`);
 console.log(`   Output file: ${outputPath}`); 

@@ -43,11 +43,11 @@ describe('ConfigManager', () => {
   describe('configuration loading', () => {
     it('should load environment config', async () => {
       fs.existsSync = jest.fn().mockReturnValue(false);
-      process.env.VITE_SUPABASE_URL = 'test-url';
+      process.env.BACKEND_API_URL = 'test-url';
 
       await configManager.loadEnvironmentConfig();
 
-      expect(configManager.envConfig.VITE_SUPABASE_URL).toBe('test-url');
+      expect(configManager.envConfig.BACKEND_API_URL).toBe('test-url');
     });
 
     it('should load user settings with defaults', async () => {
@@ -160,13 +160,14 @@ describe('ConfigManager', () => {
     });
 
     it('should export safe configuration', () => {
-      configManager.config.VITE_SUPABASE_ANON_KEY = 'secret';
+      configManager.config.INTERNAL_API_KEY = 'secret';
       configManager.config.safe_value = 'public';
 
       const exported = configManager.exportConfig();
 
       expect(exported.config.safe_value).toBe('public');
-      expect(exported.config.VITE_SUPABASE_ANON_KEY).toBeUndefined();
+      // INTERNAL_API_KEY is now the only backend credential; it must never be exported.
+      expect(exported.config.INTERNAL_API_KEY).toBeUndefined();
     });
   });
 

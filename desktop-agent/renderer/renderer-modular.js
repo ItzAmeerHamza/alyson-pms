@@ -304,7 +304,7 @@ function clearNonEffectiveStorage(dayKey = localDateIso()) {
 
 /** Drop high-water / non-effective keys for any work day other than keepDayKey. */
 function purgeStaleDayScopedStorage(keepDayKey = localDateIso()) {
-  const prefixes = ['tf_tracked_highwater_', 'tf_non_effective_'];
+  const prefixes = ['tf_tracked_highwater_', 'tf_non_effective_', 'tf_last_authoritative_'];
   const sweep = (store) => {
     try {
       for (let i = store.length - 1; i >= 0; i--) {
@@ -560,6 +560,9 @@ function applyTodayEffectiveStats(stats) {
         Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
       setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
+      // Keep the restart cache current mid-session too, so a crash while
+      // tracking still repaints real time rather than zero.
+      persistAuthoritativeTotal(window.__todayTrackedSeconds);
     } else {
       applyAuthoritativeStoppedTotal(incoming, { reason: 'stopped-db-stats' });
     }
@@ -716,6 +719,9 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
 // Avoid first-paint flash of full tracked time before IPC returns non-effective.
 hydrateNonEffectiveFromCache();
 hydrateTrackedHighWaterFromCache();
+// Last DB-confirmed total, so a restart shows real time instead of 00:00:00
+// while the first stats fetch is in flight. Overwritten by that fetch.
+hydrateAuthoritativeFromCache();
 try {
   if (window.__todayTrackedHighWaterSeconds > 0) {
     const el = getTrackerTimerElement();
@@ -723,6 +729,59 @@ try {
   }
 } catch (_) {}
 try { updateTrackerEffectiveMeta(); } catch (_) {}
+
+/**
+ * Remember the last total the DATABASE reported, so a restart can paint it
+ * immediately instead of showing 00:00:00 while the first fetch is in flight.
+ *
+ * This is deliberately NOT the local high-water. That value is a running max
+ * the renderer maintains itself, so a phantom tick could inflate it — which is
+ * why boot has to throw it away. A DB total cannot be inflated locally, so it
+ * is safe to paint before the network answers.
+ */
+function _authoritativeCacheKey(dayKey = localDateIso()) {
+  return `tf_last_authoritative_${dayKey}`;
+}
+
+function persistAuthoritativeTotal(trackedSeconds) {
+  const dayKey = localDateIso();
+  const payload = JSON.stringify({
+    tracked: Math.max(0, Math.floor(Number(trackedSeconds) || 0)),
+    nonEffective: Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0)),
+    effectiveReady: !!window.__effectiveStatsReady,
+    at: Date.now(),
+  });
+  try { localStorage.setItem(_authoritativeCacheKey(dayKey), payload); } catch (_) {}
+}
+
+/** Paint the last DB-confirmed total at boot. Still replaced by the live fetch. */
+function hydrateAuthoritativeFromCache() {
+  try {
+    const dayKey = localDateIso();
+    const raw = localStorage.getItem(_authoritativeCacheKey(dayKey));
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const tracked = Math.max(0, Math.floor(Number(parsed?.tracked) || 0));
+    if (tracked <= 0) return;
+    // Cannot exceed wall-clock since company midnight — catches a stale day key.
+    const cap = maxPlausibleTrackedSecondsToday();
+    if (Number.isFinite(cap) && tracked > cap) {
+      try { localStorage.removeItem(_authoritativeCacheKey(dayKey)); } catch (_) {}
+      return;
+    }
+    window.__todayTrackedSeconds = tracked;
+    window.__todayTrackedHighWaterSeconds = tracked;
+    window.__completedTodayBaseSeconds = tracked;
+    window.__trackerDisplayDayKey = dayKey;
+    if (parsed?.effectiveReady) {
+      window.__todayNonEffectiveSeconds = Math.max(0, Math.floor(Number(parsed.nonEffective) || 0));
+      window.__effectiveStatsReady = true;
+    }
+    const el = getTrackerTimerElement();
+    if (el) el.textContent = formatSecondsAsHMS(tracked);
+    updateTrackerEffectiveMeta();
+  } catch (_) { /* corrupt cache is not worth failing boot over */ }
+}
 
 /**
  * PLATFORM RULE (stopped): big clock == authoritative get-today-time-stats.
@@ -754,6 +813,7 @@ function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {})
   persistTrackedHighWater(clamped, { force: true });
   setTrackerDisplaySeconds(clamped, { allowDecrease: true });
   updateTrackerEffectiveMeta();
+  persistAuthoritativeTotal(clamped);
   return clamped;
 }
 window.applyAuthoritativeStoppedTotal = applyAuthoritativeStoppedTotal;
@@ -1325,149 +1385,10 @@ try {
 }
 
 // === GLOBAL STATE ===
-let supabaseClient = null;
 let moduleInstances = {};
 
 // CRITICAL FIX: Expose moduleInstances globally so IPC manager can stop ActivityMonitor
 window.moduleInstances = moduleInstances;
-
-// === SUPABASE CLIENT SETUP ===
-async function initializeSupabaseClient() {
-  try {
-    // Use the global Supabase object that's already loaded via CDN in index.html
-    console.log('🔧 Checking for global Supabase object...');
-    console.log('🔍 Available window objects:', Object.keys(window).filter(key => key.toLowerCase().includes('supabase')));
-    
-    // Check different possible global object names
-    let createClient;
-    if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-      createClient = window.supabase.createClient;
-      console.log('✅ Found Supabase at window.supabase');
-    } else if (typeof window.Supabase !== 'undefined' && window.Supabase.createClient) {
-      createClient = window.Supabase.createClient;
-      console.log('✅ Found Supabase at window.Supabase');
-    } else if (typeof supabase !== 'undefined' && supabase.createClient) {
-      createClient = supabase.createClient;
-      console.log('✅ Found Supabase in global scope');
-    } else {
-      console.error('❌ Supabase global object not found. Available objects:', Object.keys(window));
-      throw new Error('Global Supabase object not found. Make sure the CDN script is loaded properly in index.html');
-    }
-    
-    // Get config from main process via IPC (with retry for timing issues)
-    console.log('🔄 Getting Supabase config from main process...');
-    let config;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        config = await ipcRenderer.invoke('get-config');
-        if (config && config.supabase_url && config.supabase_key) break;
-        console.warn(`⚠️ [INIT] get-config attempt ${attempt} returned incomplete config, retrying...`);
-        await new Promise(r => setTimeout(r, 500 * attempt));
-      } catch (ipcErr) {
-        console.warn(`⚠️ [INIT] get-config attempt ${attempt} failed:`, ipcErr.message);
-        if (attempt === 3) throw ipcErr;
-        await new Promise(r => setTimeout(r, 500 * attempt));
-      }
-    }
-    
-    console.log('✅ Config received from main process:', {
-      hasUrl: !!config.supabase_url,
-      hasKey: !!config.supabase_key,
-      urlLength: config.supabase_url?.length || 0,
-      keyLength: config.supabase_key?.length || 0,
-      fullConfig: config
-    });
-    
-    // Validate config before creating client
-    if (!config.supabase_url || !config.supabase_key) {
-      console.error('❌ Invalid config received:', config);
-      console.error('❌ URL:', config.supabase_url);
-      console.error('❌ Key:', config.supabase_key ? '[REDACTED]' : 'null');
-      console.error('❌ Full config object:', JSON.stringify(config, null, 2));
-      throw new Error('Missing Supabase configuration from main process');
-    }
-    
-    // Connectivity check: if direct Supabase URL is unreachable, fall back to proxy
-    const PROXY_URL = 'https://timeflow-sb-proxy.vercel.app';
-    let supabaseUrl = config.supabase_url;
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      await fetch(`${config.supabase_url}/rest/v1/`, {
-        method: 'HEAD', signal: controller.signal,
-        headers: { apikey: config.supabase_key }
-      });
-      clearTimeout(timer);
-      console.log('✅ Direct Supabase URL reachable');
-    } catch (connErr) {
-      console.warn('⚠️ [INIT] Direct Supabase URL unreachable, switching to proxy:', connErr.message);
-      supabaseUrl = PROXY_URL;
-      console.log('🔄 Using proxy URL:', supabaseUrl);
-    }
-
-    console.log('🔧 Creating Supabase client with URL:', supabaseUrl);
-    
-    supabaseClient = createClient(supabaseUrl, config.supabase_key, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: false
-      },
-      realtime: {
-        // Disable realtime to prevent WebSocket connection issues
-        enabled: false,
-        params: {
-          eventsPerSecond: 2
-        }
-      },
-      global: {
-        headers: {
-          apikey: config.supabase_key,
-          Authorization: `Bearer ${config.supabase_key}`,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      }
-    });
-    try {
-      supabaseClient.auth.onAuthStateChange((event, session) => {
-        // Detect refresh failures: session becomes null while tracking
-        if (!session) {
-          try {
-            console.warn('⚠️ [AUTH] Session became null, stopping tracking');
-            ipcRenderer.invoke('stop-timer', 'auth_refresh_failed');
-          } catch (_) {}
-        }
-      });
-    } catch (_) {}
-    
-    console.log('✅ Supabase client initialized successfully');
-    // Expose client globally for inline pages (history fallbacks, etc.)
-    try {
-      window.supabaseClient = supabaseClient;
-      window.RendererModules = window.RendererModules || {};
-      window.RendererModules.supabaseClient = supabaseClient;
-    } catch(_) {}
-
-    // Initialize realtime listener for admin-driven settings
-    try {
-      const channel = supabaseClient.channel('tf_settings');
-      channel.on('broadcast', { event: 'monitoring_visibility' }, (payload) => {
-        try {
-          const enabled = !!(payload && payload.payload && payload.payload.enabled);
-          localStorage.setItem('tf_monitoring_enabled', enabled ? '1' : '0');
-          try { window.dispatchEvent(new Event('tf-monitoring-visibility-changed')); } catch (_) {}
-        } catch (e) { console.error('⚠️ realtime monitoring_visibility handling failed', e); }
-      });
-      channel.subscribe().catch(() => {});
-    } catch (_) {}
-    return supabaseClient;
-  } catch (error) {
-    console.error('❌ Failed to initialize Supabase client:', error);
-    console.error('❌ Error details:', error.message);
-    throw error;
-  }
-}
 
 // === MODULE INITIALIZATION ===
 async function initializeModules() {
@@ -1481,20 +1402,6 @@ async function initializeModules() {
       NotificationManager: typeof NotificationManager,
       IPCManager: typeof IPCManager
     });
-    
-    const runtimeConfig = await ipcRenderer.invoke('get-config');
-    const useCognito =
-      runtimeConfig?.auth_provider === 'cognito' &&
-      runtimeConfig?.cognito_user_pool_id &&
-      runtimeConfig?.cognito_client_id;
-
-    if (!supabaseClient && !useCognito) {
-      console.log('🔧 Initializing Supabase client...');
-      await initializeSupabaseClient();
-      console.log('✅ Supabase client ready');
-    } else if (useCognito) {
-      console.log('🔐 Cognito auth enabled — skipping Supabase client init for login');
-    }
     
     // Initialize modules in dependency order
     console.log('🔧 Creating NotificationManager...');
@@ -1511,7 +1418,6 @@ async function initializeModules() {
     
     console.log('🔧 Creating AuthManager...');
     moduleInstances.authManager = new AuthManager(
-      supabaseClient, 
       ipcRenderer, 
       moduleInstances.uiManager, 
       moduleInstances.notificationManager
@@ -3837,7 +3743,6 @@ window.RendererModules = {
   ui: () => moduleInstances.uiManager,
   ipc: () => moduleInstances.ipcManager,
   notifications: () => moduleInstances.notificationManager,
-  supabase: () => supabaseClient,
   screenshots: {
     load: loadRecentScreenshots,
     display: displayEnhancedScreenshots,
@@ -3997,23 +3902,12 @@ window.testSafariUrl = async function() {
       return;
     }
 
-    // Step 2: Ensure user session and current user ID are set for RLS
+    // Step 2: Ensure current user ID is set in the main process for DB writes
     console.log('🔐 Setting up authentication...');
-    const supabase = window.RendererModules?.supabaseClient || window.supabaseClient || window.supabase;
-
-    let accessToken = null, refreshToken = null, userId = null;
+    let userId = null;
     try {
-      if (supabase?.auth?.getSession) {
-        const { data } = await supabase.auth.getSession();
-        accessToken = data?.session?.access_token || null;
-        refreshToken = data?.session?.refresh_token || null;
-        userId = data?.session?.user?.id || null;
-      } else if (supabase?.auth?.session) {
-        const s = supabase.auth.session();
-        accessToken = s?.access_token || null;
-        refreshToken = s?.refresh_token || null;
-        userId = s?.user?.id || null;
-      }
+      const storedUser = localStorage.getItem('alyson_user');
+      if (storedUser) userId = JSON.parse(storedUser)?.id || null;
     } catch (_) {}
 
     if (userId) {
@@ -4022,15 +3916,6 @@ window.testSafariUrl = async function() {
         console.log('✅ Current user ID set in main process:', userId);
       } catch (e) {
         console.log('⚠️ Failed to set current user ID:', e.message);
-      }
-    }
-
-    if (accessToken) {
-      try {
-        await ipc.invoke('auth:set-session', { access_token: accessToken, refresh_token: refreshToken });
-        console.log('✅ User session forwarded to main process');
-      } catch (e) {
-        console.log('⚠️ Failed to forward session:', e.message);
       }
     }
 
@@ -4088,29 +3973,21 @@ window.testSafariUrl = async function() {
     
     // Step 6: Check database
     console.log('🗄️ Checking database for saved URL...');
-    if (!supabase) {
-      alert('Supabase client not available to verify DB save');
-      return;
-    }
-    
     const now = new Date();
     const start = new Date(now); 
     start.setMinutes(start.getMinutes() - 10);
     
-    const { data, error } = await supabase
-      .from('url_logs')
-      .select('id, url, site_url, domain, timestamp')
-      .gte('timestamp', start.toISOString())
-      .lte('timestamp', now.toISOString())
-      .order('timestamp', { ascending: false })
-      .limit(50);
+    const historyResult = await ipc.invoke('get-url-history', {
+      startDate: start.toISOString(),
+      endDate: now.toISOString()
+    });
     
-    if (error) {
-      alert(`Database query failed:\n${error.message}\n\nCheck authentication and RLS policies`);
+    if (!historyResult || historyResult.success === false) {
+      alert(`Database query failed:\n${historyResult?.error || 'Unknown error'}\n\nCheck the main process logs`);
       return;
     }
     
-    const saved = (data || []).some(r => {
+    const saved = (historyResult.data || []).some(r => {
       const a = (r.url || '').toLowerCase();
       const b = (r.site_url || '').toLowerCase();
       const c = (r.domain || '').toLowerCase();

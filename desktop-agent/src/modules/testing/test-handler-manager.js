@@ -14,7 +14,6 @@ class TestHandlerManager {
     this.captureScreenshot = dependencies.captureScreenshot;
     this.getActiveApplication = dependencies.getActiveApplication;
     this.antiCheatDetector = dependencies.antiCheatDetector;
-    this.supabase = dependencies.supabase;
     this.global = dependencies.global || global;
     
     console.log('✅ TestHandlerManager initialized');
@@ -204,28 +203,21 @@ class TestHandlerManager {
     this.ipcMain.handle('test-database-connection', async () => {
       try {
         console.log('🧪 Testing database connection...');
-        
-        if (!this.supabase) {
+
+        // RDS is only reachable through the NestJS API; probe /health rather than
+        // reading a payroll table as a connectivity canary.
+        const { checkBackendHealth } = require('../utils/backend-health');
+        const health = await checkBackendHealth(this.global.config);
+
+        if (!health.ok) {
+          const reason = health.error || (health.status ? `HTTP ${health.status}` : 'unreachable');
+          console.error('❌ Database test failed:', reason);
           return { 
             success: false, 
-            error: 'Supabase client not initialized' 
+            error: `Database connection failed: ${reason}` 
           };
         }
-        
-        // Test database connection with a simple query
-        const { data, error } = await this.supabase
-          .from('time_logs')
-          .select('id')
-          .limit(1);
-        
-        if (error) {
-          console.error('❌ Database test failed:', error);
-          return { 
-            success: false, 
-            error: `Database connection failed: ${error.message}` 
-          };
-        }
-        
+
         console.log('✅ Database connection working');
         return { 
           success: true, 

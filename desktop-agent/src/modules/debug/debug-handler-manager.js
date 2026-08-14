@@ -15,7 +15,6 @@ class DebugHandlerManager {
     this.detectBrowserUrl = dependencies.detectBrowserUrl;
     this.extractDomain = dependencies.extractDomain;
     this.config = dependencies.config;
-    this.supabase = dependencies.supabase;
     this.systemPreferences = dependencies.systemPreferences;
     this.global = dependencies.global || global;
     
@@ -146,23 +145,18 @@ class DebugHandlerManager {
     this.ipcMain.handle('debug-test-database', async () => {
       try {
         console.log('🧪 [DEBUG-TEST] Testing database connection...');
-        
-        // Test basic connection by trying to fetch config
-        if (!this.config.supabase_url || !this.config.supabase_key) {
-          return { success: false, error: 'Missing Supabase configuration' };
+
+        // RDS sits behind the NestJS API, so /health is the reachability probe.
+        // A read against a payroll table is not used as a connectivity canary.
+        const { checkBackendHealth } = require('../utils/backend-health');
+        const health = await checkBackendHealth(this.config);
+
+        if (!health.ok) {
+          const reason = health.error || (health.status ? `HTTP ${health.status}` : 'unreachable');
+          console.error('❌ [DEBUG-TEST] Database connection failed:', reason);
+          return { success: false, error: `Database error: ${reason}` };
         }
-        
-        // Test database query
-        const { data, error } = await this.supabase
-          .from('time_logs')
-          .select('id')
-          .limit(1);
-        
-        if (error) {
-          console.error('❌ [DEBUG-TEST] Database connection failed:', error);
-          return { success: false, error: `Database error: ${error.message}` };
-        }
-        
+
         console.log('✅ [DEBUG-TEST] Database connection test passed');
         return { success: true, message: 'Database connection working' };
       } catch (error) {
@@ -320,6 +314,14 @@ class DebugHandlerManager {
           accessibilityStatus = !!this.global.mouseTrackingInterval || !!this.global.keyboardTrackingInterval; // Fallback to checking if intervals exist
         }
         
+        let rdsConfigured = false;
+        try {
+          const { isBackendTimeLogsEnabled } = require('../utils/backend-time-logs');
+          rdsConfigured = !!isBackendTimeLogsEnabled(this.config);
+        } catch (error) {
+          console.log('⚠️ [DEBUG-STATUS] Backend config check failed:', error.message);
+        }
+
         // Check feature statuses based on actual functionality
         const features = {
           screenshots: {
@@ -357,10 +359,12 @@ class DebugHandlerManager {
             working: hasActiveInput || !!this.global.mouseTrackingInterval || !!this.global.keyboardTrackingInterval
           },
           database: {
-            status: this.config.supabase_url && this.config.supabase_key ? 'active' : 'inactive',
+            // Config-presence check only (this snapshot is synchronous); real
+            // reachability is debug-test-database / SystemMonitor.
+            status: rdsConfigured ? 'active' : 'inactive',
             lastUpdate: now,
-            connected: !!(this.config.supabase_url && this.config.supabase_key),
-            working: !!(this.config.supabase_url && this.config.supabase_key)
+            connected: rdsConfigured,
+            working: rdsConfigured
           },
           permissions: {
             status: 'active', // We got this far, so basic permissions work

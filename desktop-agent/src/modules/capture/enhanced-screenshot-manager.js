@@ -8,7 +8,6 @@ const cleanupRegistry = require('../core/cleanup-registry');
 const debugLogger = require('../utils/debug-logger');
 const { debounce } = require('../utils/debounce');
 const { createFeatureLogger } = require('../utils/logger');
-const { resolveSupabaseClient } = require('../utils/session-recovery');
 const { uploadScreenshotBuffer } = require('../utils/screenshot-storage');
 const {
   MEETING_ACTIVITY_FLOOR_PERCENT,
@@ -239,7 +238,6 @@ class EnhancedScreenshotManager {
       // No fallback needed - wrappers will be initialized by main.js or tracking manager
       log.info({ step: 'NO WRAPPERS PROVIDED, will use global when available' });
     }
-    this.supabaseService = dependencies.supabaseService;
     this.mainWindow = dependencies.mainWindow;
     if (dependencies.systemPreferences) {
       this.systemPreferences = dependencies.systemPreferences;
@@ -891,14 +889,12 @@ class EnhancedScreenshotManager {
           // Direct save as last resort
           if (!saved) {
             try {
-              const supabase = resolveSupabaseClient();
               const userId = this.resolveActiveUserId();
 
               // ENHANCED LOGGING: Log upload attempt details
               log.info({
                 step: 'ATTEMPTING_DIRECT_UPLOAD',
                 ctx: {
-                  hasSupabase: !!supabase,
                   hasUserId: !!userId,
                   userId: userId,
                   bufferSize: result.buffer?.length,
@@ -907,7 +903,7 @@ class EnhancedScreenshotManager {
               });
               console.log(`📤 [SCREENSHOT-UPLOAD] Attempting direct upload - Buffer: ${result.buffer?.length} bytes, User: ${userId}`);
 
-              if (supabase && userId) {
+              if (userId) {
                 const capturedAt = new Date().toISOString();
 
                 let activityData = { clicks: 0, keys: 0, moves: 0 };
@@ -928,7 +924,6 @@ class EnhancedScreenshotManager {
                 );
 
                 const uploadResult = await uploadScreenshotBuffer({
-                  supabase,
                   buffer: result.buffer,
                   userId,
                   capturedAt,
@@ -963,12 +958,11 @@ if (uploadResult?.id) {
               } else {
                 log.error({
                   step: 'MISSING_DEPENDENCIES', ctx: {
-                    hasSupabase: !!supabase,
                     hasUserId: !!userId,
                     hasTimeLog: !!global.currentTimeLogId
                   }
                 });
-                console.error(`❌ [SCREENSHOT-UPLOAD] Missing dependencies - Supabase: ${!!supabase}, UserId: ${!!userId}`);
+                console.error(`❌ [SCREENSHOT-UPLOAD] Missing dependencies - UserId: ${!!userId}`);
               }
             } catch (e) {
               log.error({ step: 'DIRECT_SAVE_EXCEPTION', message: e.message, stack: e.stack });
@@ -1066,14 +1060,12 @@ if (uploadResult?.id) {
           // Direct save as last resort
           if (!saved) {
             try {
-              const supabase = resolveSupabaseClient();
               const userId = this.resolveActiveUserId();
 
               // ENHANCED LOGGING: Log upload attempt details
               log.info({
                 step: 'ATTEMPTING_DIRECT_UPLOAD',
                 ctx: {
-                  hasSupabase: !!supabase,
                   hasUserId: !!userId,
                   userId: userId,
                   bufferSize: result.buffer?.length,
@@ -1082,7 +1074,7 @@ if (uploadResult?.id) {
               });
               console.log(`📤 [SCREENSHOT-UPLOAD] Attempting direct upload - Buffer: ${result.buffer?.length} bytes, User: ${userId}`);
 
-              if (supabase && userId) {
+              if (userId) {
                 const capturedAt = new Date().toISOString();
 
                 let activityData = { clicks: 0, keys: 0, moves: 0 };
@@ -1103,7 +1095,6 @@ if (uploadResult?.id) {
                 );
 
                 const uploadResult = await uploadScreenshotBuffer({
-                  supabase,
                   buffer: result.buffer,
                   userId,
                   capturedAt,
@@ -1139,12 +1130,11 @@ if (uploadResult?.id) {
               } else {
                 log.error({
                   step: 'MISSING_DEPENDENCIES', ctx: {
-                    hasSupabase: !!supabase,
                     hasUserId: !!userId,
                     hasTimeLog: !!global.currentTimeLogId
                   }
                 });
-                console.error(`❌ [SCREENSHOT-UPLOAD] Missing dependencies - Supabase: ${!!supabase}, UserId: ${!!userId}`);
+                console.error(`❌ [SCREENSHOT-UPLOAD] Missing dependencies - UserId: ${!!userId}`);
               }
             } catch (e) {
               log.error({ step: 'DIRECT_SAVE_EXCEPTION', message: e.message, stack: e.stack });

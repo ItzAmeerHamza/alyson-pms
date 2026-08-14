@@ -35,7 +35,7 @@ function secondsWithinLocalDay(startMs, endMs, dayRef = new Date()) {
   return secondsWithinWorkDay(startMs, endMs, dayRef);
 }
 
-async function includeCrossMidnightActiveLog(supabase, userId, currentTimeLogId, timeLogs, isTracking) {
+async function includeCrossMidnightActiveLog(userId, currentTimeLogId, timeLogs, isTracking) {
   if (!isTracking || !currentTimeLogId) return timeLogs || [];
   const list = [...(timeLogs || [])];
   if (list.some((log) => log.id === currentTimeLogId)) return list;
@@ -50,17 +50,6 @@ async function includeCrossMidnightActiveLog(supabase, userId, currentTimeLogId,
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Active log lookup failed:', err.message);
-  }
-
-  if (supabase) {
-    const { data, error } = await supabase
-      .from('time_logs')
-      .select('id, start_time, end_time, status')
-      .eq('id', currentTimeLogId)
-      .maybeSingle();
-    if (!error && data && data.status === 'active') {
-      return [...list, data];
-    }
   }
 
   return list;
@@ -319,7 +308,7 @@ function finalizeTodayAggregate(timeLogs, currentTimeLogId, isTracking, offlineC
   };
 }
 
-async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, isTracking = false) {
+async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking = false) {
   if (!userId) {
     return {
       completedClosedSeconds: 0,
@@ -330,9 +319,6 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
     };
   }
 
-  const startOfDay = startOfWorkDay();
-  const endOfDay = endOfWorkDayExclusive();
-  const lookbackStart = new Date(startOfDay.getTime() - 36 * 60 * 60 * 1000);
   const offlineLogs = loadOfflineQueuedTimeLogRows(userId, currentTimeLogId);
   const offlineCount = offlineLogs.length;
 
@@ -353,7 +339,6 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
       }
       const overlapping = logsOverlappingLocalDay(timeLogs);
       const withActive = await includeCrossMidnightActiveLog(
-        supabase,
         userId,
         currentTimeLogId,
         overlapping,
@@ -363,47 +348,17 @@ async function computeTodayTimeLogSeconds(supabase, userId, currentTimeLogId, is
       return finalizeTodayAggregate(merged, currentTimeLogId, isTracking, offlineCount);
     }
   } catch (err) {
-    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend path failed, trying Supabase:', err.message);
+    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend path failed:', err.message);
   }
 
-  if (!supabase) {
-    // Offline-only: still show queued + live local time (never wipe the clock).
-    if (offlineCount > 0 || (isTracking && currentTimeLogId)) {
-      return finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount);
-    }
-    const err = new Error('No database backend available for today time stats');
-    err.code = 'TODAY_STATS_UNAVAILABLE';
-    throw err;
+  // RDS is the only remote source; without it, show queued + live local time
+  // rather than wiping a clock the employee is still running against.
+  if (offlineCount > 0 || (isTracking && currentTimeLogId)) {
+    return finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount);
   }
-
-  const { data: timeLogs, error } = await supabase
-    .from('time_logs')
-    .select('id, start_time, end_time, status')
-    .eq('user_id', userId)
-    .gte('start_time', lookbackStart.toISOString())
-    .lt('start_time', endOfDay.toISOString())
-    .order('start_time', { ascending: false });
-
-  if (error) {
-    console.warn('⚠️ [TODAY-TIME-LOG-STATS] Query failed — using offline queue:', error.message);
-    if (offlineCount > 0 || (isTracking && currentTimeLogId)) {
-      return finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount);
-    }
-    const err = new Error(error.message || 'Today time stats query failed');
-    err.code = 'TODAY_STATS_QUERY_FAILED';
-    throw err;
-  }
-
-  const overlapping = logsOverlappingLocalDay(timeLogs);
-  const withActive = await includeCrossMidnightActiveLog(
-    supabase,
-    userId,
-    currentTimeLogId,
-    overlapping,
-    isTracking,
-  );
-  const merged = mergeRemoteAndOfflineLogs(withActive, offlineLogs, currentTimeLogId);
-  return finalizeTodayAggregate(merged, currentTimeLogId, isTracking, offlineCount);
+  const err = new Error('No database backend available for today time stats');
+  err.code = 'TODAY_STATS_UNAVAILABLE';
+  throw err;
 }
 
 module.exports = {

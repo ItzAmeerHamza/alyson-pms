@@ -388,6 +388,62 @@ Resources:
             Enabled: !If [ScreenshotAiEnabled, true, false]
             Description: Alyson Time Doctor - enqueue pending screenshots for AI analysis
 
+  # BILLING SAFETY NET: close sessions whose agent stopped proving it was alive.
+  # A slept/crashed/offline agent cannot report itself broken, so this must run
+  # server-side. Sessions close at last heartbeat — never at NOW.
+  CloseStaleSessionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-close-stale-sessions-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/close-stale-sessions-handler.handler
+      Timeout: 300
+      MemorySize: 512
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DATABASE_HOST: !Ref DatabaseHost
+          DATABASE_NAME: !Ref DatabaseName
+          DATABASE_USER: !Ref DatabaseUser
+          DATABASE_PASSWORD: !Ref DatabasePassword
+          DATABASE_SSL: 'true'
+          DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+          DATABASE_POOL_MAX: '2'
+          STALE_AFTER_MINUTES: '20'
+          LIVENESS_GRACE_SECONDS: '120'
+          # Reports only. Set to 'false' to let it actually close sessions —
+          # do that only after reviewing a dry-run report.
+          DRY_RUN: 'true'
+          MAX_CLOSES_PER_RUN: '25'
+          STALE_RATIO_ABORT_PCT: '50'
+      VpcConfig:
+        SubnetIds: !Ref VpcSubnetIds
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: '*'
+      Events:
+        CloseStaleSessionsSchedule:
+          Type: Schedule
+          Properties:
+            Name: !Sub 'alyson-time-doctor-close-stale-sessions-schedule-${EnvironmentName}'
+            Schedule: rate(10 minutes)
+            # OFF until a dry-run report has been reviewed. This job mutates
+            # payroll data; enabling it is a deliberate decision, not a default.
+            Enabled: false
+            Description: Alyson Time Doctor - close stale open sessions at last proof-of-life
+
   # Incremental export of time_doctor.time_logs → S3 NDJSON (Athena).
   # Path: s3://{S3BucketName}/tracked-time/time_logs/dt=YYYY-MM-DD/*.ndjson
   TimeLogsExportFunction:
@@ -469,7 +525,8 @@ Resources:
           SES_EMAIL_FUNCTION_NAME: !Ref SesEmailFunction
           EMAIL_FROM: !Ref EmailFrom
           EMAIL_SENDERS: !Ref EmailSenders
-          PACING_DIGEST_TO: hamza@cintara.ai,mohita@cintara.ai,alysonclient@cintara.ai
+          # PACING_DIGEST_TO omitted — defaults in PacingService (hamza, mohita, alysonclient)
+          # to stay under Lambda 4KB env limit.
           LAMBDA_VPC_ENDPOINT_URL: !Join
             - ''
             - - 'https://'

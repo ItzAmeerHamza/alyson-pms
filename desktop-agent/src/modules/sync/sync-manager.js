@@ -1,5 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
-const { getSupabaseRealtimeOptions } = require('../../lib/supabase-realtime-transport');
 const { db, logger } = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
@@ -8,45 +6,6 @@ const crypto = require('crypto');
 class SyncManager {
   constructor(config) {
     this.config = config;
-    
-    // Configure Supabase with extended timeouts for sync operations
-    const syncOptions = {
-      ...getSupabaseRealtimeOptions(),
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false
-      },
-      global: {
-        fetch: (url, options = {}) => {
-          // Set extended timeouts for sync operations which may involve large data
-          const customOptions = {
-          ...options,
-          timeout: 120000, // 2 minute timeout for sync operations (increased for high latency)
-          headers: {
-            // CRITICAL FIX: Preserve Supabase headers first, then add custom ones
-            ...options.headers,
-            'User-Agent': 'Alyson-Sync-Manager/1.0'
-          }
-        };
-          
-          // Add retry logic specifically for sync failures
-          return fetch(url, customOptions).catch(async (error) => {
-            if (error.name === 'TimeoutError' || 
-                error.code === 'UND_ERR_CONNECT_TIMEOUT' ||
-                error.code === 'ENOTFOUND' ||
-                error.message.includes('fetch failed')) {
-              console.log(`🔄 [SYNC] Retrying sync request after error: ${error.message}`);
-              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds for sync retries (increased)
-              return fetch(url, customOptions);
-            }
-            throw error;
-          });
-        }
-      }
-    };
-
-    this.supabase = createClient(config.supabase_url, config.supabase_key, syncOptions);
 
     // AWS/RDS cutover path: send all writes to backend API protected by INTERNAL_API_KEY.
     this.desktopSyncApiUrl = config.backend_api_url || process.env.BACKEND_API_URL || 'http://localhost:3000/sync/desktop-action';
@@ -708,10 +667,6 @@ class SyncManager {
         if (isBackendRdsEnabled(this.config)) {
           const health = await Promise.race([checkBackendHealth(this.config), timeoutPromise]);
           online = Boolean(health?.ok);
-        } else if (this.supabase) {
-          const healthCheckPromise = this.supabase.from('time_logs').select('id').limit(1);
-          const { error } = await Promise.race([healthCheckPromise, timeoutPromise]);
-          online = !error;
         }
 
         const wasOnline = this.isOnline;

@@ -11,7 +11,7 @@ if (typeof window !== 'undefined' && window.AppHistoryManager && window.__appHis
 } else {
 
 class AppHistoryManager {
-  constructor(supabaseClient, ipcRenderer) {
+  constructor(ipcRenderer) {
     // Prefer an invoker that exposes .invoke regardless of preload shape
     // Accept either the raw ipcRenderer or a preload-exposed electronAPI
     this.ipc = (ipcRenderer && typeof ipcRenderer.invoke === 'function')
@@ -212,7 +212,7 @@ class AppHistoryManager {
 
           // Handle different types of errors
           if (response && response.error) {
-            // If Supabase service not initialized (fetch failed)
+            // If the data service is not initialized yet (fetch failed)
             if (response.error.includes('fetch failed') || response.error.includes('TypeError') || response.error.includes('initialization timeout')) {
               console.warn(`⚠️ [APP-HISTORY] Service initialization error on attempt ${retryCount + 1}, retrying...`);
               retryCount++;
@@ -842,8 +842,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // Global initialization function
-window.initializeAppHistoryManager = function(supabaseClient, ipcRenderer) {
-  window.AppHistoryManager = new AppHistoryManager(supabaseClient, ipcRenderer);
+window.initializeAppHistoryManager = function(ipcRenderer) {
+  window.AppHistoryManager = new AppHistoryManager(ipcRenderer);
   return window.AppHistoryManager;
 };
 

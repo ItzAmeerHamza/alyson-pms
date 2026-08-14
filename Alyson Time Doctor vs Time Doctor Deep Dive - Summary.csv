@@ -1,0 +1,34 @@
+"Alyson Time Doctor vs Time Doctor — August 1–12, 2026",,,,
+"Time Doctor treated as source of truth. See ""Method & Reconciliation"" for how every figure was derived.",,,,
+,,,,
+HEADLINE,,,,
+Total hours — Time Doctor,1962h 26m,,,
+Total hours — Alyson Time Doctor,1871h 37m,,,
+Net variance,-90h 49m,95.4% of Time Doctor,,
+Gross error (sum of daily absolute error),868h 34m,44% of true hours,,
+,,,,
+User-days compared,299,,,
+  accurate (within ±25%),139  (46%),Fewer than half the days are usable,,
+  overcounted (>125%),47,290h 52m phantom time,,
+  undercounted (<75%),50,-183h 42m lost,,
+  zero recorded despite real work,27,-153h 24m invisible,,
+  time billed on days Time Doctor shows none,36,143h 19m unbacked,,
+,,,,
+Employees in Time Doctor,35,,,
+  with zero Alyson time,5,See Inactive Users tab,,
+  never onboarded (no account),4,,,
+,,,,
+THE HEADLINE TOTAL IS MISLEADING,,,,
+Alyson lands at 95% of Time Doctor only because 434h 11m of overcount nearly cancels 337h 6m of missing time. Per-day the app is wrong more often than it is right.,,,,
+,,,,
+ROOT CAUSES,,,,
+#,Root cause,Evidence (August 1–12),Impact,Fix
+1,"Sessions never terminate when the machine sleeps, shuts down, or drops network. The row stays open and end_time is eventually set to wall-clock now(), so sleep hours are billed as work.","40 sessions ran >6h holding 414.9h; 15 ran >10h. Longest: bhupen, Aug 5 21:56 → Aug 7 00:11 = 26.2h. 121 sessions cross midnight covering 445.7h.",290h 52m across 47 user-days,"Heartbeat every 30–60s. On close set end_time = LAST heartbeat, never now(). Emit an explicit stop on OS sleep / lock / shutdown / logoff."
+2,"Idle detection does not exist. idle_seconds = 0 on all 3,331 rows, so Alyson bills wall-clock while Time Doctor bills input activity.","deducted_seconds is non-zero on 28 of 3,331 rows (0.8%), worth 2.10h total. Time Doctor fills only ~70% of a person's first-to-last daily span; Alyson fills nearly all of it.",Systematic inflation on every day the timer stays up,"Sample input idle (GetLastInputInfo on Windows / CGEventSourceSecondsSinceLastEventType on macOS), populate idle_seconds, auto-pause after N minutes."
+3,"The stale-session job flags but never closes. Its own meta text: ""Flagged only — time_logs not modified. Close requires confirmation.""","24 stale_session_flagged events; one at 11.8h old (salman, Aug 11) still was not closed. All 57 confirmed_close events ran with allow_unconfirmed_end=true and admin_confirmed=false, so the gate is not gating.",Flagged sessions keep accruing until a human intervenes,Let inspect_open_sessions auto-close at the last client_checkpoint after a grace period instead of waiting for confirmation.
+4,Silent start failures. On 27 user-days the employee worked a full day in Time Doctor and Alyson holds zero rows.,"Prashansa Chauhan: 71h53m in TD, no Alyson row since Jul 27. Bhupen Patel and Aryan Sawant: 4 full days each. Khuzaima Tofeeq: 5 days.",-153h 24m invisible,"Local write-ahead queue that survives restarts, plus a daily ""you tracked 0h"" alert to both the user and an admin."
+5,Sessions fragment and the time between fragments is lost.,151 sessions under 60 seconds; 266 restarts within 30s of the previous close. Ameer Hamza on Aug 7: 18 sessions but only 1.2h recorded against 6.3h in Time Doctor.,-183h 42m lost across 50 user-days,Debounce reconnects — resume the existing session rather than opening a new one when the gap is under the heartbeat interval.
+6,"No single-active-session guard. One device can hold two open sessions, billing the same minute twice.","65 overlapping pairs worth 22.9h — and 60 of 65 are on the SAME device_id, so this is a missing constraint, not a second machine.",22.9h double-counted,"Partial unique index on (user_id, workspace_id) WHERE status='active'; close-then-open on the client."
+7,"end_time is initialised to start+30s then bumped to now(), so a network gap gets back-filled as work.","ahsanjaved, Aug 10: a 90-second session bumped to 18:39 — +4h41m in one UPDATE. aryaman, Aug 12: a 3-second session became 68 minutes.",+9.4h in the 9 days the audit log covers,Cap the bump at last_heartbeat + interval. Never extend past the last proof of life.
+8,"Sessions are not split at the day boundary, so daily and weekly reports are wrong even where totals are right.","121 cross-midnight sessions covering 445.7h. Time Doctor splits at 23:59:59 / 00:00:00; Alyson does not. This also produced 36 user-days where Alyson bills time Time Doctor shows no work for — 25 of them Saturdays, i.e. Friday-night sessions bleeding into the weekend.",143h 19m on days with no matching work,Split on the workspace-timezone day boundary at write time.
+9,"The audit log starts 2026-08-05, so you are blind on most of the beta.","all_time_logs_events covers 1,330 of 3,331 time_logs (40%). agent_version is NULL on all 2,795 events.",Cannot attribute any failure to an app version or OS,"Backfill is impossible, but stamp agent_version, OS and device model on every event from now on."

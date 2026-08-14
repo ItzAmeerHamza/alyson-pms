@@ -1,6 +1,6 @@
 /**
  * Time log CRUD via NestJS /sync/desktop-action → RDS.
- * Used when Cognito + INTERNAL_API_KEY are configured (Supabase JWT not required).
+ * Used when Cognito + INTERNAL_API_KEY are configured.
  */
 
 const { normalizeTenantUserId } = require('./tenant-user-id');
@@ -42,6 +42,26 @@ function resolveSyncUrl(config = global.config) {
     : `${base.replace(/\/$/, '')}/sync/desktop-action`;
 }
 
+/**
+ * Offline hint so Start/Stop do not re-discover the outage on every call.
+ * Three stacked 5–8s timeouts made an offline Start take ~18s; with this the
+ * network preamble is skipped and the session is armed locally straight away.
+ */
+let _lastNetworkFailureAt = 0;
+let _lastNetworkSuccessAt = 0;
+const OFFLINE_HINT_MS = 20_000;
+
+function isLikelyOffline() {
+  if (!_lastNetworkFailureAt) return false;
+  if (_lastNetworkSuccessAt > _lastNetworkFailureAt) return false;
+  return Date.now() - _lastNetworkFailureAt < OFFLINE_HINT_MS;
+}
+
+function noteNetworkResult(ok) {
+  if (ok) _lastNetworkSuccessAt = Date.now();
+  else _lastNetworkFailureAt = Date.now();
+}
+
 async function callDesktopAction(action, data, config = global.config, options = {}) {
   const { key } = resolveBackendCredentials(config);
   if (!key) {
@@ -74,6 +94,7 @@ async function callDesktopAction(action, data, config = global.config, options =
     });
   } catch (err) {
     const aborted = err?.name === 'AbortError' || controller.signal.aborted;
+    noteNetworkResult(false);
     throw new Error(
       aborted
         ? `Backend sync timeout after ${timeoutMs}ms (${action})`
@@ -82,6 +103,7 @@ async function callDesktopAction(action, data, config = global.config, options =
   } finally {
     clearTimeout(timer);
   }
+  noteNetworkResult(true);
 
   let body = {};
   try {
@@ -100,7 +122,12 @@ async function callDesktopAction(action, data, config = global.config, options =
 async function createTimeLog(payload, config = global.config, options = {}) {
   const result = await callDesktopAction(
     'create_time_log',
-    { log: payload },
+    {
+      // Stamped here rather than at each call site so every session records the
+      // build that made it, including offline rows replayed later. The audit
+      // trigger copies it from the row onto every event.
+      log: { agent_version: global.appVersion || config?.version || null, ...payload },
+    },
     config,
     options,
   );
@@ -126,13 +153,32 @@ async function updateTimeLog(id, updates, config = global.config, options = {}) 
   return result;
 }
 
+/**
+ * KILL ALL open sessions for this device. Each row closes at its own last
+ * proof-of-life, so this is safe to call from stop / lid-close / quit / logout
+ * without knowing (or inventing) an end time.
+ */
+async function killAllSessions(userId, deviceId = null, config = global.config, options = {}) {
+  return callDesktopAction(
+    'close_active_sessions',
+    {
+      user_id: requireTenantUserId(userId),
+      device_id: deviceId,
+      close_at_own_liveness: true,
+      reason: options.reason || 'kill_all',
+    },
+    config,
+    { timeoutMs: options.timeoutMs || 8000 },
+  );
+}
+
 async function closeActiveSessions(userId, deviceId = null, config = global.config, options = {}) {
   return callDesktopAction(
     'close_active_sessions',
     {
       user_id: requireTenantUserId(userId),
       device_id: deviceId,
-      // Without end_time → inspect/flag only (does not mutate time_logs).
+      // Without end_time → inspect; stale rows close at last heartbeat.
       end_time: options.end_time || null,
       confirm_with_local_checkpoint: options.confirm_with_local_checkpoint === true,
       admin_confirmed: options.admin_confirmed === true,
@@ -147,8 +193,8 @@ async function closeActiveSessions(userId, deviceId = null, config = global.conf
 }
 
 /**
- * Inspect open sessions: recover if fresh, flag if stale.
- * Does NOT auto-close from heartbeat.
+ * Inspect open sessions: recover if fresh.
+ * Stale sessions are closed at last heartbeat / checkpoint (never NOW).
  */
 async function reconcileOpenSessions(userId, deviceId = null, config = global.config, options = {}) {
   return callDesktopAction(
@@ -167,7 +213,7 @@ async function reconcileOpenSessions(userId, deviceId = null, config = global.co
 }
 
 /**
- * Confirmed close using local durable checkpoint (or admin). Never heartbeat-alone.
+ * Confirmed close using local durable checkpoint, last heartbeat, or admin.
  */
 async function confirmStaleSessionClose(payload, config = global.config, options = {}) {
   return callDesktopAction(
@@ -356,10 +402,12 @@ async function insertTimeLogEvents(events, config = global.config) {
 module.exports = {
   resolveBackendCredentials,
   isBackendTimeLogsEnabled,
+  isLikelyOffline,
   callDesktopAction,
   createTimeLog,
   updateTimeLog,
   closeActiveSessions,
+  killAllSessions,
   reconcileOpenSessions,
   confirmStaleSessionClose,
   upsertSessionHeartbeat,

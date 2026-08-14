@@ -47,7 +47,6 @@ const TrackingSnapshotSchema = z.object({
 class ReportsIPCHandlers {
   constructor(dependencies = {}) {
     this.ipcMain = dependencies.ipcMain;
-    this.supabaseService = dependencies.supabaseService;
     this.activityManager = dependencies.activityManager;
     this.trackingManager = dependencies.trackingManager;
     this.config = dependencies.config;
@@ -161,7 +160,8 @@ class ReportsIPCHandlers {
    * Get activity stats from database for last 24h
    */
   async getDBActivityStats(now) {
-    if (!this.supabaseService || !this.global.currentUserId) {
+    const { isBackendRdsEnabled, getTimeLogsInRange } = require('../utils/backend-rds-reads');
+    if (!isBackendRdsEnabled(this.config) || !this.global.currentUserId) {
       return {
         mouseMoves: 0,
         keyPresses: 0,
@@ -175,44 +175,24 @@ class ReportsIPCHandlers {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const userId = this.global.currentUserId;
 
-      // Get activity from activities table (preferred)
-      const { data: activities } = await this.supabaseService
-        .from('activities')
-        .select('activity_type')
-        .eq('user_id', userId)
-        .gte('created_at', oneDayAgo);
+      // Per-event counts came from the Supabase `activities` table, which has no RDS
+      // equivalent — only the screenshot rollup remains.
+      const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+      const screenshots = await fetchScreenshotsFromBackend(userId, this.config, {
+        startIso: oneDayAgo,
+        endIso: new Date().toISOString(),
+      });
 
       let mouseMoves = 0, keyPresses = 0, mouseClicks = 0;
-      
-      if (activities?.length) {
-        activities.forEach(activity => {
-          switch (activity.activity_type) {
-            case 'mouse_move': mouseMoves++; break;
-            case 'keystroke': keyPresses++; break;
-            case 'mouse_click': mouseClicks++; break;
-          }
-        });
-      } else {
-        // Fallback to screenshots rollup data
-        const { data: screenshots } = await this.supabaseService
-          .from('screenshots')
-          .select('mouse_movements, keystrokes, mouse_clicks')
-          .eq('user_id', userId)
-          .gte('timestamp', oneDayAgo);
 
-        if (screenshots?.length) {
-          mouseMoves = screenshots.reduce((sum, s) => sum + (s.mouse_movements || 0), 0);
-          keyPresses = screenshots.reduce((sum, s) => sum + (s.keystrokes || 0), 0);
-          mouseClicks = screenshots.reduce((sum, s) => sum + (s.mouse_clicks || 0), 0);
-        }
+      if (screenshots?.length) {
+        mouseMoves = screenshots.reduce((sum, s) => sum + (s.mouse_movements || 0), 0);
+        keyPresses = screenshots.reduce((sum, s) => sum + (s.keystrokes || 0), 0);
+        mouseClicks = screenshots.reduce((sum, s) => sum + (s.mouse_clicks || 0), 0);
       }
 
       // Calculate active time from time logs (last 24h)
-      const { data: timeLogs } = await this.supabaseService
-        .from('time_logs')
-        .select('start_time, end_time, idle_seconds')
-        .eq('user_id', userId)
-        .gte('start_time', oneDayAgo);
+      const timeLogs = await getTimeLogsInRange(userId, { start: oneDayAgo }, this.config);
 
       let activeSeconds = 0;
       if (timeLogs?.length) {
@@ -271,8 +251,9 @@ class ReportsIPCHandlers {
    */
   async getActivityLogs(cursor, limit, typeFilter, timeRange) {
     const now = new Date().toISOString();
-    
-    if (!this.supabaseService || !this.global.currentUserId) {
+
+    const { isBackendRdsEnabled, listAppLogs, listUrlLogs } = require('../utils/backend-rds-reads');
+    if (!isBackendRdsEnabled(this.config) || !this.global.currentUserId) {
       return {
         items: [],
         hasMore: false,
@@ -299,48 +280,26 @@ class ReportsIPCHandlers {
       }
 
       const logs = [];
+      const endTime = new Date().toISOString();
+      const perSourceLimit = Math.ceil(limit / 4);
 
-      // Fetch from multiple sources concurrently
-      const [appLogs, urlLogs, screenshots, activities, idleLogs] = await Promise.all([
-        this.supabaseService.from('app_logs')
-          .select('app_name, window_title, timestamp, time_log_id')
-          .eq('user_id', userId)
-          .gte('timestamp', startTime)
-          .order('timestamp', { ascending: false })
-          .limit(Math.ceil(limit / 4)),
-          
-        this.supabaseService.from('url_logs')
-          .select('url, title, domain, browser, timestamp, time_log_id')
-          .eq('user_id', userId)
-          .gte('timestamp', startTime)
-          .order('timestamp', { ascending: false })
-          .limit(Math.ceil(limit / 4)),
-          
-        this.supabaseService.from('screenshots')
-          .select('timestamp, activity_percent, time_log_id')
-          .eq('user_id', userId)
-          .gte('timestamp', startTime)
-          .order('timestamp', { ascending: false })
-          .limit(Math.ceil(limit / 4)),
-          
-        this.supabaseService.from('activities')
-          .select('activity_type, created_at, time_log_id')
-          .eq('user_id', userId)
-          .gte('created_at', startTime)
-          .order('created_at', { ascending: false })
-          .limit(Math.ceil(limit / 4)),
-          
-        this.supabaseService.from('idle_logs')
-          .select('idle_start, idle_end, duration_seconds')
-          .eq('user_id', userId)
-          .gte('idle_start', startTime)
-          .order('idle_start', { ascending: false })
-          .limit(Math.ceil(limit / 4))
+      // 'Input Activity' and 'Idle Start'/'Idle End' entries came from the Supabase
+      // `activities` and `idle_logs` tables; neither has an RDS read action, so those
+      // log types are no longer produced here.
+      const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+      const [appLogs, urlLogs, screenshots] = await Promise.all([
+        listAppLogs(userId, { start: startTime, end: endTime, limit: perSourceLimit }, this.config),
+        listUrlLogs(userId, { start: startTime, end: endTime, limit: perSourceLimit }, this.config),
+        fetchScreenshotsFromBackend(userId, this.config, {
+          startIso: startTime,
+          endIso: endTime,
+          limit: perSourceLimit,
+        }),
       ]);
 
       // Process app logs
-      if (appLogs.data?.length) {
-        appLogs.data.forEach(log => {
+      if (appLogs?.length) {
+        appLogs.forEach(log => {
           logs.push({
             ts: log.timestamp,
             type: 'App Switch',
@@ -351,8 +310,8 @@ class ReportsIPCHandlers {
       }
 
       // Process URL logs
-      if (urlLogs.data?.length) {
-        urlLogs.data.forEach(log => {
+      if (urlLogs?.length) {
+        urlLogs.forEach(log => {
           logs.push({
             ts: log.timestamp,
             type: 'Web Activity',
@@ -362,54 +321,15 @@ class ReportsIPCHandlers {
         });
       }
 
-      // Process screenshots
-      if (screenshots.data?.length) {
-        screenshots.data.forEach(log => {
+      // Process screenshots — RDS names the capture time `captured_at`
+      if (screenshots?.length) {
+        screenshots.forEach(log => {
           logs.push({
-            ts: log.timestamp,
+            ts: log.captured_at,
             type: 'Screenshot',
             message: `Screenshot captured automatically (${log.activity_percent || 0}% activity)`,
             meta: { activity: log.activity_percent, timeLogId: log.time_log_id }
           });
-        });
-      }
-
-      // Process activities
-      if (activities.data?.length) {
-        const activityCounts = activities.data.reduce((acc, activity) => {
-          acc[activity.activity_type] = (acc[activity.activity_type] || 0) + 1;
-          return acc;
-        }, {});
-
-        if (Object.keys(activityCounts).length > 0) {
-          const latest = activities.data[0];
-          logs.push({
-            ts: latest.created_at,
-            type: 'Input Activity',
-            message: `Input detected: ${activityCounts.mouse_click || 0} clicks, ${activityCounts.keystroke || 0} keys, ${activityCounts.mouse_move || 0} moves`,
-            meta: { counts: activityCounts, timeLogId: latest.time_log_id }
-          });
-        }
-      }
-
-      // Process idle logs
-      if (idleLogs.data?.length) {
-        idleLogs.data.forEach(log => {
-          logs.push({
-            ts: log.idle_start,
-            type: 'Idle Start',
-            message: `User became idle - no activity detected`,
-            meta: { duration: log.duration_seconds }
-          });
-          
-          if (log.idle_end) {
-            logs.push({
-              ts: log.idle_end,
-              type: 'Idle End',
-              message: `User returned from idle state`,
-              meta: { duration: log.duration_seconds }
-            });
-          }
         });
       }
 
@@ -504,20 +424,12 @@ class ReportsIPCHandlers {
         let fromUTC, toUTC;
         
         if (timeLogId) {
-          // Get time window from time_logs table
-          const { data: timeLog } = await this.supabaseService
-            .from('time_logs')
-            .select('start_time, end_time')
-            .eq('id', timeLogId)
-            .eq('user_id', this.global.currentUserId)
-            .single();
-            
-          if (!timeLog) {
-            throw new Error('Time log not found');
-          }
-          
-          fromUTC = timeLog.start_time;
-          toUTC = timeLog.end_time || new Date().toISOString();
+          // Resolving a window from a single time_log id was a Supabase point-lookup;
+          // there is no RDS action to fetch one time log by id.
+          console.warn(
+            '⚠️ [REPORTS] Session summary by timeLogId is unavailable (no RDS lookup by id) — returning empty summary',
+          );
+          return { success: true, data: this.getEmptySessionSummary() };
         } else {
           // Convert local times to UTC
           fromUTC = new Date(fromLocal).toISOString();
@@ -539,20 +451,28 @@ class ReportsIPCHandlers {
   }
 
   /**
+   * Zeroed session summary used when no data source can answer the request.
+   */
+  getEmptySessionSummary() {
+    return {
+      totalSeconds: 0,
+      idleSeconds: 0,
+      activeSeconds: 0,
+      mouseMoves: 0,
+      keyPresses: 0,
+      mouseClicks: 0,
+      appsCount: 0,
+      screenshotCount: 0,
+    };
+  }
+
+  /**
    * Calculate comprehensive session summary for a time window
    */
   async calculateSessionSummary(fromUTC, toUTC) {
-    if (!this.supabaseService || !this.global.currentUserId) {
-      return {
-        totalSeconds: 0,
-        idleSeconds: 0,
-        activeSeconds: 0,
-        mouseMoves: 0,
-        keyPresses: 0,
-        mouseClicks: 0,
-        appsCount: 0,
-        screenshotCount: 0,
-      };
+    const { isBackendRdsEnabled, listAppLogs } = require('../utils/backend-rds-reads');
+    if (!isBackendRdsEnabled(this.config) || !this.global.currentUserId) {
+      return this.getEmptySessionSummary();
     }
 
     const userId = this.global.currentUserId;
@@ -561,102 +481,61 @@ class ReportsIPCHandlers {
       // Calculate total time window
       const totalSeconds = Math.floor((new Date(toUTC) - new Date(fromUTC)) / 1000);
 
-      // Get idle periods that overlap with the window
-      const { data: idlePeriods } = await this.supabaseService
-        .from('idle_logs')
-        .select('idle_start, idle_end, duration_seconds')
-        .eq('user_id', userId)
-        .not('idle_end', 'is', null)
-        .lte('idle_start', toUTC)
-        .gte('idle_end', fromUTC);
-
-      // Calculate overlapping idle time
+      // Idle overlap, clipped to the requested window so a period straddling the
+      // boundary only contributes the part inside it.
       let idleSeconds = 0;
-      if (idlePeriods?.length) {
-        idlePeriods.forEach(period => {
-          const overlapStart = new Date(Math.max(new Date(period.idle_start), new Date(fromUTC)));
-          const overlapEnd = new Date(Math.min(new Date(period.idle_end), new Date(toUTC)));
-          const overlapDuration = Math.max(0, (overlapEnd - overlapStart) / 1000);
-          idleSeconds += overlapDuration;
-        });
+      try {
+        const { listIdleLogs } = require('../utils/backend-rds-reads');
+        const idleLogs = await listIdleLogs(userId, { start: fromUTC, end: toUTC }, this.config);
+        const windowStart = new Date(fromUTC).getTime();
+        const windowEnd = new Date(toUTC).getTime();
+        for (const row of idleLogs) {
+          const s = Math.max(new Date(row.idle_start).getTime(), windowStart);
+          const rawEnd = row.idle_end
+            ? new Date(row.idle_end).getTime()
+            : new Date(row.idle_start).getTime() + (Number(row.duration_seconds) || 0) * 1000;
+          const e = Math.min(rawEnd, windowEnd);
+          if (e > s) idleSeconds += Math.floor((e - s) / 1000);
+        }
+      } catch (idleErr) {
+        console.warn('⚠️ [REPORTS] Idle read failed:', idleErr?.message || idleErr);
       }
+      const activeSeconds = Math.max(0, totalSeconds - idleSeconds);
 
-      // Get activity counts from activities table
-      const { data: activities } = await this.supabaseService
-        .from('activities')
-        .select('activity_type')
-        .eq('user_id', userId)
-        .gte('created_at', fromUTC)
-        .lte('created_at', toUTC);
+      // Per-event counts came from the Supabase `activities` table (no RDS equivalent);
+      // only the screenshot rollup remains.
+      const { fetchScreenshotsFromBackend } = require('../utils/backend-screenshots');
+      const screenshots = await fetchScreenshotsFromBackend(userId, this.config, {
+        startIso: fromUTC,
+        endIso: toUTC,
+      });
 
       let mouseMoves = 0, keyPresses = 0, mouseClicks = 0;
-      if (activities?.length) {
-        activities.forEach(activity => {
-          switch (activity.activity_type) {
-            case 'mouse_move': mouseMoves++; break;
-            case 'keystroke': keyPresses++; break;
-            case 'mouse_click': mouseClicks++; break;
-          }
-        });
-      } else {
-        // Fallback to screenshots rollup
-        const { data: screenshots } = await this.supabaseService
-          .from('screenshots')
-          .select('mouse_movements, keystrokes, mouse_clicks')
-          .eq('user_id', userId)
-          .gte('timestamp', fromUTC)
-          .lte('timestamp', toUTC);
-
-        if (screenshots?.length) {
-          mouseMoves = screenshots.reduce((sum, s) => sum + (s.mouse_movements || 0), 0);
-          keyPresses = screenshots.reduce((sum, s) => sum + (s.keystrokes || 0), 0);
-          mouseClicks = screenshots.reduce((sum, s) => sum + (s.mouse_clicks || 0), 0);
-        }
+      if (screenshots?.length) {
+        mouseMoves = screenshots.reduce((sum, s) => sum + (s.mouse_movements || 0), 0);
+        keyPresses = screenshots.reduce((sum, s) => sum + (s.keystrokes || 0), 0);
+        mouseClicks = screenshots.reduce((sum, s) => sum + (s.mouse_clicks || 0), 0);
       }
 
       // Get apps count
-      const { data: appLogs } = await this.supabaseService
-        .from('app_logs')
-        .select('app_name')
-        .eq('user_id', userId)
-        .gte('timestamp', fromUTC)
-        .lte('timestamp', toUTC);
+      const appLogs = await listAppLogs(userId, { start: fromUTC, end: toUTC }, this.config);
 
       const appsCount = appLogs ? new Set(appLogs.map(log => log.app_name)).size : 0;
 
-      // Get screenshot count
-      const { data: screenshots, count: screenshotCount } = await this.supabaseService
-        .from('screenshots')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .gte('timestamp', fromUTC)
-        .lte('timestamp', toUTC);
-
-      const activeSeconds = Math.max(0, totalSeconds - idleSeconds);
-
       return {
         totalSeconds,
-        idleSeconds: Math.floor(idleSeconds),
-        activeSeconds: Math.floor(activeSeconds),
+        idleSeconds,
+        activeSeconds,
         mouseMoves,
         keyPresses,
         mouseClicks,
         appsCount,
-        screenshotCount: screenshotCount || 0,
+        screenshotCount: screenshots?.length || 0,
       };
 
     } catch (error) {
       console.error('❌ [REPORTS] Error calculating session summary:', error);
-      return {
-        totalSeconds: 0,
-        idleSeconds: 0,
-        activeSeconds: 0,
-        mouseMoves: 0,
-        keyPresses: 0,
-        mouseClicks: 0,
-        appsCount: 0,
-        screenshotCount: 0,
-      };
+      return this.getEmptySessionSummary();
     }
   }
 }
