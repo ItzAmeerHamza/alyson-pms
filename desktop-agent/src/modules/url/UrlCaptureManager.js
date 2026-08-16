@@ -6,6 +6,16 @@
 const EventEmitter = require('events');
 const { noteMeetingContext } = require('../../lib/meeting-context');
 
+/**
+ * How long the browser must be out of focus before an open visit is closed.
+ *
+ * Long enough that checking Slack or an IDE does not split one visit into
+ * several rows; short enough that a real departure is not billed as browsing.
+ * The recorded end is backdated to when focus was actually lost, so this only
+ * controls fragmentation — never the accuracy of the duration itself.
+ */
+const URL_VISIT_GRACE_MS = 90 * 1000;
+
 class UrlCaptureManager extends EventEmitter {
   constructor(config = {}) {
     super();
@@ -465,24 +475,61 @@ if (!this.config.enabled) {
           console.log('[WIN.URL.ADAPTER.RESULT] undefined - no URL found');
         }
       }
-      if (process.platform === 'darwin') {
-        if (result && result.url) {
+      // "No browser open" is the steady state for most of a working day, and it
+      // was printing several lines every poll — URL logging was 18% of all log
+      // volume, almost entirely this. Log a result whenever there is one; log the
+      // empty case only on the transition into it.
+      if (result && result.url) {
+        // Back on a browser — the visit continues, so cancel any pending close.
+        this._loggedEmptyUrl = false;
+        this._urlAwaySince = null;
+        if (process.platform === 'darwin') {
           console.log('🔧 [MACOS-URL] Result:', {
             url: result.url?.substring(0, 60),
             browser: result.browser,
             title: result.title?.substring(0, 40)
           });
-        } else {
-          console.log('🔧 [MACOS-URL] No URL detected (normal if no browser active)');
         }
-      }
+      } else {
+        // No browser in front. A url_logs row otherwise stays open until a
+        // DIFFERENT url arrives, so leaving the browser left the last visit
+        // accruing until the next browsing session — one row reached 33.9 hours.
+        //
+        // Closing on the first empty poll would bound that, but it also splits a
+        // visit every time someone alt-tabs for a few seconds. So: wait out a
+        // grace period, then close and BACKDATE the end to when the browser
+        // actually lost focus. Brief switches stay one visit; genuine departures
+        // end where they really ended.
+        const now = Date.now();
+        if (!this._urlAwaySince) this._urlAwaySince = now;
 
-      if (!result) {
-        // Only log this on non-Windows or when verbose logging is off
-        if (process.platform !== 'win32' || process.env.LOG_URL_VERBOSE !== 'true') {
-          console.log('[URL] No result from adapter - this is normal if no browser is active');
+        if (!this._loggedEmptyUrl) {
+          this._loggedEmptyUrl = true;
+          console.log('[URL] No browser URL — quiet until one appears');
+        }
+
+        const awayMs = now - this._urlAwaySince;
+        if (awayMs >= URL_VISIT_GRACE_MS && !this._urlVisitClosed) {
+          this._urlVisitClosed = true;
+          try {
+            const { closeOpenUrlLogs, isBackendTimeLogsEnabled, isLikelyOffline } =
+              require('../utils/backend-time-logs');
+            const userId = global.currentUserId || global.config?.user_id;
+            if (userId && isBackendTimeLogsEnabled(global.config) && !isLikelyOffline()) {
+              await closeOpenUrlLogs(
+                { user_id: userId, ended_at: new Date(this._urlAwaySince).toISOString() },
+                global.config,
+              );
+              console.log(
+                `[URL] Closed open visit at ${new Date(this._urlAwaySince).toISOString()} (browser away ${Math.round(awayMs / 1000)}s)`,
+              );
+            }
+          } catch (closeErr) {
+            console.warn('⚠️ [URL] Could not close open visit:', closeErr?.message || closeErr);
+          }
         }
       }
+      if (result && result.url) this._urlVisitClosed = false;
       this.lastResult = result; // Store for adaptive polling
 
       // Track video-meeting presence from the live (unfiltered) poll result so the

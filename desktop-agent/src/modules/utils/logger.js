@@ -163,6 +163,15 @@ const LEVELS = {
   error: 40,
 };
 
+/**
+ * Categories that also emit a strict `[JSON]` line for machine parsing.
+ *
+ * Kept deliberately small — these are the ones queried out of S3 when
+ * reconstructing what happened to a session. High-frequency categories (SCREEN,
+ * INPUT, APP_DETECTION, URL) log once and are read by eye.
+ */
+const JSON_DUPLICATE_CATEGORIES = new Set(['SESSION_AUDIT', 'SESSION', 'DB']);
+
 function safeStringify(value) {
   try {
     return JSON.stringify(value);
@@ -249,8 +258,17 @@ class Logger {
       default:
         console.log(line);
     }
-    // Emit JSON payload at debug level for ingestion when needed
-    if (this.level === 'debug' && level !== 'debug') {
+    // Machine-readable duplicate, for forensic categories only.
+    //
+    // This used to fire for every info/warn/error, writing each entry to disk
+    // twice and shipping twice as much to S3 — one user produced 97,652 lines
+    // and 28.8 MB in a day. The human line above already carries category, step,
+    // message and ctx, and the file stamps its own timestamps, so the duplicate
+    // was almost entirely redundant.
+    //
+    // Categories here are the ones reconstructed after the fact, where a strict
+    // JSON shape is worth the extra write. Everything else keeps the single line.
+    if (this.level === 'debug' && level !== 'debug' && JSON_DUPLICATE_CATEGORIES.has(category)) {
       console.debug(`[JSON] ${safeStringify(payload)}`);
     }
     /* eslint-enable no-console */

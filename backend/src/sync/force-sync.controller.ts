@@ -1571,7 +1571,16 @@ export class ForceSyncController {
         }
         const limit = Math.min(Math.max(Number(data?.limit) || 500, 1), 5000);
         const result = await this.db.query(
-          `SELECT id, site_url AS url, title, domain, browser, started_at AS timestamp
+          // ended_at and duration are returned so a visit can be reported as
+          // "this link, roughly this long". Without them the read path could only
+          // answer which links were opened, never for how long.
+          `SELECT id, site_url AS url, title, domain, browser,
+                  started_at AS timestamp, started_at, ended_at,
+                  CASE
+                    WHEN ended_at IS NOT NULL
+                      THEN GREATEST(0, EXTRACT(EPOCH FROM (ended_at - started_at))::int)
+                    ELSE NULL
+                  END AS duration_seconds
            FROM time_doctor.url_logs
            WHERE ${filters.join(' AND ')}
            ORDER BY started_at DESC

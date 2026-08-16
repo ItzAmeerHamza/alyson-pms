@@ -791,6 +791,18 @@ function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {})
   const cap = maxPlausibleTrackedSecondsToday();
   let clamped = Number.isFinite(cap) ? Math.min(db, cap) : db;
 
+  // This applies a STOPPED total, which is allowed to move the clock down. UI
+  // refresh paths call it from a stale view of tracking state during the Start
+  // transition, and the database total necessarily lags a running session — so
+  // it pulled a live clock backward by the sync delay (observed: 7453s → 7444s,
+  // nine seconds, while tracking). While tracking, the live clock owns the
+  // display and this may only correct upward.
+  if (isRendererActivelyTracking() && window.__lastTrackingStartTime) {
+    setTrackerDisplaySeconds(clamped);
+    updateTrackerEffectiveMeta();
+    return Math.max(clamped, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+  }
+
   // A stats read that lands before the just-closed session has been written
   // comes back short by that session. Applying it rewound the clock in front of
   // the employee moments after they pressed Stop. Hold the click total until the
@@ -971,9 +983,30 @@ function beginLocalTrackingClock(startTime) {
   window.__clearedSecondaryForTray = false;
   // LIVE ACCURACY: closed base comes from DB/stats only — never seed from
   // local high-water (that reintroduced phantom "since midnight" time).
-  const closedKnown = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+  //
+  // The stop floor is the exception: it is the total the clock was frozen at
+  // when Stop was clicked, so it already accounts for the session that just
+  // closed. The closed base is otherwise only refreshed from the backend, so
+  // an offline Stop→Start left it short by that entire session — the first
+  // live paint landed below the frozen display and the monotonic guard held
+  // the clock still until the tray took over seconds later. That is the
+  // "stuck, then jumped" clock. Online the floor is already null by here.
+  const cap = maxPlausibleTrackedSecondsToday();
+  let closedKnown = Math.max(
+    0,
+    Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
+    Math.floor(Number(window.__todayBaseAtLastStop) || 0),
+  );
+  if (Number.isFinite(cap)) closedKnown = Math.min(closedKnown, cap);
+  window.__completedTodayBaseSeconds = closedKnown;
   const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
-  if (hw > 0 && (closedKnown === 0 || isInflatedWorkDayCapHighWater(hw, closedKnown))) {
+  // A closed base of 0 means the DB total has not arrived yet — not that the day
+  // is empty. Treating "unknown" as "zero" discarded a correct high-water on
+  // every Start, painting 00:00:00 until the tray restored the real figure a
+  // second later. Only an authoritative comparison can call a high-water corrupt.
+  const baseHydrated = !!window.__todayBaseHydratedOnce;
+  const corrupt = baseHydrated && isInflatedWorkDayCapHighWater(hw, closedKnown);
+  if (hw > 0 && corrupt) {
     // Drop corrupt HW so the first live paint is base + wall-clock elapsed.
     discardInflatedHighWater(
       closedKnown + getTodayElapsedSeconds(startTime),

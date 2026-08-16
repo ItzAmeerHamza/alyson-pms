@@ -17,6 +17,9 @@ try {
   console.warn('[perm] node-mac-permissions not available, macOS permission checks will be limited');
 }
 
+/** Last screen-permission value written to the log, so polling only logs changes. */
+let _lastLoggedScreenStatus = null;
+
 /**
  * Get screen recording permission status
  * @returns {'authorized'|'denied'|'restricted'|'not-determined'}
@@ -30,13 +33,16 @@ function getScreenStatus() {
     // verify with a real screenshot probe as a fallback signal.
     try {
       const electronStatus = systemPreferences.getMediaAccessStatus('screen');
-      console.log('🔥 [EMERGENCY] Electron API screen status RAW:', electronStatus);
-      console.log('🔥 [EMERGENCY] Type:', typeof electronStatus);
-      console.log('🔥 [EMERGENCY] Checking if === "granted":', electronStatus === 'granted');
+      // Logged only when it changes. This polls every few seconds and printed
+      // four lines each time — 4,400 lines a day per user restating a value that
+      // is almost always identical.
+      if (electronStatus !== _lastLoggedScreenStatus) {
+        console.log(`🔐 [PERMISSION] Screen recording status: ${electronStatus}`);
+        _lastLoggedScreenStatus = electronStatus;
+      }
 
       // Map Electron status to our expected format
       if (electronStatus === 'granted' || electronStatus === 'authorized' || electronStatus === 'limited') {
-        console.log('🔥 [EMERGENCY] Returning "authorized"');
         return 'authorized';
       }
       if (electronStatus === 'denied') return 'denied';

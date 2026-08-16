@@ -172,31 +172,68 @@ async function uploadScreenshotBuffer({
     let uploadBuffer = buffer;
     let ext = 'png';
     let contentType = 'image/png';
-    if (nativeImage) {
-      try {
-        const img = nativeImage.createFromBuffer(buffer);
-        if (!img.isEmpty()) {
-          uploadBuffer = img.toJPEG(80);
-          ext = 'jpg';
-          contentType = 'image/jpeg';
-          log.debug({
-            step: 'JPEG_CONVERT',
-            ctx: {
-              pngBytes: buffer.length,
-              jpegBytes: uploadBuffer.length,
-              ratio: `${((1 - uploadBuffer.length / buffer.length) * 100).toFixed(0)}%`,
-            },
-          });
+    let convertRoute = 'none';
+    const convertStartedAt = Date.now();
+
+    // Encode off the main thread.
+    //
+    // nativeImage.createFromBuffer + toJPEG are synchronous Electron calls, so
+    // decoding a multi-megabyte PNG and re-encoding it blocks the event loop for
+    // as long as it takes — measured at ~10s on an Intel Mac under memory
+    // pressure, once a minute, every minute. The tray timer runs on this same
+    // thread, so the clock visibly froze for the duration.
+    //
+    // sharp hands the work to libvips' thread pool and yields, so the timer keeps
+    // ticking. nativeImage stays as the fallback for builds where sharp's native
+    // binary does not load (it ships per-architecture and has been wrong before).
+    try {
+      const sharp = require('sharp');
+      uploadBuffer = await sharp(buffer).jpeg({ quality: 80 }).toBuffer();
+      ext = 'jpg';
+      contentType = 'image/jpeg';
+      convertRoute = 'sharp-async';
+    } catch (sharpErr) {
+      if (nativeImage) {
+        try {
+          const img = nativeImage.createFromBuffer(buffer);
+          if (!img.isEmpty()) {
+            uploadBuffer = img.toJPEG(80);
+            ext = 'jpg';
+            contentType = 'image/jpeg';
+            convertRoute = 'nativeimage-sync';
+          }
+        } catch (convertErr) {
+          log.warn({ step: 'JPEG_CONVERT_FAILED', message: convertErr.message });
         }
-      } catch (convertErr) {
-        log.warn({ step: 'JPEG_CONVERT_FAILED', message: convertErr.message });
       }
+      if (convertRoute === 'none') {
+        log.warn({ step: 'JPEG_CONVERT_FALLBACK', message: sharpErr.message });
+      }
+    }
+
+    if (convertRoute !== 'none') {
+      log.debug({
+        step: 'JPEG_CONVERT',
+        ctx: {
+          pngBytes: buffer.length,
+          jpegBytes: uploadBuffer.length,
+          ratio: `${((1 - uploadBuffer.length / buffer.length) * 100).toFixed(0)}%`,
+          route: convertRoute,
+          // Blocking time when route is nativeimage-sync; wall time otherwise.
+          duration_ms: Date.now() - convertStartedAt,
+        },
+      });
     }
 
     let perceptualHash = null;
     try {
+      // Hash the already-encoded JPEG, not the original PNG. computeDHash calls
+      // nativeImage.createFromBuffer synchronously, so it decodes on the main
+      // thread — feeding it the ~280KB JPEG instead of the ~1.4MB PNG cuts that
+      // blocking decode by roughly 5x. dHash is computed from a 9x8 downscale, so
+      // JPEG artefacts do not change the result.
       if (nativeImage) {
-        perceptualHash = computeDHash(buffer, { nativeImage });
+        perceptualHash = computeDHash(uploadBuffer, { nativeImage });
       }
     } catch (hashError) {
       log.warn({ step: 'PHASH_FAILED', message: hashError.message });

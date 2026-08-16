@@ -673,6 +673,12 @@ class TrayManager {
     const tick = () => {
       try {
         if (!this.tray || this.tray.isDestroyed()) return;
+        // Stop was clicked — the total is frozen at that instant. The tray is
+        // only torn down in Phase 3, ~2s later, and every tick in between both
+        // paints and raises the high-water that the next Start seeds its base
+        // from. Offline that is the whole ~2s stop round-trip, billed once per
+        // stop/start cycle and never rewound (the base is forward-only).
+        if (global.isStopping) return;
 
         this._maybeRolloverLocalDay();
         const elapsed = this._getSessionElapsedSeconds();

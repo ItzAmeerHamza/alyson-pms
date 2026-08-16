@@ -11,6 +11,14 @@ const { computeTodayTimeLogSeconds } = require('../utils/today-time-log-stats');
 const { normalizeTenantUserId } = require('../utils/tenant-user-id');
 const backendTimeLogs = require('../utils/backend-time-logs');
 
+/**
+ * Upper bound on how far a session may be stamped before the moment its row is
+ * created. Covers the offline Start path (3s health-check race + 2s create
+ * timeout) with room to spare, without letting a Start that sat behind a
+ * draining prior stop backdate minutes into the past.
+ */
+const MAX_START_BACKDATE_MS = 15000;
+
 class TrackingManager extends EventEmitter {
   constructor(config, dependencies = {}) {
     super();
@@ -444,7 +452,9 @@ try {
       }
 
       const finalProjectId = projectId || global.currentProjectId || this.config.project_id || null;
-      const startTimeIso = recoveredSession?.start_time || new Date().toISOString();
+      const startTimeIso =
+        recoveredSession?.start_time ||
+        new Date(this._resolveStartStampMs(__startupTimestamp)).toISOString();
 
       const timeLogData = {
         user_id: effectiveUserId,
@@ -1118,6 +1128,7 @@ try {
 
       // Freeze end time and displayed total at click — DB write may finish seconds later.
       global._stopEndTimeOverride = new Date().toISOString();
+      global._lastStopEndAtMs = Date.now();
       this._captureStopTodayTotalSnapshot();
       
       // Update local state immediately
@@ -1461,6 +1472,7 @@ try {
     global.isStopping = true;
 
     global._stopEndTimeOverride = new Date().toISOString();
+    global._lastStopEndAtMs = Date.now();
     this._captureStopTodayTotalSnapshot();
 
     const timeLogIdForBackground = this.currentTimeLogId;
@@ -1741,6 +1753,63 @@ try {
       } catch (_) { /* audit is best-effort */ }
     }
     return { stillStopping };
+  }
+
+  /**
+   * A session starts when the employee clicks Start, not when its row finally
+   * lands. Offline those are ~5s apart (health-check race, then the create
+   * timeout), so stamping the later instant dropped that time from the day and
+   * left the tray clock — which counts from the stamp — permanently behind the
+   * in-app clock, which counts from the click.
+   *
+   * Clamped both ways so a Start that waited on a draining prior stop cannot
+   * backdate into that stop's session and reopen an overlap.
+   *
+   * The queue floor is the load-bearing one. _clampOverlappingQueuedSessions
+   * resolves an overlap by shortening the EARLIER session to the later start —
+   * it never moves the later start — so a stamp that lands before something
+   * already recorded does not merely overlap, it silently deletes real worked
+   * time on flush. Start also closes orphan/stale rows immediately before this
+   * runs, and those closes never touch _lastStopEndAtMs, so the in-memory hint
+   * alone is not enough. Every clamp here can only move the stamp later, so the
+   * worst case degrades to today's behaviour (stamp = now).
+   */
+  _resolveStartStampMs(clickMs) {
+    const now = Date.now();
+    const click = Number(clickMs);
+    if (!Number.isFinite(click) || click <= 0 || click >= now) return now;
+    let stamp = Math.max(click, now - MAX_START_BACKDATE_MS);
+    const lastStopEnd = Number(global._lastStopEndAtMs);
+    if (Number.isFinite(lastStopEnd) && lastStopEnd > 0 && lastStopEnd <= now) {
+      stamp = Math.max(stamp, lastStopEnd);
+    }
+    const queueEnd = this._latestRecordedEndMs();
+    if (Number.isFinite(queueEnd) && queueEnd > 0 && queueEnd <= now) {
+      stamp = Math.max(stamp, queueEnd);
+    }
+    return Math.min(stamp, now);
+  }
+
+  /**
+   * Latest end_time across everything still queued for sync. Best-effort: a
+   * failure here must never block Start, and returning 0 only costs the
+   * backdate, never correctness (the flush-time clamp remains the last gate).
+   */
+  _latestRecordedEndMs() {
+    try {
+      const queue = this.getOfflineQueue();
+      if (!Array.isArray(queue)) return 0;
+      let latest = 0;
+      for (const item of queue) {
+        const end = item?.data?.end_time;
+        if (!end) continue;
+        const ms = new Date(end).getTime();
+        if (Number.isFinite(ms) && ms > latest) latest = ms;
+      }
+      return latest;
+    } catch (_) {
+      return 0;
+    }
   }
 
   _captureStopTodayTotalSnapshot() {
@@ -2094,6 +2163,9 @@ try {
       endMs = usableFrozen ? frozenMs : nowMs;
     }
     const endTime = new Date(endMs).toISOString();
+    // Authoritative end for this session — the next Start must not backdate past
+    // it. Also covers the sleep / shutdown paths that never run stop Phase 1.
+    global._lastStopEndAtMs = Math.max(Number(global._lastStopEndAtMs) || 0, endMs);
     const idleCutSeconds = authorizedIdleCut ? cutSeconds : 0;
     // Consume flags so a later retry cannot cut again after stop.
     global._stopEndTimeOverride = null;
