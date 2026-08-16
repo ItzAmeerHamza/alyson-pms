@@ -502,7 +502,9 @@ function applyTodayEffectiveStats(stats) {
         window.__todayTrackedSeconds =
           Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
           getTodayElapsedSeconds(window.__lastTrackingStartTime);
-        setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
+        // Monotonic: this is a PARTIAL payload (idle/low-activity still loading),
+        // so it is the least trustworthy input there is to move the clock down.
+        setTrackerDisplaySeconds(window.__todayTrackedSeconds);
       } else if (!isRendererActivelyTracking() || !window.__lastTrackingStartTime) {
         applyAuthoritativeStoppedTotal(incoming, { reason: 'partial-stopped-stats' });
       }
@@ -546,20 +548,16 @@ function applyTodayEffectiveStats(stats) {
         discardInflatedHighWater(liveAuth, 'live-db-stats');
       }
       applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
-      const dbClosed = Math.max(
-        0,
-        Math.floor(Number(stats.completedTodayBeforeCurrentSessionSeconds) || 0),
-      );
-      if (
-        (stats.timeLogsCount || 0) > 0 &&
-        Math.floor(Number(window.__completedTodayBaseSeconds) || 0) > dbClosed + 180
-      ) {
-        window.__completedTodayBaseSeconds = dbClosed;
-      }
+      // The base is NOT snapped down to the server total when the two diverge.
+      // Work recorded while offline lives in the local queue, so the server is
+      // simply behind — it is not evidence that the local base is wrong. Trusting
+      // the lower number rewound the visible clock by the exact divergence the
+      // moment connectivity returned. Genuine inflation is still caught above by
+      // discardInflatedHighWater and by the work-day cap in setTrackerDisplaySeconds.
       window.__todayTrackedSeconds =
         Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
         getTodayElapsedSeconds(window.__lastTrackingStartTime);
-      setTrackerDisplaySeconds(window.__todayTrackedSeconds, { allowDecrease: true });
+      setTrackerDisplaySeconds(window.__todayTrackedSeconds);
       // Keep the restart cache current mid-session too, so a crash while
       // tracking still repaints real time rather than zero.
       persistAuthoritativeTotal(window.__todayTrackedSeconds);
@@ -791,7 +789,18 @@ function hydrateAuthoritativeFromCache() {
 function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {}) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
   const cap = maxPlausibleTrackedSecondsToday();
-  const clamped = Number.isFinite(cap) ? Math.min(db, cap) : db;
+  let clamped = Number.isFinite(cap) ? Math.min(db, cap) : db;
+
+  // A stats read that lands before the just-closed session has been written
+  // comes back short by that session. Applying it rewound the clock in front of
+  // the employee moments after they pressed Stop. Hold the click total until the
+  // database catches up; it is released below once the DB reaches it.
+  const frozenStop = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
+  const frozenUsable = frozenStop > clamped && (!Number.isFinite(cap) || frozenStop <= cap);
+  if (frozenUsable) {
+    clamped = frozenStop;
+  }
+
   const prev = Math.max(
     0,
     Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
@@ -806,7 +815,10 @@ function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {})
   clearTrackedHighWaterStorage(localDateIso());
   window.__todayTrackedHighWaterSeconds = clamped;
   window.__todayTrackedSeconds = clamped;
-  window.__todayBaseAtLastStop = null;
+  // Only drop the click floor once the database has actually caught up to it.
+  if (!frozenUsable) {
+    window.__todayBaseAtLastStop = null;
+  }
   window.__completedTodayBaseSeconds = clamped;
   window.__todayBaseHydratedOnce = true;
   window.__trackerDisplayDayKey = localDateIso();
@@ -1010,8 +1022,13 @@ function updateRendererTrackingClock() {
       : elapsed,
   );
   if (dashboardTimer) dashboardTimer.textContent = sessionStr;
-  // allowDecrease so a prior inflated paint cannot freeze the live second.
-  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
+  // Stop was clicked — the total is already frozen at that instant. Painting
+  // again here would add the wind-down time to the visible clock.
+  if (window.__stopInProgress) return;
+  // Monotonic: the tick may correct the clock upward, never backward. An
+  // inflated paint is still released by the work-day cap inside
+  // setTrackerDisplaySeconds, which is the only thing that should move it down.
+  setTrackerDisplaySeconds(cumulativeSec);
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -1760,7 +1777,11 @@ function setupModuleCommunication() {
       if (dashboardTimer && dashboardTimer.textContent !== sessionStr) {
         dashboardTimer.textContent = sessionStr;
       }
-      setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: true });
+      // A tray tick still in flight when Stop was clicked must not extend the
+      // clock past the click.
+      if (window.__stopInProgress) return;
+      // Monotonic — a tray payload arriving after a sync must not rewind the clock.
+      setTrackerDisplaySeconds(cumulativeSec);
     }
   });
 

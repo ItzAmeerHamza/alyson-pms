@@ -208,3 +208,9 @@ desktop-agent/env-config.js
 # Vision migrations (applied via Supabase MCP)
 supabase/migrations/20260108_*.sql
 production-test/
+
+# Debugging artefacts — screen recordings and extracted frames are large and
+# would be committed permanently by `git add -A` during a release.
+*.mov
+*.mp4
+frames/

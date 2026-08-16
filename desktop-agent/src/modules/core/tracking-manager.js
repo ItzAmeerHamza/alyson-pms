@@ -150,7 +150,7 @@ try {
       global._stopEndTimeOverride = null;
       this._localSessionArmed = false;
 
-      await this._waitForPriorStopToFinish(8000);
+      const priorStop = await this._waitForPriorStopToFinish(25000);
 
       debugLogger.init('tracking', 'Starting tracking session', {
         projectId: projectId,
@@ -298,9 +298,16 @@ try {
       // Already known offline: skip the inspect + cleanup preamble entirely.
       // Re-discovering the outage here cost 5s + 5s before Start even tried to
       // create the session. Orphans are reconciled on the next online Start.
-      const offlineHint = useBackendTimeLogs && backendTimeLogs.isLikelyOffline();
+      // Skipping the cleanup preamble when offline keeps Start fast, but it is
+      // ALSO the exact condition under which the previous stop fails to finish.
+      // Skipping it then is what leaves two sessions open at once, so an
+      // unfinished stop overrides the offline shortcut.
+      const offlineHint =
+        useBackendTimeLogs && backendTimeLogs.isLikelyOffline() && !priorStop?.stillStopping;
       if (offlineHint) {
         console.log('📴 [TRACKING-MANAGER] Offline — arming local session immediately');
+      } else if (priorStop?.stillStopping) {
+        console.warn('🔒 [TRACKING-MANAGER] Prior stop unfinished — running close-before-start anyway');
       }
       if (useBackendTimeLogs && !offlineHint) {
         try {
@@ -546,6 +553,18 @@ try {
         ...(timeLog._offline ? { _offline: true } : {})
       };
       this._localSessionArmed = true;
+
+      try {
+        require('../utils/session-audit').sessionCreated({
+          timeLogId: this.currentTimeLogId,
+          startTime: startTimeIso,
+          trigger: priorStop?.stillStopping ? 'start_during_stop' : 'start',
+          // Recorded even when null: its absence over time is the evidence that
+          // overlapping sessions have actually stopped happening.
+          priorOpenId: recoveredSession?.id || null,
+          queued: !!timeLog?._offline,
+        });
+      } catch (_) { /* audit is best-effort */ }
 
       __phase('DB insert + state setup done');
       // Propagate to global for legacy guards
@@ -1675,14 +1694,53 @@ try {
     }
   }
 
-  async _waitForPriorStopToFinish(maxMs = 15000) {
+  /**
+   * Block Start until the previous Stop has actually finished.
+   *
+   * This polled a flag for a fixed window and then started anyway. Start passes
+   * 8000ms while the stop's backend call times out at 12000ms, so on a slow or
+   * failing network the wait was guaranteed to expire first: the new session was
+   * created while the old one was still open, and the two overlapped. Summed by
+   * the reports, that overlap is billed twice — 15.33 phantom hours over two
+   * days, all of it on users whose stops were slow (sleep/resume, flaky links).
+   *
+   * The stop already exposes a real promise, so wait on that rather than
+   * guessing a duration. `stillStopping` tells the caller it must not skip the
+   * pre-start cleanup, even offline.
+   */
+  async _waitForPriorStopToFinish(maxMs = 25000) {
     const started = Date.now();
+
+    try {
+      const gsm = require('./graceful-shutdown-manager');
+      if (gsm?.shutdownPromise) {
+        await Promise.race([
+          gsm.shutdownPromise.catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, maxMs)),
+        ]);
+      }
+    } catch (_) { /* fall through to the flag poll */ }
+
     while ((global.isStopping || global._isStoppingTracking) && Date.now() - started < maxMs) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    if (global.isStopping || global._isStoppingTracking) {
-      console.warn('⚠️ [TRACKING-MANAGER] Starting while a prior stop is still in progress');
+
+    const waitedMs = Date.now() - started;
+    const stillStopping = !!(global.isStopping || global._isStoppingTracking);
+    if (stillStopping) {
+      console.warn(
+        `⚠️ [TRACKING-MANAGER] Prior stop unfinished after ${waitedMs}ms — forcing close before Start`,
+      );
     }
+    if (waitedMs > 250 || stillStopping) {
+      try {
+        require('../utils/session-audit').startBlockedByStop({
+          waitedMs,
+          resolved: !stillStopping,
+        });
+      } catch (_) { /* audit is best-effort */ }
+    }
+    return { stillStopping };
   }
 
   _captureStopTodayTotalSnapshot() {
@@ -2023,7 +2081,17 @@ try {
         }
       }
     } else {
-      endMs = Math.max(Date.now(), Number.isFinite(checkpointMs) ? checkpointMs : 0);
+      // The click instant, not the instant this write runs. Wall-clock here
+      // billed each stop for its own round-trip and pushed the clock past the
+      // moment the employee stopped. A checkpoint that fired after the click is
+      // not work either, so it does not extend the end.
+      const nowMs = Date.now();
+      const frozenMs = global._stopEndTimeOverride
+        ? new Date(global._stopEndTimeOverride).getTime()
+        : NaN;
+      const usableFrozen =
+        Number.isFinite(frozenMs) && frozenMs <= nowMs && nowMs - frozenMs <= 5 * 60 * 1000;
+      endMs = usableFrozen ? frozenMs : nowMs;
     }
     const endTime = new Date(endMs).toISOString();
     const idleCutSeconds = authorizedIdleCut ? cutSeconds : 0;
@@ -2393,6 +2461,56 @@ try {
   }
 
   /**
+   * Last gate before offline rows reach the API: no queued session may extend
+   * past the start of the next one.
+   *
+   * Queue entries arrive from several places — normal offline stops, and ledger
+   * rehydration after a crash, which reconstructs sessions from disk without any
+   * knowledge of what else it is reconstructing. Once these replay they are
+   * historical rows, so the server cannot tell an overlap from a legitimate
+   * backfill and every guard upstream has already been bypassed. Enforcing it
+   * here means overlapping time can never be sent at all.
+   *
+   * Mutates in place; the caller persists the queue.
+   */
+  _clampOverlappingQueuedSessions(queue) {
+    try {
+      const creates = queue
+        .filter((i) => i?.type === 'create_time_log' && i?.data?.start_time)
+        .map((i) => ({ item: i, startMs: new Date(i.data.start_time).getTime() }))
+        .filter((x) => Number.isFinite(x.startMs))
+        .sort((a, b) => a.startMs - b.startMs);
+
+      for (let i = 0; i < creates.length - 1; i += 1) {
+        const cur = creates[i].item.data;
+        const nextStartMs = creates[i + 1].startMs;
+        const curEndMs = cur.end_time ? new Date(cur.end_time).getTime() : null;
+        const overlaps = curEndMs === null || curEndMs > nextStartMs;
+        if (!overlaps) continue;
+
+        const clampedMs = Math.max(creates[i].startMs, nextStartMs);
+        const before = cur.end_time || 'open';
+        cur.end_time = new Date(clampedMs).toISOString();
+        cur.status = 'completed';
+        console.warn(
+          `🔒 [TRACKING-MANAGER] Clamped queued session ${cur.id}: ${before} → ${cur.end_time} (next session starts there)`,
+        );
+        try {
+          require('../utils/session-audit').overlapPrevented({
+            where: 'offline_queue_flush',
+            keptId: creates[i + 1].item.data.id,
+            closedId: cur.id,
+            clampedTo: cur.end_time,
+            detail: { previous_end: before },
+          });
+        } catch (_) { /* audit is best-effort */ }
+      }
+    } catch (err) {
+      console.warn('⚠️ [TRACKING-MANAGER] Queue overlap clamp failed:', err?.message || err);
+    }
+  }
+
+  /**
    * Queue a time-log create for durable offline sync.
    * PAYROLL CRITICAL: use a stable UUID (not temp-*) so RDS/API retries are idempotent.
    */
@@ -2420,6 +2538,28 @@ try {
           String(item?.data?.id) === String(stableId)
         ),
     );
+
+    // Close any earlier queued session that is still open, at this session's
+    // start. Offline rows bypass every server-side guard when they replay, so
+    // two sessions recorded during one disconnected stretch would both land
+    // overlapping and each be billed in full. A new session beginning is proof
+    // the previous one had ended — the same rule applied everywhere else.
+    const newStartMs = new Date(queuedTimeLog.start_time).getTime();
+    if (Number.isFinite(newStartMs)) {
+      for (const item of filtered) {
+        if (item?.type !== 'create_time_log') continue;
+        const prev = item.data;
+        if (!prev || prev.end_time || String(prev.id) === String(stableId)) continue;
+        const prevStartMs = new Date(prev.start_time).getTime();
+        if (!Number.isFinite(prevStartMs) || prevStartMs > newStartMs) continue;
+        prev.end_time = new Date(Math.max(prevStartMs, newStartMs)).toISOString();
+        prev.status = 'completed';
+        console.warn(
+          `🔒 [TRACKING-MANAGER] Closed queued offline session ${prev.id} at ${prev.end_time} — next session starts there`,
+        );
+      }
+    }
+
     filtered.push({
       type: 'create_time_log',
       data: queuedTimeLog,
@@ -2802,6 +2942,8 @@ try {
       }
 
       console.log('📶 [TRACKING-MANAGER] Processing offline time-log queue with', queue.length, 'items');
+
+      this._clampOverlappingQueuedSessions(queue);
 
       const remainingItems = [];
 

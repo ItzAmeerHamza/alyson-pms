@@ -396,7 +396,18 @@ class GracefulShutdownManager {
         }
         console.log(`⏱️ [GRACEFUL-SHUTDOWN] Idle-alert cut ${cutSeconds}s → end_time ${endTime}`);
       } else {
-        endTime = new Date().toISOString();
+        // Bill to the moment Stop was clicked, not to the moment this write runs.
+        // captureStopMoment() freezes that instant for exactly this reason; using
+        // wall-clock here charged every stop for its own database round-trip
+        // (~1-3s of unworked time per session) and made the clock tick past the
+        // click before settling back. Ignore a stale or future-dated override.
+        const nowMs = Date.now();
+        const frozenMs = global._stopEndTimeOverride
+          ? new Date(global._stopEndTimeOverride).getTime()
+          : NaN;
+        const usableFrozen =
+          Number.isFinite(frozenMs) && frozenMs <= nowMs && nowMs - frozenMs <= 5 * 60 * 1000;
+        endTime = new Date(usableFrozen ? frozenMs : nowMs).toISOString();
       }
       const idleCutFlag = authorizedIdleCut;
       global._stopEndTimeOverride = null;
@@ -479,6 +490,21 @@ class GracefulShutdownManager {
 
       console.log('✅ [GRACEFUL-SHUTDOWN] Database updated successfully');
       this._lastStopSynced = true;
+
+      try {
+        require('../utils/session-audit').sessionClosed({
+          timeLogId,
+          startTime: global.sessionStartTime || global.trackingManager?.sessionStartTime || null,
+          requestedEnd: endTime,
+          // The server may clamp this to proof-of-life; recording what we asked
+          // for makes a rejected or adjusted write visible, which the database
+          // trigger alone cannot show.
+          endSource: authorizedIdleCut ? 'authorized_idle_cut' : 'stop_click',
+          reason,
+          idleSeconds,
+          synced: true,
+        });
+      } catch (_) { /* audit is best-effort */ }
 
       // Close app/url rows still open at the stop moment. Without this they stay
       // open until the NEXT app switch and get stamped with an ended_at long

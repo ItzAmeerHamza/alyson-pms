@@ -5540,7 +5540,8 @@ if (isElectronContext && ipcMain) {
    */
   const holdTodayTrackedFloor = (payload, { isTracking } = {}) => {
     if (!payload || typeof payload !== 'object') return payload;
-    const last = global._lastGoodTodayStats;
+    // Day-scoped: yesterday's total is not a floor for today.
+    const last = lastGoodStatsForToday();
     const workDate = payload.workDate || getLocalDateKey();
     const cap = getWorkDayTrackedCapSeconds();
     let total = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
@@ -5702,11 +5703,35 @@ if (isElectronContext && ipcMain) {
     const workDay = buildWorkDayContext();
     return {
       ...payload,
-      workDate: payload.workDate || workDay.todayKey,
-      date: payload.date || workDay.todayKey,
+      // Always stamp the CURRENT work day. Deferring to payload.workDate let a
+      // cached _lastGoodTodayStats from an earlier day keep its own date: after
+      // a 401 or a failed query, main answered with yesterday's key while
+      // workDay held today's. The renderer read that stale key, treated it as a
+      // day change, wiped the clock to zero, recomputed today, and looped —
+      // 35,764 rollovers across 16 users on Aug 15, one of them 21,319 times.
+      workDate: workDay.todayKey,
+      date: workDay.todayKey,
       timezone: workDay.timezone,
       workDay,
     };
+  };
+
+  /**
+   * Cached stats are only valid for the day they were captured on. Yesterday's
+   * total is neither a floor for today nor a source of today's date.
+   */
+  const lastGoodStatsForToday = () => {
+    const cached = global._lastGoodTodayStats;
+    if (!cached || typeof cached !== 'object') return null;
+    const todayKey = buildWorkDayContext().todayKey;
+    if (cached.workDate && cached.workDate !== todayKey) {
+      global._lastGoodTodayStats = null;
+      console.warn(
+        `🌙 [TODAY-TIME-STATS] Dropping cached stats from ${cached.workDate} (today is ${todayKey})`,
+      );
+      return null;
+    }
+    return cached;
   };
 
   try { ipcMain.removeHandler('get-work-timezone'); } catch {}
@@ -5748,7 +5773,8 @@ if (isElectronContext && ipcMain) {
       const rawUserId = global.currentUserId || config.user_id || config.userId;
       const userId = normalizeTenantUserId(rawUserId);
       if (!userId) {
-        if (global._lastGoodTodayStats) return withWorkDayContext(global._lastGoodTodayStats);
+        const cachedToday = lastGoodStatsForToday();
+        if (cachedToday) return withWorkDayContext(cachedToday);
         return withWorkDayContext({
           totalTime: 0,
           completedTodayBeforeCurrentSessionSeconds: 0,
@@ -5805,7 +5831,8 @@ if (isElectronContext && ipcMain) {
             return withWorkDayContext(payload);
           }
         } catch (_) { /* fall through */ }
-        if (global._lastGoodTodayStats) return withWorkDayContext(global._lastGoodTodayStats);
+        const cachedToday = lastGoodStatsForToday();
+        if (cachedToday) return withWorkDayContext(cachedToday);
         return withWorkDayContext({
           totalTime: 0,
           completedTodayBeforeCurrentSessionSeconds: 0,
@@ -5880,7 +5907,11 @@ if (isElectronContext && ipcMain) {
         nonEffectiveSeconds = eff.nonEffectiveSeconds;
         idleSeconds = eff.idleSeconds;
         lowActivitySeconds = eff.lowActivitySeconds;
-        effectiveStatsComputed = true;
+        // Returning without throwing is not the same as having measured. When
+        // offline the idle/low-activity reads fail internally and come back 0,
+        // which reads as "100% effective" — the renderer keeps its last figure
+        // instead when this is false.
+        effectiveStatsComputed = eff.computed !== false;
       } catch (effErr) {
         console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
       }
@@ -5908,9 +5939,10 @@ if (isElectronContext && ipcMain) {
       return withWorkDayContext(payload);
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }
-      if (global._lastGoodTodayStats) {
+      const cachedToday = lastGoodStatsForToday();
+      if (cachedToday) {
         console.warn('⚠️ [TODAY-TIME-STATS] Returning last-good stats after error:', error.message);
-        return withWorkDayContext({ ...global._lastGoodTodayStats, stale: true, error: error.message });
+        return withWorkDayContext({ ...cachedToday, stale: true, error: error.message });
       }
       return withWorkDayContext({
         totalTime: 0,

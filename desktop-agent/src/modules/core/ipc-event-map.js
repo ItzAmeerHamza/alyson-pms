@@ -1057,7 +1057,14 @@ class IPCEventMap {
   }
 
   _getUpdateStatus() {
-    return { status: 'up-to-date' };
+    // Delegate to the real updater. This used to answer a hardcoded
+    // 'up-to-date', and since both this and ForceUpdater register
+    // 'get-update-status', whichever registered last won — so the Updates page
+    // could be told there was nothing to install while an update sat waiting.
+    if (global.forceUpdater && typeof global.forceUpdater.getUpdateStatus === 'function') {
+      return global.forceUpdater.getUpdateStatus();
+    }
+    return { status: 'up-to-date', updaterAvailable: false };
   }
 
   async _openSystemPreferences(event, options = {}) {

@@ -1157,6 +1157,12 @@ class IPCManager {
     console.log('⏹️ [IPC] Stop tracking requested - waiting for complete stop');
     
     try {
+      // Shut the clock down at the click. The tray keeps emitting ticks for a
+      // beat while the main process winds the session down, and those repainted
+      // the display past the moment Stop was pressed — the clock then appeared
+      // to run backward on the next Start when it settled on the real end time.
+      window.__stopInProgress = true;
+
       // Freeze TRACKED total at click time (big clock shows effective derived from it)
       const frozenTracked = Math.max(
         0,
@@ -1230,6 +1236,10 @@ class IPCManager {
       console.error('❌ Failed to stop tracking:', error);
       this.notificationManager.showNotification('Failed to stop tracking', 'error');
       throw error;
+    } finally {
+      // Released once tracking flags are down, so no in-flight tray tick can
+      // repaint the clock after the click.
+      window.__stopInProgress = false;
     }
   }
 

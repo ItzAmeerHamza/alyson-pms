@@ -276,12 +276,12 @@ class EventHandlerManager {
               try {
                 this.console.log('▶️ [RESUME] Auto-starting tracking after sleep stop');
                 this.global._resumeTrackingAfterWake = null;
-                await Promise.race([
-                  this.global.startTracking(resumeAfterWake.projectId || null),
-                  new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('auto-resume timed out')), RESUME_TIMEOUT_MS),
-                  ),
-                ]);
+                // Not raced against a timeout. startTracking must first wait for
+                // the sleep-stop to actually close its session, which can take
+                // longer than this handler used to allow. Abandoning it here did
+                // not cancel it — the start continued unwatched while the caller
+                // restored the retry flag, so a second start could follow.
+                await this.global.startTracking(resumeAfterWake.projectId || null);
                 if (typeof this.global.showTrayNotification === 'function') {
                   this.global.showTrayNotification(
                     `Welcome back ${savedSession.email.split('@')[0]}! Tracking resumed after sleep.`,

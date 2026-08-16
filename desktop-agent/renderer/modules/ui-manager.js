@@ -42,6 +42,7 @@ class UIManager {
     this.isTracking = false;
     
     this.setupNavigation();
+    this.watchUpdateAvailability();
     
     // Bind methods that are defined later in the class
     // Note: These methods are defined as class methods below, so binding is not necessary
@@ -73,6 +74,210 @@ class UIManager {
         'Could not open the web dashboard. Please visit app.alyson.ai in your browser.',
         'error'
       );
+    }
+  }
+
+  /**
+   * Flag an available update on the nav from anywhere in the app, so it is
+   * noticeable without opening the Updates page first.
+   */
+  watchUpdateAvailability() {
+    try {
+      this.ipcRenderer.on('update-available', () => this.setUpdatesNavBadge(true));
+      this.ipcRenderer.on('mandatory-update-required', () => this.setUpdatesNavBadge(true));
+      this.ipcRenderer.on('update-downloaded', () => this.setUpdatesNavBadge(true));
+      this.ipcRenderer.on('update-not-available', () => this.setUpdatesNavBadge(false));
+    } catch (err) {
+      console.warn('⚠️ [UI-MANAGER] Could not subscribe to update events:', err?.message || err);
+    }
+  }
+
+  /**
+   * App Updates page.
+   *
+   * The updater already exposes check / download / install over IPC and runs a
+   * background check every 6 hours; this only gives that a surface so someone
+   * mid-shift can pull an update on demand instead of waiting for a restart.
+   */
+  _updatesEls() {
+    const byId = (id) => document.getElementById(id);
+    return {
+      version: byId('updatesCurrentVersion'),
+      status: byId('updatesStatusText'),
+      progressWrap: byId('updatesProgressWrap'),
+      progressBar: byId('updatesProgressBar'),
+      progressText: byId('updatesProgressText'),
+      checkBtn: byId('updatesCheckBtn'),
+      downloadBtn: byId('updatesDownloadBtn'),
+      installBtn: byId('updatesInstallBtn'),
+      manualBtn: byId('updatesManualBtn'),
+      badge: byId('updatesNavBadge'),
+    };
+  }
+
+  async initUpdatesPage() {
+    const els = this._updatesEls();
+    if (!els.status) return;
+
+    if (!this._updatesPageBound) {
+      this._updatesPageBound = true;
+
+      els.checkBtn?.addEventListener('click', () => this.runUpdateCheck());
+      els.downloadBtn?.addEventListener('click', () => this.runUpdateDownload());
+      els.installBtn?.addEventListener('click', () => this.runUpdateInstall());
+      els.manualBtn?.addEventListener('click', () => {
+        this.ipcRenderer.invoke('open-manual-update-download').catch(() => {});
+      });
+
+      this.ipcRenderer.on('update-download-progress', (_e, data) => {
+        this.renderUpdateProgress(data || {});
+      });
+      this.ipcRenderer.on('update-downloaded', () => this.refreshUpdatesPage());
+      this.ipcRenderer.on('update-available', () => this.refreshUpdatesPage());
+      this.ipcRenderer.on('update-not-available', () => this.refreshUpdatesPage());
+      this.ipcRenderer.on('update-error', (_e, data) => {
+        const el = this._updatesEls();
+        if (el.status) {
+          el.status.textContent =
+            data?.message || data?.error || 'Update failed. You can download the installer instead.';
+        }
+        if (el.manualBtn) el.manualBtn.hidden = false;
+        if (el.checkBtn) el.checkBtn.disabled = false;
+      });
+    }
+
+    await this.refreshUpdatesPage();
+  }
+
+  renderUpdateProgress(data) {
+    const els = this._updatesEls();
+    const percent = Math.max(0, Math.min(100, Math.round(Number(data.percent) || 0)));
+    if (els.progressWrap) els.progressWrap.hidden = false;
+    if (els.progressBar) els.progressBar.style.width = `${percent}%`;
+    if (els.progressText) {
+      els.progressText.textContent = data.message ? `${data.message} (${percent}%)` : `${percent}%`;
+    }
+    if (els.status && !data.message) els.status.textContent = 'Downloading update…';
+  }
+
+  /** Orange dot on the nav item so an available update is visible from any page. */
+  setUpdatesNavBadge(show) {
+    const badge = document.getElementById('updatesNavBadge');
+    if (badge) badge.hidden = !show;
+  }
+
+  async refreshUpdatesPage() {
+    const els = this._updatesEls();
+    if (!els.status) return;
+
+    let status = {};
+    try {
+      status = (await this.ipcRenderer.invoke('get-update-status')) || {};
+    } catch (err) {
+      els.status.textContent = 'Update service is not available yet. Try again in a moment.';
+      return;
+    }
+
+    let version = status.currentVersion;
+    if (!version) {
+      try {
+        version = await this.ipcRenderer.invoke('get-app-version');
+      } catch (_) { /* fall through to placeholder */ }
+    }
+    if (els.version) els.version.textContent = version ? `v${String(version).replace(/^v/i, '')}` : '—';
+
+    const pending = status.pendingVersion ? `v${String(status.pendingVersion).replace(/^v/i, '')}` : null;
+    const hide = (el) => { if (el) el.hidden = true; };
+
+    hide(els.downloadBtn);
+    hide(els.installBtn);
+    hide(els.manualBtn);
+    if (els.checkBtn) els.checkBtn.disabled = false;
+
+    if (status.isDownloading) {
+      els.status.textContent = pending ? `Downloading ${pending}…` : 'Downloading update…';
+      this.renderUpdateProgress({ percent: status.downloadProgress || 0 });
+      if (els.checkBtn) els.checkBtn.disabled = true;
+      this.setUpdatesNavBadge(true);
+      return;
+    }
+
+    if (els.progressWrap) els.progressWrap.hidden = !status.isUpdateDownloaded;
+
+    if (status.isUpdateDownloaded) {
+      els.status.textContent = pending
+        ? `${pending} is ready to install. The app will restart.`
+        : 'Update is ready to install. The app will restart.';
+      if (els.installBtn) els.installBtn.hidden = false;
+      this.setUpdatesNavBadge(true);
+      return;
+    }
+
+    if (status.manualInstallRequired) {
+      els.status.textContent = pending
+        ? `${pending} needs to be installed manually.`
+        : 'This update needs to be installed manually.';
+      if (els.manualBtn) els.manualBtn.hidden = false;
+      this.setUpdatesNavBadge(true);
+      return;
+    }
+
+    if (status.isUpdateAvailable && pending) {
+      els.status.textContent = `${pending} is available.`;
+      if (els.downloadBtn) els.downloadBtn.hidden = false;
+      this.setUpdatesNavBadge(true);
+      return;
+    }
+
+    els.status.textContent = 'You are on the latest version.';
+    this.setUpdatesNavBadge(false);
+  }
+
+  async runUpdateCheck() {
+    const els = this._updatesEls();
+    if (els.checkBtn) els.checkBtn.disabled = true;
+    if (els.status) els.status.textContent = 'Checking for updates…';
+    try {
+      await this.ipcRenderer.invoke('check-for-update');
+    } catch (err) {
+      if (els.status) els.status.textContent = 'Could not reach the update server. Check your connection.';
+    }
+    await this.refreshUpdatesPage();
+  }
+
+  async runUpdateDownload() {
+    const els = this._updatesEls();
+    if (els.downloadBtn) els.downloadBtn.hidden = true;
+    if (els.status) els.status.textContent = 'Starting download…';
+    if (els.progressWrap) els.progressWrap.hidden = false;
+    try {
+      const res = await this.ipcRenderer.invoke('download-update');
+      if (res && res.success === false) {
+        if (els.status) {
+          els.status.textContent =
+            res.message || 'Download could not finish. You can download the installer instead.';
+        }
+        if (els.manualBtn) els.manualBtn.hidden = false;
+        return;
+      }
+    } catch (err) {
+      if (els.status) els.status.textContent = 'Download failed. You can download the installer instead.';
+      if (els.manualBtn) els.manualBtn.hidden = false;
+      return;
+    }
+    await this.refreshUpdatesPage();
+  }
+
+  async runUpdateInstall() {
+    const els = this._updatesEls();
+    if (els.installBtn) els.installBtn.disabled = true;
+    if (els.status) els.status.textContent = 'Installing… the app will restart.';
+    try {
+      await this.ipcRenderer.invoke('install-update');
+    } catch (err) {
+      if (els.status) els.status.textContent = 'Install could not start. Try Download installer.';
+      if (els.installBtn) els.installBtn.disabled = false;
+      if (els.manualBtn) els.manualBtn.hidden = false;
     }
   }
 
@@ -115,7 +320,7 @@ class UIManager {
     };
     
     // Cache all page sections
-    const pageIds = ['dashboard', 'timetracker', 'screenshots', 'faq', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
+    const pageIds = ['dashboard', 'timetracker', 'screenshots', 'faq', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
     pageIds.forEach(pageId => {
       const pageElement = document.getElementById(pageId + 'Page');
       if (pageElement) {
@@ -259,7 +464,11 @@ class UIManager {
     } else {
       this.stopMonthlyReportAutoRefresh();
     }
-    
+
+    if (pageId === 'updates') {
+      setTimeout(() => this.initUpdatesPage(), 100);
+    }
+
     // Batch DOM operations for better performance
     const operations = [];
     
@@ -358,7 +567,8 @@ class UIManager {
       'app-activity': 'App Detection',
       'activity-between-screenshots': 'Activity Monitor',
       'today-history': "Today's History",
-      'faq': 'FAQ'
+      'faq': 'FAQ',
+      'updates': 'App Updates'
     };
     
     pageTitle.textContent = pageTitles[pageId] || 'Dashboard';

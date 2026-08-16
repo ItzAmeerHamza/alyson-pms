@@ -568,6 +568,19 @@
             color: #e0f2fe;
         }
 
+        .nav-badge {
+            margin-left: auto;
+            min-width: 18px;
+            padding: 0 6px;
+            border-radius: 9px;
+            background: #f97316;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 18px;
+            text-align: center;
+        }
+
         .nav-icon {
             margin-right: 0;
             width: 17px;
@@ -4999,6 +5012,12 @@
                         <i data-lucide="circle-help" class="nav-icon"></i>
                         <span>FAQ</span>
                     </div>
+
+                    <div class="nav-item" data-page="updates">
+                        <i data-lucide="download-cloud" class="nav-icon"></i>
+                        <span>App Updates</span>
+                        <span id="updatesNavBadge" class="nav-badge" hidden>1</span>
+                    </div>
                 </div>
                 
                 <div class="nav-section" id="monitoringSection" style="display: none;">
@@ -5530,6 +5549,47 @@
                                 </ol>
                             </div>
                         </details>
+                    </div>
+                </div>
+            </div>
+
+            <!-- APP UPDATES — update without waiting for the next app restart -->
+            <div id="updatesPage" class="page-section">
+                <div class="control-section">
+                    <div class="control-header">
+                        <div class="control-title">App updates</div>
+                        <div class="control-subtitle">Check for a new version and install it without restarting manually</div>
+                    </div>
+
+                    <div style="max-width: 720px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <div>
+                                <div style="font-size: 13px; color: #64748b;">Installed version</div>
+                                <div id="updatesCurrentVersion" style="font-size: 18px; font-weight: 700; color: #0f172a;">—</div>
+                            </div>
+                            <button type="button" id="updatesCheckBtn" class="btn btn-secondary">Check for updates</button>
+                        </div>
+
+                        <div id="updatesStatusRow" style="margin-top: 14px; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                            <div id="updatesStatusText" style="color: #475569; font-size: 14px; line-height: 1.5;">Checking for updates…</div>
+
+                            <div id="updatesProgressWrap" style="margin-top: 12px;" hidden>
+                                <div style="height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
+                                    <div id="updatesProgressBar" style="height: 100%; width: 0%; background: #2563eb; transition: width 0.25s ease;"></div>
+                                </div>
+                                <div id="updatesProgressText" style="margin-top: 6px; font-size: 12px; color: #64748b;">0%</div>
+                            </div>
+
+                            <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px;">
+                                <button type="button" id="updatesDownloadBtn" class="btn btn-primary" hidden>Download update</button>
+                                <button type="button" id="updatesInstallBtn" class="btn btn-primary" hidden>Install and restart</button>
+                                <button type="button" id="updatesManualBtn" class="btn btn-secondary" hidden>Download installer</button>
+                            </div>
+                        </div>
+
+                        <p style="margin: 14px 0 0; font-size: 13px; color: #64748b; line-height: 1.55;">
+                            Installing restarts the app. Any running timer is stopped and saved first, so no tracked time is lost.
+                        </p>
                     </div>
                 </div>
             </div>

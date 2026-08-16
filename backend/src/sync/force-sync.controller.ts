@@ -835,6 +835,49 @@ export class ForceSyncController {
         const workspaceId =
           (await this.resolveWorkspaceId(payload.user_id, payload.organization_id)) ?? null;
         const projectId = await this.resolveProjectId(payload.project_id);
+        const newStart = payload.start_time || new Date().toISOString();
+
+        // A person cannot be in two sessions at once. Enforce that here, at the
+        // only point every client must pass through, rather than trusting the
+        // agent to have closed its previous session first.
+        //
+        // It does not reliably do so: Start waits 8s for a pending Stop while the
+        // Stop's own backend call times out at 12s, so on a slow link the agent
+        // opens a new session while the old one is still live. Reports sum
+        // session durations, so each overlapping second is billed twice — 15.33
+        // phantom hours across two days, concentrated in the users whose network
+        // made their stops slow.
+        //
+        // The new session's start is the strongest possible proof the previous
+        // one had ended. Same device only, so a second machine is untouched, and
+        // GREATEST keeps a session from being pushed before its own start.
+        // Only a session that is actually beginning proves the previous one
+        // ended. The offline queue replays finished sessions with a historical
+        // start_time, and treating one of those as "a new session started" would
+        // close a currently-live session at that stale timestamp — turning a
+        // sync into lost tracked time.
+        const isLiveStart = !payload.end_time;
+        if (payload.device_id && isLiveStart) {
+          const closed = await this.db.query<{ id: string }>(
+            `UPDATE time_doctor.time_logs t
+             SET end_time = GREATEST(t.start_time, LEAST($3::timestamptz, NOW())),
+                 status = 'auto_closed',
+                 updated_at = NOW()
+             WHERE t.user_id = $1
+               AND t.device_id = $2
+               AND t.end_time IS NULL
+               AND t.id <> $4
+               AND t.start_time <= $3::timestamptz
+             RETURNING t.id`,
+            [userId, payload.device_id, newStart, payload.id],
+          );
+          if (closed.rowCount > 0) {
+            this.logger.warn(
+              `Closed ${closed.rowCount} still-open session(s) for user ${userId} device ${payload.device_id} at ${newStart} (new session ${payload.id})`,
+            );
+          }
+        }
+
         // PAYROLL CRITICAL: never shorten duration on upsert.
         // start_time only moves earlier; end_time only moves later (or stays).
         await this.db.query(
@@ -870,7 +913,7 @@ export class ForceSyncController {
             payload.id,
             userId,
             projectId,
-            payload.start_time || new Date().toISOString(),
+            newStart,
             payload.end_time || null,
             payload.status || 'active',
             payload.idle_seconds ?? 0,

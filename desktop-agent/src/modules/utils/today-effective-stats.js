@@ -67,6 +67,7 @@ async function computeTodayEffectiveStats(opts = {}) {
       ...computeEffectiveSeconds(totalSeconds, 0, 0),
       idleSeconds: 0,
       lowActivitySeconds: 0,
+      computed: false,
     };
   }
 
@@ -83,6 +84,12 @@ async function computeTodayEffectiveStats(opts = {}) {
 
   let idleSeconds = 0;
   let lowActivitySeconds = 0;
+  // Both inputs come off the network. A failed fetch is NOT "zero idle" — read
+  // that way it makes non-effective collapse to 0 and reports the whole day as
+  // effective, which is the inflation this was trying to avoid. Track whether we
+  // actually measured, so callers can keep the last known figure instead.
+  let idleMeasured = false;
+  let lowActivityMeasured = false;
   const intervalSeconds = resolveScreenshotIntervalSeconds(config);
 
   try {
@@ -94,10 +101,9 @@ async function computeTodayEffectiveStats(opts = {}) {
         config,
       );
       idleSeconds = sumIdleSecondsFromLogs(logs, dayStartMs, dayEndMs);
+      idleMeasured = true;
     } else {
-      // RDS is the only source for idle_seconds; without it we report 0 rather
-      // than guessing, so effective time can never be inflated downstream.
-      console.warn('⚠️ [TODAY-EFFECTIVE] RDS reads disabled — idle reported as 0');
+      console.warn('⚠️ [TODAY-EFFECTIVE] RDS reads disabled — idle unknown, not zero');
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-EFFECTIVE] Idle fetch failed:', err?.message || err);
@@ -107,7 +113,9 @@ async function computeTodayEffectiveStats(opts = {}) {
     // Prefer screenshots already loaded by the caller (monthly report) so Today
     // and Month never diverge from different fetch/limit results.
     let screenshots = Array.isArray(opts.screenshots) ? opts.screenshots : null;
-    if (!screenshots) {
+    if (screenshots) {
+      lowActivityMeasured = true;
+    } else {
       const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('./backend-screenshots');
       const { isBackendRdsEnabled } = require('./backend-rds-reads');
       screenshots = [];
@@ -117,6 +125,7 @@ async function computeTodayEffectiveStats(opts = {}) {
           endIso: dayEndIso,
           limit: 500,
         }) || [];
+        lowActivityMeasured = true;
       }
     }
     lowActivitySeconds = sumLowActivitySecondsFromScreenshots(
@@ -135,6 +144,9 @@ async function computeTodayEffectiveStats(opts = {}) {
     idleSeconds,
     lowActivitySeconds,
     intervalSeconds,
+    // False when either input could not be read (offline). Callers must hold the
+    // previous figure rather than paint 0 non-effective / 100% effective.
+    computed: idleMeasured && lowActivityMeasured,
   };
 }
 
