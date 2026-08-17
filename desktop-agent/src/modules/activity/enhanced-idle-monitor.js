@@ -63,6 +63,10 @@ class EnhancedIdleMonitor {
 
     this.IDLE_CHECK_INTERVAL = Math.max(15000, checkpointSeconds * 1000);
     this.MIN_IDLE_CHUNK_MS = 5000; // ignore sub-5s slices (clock jitter)
+    // Three missed passes. Loose enough that a busy event loop or a slow flush is
+    // not mistaken for sleep, tight enough that real sleep is always caught.
+    this.SUSPEND_GAP_MS = this.IDLE_CHECK_INTERVAL * 3;
+    this._lastEvaluationAt = null;
     this.IDLE_THRESHOLD = detectionSeconds;
     this.LOW_ACTIVITY_PERCENT =
       this.config?.idle_low_activity_percent ??
@@ -157,6 +161,17 @@ class EnhancedIdleMonitor {
       if (this._isValidUuid(candidate)) return candidate;
     }
     return null;
+  }
+
+  /** Start of the session being tracked, in ms. Null when nothing is open. */
+  _resolveSessionStartMs() {
+    const raw =
+      global.trackingManager?.sessionStartTime ||
+      global.currentSession?.start_time ||
+      null;
+    if (!raw) return null;
+    const ms = new Date(raw).getTime();
+    return Number.isFinite(ms) ? ms : null;
   }
 
   _resolveUserId() {
@@ -343,9 +358,54 @@ class EnhancedIdleMonitor {
   }
 
   /**
+   * This loop runs on a timer, so two consecutive passes are one interval apart
+   * for as long as the machine is awake. A much larger gap means the machine was
+   * suspended in between and no time passed that anyone could have worked or sat
+   * idle through.
+   *
+   * The OS idle counter does not make that distinction: it reports time since the
+   * last input, so after a five-hour sleep it reports five hours of idle, and the
+   * period gets written as though the user sat at a running machine all night.
+   * One such record was 19,018s of idle inside a 10,179s tracked day.
+   *
+   * Same rule the session close uses: time is credited up to the last moment we
+   * have proof the machine was awake — the previous pass — and the sleep itself
+   * is not counted at all.
+   *
+   * @returns {Promise<boolean>} true when a gap was handled and this pass should
+   *   be skipped, since the OS idle reading spans the sleep and is meaningless.
+   */
+  async _handleSuspendGap() {
+    const now = Date.now();
+    const lastSeen = this._lastEvaluationAt;
+    this._lastEvaluationAt = now;
+    if (!lastSeen) return false;
+
+    const gap = now - lastSeen;
+    if (gap <= this.SUSPEND_GAP_MS) return false;
+
+    console.warn(
+      `😴 [IDLE-MONITOR] ${Math.round(gap / 1000)}s gap between checks — machine was asleep. ` +
+        'Crediting idle up to the last check and ignoring the sleep.',
+    );
+
+    if (this.currentIdleStartTime && this.wasIdleLastCheck) {
+      await this._flushIdleCheckpoint(lastSeen);
+    }
+    this.currentIdleStartTime = null;
+    this._lastIdleCheckpointTime = null;
+    this.wasIdleLastCheck = false;
+    this.idleThresholdExceeded = false;
+    this._phantomIdleStartTime = null;
+    return true;
+  }
+
+  /**
    * Core idle loop — OS idle ≥ threshold starts an idle period for idle_logs.
    */
   async _evaluateIdleState() {
+    if (await this._handleSuspendGap()) return;
+
     const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
     const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
 
@@ -353,7 +413,25 @@ class EnhancedIdleMonitor {
       console.log(
         `⏸️ [IDLE-MONITOR] Idle started (os=${os}s ≥ ${this.IDLE_THRESHOLD}s; input=${input}s low%=${lowActivity}s ignored for logging)`,
       );
-      this.currentIdleStartTime = Date.now() - idleSeconds * 1000;
+      // OS idle time is measured since the last input on the machine, which has
+      // nothing to do with when this session began. After the lid is closed the
+      // counter keeps running, so on wake it reports the whole sleep — backdating
+      // idle start hours before the session, sometimes before the work day. That
+      // produced single idle periods of 12h and 5.3h against tracked days of 1.9h
+      // and 2.8h, and idle exceeding the total forces min() to report every
+      // tracked minute as non-effective. Idle is time inside a session; it cannot
+      // predate one.
+      const idleStartedAt = Date.now() - idleSeconds * 1000;
+      const sessionStartMs = this._resolveSessionStartMs();
+      this.currentIdleStartTime =
+        sessionStartMs === null ? idleStartedAt : Math.max(idleStartedAt, sessionStartMs);
+      if (sessionStartMs !== null && idleStartedAt < sessionStartMs) {
+        console.log(
+          `⏸️ [IDLE-MONITOR] Clamped idle start to session start (OS reported ${Math.round(
+            (sessionStartMs - idleStartedAt) / 1000,
+          )}s of idle from before this session)`,
+        );
+      }
       this._lastIdleCheckpointTime = null;
       this.wasIdleLastCheck = true;
 
@@ -620,6 +698,36 @@ class EnhancedIdleMonitor {
 
   async logIdlePeriod(startTime, endTime, duration) {
     try {
+      // Every write of an idle period passes through here, so the invariant
+      // "idle lies inside its session" is enforced here rather than trusting
+      // each caller to have clamped its own inputs.
+      const sessionStartMs = this._resolveSessionStartMs();
+
+      // Idle is a description of time already being tracked. With no session
+      // open there is no tracked time for it to describe, and a record written
+      // now lands on whichever session opens next. That is exactly how a 43,054s
+      // overnight period got attached to a session that started three seconds
+      // after it was written, against a day that only tracked 6,835s.
+      if (sessionStartMs === null) {
+        console.warn(
+          `⚠️ [IDLE-LOG] Discarding ${Math.round(
+            duration / 1000,
+          )}s idle period — no session is open, so this is not tracked time`,
+        );
+        return;
+      }
+
+      if (startTime < sessionStartMs) {
+        console.warn(
+          `⚠️ [IDLE-LOG] Idle period started ${Math.round(
+            (sessionStartMs - startTime) / 1000,
+          )}s before the session — clamping to session start`,
+        );
+        startTime = sessionStartMs;
+        duration = endTime - startTime;
+      }
+      if (!(duration > 0)) return;
+
       const durationSeconds = Math.round(duration / 1000);
       const durationMinutes = Math.floor(duration / 60000);
       this._sessionIdleSeconds += Math.max(0, durationSeconds);

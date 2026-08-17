@@ -46,6 +46,9 @@ describe('EnhancedIdleMonitor', () => {
 
   afterEach(() => {
     if (monitor) monitor.shutdown();
+    delete global.trackingManager;
+    delete global.currentSession;
+    global.currentUserId = 'test-user';
     jest.useRealTimers();
     jest.clearAllMocks();
   });
@@ -333,6 +336,13 @@ describe('EnhancedIdleMonitor', () => {
 
       const end = Date.now();
       const start = end - 45000;
+      // The shared setup pins global.currentUserId to 'test-user', which is not a
+      // tenant id and normalizes to null, so the write was being skipped for want
+      // of a user rather than anything this test is about.
+      global.currentUserId = '1195';
+      // Idle is only recorded inside a session, so one has to be open for it to
+      // belong to. Without this the period is discarded as untracked time.
+      global.trackingManager = { sessionStartTime: new Date(start - 60000).toISOString() };
       await monitor.logIdlePeriod(start, end, 45000);
 
       expect(backendTimeLogs.insertIdleLog).toHaveBeenCalledTimes(1);

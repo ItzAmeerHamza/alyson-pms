@@ -758,6 +758,33 @@ export class PulseService {
            AND s.activity_percent < $${thresholdIdx}
            AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
            AND NOT ${SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL}
+           -- An idle minute produces a zero-activity screenshot by definition.
+           -- Counting it here as well charges the same minute twice, because
+           -- non_effective = min(total, low_activity + idle) adds the two. Once
+           -- the sum passed the tracked total the min() clamped it and the whole
+           -- day reported as non-effective: one employee had 8,404s of idle and
+           -- 80 low shots, 67 of them inside those idle windows, against 12,933s
+           -- tracked. The minute is already counted as idle, so it is not low.
+           --
+           -- Only periods this report actually counts as idle are excluded. Idle
+           -- shorter than MIN_IDLE_REPORT_SECONDS is dropped from the idle side,
+           -- so excluding its screenshots too would erase those minutes from
+           -- both halves and overstate effective time. The end of a period is
+           -- derived the same way dailyLowActivityFromIdleLogs derives it.
+           AND NOT EXISTS (
+             SELECT 1
+             FROM time_doctor.idle_logs il
+             WHERE il.user_id = s.user_id
+               AND s.captured_at >= il.idle_start
+               AND s.captured_at < GREATEST(
+                     COALESCE(il.idle_end, il.idle_start),
+                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
+                   )
+               AND GREATEST(
+                     COALESCE(il.idle_end, il.idle_start),
+                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
+                   ) - il.idle_start >= make_interval(secs => ${PulseService.MIN_IDLE_REPORT_SECONDS})
+           )
          ) AS is_low
        FROM time_doctor.screenshots s
        JOIN tenant."user" u ON u.id = s.user_id

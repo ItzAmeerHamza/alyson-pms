@@ -39,8 +39,22 @@ function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
  * @param {number} dayStartMs
  * @param {number} dayEndMs
  */
-function sumLowActivitySecondsFromScreenshots(screenshots, intervalSeconds, dayStartMs, dayEndMs) {
+/**
+ * @param {Array<{startMs:number,endMs:number}>} idleIntervals — periods already
+ *   counted as idle. A low-activity screenshot inside one of these is the SAME
+ *   non-effective time, not additional non-effective time.
+ */
+function sumLowActivitySecondsFromScreenshots(
+  screenshots,
+  intervalSeconds,
+  dayStartMs,
+  dayEndMs,
+  idleIntervals = [],
+) {
   const lowSecondsPerShot = Math.max(10, Math.floor(Number(intervalSeconds) || 60));
+  const insideIdle = (ms) =>
+    idleIntervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
+
   let low = 0;
   for (const shot of screenshots || []) {
     const pct = Number(shot.activity_percent);
@@ -49,10 +63,32 @@ function sumLowActivitySecondsFromScreenshots(screenshots, intervalSeconds, dayS
     if (capturedAt) {
       const ms = new Date(capturedAt).getTime();
       if (!(ms >= dayStartMs && ms < dayEndMs)) continue;
+      // Idle minutes produce zero-activity screenshots by definition. Counting
+      // both made non_effective = idle + low_activity exceed the total, so the
+      // min() capped it and an entire day read as non-effective.
+      if (insideIdle(ms)) continue;
     }
     low += lowSecondsPerShot;
   }
   return low;
+}
+
+/** Idle periods as intervals, clipped to the work day. */
+function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs) {
+  const out = [];
+  for (const log of idleLogs || []) {
+    const startMs = new Date(log.idle_start || log.start_time).getTime();
+    if (!Number.isFinite(startMs)) continue;
+    const rawEnd = log.idle_end || log.end_time;
+    const endMs = rawEnd
+      ? new Date(rawEnd).getTime()
+      : startMs + Math.max(0, Number(log.duration_seconds) || 0) * 1000;
+    if (!Number.isFinite(endMs) || endMs <= startMs) continue;
+    const lo = Math.max(startMs, dayStartMs);
+    const hi = Math.min(endMs, dayEndMs);
+    if (hi > lo) out.push({ startMs: lo, endMs: hi });
+  }
+  return out;
 }
 
 /**
@@ -92,9 +128,23 @@ async function computeTodayEffectiveStats(opts = {}) {
   let lowActivityMeasured = false;
   const intervalSeconds = resolveScreenshotIntervalSeconds(config);
 
+  // Idle intervals, not just a total. The interval boundaries are what let the
+  // low-activity count below skip screenshots that fall inside idle time.
+  let idleIntervals = [];
   try {
-    const { isBackendRdsEnabled, getTimeLogsInRange } = require('./backend-rds-reads');
+    const { isBackendRdsEnabled, getTimeLogsInRange, listIdleLogs } = require('./backend-rds-reads');
     if (isBackendRdsEnabled(config)) {
+      try {
+        const idleLogs = await listIdleLogs(
+          userId,
+          { start: dayStartIso, end: dayEndIso, limit: 2000 },
+          config,
+        );
+        idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs);
+      } catch (idleErr) {
+        console.warn('⚠️ [TODAY-EFFECTIVE] Idle interval fetch failed:', idleErr?.message || idleErr);
+      }
+
       const logs = await getTimeLogsInRange(
         userId,
         { start: dayStartIso, end: dayEndIso },
@@ -133,6 +183,7 @@ async function computeTodayEffectiveStats(opts = {}) {
       intervalSeconds,
       dayStartMs,
       dayEndMs,
+      idleIntervals,
     );
   } catch (err) {
     console.warn('⚠️ [TODAY-EFFECTIVE] Low-activity fetch failed:', err?.message || err);
