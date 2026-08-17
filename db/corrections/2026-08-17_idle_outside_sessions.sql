@@ -150,9 +150,14 @@ SELECT id,
        idle_start,
        idle_end,
        GREATEST(idle_start, sess_start) AS new_start,
-       LEAST(idle_end, sess_end)        AS new_end,
+       -- A session with neither end_time nor last_alive_at gives no upper bound.
+       -- Without the COALESCE, LEAST() returns NULL there and the row would be
+       -- backed up and then left half-corrected. Fall back to the period's own
+       -- end so only the start is clipped.
+       LEAST(idle_end, COALESCE(sess_end, idle_end)) AS new_end,
        (sess_start IS NULL
-        OR LEAST(idle_end, sess_end) <= GREATEST(idle_start, sess_start)) AS drop_row
+        OR LEAST(idle_end, COALESCE(sess_end, idle_end))
+           <= GREATEST(idle_start, sess_start)) AS drop_row
 FROM bounded
 WHERE sess_start IS NULL
    OR idle_start < sess_start

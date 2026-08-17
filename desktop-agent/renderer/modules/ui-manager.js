@@ -4498,6 +4498,14 @@ class UIManager {
         return;
       }
       if (loginContainer) loginContainer.style.display = 'flex';
+
+      // The boot path returns before initializing auth whenever the gate is up,
+      // so revealing the login form here without this left it live with no
+      // Cognito config — correct passwords were rejected until a restart.
+      // Also restores auto-login and remembered credentials on this path.
+      window.moduleInstances?.authManager?.initialize?.().catch((err) => {
+        console.warn('⚠️ [UI-MANAGER] Auth init after update gate failed:', err?.message || err);
+      });
     });
     
     // Listen for download progress

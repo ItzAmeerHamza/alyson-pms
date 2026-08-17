@@ -33,16 +33,50 @@ class AuthManager {
     this.credentialManager = null;
     this.isAuthenticated = false;
     this.authConfig = null;
+    this._initialized = false;
+    this._initPromise = null;
     // Initialization deferred until renderer completes mandatory update check
   }
 
+  /**
+   * Safe to call more than once. The boot path skips initialization entirely
+   * while the update gate is up, so whoever takes the gate down has to be able
+   * to ask for initialization again without double-binding anything.
+   */
   async initialize() {
-    console.log('🔐 AuthManager initializing...');
-
     if (window.__updateGateActive) {
       console.log('🛑 [AUTH] Update gate active — skipping auth initialization');
       return;
     }
+    if (this._initialized) return;
+    if (this._initPromise) return this._initPromise;
+
+    this._initPromise = this._initializeOnce().finally(() => {
+      this._initPromise = null;
+    });
+    return this._initPromise;
+  }
+
+  /**
+   * Cognito settings for this build. initialize() loads them, but it is skipped
+   * while the update gate is up, and the gate can come down and reveal the login
+   * form without anything re-running it. The form was then live with authConfig
+   * still null, so createPool() threw "Cognito is not configured on the desktop
+   * agent" and every correct password looked rejected until the app restarted.
+   * Loading on demand means no lifecycle path can leave this missing.
+   */
+  async ensureAuthConfig() {
+    if (isCognitoAuthEnabled(this.authConfig)) return this.authConfig;
+    try {
+      this.authConfig = await this.ipcRenderer.invoke('get-config');
+    } catch (e) {
+      console.warn('⚠️ [AUTH] Could not load auth config on demand:', e?.message || e);
+    }
+    return this.authConfig;
+  }
+
+  async _initializeOnce() {
+    console.log('🔐 AuthManager initializing...');
 
     try {
       this.authConfig = await this.ipcRenderer.invoke('get-config');
@@ -67,7 +101,11 @@ class AuthManager {
     
     // Setup event listeners
     this.setupEventListeners();
-    
+
+    // Set before the calls below so a re-entrant initialize() during auto-login
+    // joins rather than binding a second time.
+    this._initialized = true;
+
     // Try to restore remembered credentials
     await this.loadRememberedCredentials();
     
@@ -188,6 +226,8 @@ class AuthManager {
 
   async tryAutoLoginCognito(savedSession) {
     try {
+      await this.ensureAuthConfig();
+
       // Hydrate renderer Cognito store from disk (refresh token survives ID-token expiry)
       cognitoAuth.hydrateCognitoSessionFromDisk(savedSession);
 
@@ -318,6 +358,7 @@ class AuthManager {
   }
 
   async handleCognitoLogin(email, password, company, rememberMe) {
+    await this.ensureAuthConfig();
     const stored = await cognitoAuth.signInWithEmailPassword(email, password, this.authConfig);
     const profile = await fetchAuthMe(stored.idToken, this.authConfig, this.ipcRenderer);
     const details = profile.user;
