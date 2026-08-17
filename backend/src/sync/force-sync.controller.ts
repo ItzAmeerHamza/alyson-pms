@@ -5,6 +5,7 @@ import { ApiKeyGuard } from '../auth/api-key.guard';
 import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
 import { ScreenshotAiBackfillService } from '../screenshot-ai/screenshot-ai-backfill.service';
+import { EffectiveTimeService } from '../pulse/effective-time.service';
 import { buildScreenshotS3Key } from '../lib/screenshot-s3-key';
 import { buildLogS3Key } from '../lib/log-s3-key';
 import {
@@ -60,6 +61,7 @@ export class ForceSyncController {
     private readonly db: DatabaseService,
     private readonly s3: S3Service,
     private readonly screenshotAi: ScreenshotAiBackfillService,
+    private readonly effectiveTime: EffectiveTimeService,
   ) {}
 
   private async resolveWorkspaceId(userId: unknown, provided?: unknown): Promise<number | null> {
@@ -1344,6 +1346,60 @@ export class ForceSyncController {
         // No-op for duration: never shorten employee time.
         // Kept as a success stub so older agents calling this action do not fail.
         return { success: true, reconciled: 0 };
+      }
+      case 'get_effective_stats': {
+        // Idle and low-activity seconds under the same rules the web reports
+        // use. The agent used to work these out itself and the two answers
+        // drifted — it counted isolated low screenshots, counted video meetings
+        // against people, and treated any pause over a minute as idle, so the
+        // same day read 24m non-effective on the web and 1h16m on the desktop.
+        //
+        // Only the two inputs are returned, not a total. The agent applies
+        // min(total, idle + low) against the total it is already displaying, so
+        // its clock never depends on this call.
+        const userId = parseUserIdParam(data?.user_id);
+        const workspaceId = await this.resolveWorkspaceId(userId, data?.workspace_id);
+        if (!data?.start || !data?.end) {
+          throw new HttpException('Missing start/end', HttpStatus.BAD_REQUEST);
+        }
+
+        let lowActivityThreshold = 10;
+        let intervalMinutes = 10;
+        let tz: string | undefined = typeof data?.tz === 'string' ? data.tz : undefined;
+        if (workspaceId) {
+          const wsResult = await this.db.query<{ settings: Record<string, unknown> }>(
+            `SELECT settings FROM time_doctor.workspace_settings WHERE workspace_id = $1 LIMIT 1`,
+            [workspaceId],
+          );
+          const raw = wsResult.rows[0]?.settings ?? {};
+          const rawThreshold = Number(raw.low_activity_threshold);
+          // Same cap Pulse applies, so the agent cannot be handed a looser one.
+          lowActivityThreshold = Math.min(
+            Math.max(Number.isFinite(rawThreshold) ? rawThreshold : 10, 0),
+            10,
+          );
+          const rawInterval = Number(raw.screenshot_interval_minutes);
+          if (Number.isFinite(rawInterval) && rawInterval > 0) intervalMinutes = rawInterval;
+          if (!tz && typeof raw.timezone === 'string') tz = raw.timezone;
+        }
+
+        const stats = await this.effectiveTime.idleAndLowActivitySecondsForUser({
+          userId,
+          workspaceId,
+          startIso: String(data.start),
+          endIso: String(data.end),
+          lowActivityThreshold,
+          intervalMinutes,
+          tz,
+        });
+
+        return {
+          success: true,
+          idle_seconds: stats.idleSeconds,
+          low_activity_seconds: stats.lowActivitySeconds,
+          low_activity_threshold: lowActivityThreshold,
+          screenshot_interval_minutes: intervalMinutes,
+        };
       }
       case 'get_workspace_settings': {
         const userId = parseUserIdParam(data?.user_id);

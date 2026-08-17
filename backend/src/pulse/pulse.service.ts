@@ -35,6 +35,7 @@ import {
   workDayBoundsMs,
 } from '../lib/work-timezone';
 import { computeEffectiveTime } from '../lib/effective-time';
+import { EffectiveTimeService, WorkspaceFilter } from './effective-time.service';
 import {
   nextDayTotalHours,
   resolveAdjustmentDeltaSeconds,
@@ -112,7 +113,13 @@ export class PulseService {
     private readonly db: DatabaseService,
     private readonly accessGrants: AccessGrantsService,
     private readonly sesEmail: SesEmailService,
+    private readonly effectiveTime: EffectiveTimeService,
   ) {}
+
+  /** The workspace filter these reports run under, as the shared rules expect it. */
+  private effectiveTimeFilter(user: ScopedAuthUser): WorkspaceFilter {
+    return { workspaceId: user.is_super_admin ? null : parseWorkspaceId(user.organization_id) };
+  }
 
   private workspaceId(user: ScopedAuthUser): number | null {
     return parseWorkspaceId(user.organization_id);
@@ -569,21 +576,7 @@ export class PulseService {
     }>,
     tz?: string,
   ): Map<string, Map<string, number>> {
-    const workTz = normalizeWorkTimezone(tz);
-    const byUserDay = new Map<string, Map<string, number>>();
-
-    for (const log of logs) {
-      const seconds = log.idle_seconds ?? 0;
-      if (seconds <= 0) continue;
-
-      const day = toDateKey(log.start_time, workTz);
-      const hours = Math.round((seconds / 3600) * 10) / 10;
-      if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
-      const dayMap = byUserDay.get(log.user_id)!;
-      dayMap.set(day, (dayMap.get(day) ?? 0) + hours);
-    }
-
-    return byUserDay;
+    return this.effectiveTime.idleHoursFromTimeLogs(logs, tz);
   }
 
   private async fetchIdleLogsInRange(
@@ -621,13 +614,6 @@ export class PulseService {
     return result.rows;
   }
 
-  /**
-   * Idle periods shorter than this are ignored on the dashboard.
-   * Aligns historical idle_logs with the desktop rule: idle starts after 5 minutes
-   * of OS inactivity (reading / short pauses should not count).
-   */
-  private static readonly MIN_IDLE_REPORT_SECONDS = 5 * 60;
-
   private dailyLowActivityFromIdleLogs(
     logs: Array<{
       user_id: string;
@@ -637,39 +623,7 @@ export class PulseService {
     }>,
     tz?: string,
   ): Map<string, Map<string, number>> {
-    const workTz = normalizeWorkTimezone(tz);
-    const byUserDay = new Map<string, Map<string, number>>();
-
-    for (const log of logs) {
-      const startMs = new Date(log.idle_start).getTime();
-      let endMs = log.idle_end ? new Date(log.idle_end).getTime() : Date.now();
-      if (log.duration_seconds && log.duration_seconds > 0) {
-        const fromDuration = startMs + log.duration_seconds * 1000;
-        if (!log.idle_end || fromDuration > endMs) endMs = fromDuration;
-      }
-      if (!(endMs > startMs)) continue;
-
-      const totalSeconds = Math.round((endMs - startMs) / 1000);
-      // Approximate Option B on history: drop sub-5-minute idle stretches.
-      if (totalSeconds < PulseService.MIN_IDLE_REPORT_SECONDS) continue;
-
-      let cursor = startMs;
-      while (cursor < endMs) {
-        const day = workDateKey(new Date(cursor), workTz);
-        const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day, workTz);
-        const clipStart = Math.max(startMs, dayStart);
-        const clipEnd = Math.min(endMs, dayEnd);
-        if (clipEnd > clipStart) {
-          const hours = Math.round(((clipEnd - clipStart) / 3600000) * 10) / 10;
-          if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
-          const dayMap = byUserDay.get(log.user_id)!;
-          dayMap.set(day, Math.round(((dayMap.get(day) ?? 0) + hours) * 10) / 10);
-        }
-        cursor = dayEnd;
-      }
-    }
-
-    return byUserDay;
+    return this.effectiveTime.idleHoursFromIdleLogs(logs, tz);
   }
 
   /** Idle hours per user/day — prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows. */
@@ -677,40 +631,7 @@ export class PulseService {
     idleLogHours: Map<string, Map<string, number>>,
     idleSecondsHours: Map<string, Map<string, number>>,
   ): Map<string, Map<string, number>> {
-    const merged = new Map<string, Map<string, number>>();
-    const userIds = new Set<string>([
-      ...idleLogHours.keys(),
-      ...idleSecondsHours.keys(),
-    ]);
-
-    for (const userId of userIds) {
-      const fromLogs = idleLogHours.get(userId) ?? new Map();
-      const fromSessions = idleSecondsHours.get(userId) ?? new Map();
-      const days = new Set<string>([...fromLogs.keys(), ...fromSessions.keys()]);
-      const dayMap = new Map<string, number>();
-
-      for (const day of days) {
-        const logHours = fromLogs.get(day) ?? 0;
-        const sessionHours = fromSessions.get(day) ?? 0;
-        const hours = logHours > 0 ? logHours : sessionHours;
-        if (hours > 0) dayMap.set(day, Math.round(hours * 10) / 10);
-      }
-
-      if (dayMap.size > 0) merged.set(userId, dayMap);
-    }
-
-    return merged;
-  }
-
-  /**
-   * Sustained quiet required before a low screenshot counts toward LOW hours.
-   * At 1-min intervals, N=3 (three consecutive quiet minutes). At 10-min, N=1.
-   */
-  private static readonly SUSTAINED_LOW_MINUTES = 3;
-
-  private sustainedLowStreakNeeded(intervalMinutes: number): number {
-    const interval = Math.max(1, Number(intervalMinutes) || 1);
-    return Math.max(1, Math.ceil(PulseService.SUSTAINED_LOW_MINUTES / interval));
+    return this.effectiveTime.mergeIdleHours(idleLogHours, idleSecondsHours);
   }
 
   /**
@@ -727,118 +648,15 @@ export class PulseService {
     userId?: string,
     tz?: string,
   ): Promise<Map<string, Map<string, number>>> {
-    const workTz = normalizeWorkTimezone(tz);
-    const scope = workspaceScope(user, 'ext');
-    const params: unknown[] = [...scope.params, lowActivityThreshold, start, end];
-    const thresholdIdx = scope.params.length + 1;
-    const startIdx = scope.params.length + 2;
-    const endIdx = scope.params.length + 3;
-    let userFilter = '';
-    if (userId) {
-      params.push(parseTenantUserId(userId));
-      userFilter = `AND s.user_id = $${params.length}`;
-    }
-    const intervalHours = Math.max(1, Number(intervalMinutes) || 1) / 60;
-    const streakNeeded = this.sustainedLowStreakNeeded(intervalMinutes);
-
-    const result = await this.db.query<{
-      user_id: string;
-      activity_date: string;
-      captured_at: string;
-      activity_percent: number | null;
-      is_low: boolean;
-    }>(
-      `SELECT
-         s.user_id::text AS user_id,
-         ${sqlWorkDate('s.captured_at', workTz)}::text AS activity_date,
-         s.captured_at,
-         s.activity_percent,
-         (
-           s.activity_percent IS NOT NULL
-           AND s.activity_percent < $${thresholdIdx}
-           AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
-           AND NOT ${SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL}
-           -- An idle minute produces a zero-activity screenshot by definition.
-           -- Counting it here as well charges the same minute twice, because
-           -- non_effective = min(total, low_activity + idle) adds the two. Once
-           -- the sum passed the tracked total the min() clamped it and the whole
-           -- day reported as non-effective: one employee had 8,404s of idle and
-           -- 80 low shots, 67 of them inside those idle windows, against 12,933s
-           -- tracked. The minute is already counted as idle, so it is not low.
-           --
-           -- Only periods this report actually counts as idle are excluded. Idle
-           -- shorter than MIN_IDLE_REPORT_SECONDS is dropped from the idle side,
-           -- so excluding its screenshots too would erase those minutes from
-           -- both halves and overstate effective time. The end of a period is
-           -- derived the same way dailyLowActivityFromIdleLogs derives it.
-           AND NOT EXISTS (
-             SELECT 1
-             FROM time_doctor.idle_logs il
-             WHERE il.user_id = s.user_id
-               AND s.captured_at >= il.idle_start
-               AND s.captured_at < GREATEST(
-                     COALESCE(il.idle_end, il.idle_start),
-                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
-                   )
-               AND GREATEST(
-                     COALESCE(il.idle_end, il.idle_start),
-                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
-                   ) - il.idle_start >= make_interval(secs => ${PulseService.MIN_IDLE_REPORT_SECONDS})
-           )
-         ) AS is_low
-       FROM time_doctor.screenshots s
-       JOIN tenant."user" u ON u.id = s.user_id
-       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
-       WHERE ${scope.clause}
-         AND s.captured_at >= $${startIdx}::timestamptz
-         AND s.captured_at < $${endIdx}::timestamptz
-         AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
-         ${userFilter}
-       ORDER BY s.user_id, s.captured_at ASC`,
-      params,
+    return this.effectiveTime.lowActivityHoursFromScreenshots(
+      this.effectiveTimeFilter(user),
+      start,
+      end,
+      lowActivityThreshold,
+      intervalMinutes,
+      userId,
+      tz,
     );
-
-    type Shot = { activity_date: string; is_low: boolean };
-    const byUserShots = new Map<string, Shot[]>();
-    for (const row of result.rows) {
-      if (!byUserShots.has(row.user_id)) byUserShots.set(row.user_id, []);
-      byUserShots.get(row.user_id)!.push({
-        activity_date: row.activity_date,
-        is_low: Boolean(row.is_low),
-      });
-    }
-
-    const byUserDay = new Map<string, Map<string, number>>();
-
-    for (const [uid, shots] of byUserShots) {
-      let i = 0;
-      while (i < shots.length) {
-        if (!shots[i].is_low) {
-          i += 1;
-          continue;
-        }
-        let j = i;
-        while (j < shots.length && shots[j].is_low) j += 1;
-        const streakLen = j - i;
-        if (streakLen >= streakNeeded) {
-          for (let k = i; k < j; k += 1) {
-            const day = shots[k].activity_date;
-            if (!byUserDay.has(uid)) byUserDay.set(uid, new Map());
-            const dayMap = byUserDay.get(uid)!;
-            dayMap.set(day, (dayMap.get(day) ?? 0) + intervalHours);
-          }
-        }
-        i = j;
-      }
-    }
-
-    for (const dayMap of byUserDay.values()) {
-      for (const [day, hours] of dayMap) {
-        dayMap.set(day, Math.round(hours * 10) / 10);
-      }
-    }
-
-    return byUserDay;
   }
 
   private mergeLowActivityByUserDay(
