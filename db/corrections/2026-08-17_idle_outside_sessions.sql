@@ -172,10 +172,17 @@ WHERE b.sess_start IS NULL
    OR b.idle_end   > b.sess_end;
 
 -- 2b. Idle that lies partly inside its session: keep the part that does.
+--
+-- FLOOR, not ROUND. These timestamps carry milliseconds, so a clipped period is
+-- rarely a whole number of seconds. Readers reconstruct the end as
+-- GREATEST(idle_end, idle_start + duration_seconds), so rounding 48893.571s up
+-- to 48894 puts that reconstructed end four tenths of a second past the session
+-- it was just clipped into — which is the very thing this correction exists to
+-- prevent. FLOOR can only ever land on or before the real end.
 UPDATE time_doctor.idle_logs il
 SET idle_start       = f.new_start,
     idle_end         = f.new_end,
-    duration_seconds = GREATEST(0, ROUND(EXTRACT(EPOCH FROM (f.new_end - f.new_start))))::int
+    duration_seconds = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (f.new_end - f.new_start))))::int
 FROM time_doctor.idle_logs_fix_2026_08_17 f
 WHERE f.id = il.id
   AND NOT f.drop_row;
