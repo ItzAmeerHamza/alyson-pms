@@ -80,6 +80,31 @@ async function listIdleLogs(userId, { start, end, timeLogId, limit } = {}, confi
   return result.idle_logs || [];
 }
 
+/**
+ * Idle + low-activity seconds under the same rules Pulse uses for the web.
+ * The agent applies min(total, idle + low) itself so the clock never depends
+ * on this call.
+ */
+async function getEffectiveStats(userId, { start, end, tz } = {}, config = global.config) {
+  // Display-only. Fail fast so a missing/slow endpoint cannot stall the clock
+  // IPC (get-today-time-stats) or offline Start/Stop.
+  const result = await callDesktopAction(
+    'get_effective_stats',
+    {
+      user_id: requireTenantUserId(userId),
+      start,
+      end,
+      tz,
+    },
+    config,
+    { timeoutMs: 4000 },
+  );
+  return {
+    idleSeconds: Math.max(0, Math.floor(Number(result.idle_seconds) || 0)),
+    lowActivitySeconds: Math.max(0, Math.floor(Number(result.low_activity_seconds) || 0)),
+  };
+}
+
 module.exports = {
   isBackendRdsEnabled,
   resolveSyncUrl,
@@ -87,4 +112,5 @@ module.exports = {
   listAppLogs,
   listUrlLogs,
   listIdleLogs,
+  getEffectiveStats,
 };

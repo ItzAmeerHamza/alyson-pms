@@ -13,6 +13,11 @@ const {
 const { normalizeTenantUserId } = require('./tenant-user-id');
 
 const LOW_ACTIVITY_PERCENT = 10;
+// Same floor Pulse uses. The agent records idle after 60s so the raw periods
+// exist, but a pause under five minutes is not non-effective time.
+const MIN_IDLE_REPORT_SECONDS = 5 * 60;
+// Same streak Pulse uses: three consecutive quiet minutes at 1/min capture.
+const SUSTAINED_LOW_MINUTES = 3;
 
 function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
   let idle = 0;
@@ -52,28 +57,40 @@ function sumLowActivitySecondsFromScreenshots(
   idleIntervals = [],
 ) {
   const lowSecondsPerShot = Math.max(10, Math.floor(Number(intervalSeconds) || 60));
+  const streakNeeded = Math.max(1, Math.ceil(SUSTAINED_LOW_MINUTES / (lowSecondsPerShot / 60)));
   const insideIdle = (ms) =>
     idleIntervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
 
-  let low = 0;
+  const flags = [];
   for (const shot of screenshots || []) {
-    const pct = Number(shot.activity_percent);
-    if (!Number.isFinite(pct) || pct >= LOW_ACTIVITY_PERCENT) continue;
     const capturedAt = shot.captured_at || shot.capturedAt;
-    if (capturedAt) {
-      const ms = new Date(capturedAt).getTime();
-      if (!(ms >= dayStartMs && ms < dayEndMs)) continue;
-      // Idle minutes produce zero-activity screenshots by definition. Counting
-      // both made non_effective = idle + low_activity exceed the total, so the
-      // min() capped it and an entire day read as non-effective.
-      if (insideIdle(ms)) continue;
+    const ms = capturedAt ? new Date(capturedAt).getTime() : NaN;
+    if (Number.isFinite(ms) && !(ms >= dayStartMs && ms < dayEndMs)) continue;
+    const pct = Number(shot.activity_percent);
+    const isLow =
+      Number.isFinite(pct) &&
+      pct < LOW_ACTIVITY_PERCENT &&
+      !(Number.isFinite(ms) && insideIdle(ms));
+    flags.push({ ms: Number.isFinite(ms) ? ms : 0, isLow });
+  }
+  flags.sort((a, b) => a.ms - b.ms);
+
+  let low = 0;
+  let i = 0;
+  while (i < flags.length) {
+    if (!flags[i].isLow) {
+      i += 1;
+      continue;
     }
-    low += lowSecondsPerShot;
+    let j = i;
+    while (j < flags.length && flags[j].isLow) j += 1;
+    if (j - i >= streakNeeded) low += (j - i) * lowSecondsPerShot;
+    i = j;
   }
   return low;
 }
 
-/** Idle periods as intervals, clipped to the work day. */
+/** Idle periods as intervals, clipped to the work day. Sub-5-minute pauses are ignored. */
 function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs) {
   const out = [];
   for (const log of idleLogs || []) {
@@ -84,6 +101,7 @@ function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs) {
       ? new Date(rawEnd).getTime()
       : startMs + Math.max(0, Number(log.duration_seconds) || 0) * 1000;
     if (!Number.isFinite(endMs) || endMs <= startMs) continue;
+    if ((endMs - startMs) / 1000 < MIN_IDLE_REPORT_SECONDS) continue;
     const lo = Math.max(startMs, dayStartMs);
     const hi = Math.min(endMs, dayEndMs);
     if (hi > lo) out.push({ startMs: lo, endMs: hi });
@@ -128,11 +146,68 @@ async function computeTodayEffectiveStats(opts = {}) {
   let lowActivityMeasured = false;
   const intervalSeconds = resolveScreenshotIntervalSeconds(config);
 
-  // Idle intervals, not just a total. The interval boundaries are what let the
-  // low-activity count below skip screenshots that fall inside idle time.
+  // Display-only overlay. The caller already owns totalSeconds (the clock).
+  // This function never writes sessions, idle, or the offline queue.
+  const { isLikelyOffline } = require('./backend-time-logs');
+  if (isLikelyOffline()) {
+    return {
+      ...computeEffectiveSeconds(totalSeconds, 0, 0),
+      idleSeconds: 0,
+      lowActivitySeconds: 0,
+      intervalSeconds,
+      computed: false,
+      source: 'offline',
+    };
+  }
+
+  // Prefer the same numbers Pulse already computed for the web. The agent used
+  // to work these out itself and the two drifted: it counted isolated low
+  // screenshots and treated any pause over a minute as idle, so the same day
+  // read 24m non-effective on the web and 1h16m on the desktop.
+  try {
+    const { isBackendRdsEnabled, getEffectiveStats } = require('./backend-rds-reads');
+    const { getWorkTimezone } = require('./work-timezone');
+    if (isBackendRdsEnabled(config)) {
+      const remote = await getEffectiveStats(
+        userId,
+        { start: dayStartIso, end: dayEndIso, tz: getWorkTimezone() },
+        config,
+      );
+      idleSeconds = remote.idleSeconds;
+      lowActivitySeconds = remote.lowActivitySeconds;
+      const eff = computeEffectiveSeconds(totalSeconds, lowActivitySeconds, idleSeconds);
+      return {
+        ...eff,
+        idleSeconds,
+        lowActivitySeconds,
+        intervalSeconds,
+        computed: true,
+        source: 'pulse',
+      };
+    }
+  } catch (err) {
+    const msg = String(err?.message || err);
+    const networkFail = /timeout|network|offline|ECONN|ENOTFOUND|fetch|AbortError/i.test(msg);
+    console.warn('⚠️ [TODAY-EFFECTIVE] Shared Pulse stats unavailable, using local fallback:', msg);
+    // A network miss must not pile on idle/screenshot fetches — those hang the
+    // same clock IPC. Hold the last painted split (computed: false).
+    if (networkFail) {
+      return {
+        ...computeEffectiveSeconds(totalSeconds, 0, 0),
+        idleSeconds: 0,
+        lowActivitySeconds: 0,
+        intervalSeconds,
+        computed: false,
+        source: 'offline',
+      };
+    }
+  }
+
+  // Offline / older-backend fallback. Same floors as Pulse so a network drop
+  // does not suddenly inflate non-effective.
   let idleIntervals = [];
   try {
-    const { isBackendRdsEnabled, getTimeLogsInRange, listIdleLogs } = require('./backend-rds-reads');
+    const { isBackendRdsEnabled, listIdleLogs } = require('./backend-rds-reads');
     if (isBackendRdsEnabled(config)) {
       try {
         const idleLogs = await listIdleLogs(
@@ -141,17 +216,11 @@ async function computeTodayEffectiveStats(opts = {}) {
           config,
         );
         idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs);
+        idleSeconds = idleIntervals.reduce((acc, iv) => acc + Math.floor((iv.endMs - iv.startMs) / 1000), 0);
+        idleMeasured = true;
       } catch (idleErr) {
         console.warn('⚠️ [TODAY-EFFECTIVE] Idle interval fetch failed:', idleErr?.message || idleErr);
       }
-
-      const logs = await getTimeLogsInRange(
-        userId,
-        { start: dayStartIso, end: dayEndIso },
-        config,
-      );
-      idleSeconds = sumIdleSecondsFromLogs(logs, dayStartMs, dayEndMs);
-      idleMeasured = true;
     } else {
       console.warn('⚠️ [TODAY-EFFECTIVE] RDS reads disabled — idle unknown, not zero');
     }
@@ -198,6 +267,7 @@ async function computeTodayEffectiveStats(opts = {}) {
     // False when either input could not be read (offline). Callers must hold the
     // previous figure rather than paint 0 non-effective / 100% effective.
     computed: idleMeasured && lowActivityMeasured,
+    source: 'local',
   };
 }
 

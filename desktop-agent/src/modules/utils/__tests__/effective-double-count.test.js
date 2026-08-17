@@ -7,7 +7,20 @@
  * min() capped it, and an employee's entire day read as non-effective.
  */
 
+jest.mock('../backend-rds-reads', () => ({
+  isBackendRdsEnabled: jest.fn(() => true),
+  getEffectiveStats: jest.fn(),
+  listIdleLogs: jest.fn(),
+}));
+
+jest.mock('../backend-time-logs', () => ({
+  isLikelyOffline: jest.fn(() => false),
+}));
+
+const rds = require('../backend-rds-reads');
+const { isLikelyOffline } = require('../backend-time-logs');
 const {
+  computeTodayEffectiveStats,
   sumLowActivitySecondsFromScreenshots,
 } = require('../today-effective-stats');
 
@@ -38,19 +51,32 @@ describe('low-activity counting excludes idle periods', () => {
     expect(low).toBe(0);
   });
 
-  it('still counts low activity outside any idle period', () => {
+  it('still counts a sustained low-activity streak outside any idle period', () => {
     const idle = [{ startMs: T('2026-08-17T10:00:00Z'), endMs: T('2026-08-17T10:05:00Z') }];
     const screenshots = [
       shot('2026-08-17T10:01:00Z', 0),   // inside idle — skipped
-      shot('2026-08-17T11:00:00Z', 2),   // awake but barely active — counted
-      shot('2026-08-17T11:01:00Z', 5),   // counted
+      shot('2026-08-17T11:00:00Z', 2),   // awake but barely active
+      shot('2026-08-17T11:01:00Z', 5),
+      shot('2026-08-17T11:02:00Z', 4),
     ];
 
     const low = sumLowActivitySecondsFromScreenshots(
       screenshots, INTERVAL, DAY_START, DAY_END, idle,
     );
 
-    expect(low).toBe(2 * INTERVAL);
+    expect(low).toBe(3 * INTERVAL);
+  });
+
+  it('ignores an isolated low-activity screenshot the way the web does', () => {
+    const screenshots = [
+      shot('2026-08-17T11:00:00Z', 2),
+      shot('2026-08-17T11:01:00Z', 80),
+      shot('2026-08-17T11:02:00Z', 3),
+    ];
+
+    expect(
+      sumLowActivitySecondsFromScreenshots(screenshots, INTERVAL, DAY_START, DAY_END, []),
+    ).toBe(0);
   });
 
   it('never counts an active screenshot', () => {
@@ -133,5 +159,81 @@ describe('low-activity counting excludes idle periods', () => {
     expect(low).toBe(13 * INTERVAL);            // only the 13 awake-but-idle shots
     expect(after).toBe(9184);
     expect(totalSeconds - after).toBe(3749);    // ~1h02m effective, correctly
+  });
+});
+
+describe('computeTodayEffectiveStats prefers Pulse numbers', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    rds.isBackendRdsEnabled.mockReturnValue(true);
+    isLikelyOffline.mockReturnValue(false);
+  });
+
+  it('uses the shared Pulse split so desktop matches the web', async () => {
+    rds.getEffectiveStats.mockResolvedValue({
+      idleSeconds: 24 * 60,
+      lowActivitySeconds: 0,
+    });
+
+    const totalSeconds = 4 * 3600 + 24 * 60;
+    const result = await computeTodayEffectiveStats({
+      userId: 1224,
+      totalSeconds,
+      config: {},
+    });
+
+    expect(result.source).toBe('pulse');
+    expect(result.totalSeconds).toBe(totalSeconds);
+    expect(result.nonEffectiveSeconds).toBe(24 * 60);
+    expect(result.effectiveSeconds).toBe(4 * 3600);
+    expect(result.effectiveSeconds + result.nonEffectiveSeconds).toBe(totalSeconds);
+    expect(rds.listIdleLogs).not.toHaveBeenCalled();
+  });
+
+  it('falls back locally when Pulse rejects a non-network error', async () => {
+    rds.getEffectiveStats.mockRejectedValue(new Error('not deployed'));
+    rds.listIdleLogs.mockResolvedValue([]);
+
+    const result = await computeTodayEffectiveStats({
+      userId: 1224,
+      totalSeconds: 3600,
+      screenshots: [],
+      config: {},
+    });
+
+    expect(result.source).toBe('local');
+    expect(result.totalSeconds).toBe(3600);
+    expect(result.computed).toBe(true);
+  });
+
+  it('does not call Pulse or idle reads while offline', async () => {
+    isLikelyOffline.mockReturnValue(true);
+
+    const result = await computeTodayEffectiveStats({
+      userId: 1224,
+      totalSeconds: 5400,
+      config: {},
+    });
+
+    expect(result.source).toBe('offline');
+    expect(result.computed).toBe(false);
+    expect(result.totalSeconds).toBe(5400);
+    expect(rds.getEffectiveStats).not.toHaveBeenCalled();
+    expect(rds.listIdleLogs).not.toHaveBeenCalled();
+  });
+
+  it('does not pile on idle fetches after a Pulse timeout', async () => {
+    rds.getEffectiveStats.mockRejectedValue(new Error('Backend sync timeout after 4000ms (get_effective_stats)'));
+
+    const result = await computeTodayEffectiveStats({
+      userId: 1224,
+      totalSeconds: 5400,
+      config: {},
+    });
+
+    expect(result.source).toBe('offline');
+    expect(result.computed).toBe(false);
+    expect(result.totalSeconds).toBe(5400);
+    expect(rds.listIdleLogs).not.toHaveBeenCalled();
   });
 });
