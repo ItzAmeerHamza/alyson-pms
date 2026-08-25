@@ -389,6 +389,15 @@ class EnhancedIdleMonitor {
         'Crediting idle up to the last check and ignoring the sleep.',
     );
 
+    try {
+      global._lastWakeAtMs = now;
+      global._startAfterSleep = true;
+      global._lidLastProofIso = new Date(lastSeen).toISOString();
+      if (typeof global.trackingManager?.noteMachineSlept === 'function') {
+        void global.trackingManager.noteMachineSlept(lastSeen);
+      }
+    } catch (_) { /* session split is best-effort */ }
+
     if (this.currentIdleStartTime && this.wasIdleLastCheck) {
       await this._flushIdleCheckpoint(lastSeen);
     }
@@ -405,6 +414,24 @@ class EnhancedIdleMonitor {
    */
   async _evaluateIdleState() {
     if (await this._handleSuspendGap()) return;
+
+    // Listening on Meet/Zoom/Teams is work. OS idle would otherwise write idle_logs
+    // while a live probe (or 2-min grace) still says the call is open.
+    try {
+      const { isInMeetingSession } = require('../../lib/meeting-context');
+      if (isInMeetingSession()) {
+        if (this._idlePromptActive || this.wasIdleLastCheck || this.currentIdleStartTime) {
+          console.log('📹 [IDLE-MONITOR] In a video meeting — not counting idle');
+          if (this._idlePromptActive) this._resolveIdlePrompt('working');
+          this.currentIdleStartTime = null;
+          this._lastIdleCheckpointTime = null;
+          this.wasIdleLastCheck = false;
+          this.idleThresholdExceeded = false;
+          this._phantomIdleStartTime = null;
+        }
+        return;
+      }
+    } catch (_) {}
 
     const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
     const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
@@ -716,6 +743,16 @@ class EnhancedIdleMonitor {
         );
         return;
       }
+
+      try {
+        const { isInMeetingSession } = require('../../lib/meeting-context');
+        if (isInMeetingSession()) {
+          console.log(
+            `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting`,
+          );
+          return;
+        }
+      } catch (_) {}
 
       if (startTime < sessionStartMs) {
         console.warn(

@@ -157,7 +157,7 @@ export class DeepseekVisionService {
     ];
 
     if (imageContext.labels.length > 0) {
-      sections.push(`Scene labels (AWS Rekognition): ${imageContext.labels.join(', ')}`);
+      sections.push(`Scene labels: ${imageContext.labels.join(', ')}`);
     }
 
     if (imageContext.ocrText?.trim()) {

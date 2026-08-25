@@ -16,6 +16,10 @@ jest.mock('../../utils/backend-time-logs', () => ({
 }));
 
 const backendTimeLogs = require('../../utils/backend-time-logs');
+const {
+  _resetMeetingSessionForTests,
+  _setPresenceForTests,
+} = require('../../../lib/meeting-context');
 
 describe('EnhancedIdleMonitor', () => {
   let monitor;
@@ -40,6 +44,7 @@ describe('EnhancedIdleMonitor', () => {
 
     backendTimeLogs.isBackendTimeLogsEnabled.mockReturnValue(true);
     backendTimeLogs.insertIdleLog.mockResolvedValue({});
+    _resetMeetingSessionForTests();
 
     jest.useFakeTimers();
   });
@@ -51,6 +56,7 @@ describe('EnhancedIdleMonitor', () => {
     global.currentUserId = 'test-user';
     jest.useRealTimers();
     jest.clearAllMocks();
+    _resetMeetingSessionForTests();
   });
 
   // ─── Constructor: idle_threshold_seconds should NOT control auto-stop ───
@@ -383,6 +389,57 @@ describe('EnhancedIdleMonitor', () => {
 
       expect(monitor.wasIdleLastCheck).toBe(false);
       expect(monitor.logIdlePeriod).not.toHaveBeenCalled();
+    });
+
+    test('does not persist idle while a video meeting is in progress', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 60000).toISOString() };
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+
+      const end = Date.now();
+      await monitor.logIdlePeriod(end - 398000, end, 398000);
+
+      expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
+    });
+
+    test('OS idle during a meeting does not start an idle period', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(300);
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor.wasIdleLastCheck).toBe(false);
+      expect(monitor.currentIdleStartTime).toBeNull();
+    });
+
+    test('Windows Zoom window presence also blocks idle writes', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 60000).toISOString() };
+      _setPresenceForTests({ active: true, label: 'Zoom' });
+
+      await monitor.logIdlePeriod(Date.now() - 400000, Date.now(), 400000);
+
+      expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
+    });
+
+    test('after a conclusive meeting miss, OS idle is written (non-effective can grow)', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(300);
+      _setPresenceForTests({ active: false, label: null });
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor.wasIdleLastCheck).toBe(true);
+      expect(monitor.currentIdleStartTime).toBeTruthy();
     });
 
     test('OS idle at/above 5 min starts idle logging', async () => {

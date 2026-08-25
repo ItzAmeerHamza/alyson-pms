@@ -28,11 +28,12 @@ class EventHandlerManager {
     // State variables
     this.systemSleepStart = null;
     
-    // Legacy grace timers (cleared if present). Sleep/lock no longer stop tracking —
-    // only screenshots pause so the continuous timer matches Time Doctor.
+    // Lid-close / sleep is a full halt. Display-sleep is treated the same
+    // because Windows often never emits suspend on lid close.
     this._displaySleepGraceTimer = null;
     this._screenLockGraceTimer = null;
     this.GRACE_PERIOD_MS = 2 * 60 * 1000; // unused for stop; kept for compatibility
+    this._lidHaltInProgress = false;
     
     console.log('✅ EventHandlerManager initialized');
   }
@@ -95,6 +96,71 @@ class EventHandlerManager {
   }
 
   /**
+   * Lid close, OS sleep, or display-off: stop tracking and kill leftover
+   * capture / heartbeat / IPC. Stay stopped until the employee clicks Start.
+   */
+  handleLidCloseOrSleep(source = 'suspend') {
+    if (this._lidHaltInProgress) {
+      this.console.log(`💤 [LID] Halt already in progress, ignoring duplicate ${source}`);
+      return;
+    }
+    this._lidHaltInProgress = true;
+    this.systemSleepStart = this.systemSleepStart || Date.now();
+
+    try {
+      const cp = this.global.trackingManager?._readSessionCheckpoint?.();
+      if (cp?.checkpointAt) {
+        global._lidLastProofIso = cp.checkpointAt;
+      }
+    } catch (_) { /* ignore */ }
+    global._lidDownArmed = true;
+    global._startAfterSleep = true;
+    global._resumeTrackingAfterWake = null;
+
+    if (this.global.trayManager) {
+      this.global.trayManager.onSystemSleep();
+    }
+
+    const hasOpenSession = !!(
+      this.global.isTracking ||
+      this.global.trackingManager?.isTracking ||
+      this.global.currentTimeLogId ||
+      this.global.trackingManager?.currentTimeLogId
+    );
+    if (hasOpenSession) {
+      this.console.log(`🛑 Laptop lid closed / ${source} - durable arm then stop`);
+      try {
+        if (typeof this.global.trackingManager?.armDurableSleepStop === 'function') {
+          this.global.trackingManager.armDurableSleepStop('system_sleep');
+        }
+      } catch (armErr) {
+        this.console.warn('⚠️ [SLEEP] Durable arm failed:', armErr?.message || armErr);
+      }
+      try {
+        const gsm = this.global.gracefulShutdownManager;
+        if (gsm?.captureStopMoment) gsm.captureStopMoment();
+      } catch (_) { /* ignore */ }
+      if (typeof this.global.stopTracking === 'function') {
+        void this.global.stopTracking('system_sleep');
+      }
+      try {
+        const { closeOpenSessionsAfterExplicitStop } = require('./session-recovery');
+        void closeOpenSessionsAfterExplicitStop({ reason: 'system_sleep', timeoutMs: 4000 });
+      } catch (_) { /* ignore */ }
+    }
+
+    try {
+      this.global.trackingManager?.haltBackgroundProcesses?.();
+    } catch (haltErr) {
+      this.console.warn('⚠️ [LID] Halt leftover processes failed:', haltErr?.message || haltErr);
+    }
+
+    if (this.antiCheatDetector) {
+      this.antiCheatDetector.stopMonitoring();
+    }
+  }
+
+  /**
    * Set up power monitoring events
    */
   setupPowerMonitoring() {
@@ -106,55 +172,7 @@ class EventHandlerManager {
     // System suspend event (fires on lid close and manual sleep)
     this.powerMonitor.on('suspend', () => {
       this.console.log('💤 System suspended (laptop closed/sleep mode)');
-      this.systemSleepStart = Date.now();
-
-      // Notify tray manager so it can defer notifications
-      if (this.global.trayManager) {
-        this.global.trayManager.onSystemSleep();
-      }
-
-      // PAYROLL CRITICAL: write checkpoint + pending close + offline queue to disk
-      // SYNCHRONOUSLY before async stop — OS may freeze mid-stopTracking.
-      //
-      // The gate must include a bare time-log id: a Start still in flight leaves
-      // isTracking false while a row is already open on the server. That race
-      // left 6 of 8 observed suspends completely unarmed, and those sessions
-      // then billed the whole sleep.
-      const hasOpenSession = !!(
-        this.global.isTracking ||
-        this.global.trackingManager?.isTracking ||
-        this.global.currentTimeLogId ||
-        this.global.trackingManager?.currentTimeLogId
-      );
-      if (hasOpenSession) {
-        this.console.log('🛑 Laptop lid closed / system sleep - durable arm then stop');
-        try {
-          if (typeof this.global.trackingManager?.armDurableSleepStop === 'function') {
-            this.global.trackingManager.armDurableSleepStop('system_sleep');
-          }
-        } catch (armErr) {
-          this.console.warn('⚠️ [SLEEP] Durable arm failed:', armErr?.message || armErr);
-        }
-        try {
-          const gsm = this.global.gracefulShutdownManager;
-          if (gsm?.captureStopMoment) gsm.captureStopMoment();
-        } catch (_) { /* ignore */ }
-        if (typeof this.global.stopTracking === 'function') {
-          // Fire-and-forget: durable state is already on disk.
-          void this.global.stopTracking('system_sleep');
-        }
-        // Kill any leftover open row too. Each closes at its own last
-        // proof-of-life, so this is safe even if the stop above never finishes.
-        try {
-          const { closeOpenSessionsAfterExplicitStop } = require('./session-recovery');
-          void closeOpenSessionsAfterExplicitStop({ reason: 'system_sleep', timeoutMs: 4000 });
-        } catch (_) { /* ignore */ }
-      }
-
-      // Pause anti-cheat during sleep (restart on resume if still tracking)
-      if (this.antiCheatDetector) {
-        this.antiCheatDetector.stopMonitoring();
-      }
+      this.handleLidCloseOrSleep('suspend');
     });
 
     // System resume event
@@ -171,6 +189,10 @@ class EventHandlerManager {
 
       try {
         this.console.log('🌅 System resumed from sleep');
+        this._lidHaltInProgress = false;
+        global._lastWakeAtMs = Date.now();
+        global._startAfterSleep = true;
+        global._resumeTrackingAfterWake = null;
         // Clear shutdown flag so detection/polling can resume when tracking starts
         global.isShuttingDown = false;
 
@@ -184,6 +206,7 @@ class EventHandlerManager {
           const wake = await reconcileAfterWake();
           if (
             wake?.continued &&
+            !global._lidDownArmed &&
             this.global.trackingManager &&
             typeof this.global.trackingManager._startTimeLogCheckpoint === 'function'
           ) {
@@ -208,7 +231,7 @@ class EventHandlerManager {
         
         // Re-sync tray state and fire any deferred auto-stop notification
         if (this.global.trayManager) {
-          // Pacific day rollover first (lid-close overnight freezes midnight timers).
+          // Company day rollover first (lid-close overnight freezes midnight timers).
           try {
             if (typeof this.global.trayManager.ensureWorkDayRollover === 'function') {
               this.global.trayManager.ensureWorkDayRollover();
@@ -221,7 +244,11 @@ class EventHandlerManager {
         // leftover live clock so "Not Tracking" cannot keep ticking since midnight.
         try {
           const { BrowserWindow } = require('electron');
-          const payload = { isTracking: !!this.global.isTracking };
+          const payload = {
+            isTracking: !!this.global.isTracking,
+            lastWakeAtMs: global._lastWakeAtMs || Date.now(),
+            startAfterSleep: true,
+          };
           for (const win of BrowserWindow.getAllWindows()) {
             if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
               win.webContents.send('system-resumed', payload);
@@ -258,78 +285,16 @@ class EventHandlerManager {
             if (this.global.config) {
               this.global.config.user_id = savedSession.id;
             }
-            // PAYROLL CRITICAL: sleep auto-stops tracking; auto-resume on wake so
-            // post-wake work is never silently untracked.
-            const resumeAfterWake = this.global._resumeTrackingAfterWake;
-            if (
-              resumeAfterWake &&
-              !this.global.isTracking &&
-              typeof this.global.startTracking === 'function'
-            ) {
-              // Sleep stop must never be treated as an explicit user stop.
-              try {
-                const { clearUserExplicitlyStopped } = require('./session-recovery');
-                clearUserExplicitlyStopped();
-              } catch (_) {
-                this.global.userExplicitlyStopped = false;
-              }
-              try {
-                this.console.log('▶️ [RESUME] Auto-starting tracking after sleep stop');
-                this.global._resumeTrackingAfterWake = null;
-                // Not raced against a timeout. startTracking must first wait for
-                // the sleep-stop to actually close its session, which can take
-                // longer than this handler used to allow. Abandoning it here did
-                // not cancel it — the start continued unwatched while the caller
-                // restored the retry flag, so a second start could follow.
-                await this.global.startTracking(resumeAfterWake.projectId || null);
-                if (typeof this.global.showTrayNotification === 'function') {
-                  this.global.showTrayNotification(
-                    `Welcome back ${savedSession.email.split('@')[0]}! Tracking resumed after sleep.`,
-                    'info'
-                  );
-                }
-              } catch (resumeErr) {
-                this.console.warn(
-                  '⚠️ [RESUME] Auto-start after sleep failed:',
-                  resumeErr?.message || resumeErr
-                );
-                this.global._resumeTrackingAfterWake = resumeAfterWake;
-                try {
-                  const { clearUserExplicitlyStopped } = require('./session-recovery');
-                  clearUserExplicitlyStopped();
-                } catch (_) {
-                  this.global.userExplicitlyStopped = false;
-                }
-                if (typeof this.global.showTrayNotification === 'function') {
-                  this.global.showTrayNotification(
-                    `Welcome back ${savedSession.email.split('@')[0]}! Click to start tracking — auto-resume failed.`,
-                    'warning'
-                  );
-                }
-              }
-            } else if (
-              resumeAfterWake &&
-              this.global.userExplicitlyStopped
-            ) {
-              // Defensive: older builds set explicit-stop on sleep; clear and retry once.
-              this.console.warn(
-                '⚠️ [RESUME] Clearing stale userExplicitlyStopped for sleep auto-resume',
-              );
-              try {
-                const { clearUserExplicitlyStopped } = require('./session-recovery');
-                clearUserExplicitlyStopped();
-              } catch (_) {
-                this.global.userExplicitlyStopped = false;
-              }
-            } else if (typeof this.global.showTrayNotification === 'function') {
+            this.global._resumeTrackingAfterWake = null;
+            if (typeof this.global.showTrayNotification === 'function') {
               if (this.global.isTracking) {
                 this.global.showTrayNotification(
-                  `Welcome back ${savedSession.email.split('@')[0]}! Tracking continued through sleep.`,
-                  'info'
+                  `Welcome back ${savedSession.email.split('@')[0]}! Tracking is still running — click Stop if this is unexpected.`,
+                  'warning'
                 );
               } else {
                 this.global.showTrayNotification(
-                  `Welcome back ${savedSession.email.split('@')[0]}! Click to start tracking when ready.`,
+                  `Welcome back ${savedSession.email.split('@')[0]}! Click Start to track when ready.`,
                   'info'
                 );
               }
@@ -402,7 +367,7 @@ class EventHandlerManager {
         
         this.console.log(
           this.global.isTracking
-            ? '🌅 System resumed — tracking still active (continuous timer)'
+            ? '🌅 System resumed — tracking will restart from wake (sleep not billed)'
             : '🌅 System resumed — tracking is stopped',
         );
       } finally {
@@ -427,33 +392,21 @@ class EventHandlerManager {
       }
     });
 
-    // Display sleep/wake — pause screenshots only; never stop the timer.
+    // Windows lid close often only fires display-sleep (not suspend).
     this.powerMonitor.on('display-sleep', () => {
       this.console.log('🖥️ Display sleep detected');
-      global.isScreenLocked = true; // Treat display sleep same as lock for all systems
+      global.isScreenLocked = true;
       this.console.log(`🔍 [DEBUG] Global tracking state: ${this.global.isTracking}, timestamp: ${new Date().toISOString()}`);
-      
-      if (this.global.isTracking) {
-        // Pause screenshots to prevent black screen captures; keep timer running.
-        try {
-          const screenshotMgr = this.global.enhancedScreenshotManager || global.enhancedScreenshotManager;
-          if (screenshotMgr && typeof screenshotMgr.pauseScreenshotsOnly === 'function') {
-            screenshotMgr.pauseScreenshotsOnly();
-            this.console.log('📸 [SLEEP] Screenshots paused on display sleep (tracking continues)');
-          }
-        } catch (e) {
-          this.console.log('⚠️ [SLEEP] Failed to pause screenshots:', e?.message);
-        }
-        // Cancel any legacy grace-stop timer from older builds still in memory.
-        if (this._displaySleepGraceTimer) {
-          clearTimeout(this._displaySleepGraceTimer);
-          this._displaySleepGraceTimer = null;
-        }
+      if (this._displaySleepGraceTimer) {
+        clearTimeout(this._displaySleepGraceTimer);
+        this._displaySleepGraceTimer = null;
       }
+      this.handleLidCloseOrSleep('display-sleep');
     });
     
     this.powerMonitor.on('display-wake', () => {
       this.console.log('🌅 Display wake detected');
+      this._lidHaltInProgress = false;
       global.isScreenLocked = false;
       if (this._displaySleepGraceTimer) {
         clearTimeout(this._displaySleepGraceTimer);
@@ -464,6 +417,20 @@ class EventHandlerManager {
       try {
         if (typeof this.global.trayManager?.ensureWorkDayRollover === 'function') {
           this.global.trayManager.ensureWorkDayRollover();
+        }
+      } catch (_) { /* ignore */ }
+
+      try {
+        const { isSleepGap } = require('./sleep-aware-elapsed');
+        const cp = this.global.trackingManager?._readSessionCheckpoint?.();
+        if (isSleepGap(cp?.checkpointAt)) {
+          global._lastWakeAtMs = Date.now();
+          global._startAfterSleep = true;
+          if (typeof this.global.trackingManager?.noteMachineSlept === 'function') {
+            void this.global.trackingManager.noteMachineSlept(
+              new Date(cp.checkpointAt).getTime(),
+            );
+          }
         }
       } catch (_) { /* ignore */ }
 

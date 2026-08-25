@@ -13,7 +13,8 @@ New upload / backfill (VPC Lambda, RDS + SQS endpoint)
         ▼
   Worker Lambda (NO VPC — public internet)
         │── S3 GetObject
-        │── DeepSeek HTTPS
+        │── Tesseract.js OCR
+        │── DeepSeek HTTPS (text)
         └── POST /sync/screenshot-ai/* → API Lambda (VPC) → RDS
 ```
 
@@ -31,7 +32,7 @@ New upload / backfill (VPC Lambda, RDS + SQS endpoint)
 |---------|------|------|
 | **Amazon SQS** | Job queue | Yes |
 | **SQS VPC interface endpoint** | API/backfill enqueue from VPC without NAT | Yes |
-| **AWS Lambda (worker)** | S3 + DeepSeek (outside VPC) | Yes |
+| **AWS Lambda (worker)** | S3 + Tesseract.js OCR + DeepSeek (outside VPC) | Yes |
 | **AWS Lambda (API/backfill)** | RDS + SQS send | Updated |
 | **DeepSeek API** | Vision/text analysis | External |
 

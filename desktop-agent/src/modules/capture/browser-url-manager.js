@@ -131,7 +131,7 @@ class BrowserUrlManager extends EventEmitter {
           }
         }
       }
-    }, 2000); // Check every 2 seconds for faster sync
+    }, 15000); // Self-heal only — start/stop already syncs state on the event
     
     try { const { logger } = require('../utils/logger'); logger && logger.debug({ category: 'URL', step: 'STATE MONITOR START' }); } catch {}
   }
@@ -500,8 +500,13 @@ class BrowserUrlManager extends EventEmitter {
     }
     
     console.log('🔍 [BROWSER-URL-MANAGER] Starting enhanced tab change detection...');
+
+    let tabMonitorMs = 30000;
+    try {
+      const { getUrlPollDelayMs } = require('../utils/power-profile');
+      tabMonitorMs = getUrlPollDelayMs();
+    } catch (_) { /* keep 30s */ }
     
-    // IMPROVED: Check for tab changes every 3 seconds CONTINUOUSLY
     this.activeBrowserUrlCheckInterval = setInterval(async () => {
       try {
         const activeApp = await global.detectActiveApplication?.();
@@ -541,7 +546,7 @@ class BrowserUrlManager extends EventEmitter {
       } catch (error) {
         console.log('❌ [BROWSER-URL-MANAGER] Tab monitor error:', error.message);
       }
-    }, 3000); // 3 second interval
+    }, tabMonitorMs);
     
     // Register with cleanup registry
     if (this.cleanupRegistry) {

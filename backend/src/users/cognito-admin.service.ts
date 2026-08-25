@@ -118,15 +118,19 @@ export class CognitoAdminService {
   }
 
   /**
-   * Creates a Cognito pool user. Cognito emails the user a temporary password
-   * (default AdminCreateUser behaviour). Returns the new user's `sub` (used to
-   * link the RDS record so login works on the first sign-in).
+   * Creates a Cognito pool user with a temporary password.
+   * Cognito's default invite email is suppressed — Pulse sends its own SES mail.
    */
   async createUser(input: {
     email: string;
     firstName: string;
     lastName: string;
-  }): Promise<{ sub: string; username: string; created: boolean }> {
+  }): Promise<{
+    sub: string;
+    username: string;
+    created: boolean;
+    temporaryPassword?: string;
+  }> {
     if (!this.enabled) {
       throw new InternalServerErrorException('User provisioning is not configured');
     }
@@ -155,7 +159,12 @@ export class CognitoAdminService {
     }
 
     this.logger.log(`AdminCreateUser ok for ${input.email}`);
-    return { sub: result.sub, username: result.username, created: true };
+    return {
+      sub: result.sub,
+      username: result.username,
+      created: true,
+      temporaryPassword: result.temporaryPassword,
+    };
   }
 
   /** Resolve an existing Cognito user by email/username (no invite email). */

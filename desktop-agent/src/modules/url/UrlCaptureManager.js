@@ -31,9 +31,9 @@ class UrlCaptureManager extends EventEmitter {
 
       // Performance toggles
       diagRateLimitPerMin: Number(process.env.URL_DIAG_RATE_LIMIT_PER_MIN || 120),
-      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 8000),
-      minPollMsWayland: Number(process.env.URL_TRACKING_MIN_POLL_MS_WAYLAND || 5000),
-      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 20000),
+      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 30000),
+      minPollMsWayland: Number(process.env.URL_TRACKING_MIN_POLL_MS_WAYLAND || 15000),
+      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 60000),
       workerYieldMs: Number(process.env.URL_WORKER_YIELD_MS || 8),
       maxPerTick: Number(process.env.URL_MAX_PER_TICK || 1),
       redactPipelineConcurrency: Number(process.env.URL_REDACT_PIPELINE_CONCURRENCY || 1)
@@ -56,7 +56,7 @@ class UrlCaptureManager extends EventEmitter {
     this.debounceTimers = new Map();
 
     // Adaptive polling state - matches steady-state after CPU budget backoff
-    this.pollDelay = 8000;
+    this.pollDelay = 30000;
     this.lastResult = null;
 
     // Status tracking

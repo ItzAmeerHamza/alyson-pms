@@ -2094,9 +2094,6 @@ if (uploadResult?.id) {
       } catch (_) {
         meetingLabel = getRecentMeetingLabel();
       }
-    } else {
-      // Keep presence in sync when we can see the meeting in the foreground.
-      void refreshMeetingPresence().catch(() => {});
     }
 
     const inMeeting = Boolean(meetingLabel) || isInMeetingSession();

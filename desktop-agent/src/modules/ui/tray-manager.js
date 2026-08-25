@@ -431,8 +431,9 @@ class TrayManager {
   }
 
   /**
-   * Pacific work-day boundary. Safe to call on resume/wake/start — no-ops if
-   * already on today's key. Returns true when a rollover reset ran.
+   * Company work-day boundary (America/Chicago by default). Safe to call on
+   * resume/wake/start — no-ops if already on today's key. Returns true when
+   * a rollover reset ran and the daily clock was zeroed.
    */
   _maybeRolloverLocalDay() {
     const { localDateKey } = require('../utils/today-time-log-stats');
@@ -458,7 +459,7 @@ class TrayManager {
       global._frozenTotalDate = todayKey;
       // Drop yesterday's floor so get-today-time-stats cannot reinflate the clock.
       global._lastGoodTodayStats = null;
-      // Key tray high-water by Pacific work day (not machine toDateString).
+      // Key tray high-water by company work day (not machine toDateString).
       global._trayTodayHighWaterSeconds = 0;
       global._trayTodayHighWaterDate = todayKey;
       global._rendererTodayFloorSeconds = 0;
@@ -478,7 +479,7 @@ class TrayManager {
     return true;
   }
 
-  /** Public: force Pacific day check (resume / unlock / Start). */
+  /** Public: force company (Chicago by default) day check (resume / unlock / Start). */
   ensureWorkDayRollover() {
     const rolled = this._maybeRolloverLocalDay();
     if (!rolled) {
@@ -517,7 +518,7 @@ class TrayManager {
     const { localDateKey } = require('../utils/today-time-log-stats');
     const todayKey = localDateKey();
     const persisted = this._readPersistedWorkDayKey();
-    // If the process slept past Pacific midnight, persisted day is yesterday —
+    // If the process slept past company midnight, persisted day is yesterday —
     // seed _localDayKey from disk so the first check performs a real reset.
     this._localDayKey = persisted || todayKey;
     this._maybeRolloverLocalDay();
@@ -924,7 +925,7 @@ class TrayManager {
     if (extra.completedTodayBeforeSessionSeconds !== undefined) {
       const n = Number(extra.completedTodayBeforeSessionSeconds);
       const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-      // Forward-only on the same Pacific day only (rollover already zeroed base).
+      // Forward-only on the same company day only (rollover already zeroed base).
       this._cumulativeBaseSeconds = Math.max(
         Math.floor(Number(this._cumulativeBaseSeconds) || 0),
         next,
@@ -1020,7 +1021,7 @@ class TrayManager {
     this._systemSleeping = false;
     console.log('🌅 [TRAY] System resumed — re-syncing tray state');
 
-    // CRITICAL: sleep freezes midnight timers. Force Pacific day rollover now so
+    // CRITICAL: sleep freezes midnight timers. Force company day rollover now so
     // yesterday's 8h cannot stick when the user Starts later without quitting.
     try {
       this.ensureWorkDayRollover();

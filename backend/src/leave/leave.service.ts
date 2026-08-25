@@ -74,7 +74,7 @@ export class LeaveService {
 
   private ensureCanManage(user: ScopedAuthUser) {
     if (!canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin role required for leave');
+      throw new ForbiddenException('Admin role required for leave');
     }
   }
 
@@ -1484,7 +1484,7 @@ export class LeaveService {
     }
     const user = req.actor;
     if (!user?.id || !canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin actor required');
+      throw new ForbiddenException('Admin actor required');
     }
     const actorId = parseTenantUserId(user.id);
     const employees = await this.loadTrackableEmployees(workspaceId);

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
+import { SesEmailService } from '../common/ses-email.service';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
@@ -7,6 +9,7 @@ import {
 } from '../database/time-doctor-sql';
 import { CognitoAdminService } from './cognito-admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { buildInviteEmail } from './invite-email-templates';
 
 @Injectable()
 export class UsersService {
@@ -15,6 +18,8 @@ export class UsersService {
   constructor(
     private readonly db: DatabaseService,
     private readonly cognitoAdmin: CognitoAdminService,
+    private readonly sesEmail: SesEmailService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -178,9 +183,57 @@ export class UsersService {
       `${EMPLOYEE_USER_SELECT} WHERE u.id = $1 LIMIT 1`,
       [userId],
     );
+
+    let inviteEmailSent = false;
+    if (cognito.created && cognito.temporaryPassword) {
+      inviteEmailSent = await this.sendInviteEmail({
+        firstName,
+        email,
+        temporaryPassword: cognito.temporaryPassword,
+      });
+    }
+
     return {
       ...(created.rows[0] ?? { id: userId, email, role: dto.role }),
       linked_existing: Boolean(existingUserId) || !cognito.created,
+      invite_email_sent: inviteEmailSent,
     };
+  }
+
+  private async sendInviteEmail(input: {
+    firstName: string;
+    email: string;
+    temporaryPassword: string;
+  }): Promise<boolean> {
+    if (!this.sesEmail.isEnabled()) {
+      this.logger.error(`Invite email not sent to ${input.email}: SES is not configured`);
+      throw new BadRequestException(
+        'The account was created but invite email is not configured. Ask engineering to check SES.',
+      );
+    }
+
+    const mail = buildInviteEmail({
+      firstName: input.firstName,
+      email: input.email,
+      temporaryPassword: input.temporaryPassword,
+      appUrl: this.config.get<string>('PULSE_APP_URL'),
+    });
+
+    const result = await this.sesEmail.send({
+      to: input.email,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+    });
+
+    if (!result.ok) {
+      this.logger.error(`Invite email failed for ${input.email}: ${result.code || 'unknown'}`);
+      throw new BadRequestException(
+        'The account was created but the invite email could not be sent. Try again or contact support.',
+      );
+    }
+
+    this.logger.log(`Invite email sent to ${input.email}`);
+    return true;
   }
 }

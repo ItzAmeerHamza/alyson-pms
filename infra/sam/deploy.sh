@@ -161,6 +161,7 @@ sam deploy \
     "LeaveScanApiBaseUrl=${LEAVE_SCAN_API_BASE_URL:-https://rxbi86aui3.execute-api.us-west-2.amazonaws.com}" \
     "ScreenshotAiEnabled=${SCREENSHOT_AI_ENABLED:-false}" \
     "ScreenshotAiBackfillBatchSize=${SCREENSHOT_AI_BACKFILL_BATCH_SIZE:-100}" \
+    "ScreenshotOcrProvider=${SCREENSHOT_OCR_PROVIDER:-tesseract}" \
     "EnvironmentName=${ENVIRONMENT_NAME:-dev}" \
     "SqsVpcEndpointDnsName=${SQS_VPC_ENDPOINT_DNS}" \
     "LambdaEndpointSubnetId=${LAMBDA_ENDPOINT_SUBNET_ID}" \

@@ -8,6 +8,15 @@ export interface TimeInterval {
   endMs: number;
 }
 
+/** Open sessions end at last proof-of-life, never wall-clock now. */
+export function sessionEndMs(log: {
+  end_time?: string | Date | null;
+  last_alive_at?: string | Date | null;
+}): number {
+  const raw = log.end_time ?? log.last_alive_at ?? Date.now();
+  return new Date(raw).getTime();
+}
+
 export function mergeTimeIntervals(intervals: TimeInterval[]): TimeInterval[] {
   if (intervals.length === 0) return [];
 
@@ -37,6 +46,7 @@ export function calculateMergedHoursByUser(
     user_id: string;
     start_time: string | Date;
     end_time: string | Date | null;
+    last_alive_at?: string | Date | null;
     idle_seconds?: number | null;
   }>,
 ): Map<string, number> {
@@ -44,9 +54,7 @@ export function calculateMergedHoursByUser(
 
   for (const log of logs) {
     const startMs = new Date(log.start_time).getTime();
-    const endMs = log.end_time
-      ? new Date(log.end_time).getTime()
-      : Date.now();
+    const endMs = sessionEndMs(log);
     if (endMs <= startMs) continue;
 
     if (!byUser.has(log.user_id)) byUser.set(log.user_id, []);

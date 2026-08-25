@@ -14,7 +14,7 @@ import {
   canAdjustPulseTime,
   workspaceScope,
 } from '../database/time-doctor-sql';
-import { mergeTimeIntervals } from '../lib/time-merge';
+import { mergeTimeIntervals, sessionEndMs } from '../lib/time-merge';
 import {
   normalizeWorkTimezone,
   workDateKey,
@@ -63,7 +63,7 @@ export class PacingService {
 
   private ensureCanView(user: ScopedAuthUser) {
     if (!canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin role required for pacing');
+      throw new ForbiddenException('Admin role required for pacing');
     }
   }
 
@@ -128,10 +128,12 @@ export class PacingService {
       user_id: string;
       start_time: string;
       end_time: string | null;
+      last_alive_at: string | null;
     }>(
       `SELECT t.user_id::text AS user_id,
               t.start_time::text AS start_time,
-              t.end_time::text AS end_time
+              t.end_time::text AS end_time,
+              t.last_alive_at::text AS last_alive_at
          FROM time_doctor.time_logs t
          LEFT JOIN tenant."user" u ON u.id = t.user_id
         WHERE ${scope.clause}
@@ -145,7 +147,7 @@ export class PacingService {
     const byUser = new Map<string, Array<{ startMs: number; endMs: number }>>();
     for (const row of result.rows) {
       const startMs = new Date(row.start_time).getTime();
-      const endMs = row.end_time ? new Date(row.end_time).getTime() : Date.now();
+      const endMs = sessionEndMs(row);
       if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
       if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
       byUser.get(row.user_id)!.push({ startMs, endMs });

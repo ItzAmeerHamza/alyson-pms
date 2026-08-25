@@ -75,4 +75,43 @@ describe('pacing-math acceptance', () => {
     expect(row.paceDelta).toBe(17.6);
     expect(row.status).toBe('on_track');
   });
+
+  it('adds leave credit and other adjustments into worked hours', () => {
+    const row = computePacingRowMetrics({
+      hoursWorkedLogged: 21,
+      leaveHoursCredit: leaveHoursFromFraction(0.5), // +4h
+      otherAdjustmentHours: 1,
+      targetHours: WEEKLY_HOURS_TARGET,
+      dailyHoursSample: [7, 7, 7, 5],
+      remainingWorkDays: 1,
+      mode: 'weekly',
+    });
+    expect(row.leaveHoursCredit).toBe(4);
+    expect(row.hoursWorked).toBe(26);
+    expect(row.projectedPace).toBe(32.5); // weekly: sum(sample)+avg = 26+6.5
+    expect(row.hoursWorkedLogged).toBe(21);
+  });
+
+  it('weekly leave credit does not change the sample-based projection formula', () => {
+    const noLeave = computePacingRowMetrics({
+      hoursWorkedLogged: 28,
+      leaveHoursCredit: 0,
+      targetHours: WEEKLY_HOURS_TARGET,
+      dailyHoursSample: [7, 7, 7, 7],
+      remainingWorkDays: 1,
+      mode: 'weekly',
+    });
+    const withLeave = computePacingRowMetrics({
+      hoursWorkedLogged: 20,
+      leaveHoursCredit: 8,
+      targetHours: WEEKLY_HOURS_TARGET,
+      dailyHoursSample: [7, 7, 7, 7],
+      remainingWorkDays: 1,
+      mode: 'weekly',
+    });
+    expect(noLeave.hoursWorked).toBe(28);
+    expect(withLeave.hoursWorked).toBe(28);
+    expect(noLeave.projectedPace).toBe(withLeave.projectedPace);
+    expect(withLeave.status).toBe('on_track');
+  });
 });

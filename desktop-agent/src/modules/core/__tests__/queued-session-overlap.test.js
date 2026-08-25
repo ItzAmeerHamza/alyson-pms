@@ -22,7 +22,7 @@ const create = (id, start, end) => ({
 });
 
 describe('offline queue overlap clamping', () => {
-  it('clamps a session that runs past the next session start', () => {
+  it('keeps the outer tail when a shorter session is nested inside', () => {
     const queue = [
       create('a', '2026-08-14T10:00:00.000Z', '2026-08-14T13:00:00.000Z'),
       create('b', '2026-08-14T11:00:00.000Z', '2026-08-14T12:00:00.000Z'),
@@ -30,8 +30,27 @@ describe('offline queue overlap clamping', () => {
 
     clamp(queue);
 
+    const creates = queue.filter((q) => q.type === 'create_time_log');
+    expect(creates).toHaveLength(1);
+    expect(creates[0].data.id).toBe('a');
+    expect(creates[0].data.end_time).toBe('2026-08-14T13:00:00.000Z');
+  });
+
+  it('partial overlap keeps the later tail and does not double-bill', () => {
+    const queue = [
+      create('a', '2026-08-14T10:00:00.000Z', '2026-08-14T13:00:00.000Z'),
+      create('b', '2026-08-14T11:00:00.000Z', '2026-08-14T14:00:00.000Z'),
+    ];
+
+    clamp(queue);
+
     expect(queue[0].data.end_time).toBe('2026-08-14T11:00:00.000Z');
-    expect(queue[1].data.end_time).toBe('2026-08-14T12:00:00.000Z');
+    expect(queue[1].data.end_time).toBe('2026-08-14T14:00:00.000Z');
+    const summed =
+      Date.parse(queue[0].data.end_time) -
+      Date.parse(queue[0].data.start_time) +
+      (Date.parse(queue[1].data.end_time) - Date.parse(queue[1].data.start_time));
+    expect(summed).toBe(4 * 3600 * 1000);
   });
 
   it('closes a session left open by a crash at the next session start', () => {
@@ -67,7 +86,10 @@ describe('offline queue overlap clamping', () => {
 
     clamp(queue);
 
-    expect(queue[1].data.end_time).toBe('2026-08-14T11:00:00.000Z');
+    const creates = queue.filter((q) => q.type === 'create_time_log');
+    expect(creates).toHaveLength(1);
+    expect(creates[0].data.id).toBe('a');
+    expect(creates[0].data.end_time).toBe('2026-08-14T13:00:00.000Z');
   });
 
   it('never produces a negative duration when fully contained', () => {
@@ -78,6 +100,10 @@ describe('offline queue overlap clamping', () => {
 
     clamp(queue);
 
+    const creates = queue.filter((q) => q.type === 'create_time_log');
+    expect(creates).toHaveLength(1);
+    expect(creates[0].data.id).toBe('b');
+    expect(creates[0].data.end_time).toBe('2026-08-14T14:00:00.000Z');
     for (const entry of queue) {
       if (!entry.data.end_time) continue;
       const start = new Date(entry.data.start_time).getTime();

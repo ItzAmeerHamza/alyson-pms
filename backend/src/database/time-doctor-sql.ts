@@ -47,25 +47,23 @@ export function canManagePulseUsers(
 }
 
 /**
- * Admin or manager — may add/remove time on employee work days.
- * Employees, team leads, and delegated viewers cannot adjust.
+ * Admin only — may add/remove time on employee work days.
+ * Managers invite users/projects; they cannot adjust hours.
  */
 export function canAdjustPulseTime(
   user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
 ): boolean {
-  return canManagePulseUsers(user);
+  return isPulseOrgAdmin(user);
 }
 
 /**
  * Org-wide / team time-progress reports (Team Time, individual employee).
- * Admin and manager — team leads see their own report only.
+ * Admin only — managers invite members and do not see team reports.
  */
 export function canAccessPulseTeamReports(
   user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
 ): boolean {
-  return Boolean(
-    user.is_super_admin || user.role === 'admin' || user.role === 'manager',
-  );
+  return isPulseOrgAdmin(user);
 }
 
 /**

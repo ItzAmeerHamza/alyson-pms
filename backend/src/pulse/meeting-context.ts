@@ -6,16 +6,19 @@ export function isVideoMeetingScreenshot(
   windowTitle?: string | null,
 ): boolean {
   const hay = `${appName || ''} ${windowTitle || ''}`.toLowerCase();
-  if (/google meet|meet\.google\.com/.test(hay)) return true;
+  if (/google meet|meet\.google\.com|(^|[/.])meet\.com([/?#:\s]|$)/.test(hay)) return true;
   if (/\bmeet\s+-/.test(hay)) return true;
   if (/\b[a-z]{3}-[a-z]{4}-[a-z]{3}\b/.test(hay)) return true;
   if (/zoom meeting|zoom\.us|zoom workplace/.test(hay)) return true;
   if (/\bzoom\b/.test(hay) && /meeting|webinar|personal room|waiting room/.test(hay)) return true;
   if (/microsoft teams|teams\.microsoft\.com|\bms-?teams\b/.test(hay)) return true;
   if (/cisco webex|\bwebex\b/.test(hay)) return true;
+  if (/\bskype\b/.test(hay)) return true;
 
   const app = (appName || '').trim().toLowerCase();
   if (app === 'zoom' || app === 'zoom.us' || app.startsWith('zoom workplace')) return true;
+  if (app === 'skype' || app.startsWith('skype')) return true;
+  if (app === 'google meet' || app === 'meet') return true;
   return (
     app.startsWith('microsoft teams') || app === 'teams' || app === 'msteams' || app === 'ms-teams'
   );
@@ -51,6 +54,7 @@ export const SCREENSHOT_IS_VIDEO_MEETING_SQL = `(
   COALESCE(s.app_name, '') ILIKE '%google meet%'
   OR COALESCE(s.window_title, '') ILIKE '%google meet%'
   OR COALESCE(s.window_title, '') ILIKE '%meet.google.com%'
+  OR COALESCE(s.window_title, '') ILIKE '%meet.com%'
   OR COALESCE(s.window_title, '') ILIKE 'Meet - %'
   OR COALESCE(s.window_title, '') ~* '[a-z]{3}-[a-z]{4}-[a-z]{3}'
   OR COALESCE(s.window_title, '') ILIKE '%zoom meeting%'
@@ -66,6 +70,8 @@ export const SCREENSHOT_IS_VIDEO_MEETING_SQL = `(
   OR LOWER(COALESCE(s.app_name, '')) IN ('teams', 'msteams', 'ms-teams')
   OR COALESCE(s.app_name, '') ILIKE '%webex%'
   OR COALESCE(s.window_title, '') ILIKE '%webex%'
+  OR COALESCE(s.app_name, '') ILIKE '%skype%'
+  OR COALESCE(s.window_title, '') ILIKE '%skype%'
 )`;
 
 /** @deprecated use SCREENSHOT_IS_VIDEO_MEETING_SQL */

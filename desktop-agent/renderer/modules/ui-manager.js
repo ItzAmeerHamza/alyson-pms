@@ -4,6 +4,7 @@ const {
   getWorkTimezone,
   workDateKey,
 } = require('../../src/modules/utils/work-timezone');
+const { shouldKeepCachedTodayStats } = require('../../src/modules/utils/today-time-log-stats');
 
 class UIManager {
   constructor(ipcRenderer, notificationManager) {
@@ -1474,42 +1475,32 @@ class UIManager {
     this._todayStatsInFlight = (async () => {
       try {
         const result = await this.ipcRenderer.invoke('get-today-time-stats');
-        // Keep last-good only on hard failure / wipe-to-zero — never freeze an
-        // inflated total (that made the live clock run ahead of wall time).
+        // Keep last-good only on same-day failure. A new work day at 0 is real —
+        // leftover yesterday must not paint back after midnight reset.
         const prev = this._todayStatsCache;
-        const incomingTotal = Math.max(0, Math.floor(Number(result?.totalTime) || 0));
-        const prevTotal = Math.max(0, Math.floor(Number(prev?.totalTime) || 0));
-        if (result?.error && prev && !prev.error && prevTotal > 0) {
-          console.warn('⚠️ [TODAY-TIME] Keeping cached stats after error');
-          return prev;
-        }
-        if (
-          prev &&
-          !prev.error &&
-          prevTotal > 60 &&
-          incomingTotal < 30 &&
-          !result?.offlinePendingCount
-        ) {
-          console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring wipe-to-zero response');
-          return prev;
-        }
-        // Live tracking: reject mid-range sync drops (network blip / partial remote).
-        if (
-          trackingLive &&
-          prev &&
-          !prev.error &&
-          prevTotal > 60 &&
-          incomingTotal + 15 < prevTotal &&
-          !result?.floorHeld
-        ) {
-          console.warn(
-            `⚠️ [TODAY-TIME] Keeping cached ${prevTotal}s; ignoring sync drop to ${incomingTotal}s while tracking`,
-          );
-          return {
-            ...prev,
-            ongoingCurrentSessionSeconds: result?.ongoingCurrentSessionSeconds ?? prev.ongoingCurrentSessionSeconds,
-            offlinePendingCount: result?.offlinePendingCount ?? prev.offlinePendingCount,
-          };
+        const held = shouldKeepCachedTodayStats(prev, result, {
+          trackingLive,
+          rendererDayKey: window.__localDayKey || window.__trackerDisplayDayKey || null,
+        });
+        if (held.keep) {
+          if (held.reason === 'error') {
+            console.warn('⚠️ [TODAY-TIME] Keeping cached stats after error');
+          } else if (held.reason === 'backend-miss') {
+            const prevTotal = Math.max(0, Math.floor(Number(prev?.totalTime) || 0));
+            const incomingTotal = Math.max(0, Math.floor(Number(result?.totalTime) || 0));
+            console.warn(
+              `⚠️ [TODAY-TIME] Keeping cached ${prevTotal}s; backend miss must not rewind to ${incomingTotal}s`,
+            );
+          } else if (held.reason === 'wipe-to-zero') {
+            console.warn('⚠️ [TODAY-TIME] Keeping cached stats; ignoring wipe-to-zero response');
+          } else if (held.reason === 'sync-drop') {
+            const prevTotal = Math.max(0, Math.floor(Number(prev?.totalTime) || 0));
+            const incomingTotal = Math.max(0, Math.floor(Number(result?.totalTime) || 0));
+            console.warn(
+              `⚠️ [TODAY-TIME] Keeping cached ${prevTotal}s; ignoring sync drop to ${incomingTotal}s while tracking`,
+            );
+          }
+          return held.value || prev;
         }
         if (result && !result.error) {
           this._todayStatsCache = result;
@@ -3556,19 +3547,23 @@ class UIManager {
         if (typeof window.applyTodayEffectiveStats === 'function') {
           window.applyTodayEffectiveStats(todayStats);
         }
+        const statsUntrusted =
+          todayStats.stale === true || todayStats.backendFetchFailed === true || !!todayStats.error;
         const effectiveSec =
           typeof todayStats.effectiveSeconds === 'number'
             ? Math.max(0, Math.floor(todayStats.effectiveSeconds))
             : typeof window.toEffectiveSeconds === 'function'
               ? window.toEffectiveSeconds(totalSec)
               : totalSec;
-        this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
+        if (!statsUntrusted) {
+          this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
+        }
         console.log('✅ [TODAY-TIME] Updated effective display:', effectiveSec, 's (tracked', totalSec, 's)');
         const trackingLive =
           !!window.__lastTrackingStartTime ||
           !!(typeof window.isTrayTimerDrivingDisplay === 'function' && window.isTrayTimerDrivingDisplay()) ||
           this.trackingStatus === 'active';
-        if (typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
+        if (!statsUntrusted && typeof todayStats.completedTodayBeforeCurrentSessionSeconds === 'number') {
           if (typeof window.applyClosedBaseFromStats === 'function') {
             window.applyClosedBaseFromStats(completedBase, { live: trackingLive });
           } else if (!(trackingLive && completedBase <= 0 && (window.__completedTodayBaseSeconds || 0) > 60)) {
@@ -3576,7 +3571,14 @@ class UIManager {
           }
         }
         if (trackerTimeElement && typeof window.setTrackerDisplaySeconds === 'function') {
-          if (trackingLive) {
+          if (statsUntrusted) {
+            if (trackingLive && typeof window.updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
+              window.updateRendererTrackingClock();
+            } else {
+              window.setTrackerDisplaySeconds(totalSec, { allowDecrease: false });
+            }
+            console.log('⚠️ [TODAY-TIME] Untrusted stats — clock cannot go back');
+          } else if (trackingLive) {
             // Live session owns the big clock; forward-only high-water paint.
             if (typeof window.updateRendererTrackingClock === 'function' && window.__lastTrackingStartTime) {
               window.updateRendererTrackingClock();
@@ -4990,12 +4992,13 @@ class UIManager {
           (typeof window.isRendererActivelyTracking === 'function' &&
             window.isRendererActivelyTracking())
         );
-        // Stopped + phantom "since midnight" must not paint today's month bar.
+        // Stopped: Month today is Pulse only. Local leftover (3h after lid-sleep)
+        // must not lift the bar or the cards will blink vs the next DB refresh.
         const liveIsOrphanCap =
           typeof window.isInflatedWorkDayCapHighWater === 'function' &&
           window.isInflatedWorkDayCapHighWater(liveTracked, rowTotal);
         const todayTracked =
-          !reallyTracking && liveIsOrphanCap
+          !reallyTracking || liveIsOrphanCap
             ? rowTotal
             : Math.max(liveTracked, rowTotal);
         const todayNonEff = liveReady
@@ -5069,7 +5072,7 @@ class UIManager {
 
     // Find max seconds for scaling
     const maxSeconds = Math.max(...daily.map(d => d.totalSeconds), 1);
-    // Pacific work calendar — matches daily totals and session dates
+    // Company work calendar — matches daily totals and session dates
     const todayStr = this._localDateStr();
 
     let html = '';

@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { mergeTimeIntervals } from '../lib/time-merge';
+import { mergeTimeIntervals, sessionEndMs } from '../lib/time-merge';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
@@ -131,7 +131,7 @@ export class PulseService {
    * Everyone else = self only.
    */
   private async visibleEmployeeIds(user: ScopedAuthUser): Promise<string[] | null> {
-    // Admin/manager org-wide team reports (same as canAccessPulseTeamReports).
+    // Admin org-wide team reports (same as canAccessPulseTeamReports).
     if (canAccessPulseTeamReports(user)) {
       return null;
     }
@@ -216,12 +216,13 @@ export class PulseService {
       user_id: string;
       start_time: string;
       end_time: string | null;
+      last_alive_at: string | null;
       idle_seconds: number | null;
     }>(
       // Overlap the range (not start_time-only) so day mode includes sessions that
       // began before Pacific midnight but still have time on that day. Lookback
       // avoids pulling ancient never-closed sessions into every day query.
-      `SELECT t.user_id::text AS user_id, t.start_time, t.end_time, t.idle_seconds
+      `SELECT t.user_id::text AS user_id, t.start_time, t.end_time, t.last_alive_at, t.idle_seconds
        FROM time_doctor.time_logs t
        LEFT JOIN tenant."user" u ON u.id = t.user_id
        WHERE ${scope.clause}
@@ -237,7 +238,12 @@ export class PulseService {
   }
 
   private dailyHoursFromLogs(
-    logs: Array<{ user_id: string; start_time: string | Date; end_time: string | Date | null }>,
+    logs: Array<{
+      user_id: string;
+      start_time: string | Date;
+      end_time: string | Date | null;
+      last_alive_at?: string | Date | null;
+    }>,
     tz?: string,
   ): Map<string, Map<string, number>> {
     const workTz = normalizeWorkTimezone(tz);
@@ -246,7 +252,7 @@ export class PulseService {
     const byUser = new Map<string, Array<{ startMs: number; endMs: number }>>();
     for (const log of logs) {
       const startMs = new Date(log.start_time).getTime();
-      const endMs = log.end_time ? new Date(log.end_time).getTime() : Date.now();
+      const endMs = sessionEndMs(log);
       if (endMs <= startMs) continue;
       if (!byUser.has(log.user_id)) byUser.set(log.user_id, []);
       byUser.get(log.user_id)!.push({ startMs, endMs });
@@ -379,7 +385,7 @@ export class PulseService {
 
   async listTimeAdjustments(user: ScopedAuthUser, userId: string, workDate: string) {
     if (!canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin role required to adjust time');
+      throw new ForbiddenException('Admin role required to adjust time');
     }
     const targetId = parseTenantUserId(userId);
     const dayKey = String(workDate).slice(0, 10);
@@ -445,7 +451,7 @@ export class PulseService {
     },
   ) {
     if (!canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin role required to adjust time');
+      throw new ForbiddenException('Admin role required to adjust time');
     }
     const targetId = parseTenantUserId(input.userId);
     const adminId = parseTenantUserId(user.id);
@@ -614,7 +620,10 @@ export class PulseService {
     return result.rows;
   }
 
-  private dailyLowActivityFromIdleLogs(
+  private async dailyLowActivityFromIdleLogs(
+    user: ScopedAuthUser,
+    startIso: string,
+    endIso: string,
     logs: Array<{
       user_id: string;
       idle_start: string | Date;
@@ -622,8 +631,17 @@ export class PulseService {
       duration_seconds: number | null;
     }>,
     tz?: string,
-  ): Map<string, Map<string, number>> {
-    return this.effectiveTime.idleHoursFromIdleLogs(logs, tz);
+    intervalMinutes = 1,
+    userId?: string,
+  ): Promise<Map<string, Map<string, number>>> {
+    const meetings = await this.effectiveTime.meetingIntervalsByUser(
+      this.effectiveTimeFilter(user),
+      startIso,
+      endIso,
+      intervalMinutes,
+      userId,
+    );
+    return this.effectiveTime.idleHoursFromIdleLogs(logs, tz, meetings);
   }
 
   /** Idle hours per user/day — prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows. */
@@ -845,8 +863,17 @@ export class PulseService {
     );
     // Idle: OS inactivity stretches ≥ 5 min (idle_logs); short periods ignored.
     // Fallback time_logs.idle_seconds only when no idle_logs exist for that day.
+    // Meeting minutes are subtracted so a 1h Meet with no typing stays effective.
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs, workTz),
+      await this.dailyLowActivityFromIdleLogs(
+        user,
+        startIso,
+        endExclusiveIso,
+        idleLogs,
+        workTz,
+        settings.screenshot_interval_minutes,
+        restrictToUserId,
+      ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
 
@@ -1464,7 +1491,14 @@ export class PulseService {
       settings.screenshot_interval_minutes,
     );
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs),
+      await this.dailyLowActivityFromIdleLogs(
+        user,
+        prevStartIso,
+        checkEndIso,
+        idleLogs,
+        undefined,
+        settings.screenshot_interval_minutes,
+      ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
 
@@ -1641,8 +1675,8 @@ export class PulseService {
       employees = employees.filter((e) => e.manager_id === user.id);
     }
 
-    // Team leads may see roster only — not teammate hours/reports.
-    const includeHours = user.role !== 'team_leader' || Boolean(user.is_super_admin);
+    // Roster-only roles (manager, team lead) do not see teammate hours/reports.
+    const includeHours = canAccessPulseTeamReports(user);
 
     const reportsFor = (leadId: string) =>
       employees
@@ -1968,7 +2002,14 @@ export class PulseService {
     );
     const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso);
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs),
+      await this.dailyLowActivityFromIdleLogs(
+        user,
+        startIso,
+        endExclusiveIso,
+        idleLogs,
+        undefined,
+        settings.screenshot_interval_minutes,
+      ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
     const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
@@ -2112,7 +2153,14 @@ export class PulseService {
     );
     const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso);
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs),
+      await this.dailyLowActivityFromIdleLogs(
+        user,
+        startIso,
+        endExclusiveIso,
+        idleLogs,
+        undefined,
+        settings.screenshot_interval_minutes,
+      ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
     const adjustmentByUser = await this.fetchAdjustmentHoursInRange(user, date, date);
@@ -2239,7 +2287,14 @@ export class PulseService {
     );
     const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso);
     const idleByUser = this.dailyIdleHoursByUserDay(
-      this.dailyLowActivityFromIdleLogs(idleLogs, workTz),
+      await this.dailyLowActivityFromIdleLogs(
+        user,
+        startIso,
+        endExclusiveIso,
+        idleLogs,
+        workTz,
+        settings.screenshot_interval_minutes,
+      ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
     const adjustmentByUser = await this.fetchAdjustmentHoursInRange(

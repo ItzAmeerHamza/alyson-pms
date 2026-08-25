@@ -97,7 +97,7 @@ async function getEffectiveStats(userId, { start, end, tz } = {}, config = globa
       tz,
     },
     config,
-    { timeoutMs: 4000 },
+    { timeoutMs: 8000 },
   );
   return {
     idleSeconds: Math.max(0, Math.floor(Number(result.idle_seconds) || 0)),

@@ -547,22 +547,28 @@ export class TimeDoctorService {
        -- offline. Boundaries are work-timezone midnights, not the server's.
        worked AS (
          SELECT t.user_id, d.day,
-                SUM(EXTRACT(EPOCH FROM (
+                SUM(GREATEST(0, EXTRACT(EPOCH FROM (
                   LEAST(
                     COALESCE(t.end_time, t.last_alive_at, NOW()),
                     ((d.day + INTERVAL '1 day')::timestamp AT TIME ZONE '${workTz}')
                   )
-                  - GREATEST(t.start_time, (d.day::timestamp AT TIME ZONE '${workTz}'))
-                ))) AS secs
+                  - GREATEST(
+                    t.start_time,
+                    (d.day::timestamp AT TIME ZONE '${workTz}')
+                  )
+                )))) AS secs
          FROM time_doctor.time_logs t
          JOIN days d
            ON t.start_time < ((d.day + INTERVAL '1 day')::timestamp AT TIME ZONE '${workTz}')
           AND COALESCE(t.end_time, t.last_alive_at, NOW()) > (d.day::timestamp AT TIME ZONE '${workTz}')
          WHERE ${tWs}
-           -- One day of slack so a session that began before the range but runs
-           -- into it still credits the days it covers.
-           AND t.start_time >= ($${startParam}::date - INTERVAL '1 day')
-           AND t.start_time < ($${endParam}::date + INTERVAL '1 day')
+           -- Overlap the work-timezone window. Do not compare start_time to
+           -- naive dates — RDS treats those as UTC and drops late Chicago
+           -- starts (e.g. 20:00 CDT = 01:00 UTC next calendar day).
+           AND t.start_time < (($${endParam}::date + INTERVAL '1 day')::timestamp AT TIME ZONE '${workTz}')
+           AND COALESCE(t.end_time, t.last_alive_at, NOW())
+               > ($${startParam}::date::timestamp AT TIME ZONE '${workTz}')
+           AND t.start_time >= (($${startParam}::date - INTERVAL '14 days')::timestamp AT TIME ZONE '${workTz}')
          GROUP BY t.user_id, d.day
        )
        SELECT

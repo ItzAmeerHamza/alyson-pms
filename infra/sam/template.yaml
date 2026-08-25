@@ -91,6 +91,11 @@ Parameters:
     Type: String
     Default: '100'
     Description: Max pending screenshots enqueued per backfill run
+  ScreenshotOcrProvider:
+    Type: String
+    Default: tesseract
+    AllowedValues: [tesseract, none]
+    Description: Screenshot text extract — tesseract (local, default) | none (metadata only)
   EnvironmentName:
     Type: String
     Default: dev
@@ -316,18 +321,12 @@ Resources:
           AWS_S3_SCREENSHOTS_PREFIX: !Ref S3Prefix
           DEEPSEEK_API_KEY: !Ref DeepseekApiKey
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
+          SCREENSHOT_OCR_PROVIDER: !Ref ScreenshotOcrProvider
           SCREENSHOT_AI_API_BASE_URL: !Sub 'https://${AlysonTimeDoctorHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
           INTERNAL_API_KEY: !Ref InternalApiKey
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref S3BucketName
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - rekognition:DetectText
-                - rekognition:DetectLabels
-              Resource: '*'
       Events:
         ScreenshotAiQueueEvent:
           Type: SQS
@@ -538,6 +537,7 @@ Resources:
           DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
           SCREENSHOT_AI_QUEUE_URL: !Ref ScreenshotAiQueue
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
+          SCREENSHOT_OCR_PROVIDER: !Ref ScreenshotOcrProvider
           SQS_VPC_ENDPOINT_URL: !Sub 'https://${SqsVpcEndpointDnsName}'
           # Leave module: scan runs on non-VPC LeaveScanWorker (Gmail + DeepSeek); API persists via ingest-batch
           DEEPSEEK_API_KEY: !Ref DeepseekApiKey

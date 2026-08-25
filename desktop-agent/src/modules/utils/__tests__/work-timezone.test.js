@@ -9,6 +9,7 @@ const {
   getWorkTimezone,
   startOfWorkDay,
   workDateKey,
+  shouldAcceptWorkDayKey,
   isValidIanaTimezone,
 } = require('../work-timezone');
 
@@ -17,6 +18,26 @@ describe('work-timezone company / Time Doctor sync', () => {
 
   afterEach(() => {
     setWorkTimezone(previousTz);
+  });
+
+  it('defaults to America/Chicago when no workspace TZ is set', () => {
+    const { resolveWorkTimezone } = require('../work-timezone');
+    const prev = process.env.WORK_TIMEZONE;
+    delete process.env.WORK_TIMEZONE;
+    try {
+      expect(resolveWorkTimezone({})).toBe('America/Chicago');
+      expect(resolveWorkTimezone(null)).toBe('America/Chicago');
+    } finally {
+      if (prev === undefined) delete process.env.WORK_TIMEZONE;
+      else process.env.WORK_TIMEZONE = prev;
+    }
+  });
+
+  it('never accepts a work-day key that rolls backward', () => {
+    expect(shouldAcceptWorkDayKey('2026-08-25', '2026-08-24')).toBe(false);
+    expect(shouldAcceptWorkDayKey('2026-08-24', '2026-08-25')).toBe(true);
+    expect(shouldAcceptWorkDayKey('2026-08-25', '2026-08-25')).toBe(true);
+    expect(shouldAcceptWorkDayKey(null, '2026-08-25')).toBe(true);
   });
 
   it('accepts America/Chicago as a valid IANA timezone', () => {
@@ -77,10 +98,7 @@ describe('work-timezone company / Time Doctor sync', () => {
   });
 
   it('round-the-clock: 2AM Central start only counts after company midnight on next day', () => {
-    const {
-      elapsedSecondsSinceWorkMidnight,
-      getWorkDayContext,
-    } = require('../work-timezone');
+    const { elapsedSecondsSinceWorkMidnight, getWorkDayContext } = require('../work-timezone');
     setWorkTimezone('America/Chicago');
 
     // Started 02:00 CDT Aug 11, still tracking at 00:30 CDT Aug 12

@@ -5741,7 +5741,7 @@ if (isElectronContext && ipcMain) {
       const workDay = buildWorkDayContext();
       return { success: true, timezone: workDay.timezone, workDay };
     } catch (err) {
-      return { success: false, timezone: 'America/Los_Angeles' };
+      return { success: false, timezone: 'America/Chicago' };
     }
   });
   ipcMain.handle('get-work-day-context', async () => {
@@ -5749,7 +5749,7 @@ if (isElectronContext && ipcMain) {
       const workDay = buildWorkDayContext();
       return { success: true, ...workDay, workDay };
     } catch (err) {
-      return { success: false, timezone: 'America/Los_Angeles' };
+      return { success: false, timezone: 'America/Chicago' };
     }
   });
 
@@ -5765,7 +5765,7 @@ if (isElectronContext && ipcMain) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
-      const { computeTodayTimeLogSeconds } = require('./modules/utils/today-time-log-stats');
+      const { computeTodayTimeLogSeconds, holdLastGoodOnFailedFetch } = require('./modules/utils/today-time-log-stats');
       const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
       // Do not re-init from cold config here — that wiped workspace timezone
       // (set after login via refreshWorkspaceSettings) back to Pacific.
@@ -5840,7 +5840,15 @@ if (isElectronContext && ipcMain) {
         });
       }
 
-      const agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
+      let agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
+      const lastGoodBefore = lastGoodStatsForToday();
+      if (agg.backendFetchFailed) {
+        agg = holdLastGoodOnFailedFetch(agg, lastGoodBefore, { isTracking });
+        console.warn(
+          `⚠️ [TODAY-TIME-STATS] Backend fetch failed — holding last-good ${agg.totalTime}s ` +
+            `(closed ${agg.completedClosedSeconds}s + live ${agg.ongoingCurrentSessionSeconds}s)`,
+        );
+      }
 
       // Source of truth = remote time_logs + local offline queue (merged).
       // Frozen stop floors only paper over a true empty/failed read (0s).
@@ -5873,47 +5881,66 @@ if (isElectronContext && ipcMain) {
       } catch (_) { /* ignore */ }
 
       // Sync / network / empty DB must never erase known local time.
-      const lastGood = global._lastGoodTodayStats;
+      const lastGood = lastGoodBefore || global._lastGoodTodayStats;
       const todayKey = workDateKey(today);
       if (
         lastGood &&
         typeof lastGood.totalTime === 'number' &&
         lastGood.workDate === todayKey &&
-        lastGood.totalTime > 60 &&
-        totalTime < 30 &&
-        (agg.timeLogsCount || 0) === 0
+        lastGood.totalTime > totalTime &&
+        (agg.backendFetchFailed || (lastGood.totalTime > 60 && totalTime < 30 && (agg.timeLogsCount || 0) === 0))
       ) {
         console.warn(
-          `⚠️ [TODAY-TIME-STATS] Ignoring empty total ${totalTime}s (last good ${lastGood.totalTime}s)`,
+          `⚠️ [TODAY-TIME-STATS] Ignoring ${agg.backendFetchFailed ? 'failed-fetch' : 'empty'} total ${totalTime}s (last good ${lastGood.totalTime}s)`,
         );
-        return withWorkDayContext({ ...lastGood, stale: true, floorHeld: true });
+        return withWorkDayContext({ ...lastGood, stale: true, floorHeld: true, backendFetchFailed: !!agg.backendFetchFailed });
       }
-
-      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: totalTime, completed_closed: completedClosedSeconds } }); } catch { }
 
       let effectiveSeconds = totalTime;
       let nonEffectiveSeconds = 0;
       let idleSeconds = 0;
       let lowActivitySeconds = 0;
       let effectiveStatsComputed = false;
-      try {
-        const { computeTodayEffectiveStats } = require('./modules/utils/today-effective-stats');
-        const eff = await computeTodayEffectiveStats({
-          userId,
-          totalSeconds: totalTime,
-          config,
-        });
-        effectiveSeconds = eff.effectiveSeconds;
-        nonEffectiveSeconds = eff.nonEffectiveSeconds;
-        idleSeconds = eff.idleSeconds;
-        lowActivitySeconds = eff.lowActivitySeconds;
-        // Returning without throwing is not the same as having measured. When
-        // offline the idle/low-activity reads fail internally and come back 0,
-        // which reads as "100% effective" — the renderer keeps its last figure
-        // instead when this is false.
-        effectiveStatsComputed = eff.computed !== false;
-      } catch (effErr) {
-        console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
+      let effectiveStatsSource = null;
+      // A failed time_logs fetch must not pile on Pulse timeouts — that is the
+      // 3.49h → 0.12h saw when both calls miss and the UI paints live-only time.
+      if (!agg.backendFetchFailed) {
+        try {
+          const { computeTodayEffectiveStats } = require('./modules/utils/today-effective-stats');
+          const eff = await computeTodayEffectiveStats({
+            userId,
+            totalSeconds: totalTime,
+            config,
+          });
+          effectiveSeconds = eff.effectiveSeconds;
+          nonEffectiveSeconds = eff.nonEffectiveSeconds;
+          idleSeconds = eff.idleSeconds;
+          lowActivitySeconds = eff.lowActivitySeconds;
+          // Returning without throwing is not the same as having measured. When
+          // offline the idle/low-activity reads fail internally and come back 0,
+          // which reads as "100% effective" — the renderer keeps its last figure
+          // instead when this is false.
+          effectiveStatsComputed = eff.computed !== false;
+          effectiveStatsSource = eff.source || null;
+        } catch (effErr) {
+          console.warn('⚠️ [TODAY-TIME-STATS] Effective time compute failed:', effErr?.message || effErr);
+        }
+      }
+
+      const lastSplit = lastGood && lastGood.workDate === todayKey ? lastGood : null;
+      // A Pulse timeout / local fallback must not replace a split we already
+      // measured. That is the 20m ↔ 6m see-saw on the Today cards.
+      if (
+        lastSplit?.effectiveStatsComputed === true &&
+        lastSplit.effectiveStatsSource === 'pulse' &&
+        (effectiveStatsComputed !== true || effectiveStatsSource !== 'pulse')
+      ) {
+        nonEffectiveSeconds = Math.max(0, Math.floor(Number(lastSplit.nonEffectiveSeconds) || 0));
+        idleSeconds = Math.max(0, Math.floor(Number(lastSplit.idleSeconds) || 0));
+        lowActivitySeconds = Math.max(0, Math.floor(Number(lastSplit.lowActivitySeconds) || 0));
+        effectiveSeconds = Math.max(0, totalTime - Math.min(totalTime, nonEffectiveSeconds));
+        effectiveStatsComputed = true;
+        effectiveStatsSource = 'pulse';
       }
 
       let payload = {
@@ -5927,6 +5954,7 @@ if (isElectronContext && ipcMain) {
         idleSeconds,
         lowActivitySeconds,
         effectiveStatsComputed,
+        effectiveStatsSource,
         userId,
         workDate: todayKey,
         date: todayKey,
@@ -5935,7 +5963,16 @@ if (isElectronContext && ipcMain) {
       // Monotonic same-day floor: partial sync after offline must not lower the clock.
       // Only the authorized idle-prompt cut may drop totals (once).
       payload = holdTodayTrackedFloor(payload, { isTracking });
-      global._lastGoodTodayStats = payload;
+      if (agg.backendFetchFailed) {
+        payload = { ...payload, stale: true, backendFetchFailed: true };
+      }
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: payload.totalTime, completed_closed: payload.completedTodayBeforeCurrentSessionSeconds, backend_fetch_failed: !!agg.backendFetchFailed, stale: !!payload.stale } }); } catch { }
+      const prevGood = lastGoodStatsForToday();
+      const payloadTotal = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
+      const prevTotal = Math.max(0, Math.floor(Number(prevGood?.totalTime) || 0));
+      if (!prevGood || payloadTotal >= prevTotal) {
+        global._lastGoodTodayStats = { ...payload, stale: false };
+      }
       return withWorkDayContext(payload);
     } catch (error) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.error({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD ERROR', message: error.message, ctx: { source: 'get-today-time-stats' } }); } catch { }

@@ -8,7 +8,13 @@ import {
   UsernameExistsException,
 } from '@aws-sdk/client-cognito-identity-provider';
 
-export type CognitoAdminCreateOk = { ok: true; sub: string; username: string };
+export type CognitoAdminCreateOk = {
+  ok: true;
+  sub: string;
+  username: string;
+  /** Present only for newly created users — used for the Pulse invite email. */
+  temporaryPassword: string;
+};
 export type CognitoAdminCreateErr = {
   ok: false;
   code: 'USERNAME_EXISTS' | 'MISSING_IDENTIFIER' | 'ERROR';
@@ -62,7 +68,8 @@ export async function adminCreateUser(
         UserPoolId: userPoolId,
         Username: input.email,
         TemporaryPassword: temporaryPassword,
-        DesiredDeliveryMediums: ['EMAIL'],
+        // Pulse sends its own SES invite — do not use Cognito's default email.
+        MessageAction: 'SUPPRESS',
         UserAttributes: [
           { Name: 'email', Value: input.email },
           { Name: 'email_verified', Value: 'true' },
@@ -78,7 +85,7 @@ export async function adminCreateUser(
     if (!sub || !username) {
       return { ok: false, code: 'MISSING_IDENTIFIER', message: 'Cognito did not return a user identifier' };
     }
-    return { ok: true, sub, username };
+    return { ok: true, sub, username, temporaryPassword };
   } catch (error) {
     if (error instanceof UsernameExistsException) {
       return { ok: false, code: 'USERNAME_EXISTS', message: 'A user with this email already exists' };

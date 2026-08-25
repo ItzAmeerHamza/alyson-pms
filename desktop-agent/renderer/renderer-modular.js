@@ -12,6 +12,7 @@ const {
   initWorkTimezone,
   setWorkTimezone,
   workDateKey,
+  shouldAcceptWorkDayKey,
   elapsedSecondsSinceWorkMidnight,
   nextWorkDayMidnight,
   formatWorkTimezoneLabel,
@@ -53,7 +54,8 @@ function applyWorkDayContextFromMain(ctx, reason = 'main') {
   const todayKey = ctx.todayKey || ctx.date || null;
   const prevDay = window.__localDayKey || localDateIso();
   const tzChanged = tz ? applyRendererWorkTimezone(tz, reason) : false;
-  if (Number.isFinite(Number(ctx.dayStartMs))) {
+  const acceptDay = shouldAcceptWorkDayKey(prevDay, todayKey);
+  if (Number.isFinite(Number(ctx.dayStartMs)) && acceptDay) {
     window.__workDayContext = {
       timezone: getWorkTimezone(),
       todayKey: todayKey || localDateIso(),
@@ -67,6 +69,13 @@ function applyWorkDayContextFromMain(ctx, reason = 'main') {
   }
   let dayChanged = false;
   if (todayKey && prevDay && todayKey !== prevDay) {
+    if (!shouldAcceptWorkDayKey(prevDay, todayKey)) {
+      // Stale stats/tray still on yesterday. Adopting 24 while local is 25
+      // flip-flopped Mohita's clock and glued 7.3h leftover onto today.
+      console.warn(
+        `⚠️ [TRACKER] Ignoring backward work-day ${prevDay} → ${todayKey} (${reason})`,
+      );
+    } else {
     dayChanged = true;
     try {
       const tracking = !!(moduleInstances?.ipcManager?.isTracking || window.__isTracking);
@@ -74,6 +83,7 @@ function applyWorkDayContextFromMain(ctx, reason = 'main') {
     } catch (_) {
       window.__localDayKey = todayKey;
       window.__trackerDisplayDayKey = todayKey;
+    }
     }
   } else if (todayKey) {
     window.__localDayKey = todayKey;
@@ -253,7 +263,9 @@ function isInflatedWorkDayCapHighWater(highWaterSeconds, authoritativeSeconds = 
   if (!aboveAuth) return false;
   // Real stats/tray total present — trust the gap; do not require near-midnight.
   if (auth > 0) return true;
-  // Empty/failed auth: only discard classic orphan-cap signature.
+  // Empty/failed auth: only discard classic orphan-cap signature
+  // unless a DB read already said 0 (overnight leftover / 3h since midnight).
+  if (window.__todayBaseHydratedOnce && hw > 180) return true;
   return isNearWorkDayCapTotal(hw, nowMs);
 }
 
@@ -466,6 +478,11 @@ function applyTodayEffectiveStats(stats) {
   // Stale payload from a different company day must not reinflate today's clock.
   // After TZ sync, todayKey should match main; if not, trust main and adopt that day.
   if (statsDay && statsDay !== todayKey) {
+    if (!shouldAcceptWorkDayKey(todayKey, statsDay)) {
+      console.warn(
+        `⚠️ [TRACKER] Ignoring stale work day ${statsDay} (renderer has ${todayKey})`,
+      );
+    } else {
     console.warn(
       `⚠️ [TRACKER] Adopting main work day ${statsDay} (renderer had ${todayKey})`,
     );
@@ -477,9 +494,18 @@ function applyTodayEffectiveStats(stats) {
       window.__localDayKey = statsDay;
       window.__trackerDisplayDayKey = statsDay;
     }
+    }
   }
 
   const cap = maxPlausibleTrackedSecondsToday();
+
+  // Failed / stale BE must never move the painted clock. Garima 25 Aug 17:47
+  // saw 3.49h → 0.12h when time_logs + Pulse both missed and live-only 431s
+  // was treated as an authoritative total.
+  if (stats.stale === true || stats.backendFetchFailed === true || stats.error) {
+    updateTrackerEffectiveMeta();
+    return;
+  }
 
   // Ignore incomplete responses that would flash "0 non-effective / all effective"
   // before idle + low-activity queries finish (common right after app launch).
@@ -887,7 +913,9 @@ function resolveStoppedDisplaySeconds(dbSeconds, extraFloor = 0, { authoritative
  * Clamps session start to company work-day midnight (same formula as tray/main).
  */
 function getTodayElapsedSeconds(sessionStart) {
-  return elapsedSecondsSinceWorkMidnight(sessionStart);
+  const { effectiveSessionStart } = require('../src/modules/utils/sleep-aware-elapsed');
+  const wake = Number(window.__lastWakeAtMs) || 0;
+  return elapsedSecondsSinceWorkMidnight(effectiveSessionStart(sessionStart, wake));
 }
 
 /**
@@ -997,6 +1025,14 @@ function beginLocalTrackingClock(startTime) {
     Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
     Math.floor(Number(window.__todayBaseAtLastStop) || 0),
   );
+  // Overnight lid-sleep leftover (3h since midnight) must not seed Start.
+  if (
+    window.__todayBaseHydratedOnce &&
+    isInflatedWorkDayCapHighWater(closedKnown, 0)
+  ) {
+    closedKnown = 0;
+    window.__todayBaseAtLastStop = null;
+  }
   if (Number.isFinite(cap)) closedKnown = Math.min(closedKnown, cap);
   window.__completedTodayBaseSeconds = closedKnown;
   const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
@@ -1218,6 +1254,11 @@ function readPersistedWorkDayKey() {
 function handleLocalDayRollover(isTracking, previousDayKeyOverride = null, authoritativeTodayKey = null) {
   // Prefer main-process day key (authoritative company TZ). Renderer TZ can lag.
   const todayKey = authoritativeTodayKey || localDateIso();
+  const previousHint = previousDayKeyOverride || window.__localDayKey || window.__trackerDisplayDayKey;
+  if (previousHint && !shouldAcceptWorkDayKey(previousHint, todayKey)) {
+    console.warn(`⚠️ [TRACKER] Skipping backward rollover ${previousHint} → ${todayKey}`);
+    return;
+  }
   const priorStart = window.__lastTrackingStartTime || null;
   let elapsedIfKeptStart = 0;
   try {
@@ -1265,6 +1306,9 @@ function handleLocalDayRollover(isTracking, previousDayKeyOverride = null, autho
   clearTrackedHighWaterStorage(todayKey);
   clearNonEffectiveStorage(todayKey);
   purgeStaleDayScopedStorage(todayKey);
+  try {
+    moduleInstances?.uiManager?.invalidateTodayTimeStatsCache?.();
+  } catch (_) { /* cache may not exist yet */ }
 
   // Only company midnight rollover may reset the clock backward.
   setTrackerDisplaySeconds(0, { allowDecrease: true });
@@ -1305,7 +1349,7 @@ function scheduleNextWorkDayRollover() {
   }
   try {
     const nextMs = nextWorkDayMidnight().getTime();
-    // Fire 250ms after Pacific midnight so date-key math is firmly on the new day.
+    // Fire 250ms after company midnight so date-key math is firmly on the new day.
     const delay = Math.max(250, nextMs - Date.now() + 250);
     window.__workDayRolloverTimeout = setTimeout(() => {
       window.__workDayRolloverTimeout = null;
@@ -1314,13 +1358,14 @@ function scheduleNextWorkDayRollover() {
       scheduleNextWorkDayRollover();
     }, Math.min(delay, 2147483647));
   } catch (err) {
-    console.warn('⚠️ [RENDERER] Failed to schedule Pacific midnight rollover:', err?.message || err);
+    console.warn('⚠️ [RENDERER] Failed to schedule company midnight rollover:', err?.message || err);
   }
 }
 
 /**
- * Force Pacific work-day alignment. Call on resume/wake/focus/Start so a
- * laptop that slept through midnight still shows 0 for the new day.
+ * Force company work-day alignment (America/Chicago by default). Call on
+ * resume/wake/focus/Start so a laptop that slept through midnight still
+ * shows 0 for the new day.
  * @returns {boolean} true when a rollover reset ran
  */
 function ensureCurrentWorkDay({ reason = 'check', isTracking } = {}) {
@@ -1356,7 +1401,7 @@ function ensureLocalDayRolloverWatch() {
   scheduleNextWorkDayRollover();
   window.__localDayRolloverWatch = setInterval(() => {
     ensureCurrentWorkDay({ reason: 'watch-tick' });
-  }, 1000);
+  }, 30 * 1000);
 }
 
 /** Next work-day boundary (company timezone) — shown under the Time Tracker clock */
@@ -1718,14 +1763,37 @@ function setupModuleCommunication() {
     } catch (_) { /* ignore */ }
   });
   ipcRenderer.on('system-resumed', (_event, data) => {
+    const wakeMs = Number(data?.lastWakeAtMs) || Date.now();
+    window.__lastWakeAtMs = wakeMs;
     const tracking =
       typeof data?.isTracking === 'boolean' ? data.isTracking : isRendererActivelyTracking();
     ensureCurrentWorkDay({ reason: 'system-resume', isTracking: tracking });
+    if (data?.startAfterSleep && window.__lastTrackingStartTime) {
+      const startMs = new Date(window.__lastTrackingStartTime).getTime();
+      if (Number.isFinite(startMs) && startMs < wakeMs) {
+        window.__lastTrackingStartTime = new Date(wakeMs);
+      }
+    }
     if (!tracking) {
       stopLiveTrackingClock('system-resume');
-      void refreshTodayCompletedBaseSeconds();
+      window.__lastTrackingStartTime = null;
+      void refreshTodayCompletedBaseSeconds().then(() => {
+        const db = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
+        const live = Math.max(
+          0,
+          Math.floor(Number(window.__todayTrackedSeconds) || 0),
+          Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+        );
+        if (isInflatedWorkDayCapHighWater(live, db)) {
+          discardInflatedHighWater(db, 'system-resume-stopped');
+        }
+        setTrackerDisplaySeconds(db, { allowDecrease: true });
+      });
       if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
         void moduleInstances.uiManager.loadTodaysTotalTime();
+      }
+      if (moduleInstances?.uiManager?.loadMonthlyReport) {
+        void moduleInstances.uiManager.loadMonthlyReport(true, { silent: true });
       }
     }
   });
@@ -3703,7 +3771,7 @@ function navigateDate(direction) {
     const month = parseInt(dateParts[1]) - 1; // Month is 0-indexed
     const day = parseInt(dateParts[2]);
     
-    // Calendar-day arithmetic on the YYYY-MM-DD key (Pacific work calendar)
+    // Calendar-day arithmetic on the YYYY-MM-DD key (company work calendar)
     const newDate = new Date(Date.UTC(year, month, day + direction));
     const newYear = newDate.getUTCFullYear();
     const newMonth = String(newDate.getUTCMonth() + 1).padStart(2, '0');
@@ -3711,7 +3779,7 @@ function navigateDate(direction) {
     const newDateStr = `${newYear}-${newMonth}-${newDay}`;
 
     if (newDateStr > localDateIso()) {
-        console.log('❌ Cannot navigate past Pacific work-day today');
+        console.log('❌ Cannot navigate past company work-day today');
         return;
     }
     if (newDateStr < '2020-01-01') {

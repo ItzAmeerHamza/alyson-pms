@@ -17,9 +17,10 @@ Minimal REST API for the Loveable frontend. Deploy behind API Gateway + Lambda w
 
 ---
 
-## Pulse dashboards (admin/manager)
+## Pulse dashboards (admin)
 
-All require `admin` or `manager` role.
+Org reports, time adjustments, leave, and pacing require `admin`.
+Managers may invite users / assign projects (`PATCH /pulse/users`, projects) but cannot view team reports or adjust hours.
 
 | Method | Path | Loveable page | Description |
 |--------|------|---------------|-------------|
@@ -71,7 +72,7 @@ Also accepts `hours` or signed `deltaSeconds`. Day total = tracked `time_logs` +
 
 ## Data reads (admin + employee self-service)
 
-JWT required. Employees only see own data unless admin/manager.
+JWT required. Employees only see own data unless admin (or a delegated grant).
 
 | Method | Path | Loveable page | Description |
 |--------|------|---------------|-------------|
@@ -117,7 +118,7 @@ Actions: `create_time_log`, `upsert_time_log`, `update_time_log`, `close_active_
 | `AWS_S3_BUCKET` | Yes | Screenshot storage |
 | `RESEND_API_KEY` | For email | Low-hours notifications |
 | `EMAIL_FROM` | Optional | Sender address |
-| `ALLOWED_ORIGINS` | Yes | CORS for Loveable domain |
+| `ALLOWED_ORIGINS` | Yes | CORS for Palisade web (`localhost:3000`, `app.palisade.ai`, QA Vercel) |
 
 ---
 

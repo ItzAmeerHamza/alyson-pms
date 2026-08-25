@@ -51,7 +51,7 @@ export class PulseController {
 
   private ensureCanAdjustTime(user: { role?: string; is_super_admin?: boolean }) {
     if (!canAdjustPulseTime(user)) {
-      throw new ForbiddenException('Manager or admin role required to adjust time');
+      throw new ForbiddenException('Admin role required to adjust time');
     }
   }
 
@@ -305,7 +305,7 @@ export class PulseController {
   }
 
   /**
-   * Manager/admin only: list manual time adjustments for one employee × work day.
+   * Admin only: list manual time adjustments for one employee × work day.
    */
   @Get('time-adjustments')
   async listTimeAdjustments(
@@ -321,7 +321,7 @@ export class PulseController {
   }
 
   /**
-   * Manager/admin only: add (+) or remove (-) time for an employee on a work day.
+   * Admin only: add (+) or remove (-) time for an employee on a work day.
    * Append-only audit row; day total = tracked + net adjustments (never below 0).
    */
   @Post('time-adjustments')

@@ -565,8 +565,15 @@ class EnhancedAppDetector {
     };
     
     // App detection via AppleScript is CPU-heavy (~300–450ms).
-    // Fixed tick ~15s while active; idle/locked ticks no-op (see runDetectionWithJitter).
-    const baseInterval = Number(process.env.APP_DETECT_INTERVAL_MS) || 15000;
+    // Idle/locked ticks no-op (see runDetectionWithJitter).
+    let baseInterval = 45000;
+    try {
+      const { getAppDetectIntervalMs } = require('../utils/power-profile');
+      baseInterval = getAppDetectIntervalMs();
+    } catch (_) { /* keep 45s */ }
+    if (Number(process.env.APP_DETECT_INTERVAL_MS) > 0) {
+      baseInterval = Number(process.env.APP_DETECT_INTERVAL_MS);
+    }
     
     // Initial run with random jitter
     const initialJitter = Math.random() * this.scheduleJitter * 2 - this.scheduleJitter; // ±jitter

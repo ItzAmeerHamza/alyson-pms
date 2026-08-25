@@ -119,7 +119,7 @@ try {
         console.log(`⏱️ [STARTUP-TIMING] ${label}: +${elapsed}ms`);
       };
 
-      // Pacific day boundary before arming the session (lid-close overnight).
+      // Company day boundary before arming the session (lid-close overnight).
       try {
         if (typeof global.trayManager?.ensureWorkDayRollover === 'function') {
           global.trayManager.ensureWorkDayRollover();
@@ -159,6 +159,10 @@ try {
       this._localSessionArmed = false;
 
       const priorStop = await this._waitForPriorStopToFinish(25000);
+      try {
+        const { primeMeetingPresenceOnStart } = require('../../lib/meeting-context');
+        void primeMeetingPresenceOnStart();
+      } catch (_) {}
 
       debugLogger.init('tracking', 'Starting tracking session', {
         projectId: projectId,
@@ -320,12 +324,14 @@ try {
       if (useBackendTimeLogs && !offlineHint) {
         try {
           // Fail fast on low internet — Start must not hang waiting for inspect.
+          const startAfterSleep = !!global._startAfterSleep;
           const inspect = await backendTimeLogs.reconcileOpenSessions(
             effectiveUserId,
             deviceId,
             this.config,
             {
-              prefer_recover: true,
+              // Lid-down: never continue the pre-sleep row (that bills the nap).
+              prefer_recover: !startAfterSleep,
               client_last_seen_at: localCheckpoint?.checkpointAt || null,
               freshness_minutes: 15,
               timeoutMs: 5000,
@@ -452,8 +458,15 @@ try {
       }
 
       const finalProjectId = projectId || global.currentProjectId || this.config.project_id || null;
+      const startAfterSleep = !!global._startAfterSleep;
+      if (startAfterSleep && recoveredSession) {
+        console.warn(
+          `🚩 [TRACKING-MANAGER] Dropping recovered session ${recoveredSession.id} after sleep — new row from wake`,
+        );
+        recoveredSession = null;
+      }
       const startTimeIso =
-        recoveredSession?.start_time ||
+        (!startAfterSleep && recoveredSession?.start_time) ||
         new Date(this._resolveStartStampMs(__startupTimestamp)).toISOString();
 
       const timeLogData = {
@@ -609,14 +622,22 @@ try {
         const projectName = this.currentSession?.projectName || null;
         // PAYROLL CRITICAL: never block Start on today-stats network fetch.
         // Use last-known local floor immediately; refresh base in background.
-        let completedTodayBeforeSessionSeconds = Math.max(
-          0,
-          Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
-          Math.floor(Number(global._rendererTodayFloorSeconds) || 0),
-          Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
-          Math.floor(Number(global._lastGoodTodayStats?.totalTime) || 0),
-          Math.floor(Number(global._lastTodayTotalAtStop) || 0),
-        );
+        const { closedBaseAfterSleep } = require('../utils/sleep-aware-elapsed');
+        let completedTodayBeforeSessionSeconds = startAfterSleep
+          ? closedBaseAfterSleep(
+              global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
+            )
+          : Math.max(
+              0,
+              Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
+              Math.floor(Number(global._rendererTodayFloorSeconds) || 0),
+              Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
+              Math.floor(Number(global._lastGoodTodayStats?.totalTime) || 0),
+              Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+            );
+        if (startAfterSleep) {
+          global._trayTodayHighWaterSeconds = completedTodayBeforeSessionSeconds;
+        }
         global.trayManager.updateState(true, false, {
           projectName,
           projectId: this.currentProjectId,
@@ -690,6 +711,12 @@ try {
           );
         });
       });
+
+      if (startAfterSleep) {
+        global._startAfterSleep = false;
+        global._lidDownArmed = false;
+        global._lidLastProofIso = null;
+      }
 
       __phase('Local session armed — returning Start success');
       console.log(
@@ -1071,31 +1098,17 @@ try {
   async stopTracking(reason = 'manual', message = null) {
     const stopStartTime = Date.now();
     try {
-      // Sleep/shutdown auto-stops must NOT block wake auto-resume.
-      // Manual/idle stops remain an explicit user/system intent.
+      // Lid-close / sleep is a full stop. Do not auto-start on wake.
       const isAutoSleepStop = reason === 'system_sleep';
-      if (isAutoSleepStop) {
-        global._resumeTrackingAfterWake = {
-          projectId: this.currentProjectId || global.currentProjectId || null,
-          stoppedAt: Date.now(),
-        };
-        try {
-          const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
-          clearUserExplicitlyStopped();
-        } catch (_) {
-          global.userExplicitlyStopped = false;
-        }
-      } else {
-        try {
-          const { markUserExplicitlyStopped } = require('../utils/session-recovery');
-          markUserExplicitlyStopped({
-            reason,
-            timeLogId: this.currentTimeLogId || global.currentTimeLogId,
-          });
-        } catch (_) {
-          global.userExplicitlyStopped = true;
-        }
-        global._resumeTrackingAfterWake = null;
+      global._resumeTrackingAfterWake = null;
+      try {
+        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+        markUserExplicitlyStopped({
+          reason: isAutoSleepStop ? 'system_sleep' : reason,
+          timeLogId: this.currentTimeLogId || global.currentTimeLogId,
+        });
+      } catch (_) {
+        global.userExplicitlyStopped = true;
       }
 
       // End sticky video-meeting session so the next work block isn't floored
@@ -1106,6 +1119,9 @@ try {
       
       if (!this.isTracking) {
         console.log('⚠️ [TRACKING-MANAGER] Tracking already stopped');
+        if (isAutoSleepStop) {
+          this.haltBackgroundProcesses();
+        }
         return { success: false, message: 'Tracking already stopped' };
       }
 
@@ -1118,10 +1134,7 @@ try {
       
       // CRITICAL: Set stopping flag to prevent session recovery from restoring tracking
       global.isStopping = true;
-      // Sleep auto-stop must allow wake auto-resume; manual/idle remain explicit.
-      if (!isAutoSleepStop) {
-        global.userExplicitlyStopped = true;
-      }
+      global.userExplicitlyStopped = true;
       
       // Capture timeLogId for background DB update
       const timeLogIdForBackground = this.currentTimeLogId;
@@ -1429,28 +1442,15 @@ try {
     console.log('🚀 [TRACKING-MANAGER] stopTrackingAsync - fast return with background cleanup');
     
     const isAutoSleepStop = reason === 'system_sleep';
-    if (isAutoSleepStop) {
-      global._resumeTrackingAfterWake = {
-        projectId: this.currentProjectId || global.currentProjectId || null,
-        stoppedAt: Date.now(),
-      };
-      try {
-        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
-        clearUserExplicitlyStopped();
-      } catch (_) {
-        global.userExplicitlyStopped = false;
-      }
-    } else {
-      try {
-        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
-        markUserExplicitlyStopped({
-          reason,
-          timeLogId: this.currentTimeLogId || global.currentTimeLogId,
-        });
-      } catch (_) {
-        global.userExplicitlyStopped = true;
-      }
-      global._resumeTrackingAfterWake = null;
+    global._resumeTrackingAfterWake = null;
+    try {
+      const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+      markUserExplicitlyStopped({
+        reason: isAutoSleepStop ? 'system_sleep' : reason,
+        timeLogId: this.currentTimeLogId || global.currentTimeLogId,
+      });
+    } catch (_) {
+      global.userExplicitlyStopped = true;
     }
     try {
       const { clearMeetingSession } = require('../../lib/meeting-context');
@@ -1460,6 +1460,9 @@ try {
     // Check if already stopped
     if (!this.isTracking && !global.isTracking) {
       console.log('⚠️ [TRACKING-MANAGER] Tracking already stopped');
+      if (isAutoSleepStop) {
+        this.haltBackgroundProcesses();
+      }
       return { success: false, message: 'Tracking already stopped' };
     }
     
@@ -1861,7 +1864,16 @@ try {
 
       this._stopTimeLogCheckpoint();
 
-      const endTime = new Date().toISOString();
+      const { sleepSafeEndIso } = require('../utils/sleep-aware-elapsed');
+      const existingCp = this._readSessionCheckpoint?.() || null;
+      const proofIso = global._lidLastProofIso || existingCp?.checkpointAt || null;
+      const nowIso = new Date().toISOString();
+      const endTime = sleepSafeEndIso({
+        lastCheckpointAt: proofIso,
+        checkpointTimeLogId: existingCp?.timeLogId || null,
+        timeLogId,
+        nowIso,
+      });
       global._stopEndTimeOverride = global._stopEndTimeOverride || endTime;
       const startTime =
         this.sessionStartTime ||
@@ -1899,20 +1911,20 @@ try {
         });
       }
 
-      global._resumeTrackingAfterWake = {
-        projectId: this.currentProjectId || global.currentProjectId || null,
-        stoppedAt: Date.now(),
-        reason,
-      };
+      global._resumeTrackingAfterWake = null;
       try {
-        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
-        clearUserExplicitlyStopped();
+        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+        markUserExplicitlyStopped({
+          reason,
+          timeLogId,
+        });
       } catch (_) {
-        global.userExplicitlyStopped = false;
+        global.userExplicitlyStopped = true;
       }
 
       console.log(
-        `💤 [TRACKING-MANAGER] Durable sleep arm written for ${timeLogId || 'no-id'} at ${endTime}`,
+        `💤 [TRACKING-MANAGER] Durable sleep arm written for ${timeLogId || 'no-id'} at ${endTime}` +
+          (endTime !== nowIso ? ' (last awake proof, not wake NOW)' : ''),
       );
       return endTime;
     } catch (err) {
@@ -1921,11 +1933,122 @@ try {
     }
   }
 
+  /**
+   * Idle-monitor / display-wake saw a freeze. Close the pre-sleep row at last
+   * proof-of-life and start a new session from wake. No-ops if this session
+   * already began after the nap.
+   */
+  async noteMachineSlept(lastAwakeMs) {
+    const now = Date.now();
+    if (global._sleepSplitInProgress) return { skipped: true };
+    if (global._lastSleepSplitAt && now - global._lastSleepSplitAt < 8000) {
+      return { skipped: true };
+    }
+    const { isSleepGap } = require('../utils/sleep-aware-elapsed');
+    const proofIso = Number.isFinite(lastAwakeMs)
+      ? new Date(lastAwakeMs).toISOString()
+      : global._lidLastProofIso;
+    if (!global._lidDownArmed && !isSleepGap(proofIso, now)) {
+      return { skipped: true };
+    }
+    const startMs = new Date(this.sessionStartTime || global.sessionStartTime || 0).getTime();
+    if (
+      Number.isFinite(startMs) &&
+      Number.isFinite(lastAwakeMs) &&
+      startMs >= lastAwakeMs - 2000
+    ) {
+      return { skipped: true, reason: 'session-started-after-sleep' };
+    }
+
+    global._sleepSplitInProgress = true;
+    global._lastSleepSplitAt = now;
+    global._lastWakeAtMs = now;
+    global._startAfterSleep = true;
+    if (proofIso) global._lidLastProofIso = proofIso;
+
+    try {
+      if (!(this.isTracking || global.isTracking)) return { noted: true };
+      global._stopEndTimeOverride = proofIso || global._stopEndTimeOverride;
+      console.warn('💤 [TRACKING-MANAGER] Lid/sleep gap — stopping processes, not auto-starting');
+      await this.stopTracking('system_sleep');
+      return { split: true };
+    } catch (err) {
+      console.warn('⚠️ [TRACKING-MANAGER] noteMachineSlept failed:', err?.message || err);
+      return { error: true };
+    } finally {
+      global._sleepSplitInProgress = false;
+    }
+  }
+
+  /**
+   * Lid-close / sleep: kill leftover capture, heartbeat, and IPC even if
+   * tracking was already Stopped. Does not quit the app.
+   */
+  haltBackgroundProcesses() {
+    console.log('🛑 [TRACKING-MANAGER] Halting leftover processes (lid close / sleep)');
+    global._resumeTrackingAfterWake = null;
+    try {
+      this._stopTimeLogCheckpoint();
+    } catch (_) { /* ignore */ }
+    try {
+      if (this._lagInterval) {
+        clearInterval(this._lagInterval);
+        this._lagInterval = null;
+      }
+    } catch (_) { /* ignore */ }
+    try {
+      this._stopMonitoringSystemsSync();
+    } catch (_) { /* ignore */ }
+    try {
+      this._stopAllActivitySystems();
+    } catch (_) { /* ignore */ }
+    try {
+      global.systemMonitor?.stopPermissionMonitoring?.();
+    } catch (_) { /* ignore */ }
+    try {
+      global.urlCaptureManager?.stop?.();
+    } catch (_) { /* ignore */ }
+    try {
+      this.wrappers?.stopConsolidatedTracking?.();
+    } catch (_) { /* ignore */ }
+    try {
+      global.enhancedScreenshotManager?.stopScreenshotCapture?.();
+      global.enhancedScreenshotManager?.stopScreenshotTimerUpdates?.();
+      if (global.enhancedScreenshotManager) {
+        global.enhancedScreenshotManager.isTracking = false;
+        global.enhancedScreenshotManager.currentSession = null;
+      }
+    } catch (_) { /* ignore */ }
+    try {
+      global.enhancedIdleMonitor?.stopIdleMonitoring?.();
+    } catch (_) { /* ignore */ }
+    try {
+      if (typeof global.stopIdleMonitoring === 'function') global.stopIdleMonitoring();
+    } catch (_) { /* ignore */ }
+    try {
+      global.enhancedSyncManager?.stopActivitySync?.();
+      global.enhancedSyncManager?.stopConsolidatedIPC?.();
+    } catch (_) { /* ignore */ }
+    try {
+      global.antiCheatDetector?.stopMonitoring?.();
+    } catch (_) { /* ignore */ }
+    try {
+      global.inputManager?.stop?.();
+    } catch (_) { /* ignore */ }
+    try {
+      global.liveMonitoringManager?.stop?.();
+    } catch (_) { /* ignore */ }
+  }
+
   _startTimeLogCheckpoint() {
     this._stopTimeLogCheckpoint();
 
-    // PAYROLL: hard-kill loss window ≈ checkpoint interval. Keep this tight.
-    const CHECKPOINT_MS = 10 * 1000;
+    // Crash loss window ≈ this interval. 30s is enough; 10s was waking the CPU/network constantly.
+    let CHECKPOINT_MS = 30 * 1000;
+    try {
+      const { getSessionCheckpointMs } = require('../utils/power-profile');
+      CHECKPOINT_MS = getSessionCheckpointMs();
+    } catch (_) { /* keep 30s */ }
     this._timeLogCheckpointInterval = setInterval(() => {
       void this._checkpointCurrentTimeLog();
     }, CHECKPOINT_MS);
@@ -1944,14 +2067,14 @@ try {
   }
 
   /**
-   * DEAD-MAN'S SWITCH. Every 10s, stamp last_alive_at = now on the row, so the
+   * DEAD-MAN'S SWITCH. Periodically stamp last_alive_at = now on the row, so the
    * server always already knows where this session ends if the agent vanishes.
    *
    * We cannot rely on writing the end at stop time: lid-close freezes the
    * process mid-call (observed on a real device: 8 suspends, only 2 completed
    * stops, one that took 5m21s and failed). Anything written at wake time bills
    * the whole sleep. Stamping while alive has no such failure mode — worst case
-   * is losing the last 10 seconds, never gaining hours.
+   * is losing the last checkpoint window, never gaining hours.
    */
   async _checkpointCurrentTimeLog() {
     const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
@@ -2533,39 +2656,54 @@ try {
   }
 
   /**
-   * Last gate before offline rows reach the API: no queued session may extend
-   * past the start of the next one.
+   * Last gate before offline rows reach the API.
    *
    * Queue entries arrive from several places — normal offline stops, and ledger
    * rehydration after a crash, which reconstructs sessions from disk without any
    * knowledge of what else it is reconstructing. Once these replay they are
    * historical rows, so the server cannot tell an overlap from a legitimate
-   * backfill and every guard upstream has already been bypassed. Enforcing it
-   * here means overlapping time can never be sent at all.
+   * backfill and a raw SUM would double-bill.
+   *
+   * Rules:
+   * 1. An open (crash) row closes at the next session start.
+   * 2. A completed session fully inside a longer one is dropped — the outer
+   *    tail is kept. Cutting the outer at the inner start used to delete
+   *    real work after the nested row.
+   * 3. Partial overlap: the earlier row ends at the later start; the later
+   *    row keeps its own tail.
    *
    * Mutates in place; the caller persists the queue.
    */
   _clampOverlappingQueuedSessions(queue) {
     try {
+      if (!Array.isArray(queue) || queue.length === 0) return;
+
+      const endMsOf = (data) => {
+        if (!data?.end_time) return null;
+        const ms = new Date(data.end_time).getTime();
+        return Number.isFinite(ms) ? ms : null;
+      };
+
       const creates = queue
         .filter((i) => i?.type === 'create_time_log' && i?.data?.start_time)
         .map((i) => ({ item: i, startMs: new Date(i.data.start_time).getTime() }))
         .filter((x) => Number.isFinite(x.startMs))
-        .sort((a, b) => a.startMs - b.startMs);
+        .sort((a, b) => {
+          if (a.startMs !== b.startMs) return a.startMs - b.startMs;
+          return (endMsOf(b.item.data) ?? Infinity) - (endMsOf(a.item.data) ?? Infinity);
+        });
 
+      // 1. Crash-open rows close at the next start (no known tail to keep).
       for (let i = 0; i < creates.length - 1; i += 1) {
         const cur = creates[i].item.data;
+        if (endMsOf(cur) != null) continue;
         const nextStartMs = creates[i + 1].startMs;
-        const curEndMs = cur.end_time ? new Date(cur.end_time).getTime() : null;
-        const overlaps = curEndMs === null || curEndMs > nextStartMs;
-        if (!overlaps) continue;
-
         const clampedMs = Math.max(creates[i].startMs, nextStartMs);
         const before = cur.end_time || 'open';
         cur.end_time = new Date(clampedMs).toISOString();
         cur.status = 'completed';
         console.warn(
-          `🔒 [TRACKING-MANAGER] Clamped queued session ${cur.id}: ${before} → ${cur.end_time} (next session starts there)`,
+          `🔒 [TRACKING-MANAGER] Closed open queued session ${cur.id}: ${before} → ${cur.end_time}`,
         );
         try {
           require('../utils/session-audit').overlapPrevented({
@@ -2573,9 +2711,79 @@ try {
             keptId: creates[i + 1].item.data.id,
             closedId: cur.id,
             clampedTo: cur.end_time,
-            detail: { previous_end: before },
+            detail: { previous_end: before, reason: 'open' },
           });
         } catch (_) { /* audit is best-effort */ }
+      }
+
+      // 2. Drop completed rows fully inside a longer one so the outer tail stays.
+      const absorbedIds = new Set();
+      const kept = [];
+      const completed = creates
+        .map((c) => ({ ...c, endMs: endMsOf(c.item.data) }))
+        .filter((c) => c.endMs != null)
+        .sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs);
+
+      for (const c of completed) {
+        const id = String(c.item.data.id);
+        if (c.endMs <= c.startMs) {
+          absorbedIds.add(id);
+          continue;
+        }
+        if (kept.some((k) => c.startMs >= k.startMs && c.endMs <= k.endMs)) {
+          absorbedIds.add(id);
+          console.warn(
+            `🔒 [TRACKING-MANAGER] Absorbed nested queued session ${id} into longer session`,
+          );
+          continue;
+        }
+        kept.push(c);
+      }
+
+      // 3. Partial overlap among remaining rows: earlier ends where the next starts.
+      const remaining = creates.filter((c) => !absorbedIds.has(String(c.item.data.id)));
+      for (let i = 0; i < remaining.length - 1; i += 1) {
+        const cur = remaining[i].item.data;
+        const curEndMs = endMsOf(cur);
+        const nextStartMs = remaining[i + 1].startMs;
+        if (curEndMs == null || curEndMs <= nextStartMs) continue;
+
+        const clampedMs = Math.max(remaining[i].startMs, nextStartMs);
+        const before = cur.end_time;
+        cur.end_time = new Date(clampedMs).toISOString();
+        cur.status = 'completed';
+        if (clampedMs <= remaining[i].startMs) {
+          absorbedIds.add(String(cur.id));
+        }
+        console.warn(
+          `🔒 [TRACKING-MANAGER] Clamped queued session ${cur.id}: ${before} → ${cur.end_time} (next session starts there)`,
+        );
+        try {
+          require('../utils/session-audit').overlapPrevented({
+            where: 'offline_queue_flush',
+            keptId: remaining[i + 1].item.data.id,
+            closedId: cur.id,
+            clampedTo: cur.end_time,
+            detail: { previous_end: before, reason: 'partial' },
+          });
+        } catch (_) { /* audit is best-effort */ }
+      }
+
+      for (const item of queue) {
+        if (item?.type !== 'create_time_log' || !item.data) continue;
+        const startMs = new Date(item.data.start_time).getTime();
+        const endMs = endMsOf(item.data);
+        if (Number.isFinite(startMs) && endMs != null && endMs <= startMs) {
+          absorbedIds.add(String(item.data.id));
+        }
+      }
+
+      if (absorbedIds.size === 0) return;
+      for (let i = queue.length - 1; i >= 0; i -= 1) {
+        const id = queue[i]?.data?.id;
+        if (id != null && absorbedIds.has(String(id))) {
+          queue.splice(i, 1);
+        }
       }
     } catch (err) {
       console.warn('⚠️ [TRACKING-MANAGER] Queue overlap clamp failed:', err?.message || err);

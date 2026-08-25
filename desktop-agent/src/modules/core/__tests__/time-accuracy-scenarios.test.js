@@ -131,9 +131,17 @@ describe('offline tracking — queued sessions must not overlap on replay', () =
 
     clamp(queue);
 
-    const a = queue[0].data;
-    const b = queue[1].data;
-    expect(new Date(a.end_time).getTime()).toBeLessThanOrEqual(new Date(b.start_time).getTime());
+    const rows = queue.map((q) => q.data).sort((x, y) => new Date(x.start_time) - new Date(y.start_time));
+    const billed = rows.reduce(
+      (acc, r) => acc + (new Date(r.end_time).getTime() - new Date(r.start_time).getTime()),
+      0,
+    );
+    expect(billed).toBe(3 * 3600 * 1000);
+    for (let i = 0; i < rows.length - 1; i += 1) {
+      expect(new Date(rows[i].end_time).getTime()).toBeLessThanOrEqual(
+        new Date(rows[i + 1].start_time).getTime(),
+      );
+    }
   });
 
   it('a crash leaving a session open closes it at the next session start', () => {

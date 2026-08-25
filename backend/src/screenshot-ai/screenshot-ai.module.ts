@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { CommonModule } from '../common/common.module';
 import { ScreenshotAiAnalyzerService } from './screenshot-ai-analyzer.service';
@@ -11,7 +12,7 @@ import { DeepseekVisionService } from './deepseek-vision.service';
 import { ScreenshotImageContextService } from './screenshot-image-context.service';
 
 @Module({
-  imports: [AuthModule, CommonModule],
+  imports: [ConfigModule, AuthModule, CommonModule],
   controllers: [ScreenshotAiController, ScreenshotAiInternalController],
   providers: [
     ScreenshotAiRepository,

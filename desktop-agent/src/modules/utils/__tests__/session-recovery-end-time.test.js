@@ -3,7 +3,7 @@ const path = require('path');
 
 jest.mock('fs');
 
-const { resolveExplicitStopEndTime } = require('../session-recovery');
+const { resolveExplicitStopEndTime, reconcileAfterWake } = require('../session-recovery');
 
 describe('resolveExplicitStopEndTime', () => {
   beforeEach(() => {
@@ -99,5 +99,48 @@ describe('resolveExplicitStopEndTime', () => {
         resolveExplicitStopEndTime(null, { liveStop: true, timeLogId: 'session-B' }),
       ).toBe('2026-08-13T16:30:00.000Z');
     });
+  });
+});
+
+describe('reconcileAfterWake lid close is a full stop', () => {
+  const prev = {};
+
+  beforeEach(() => {
+    prev.isTracking = global.isTracking;
+    prev.currentTimeLogId = global.currentTimeLogId;
+    prev._lidDownArmed = global._lidDownArmed;
+    prev._lidLastProofIso = global._lidLastProofIso;
+    prev.trackingManager = global.trackingManager;
+    global.isTracking = true;
+    global.currentTimeLogId = 'open-row';
+    global._lidDownArmed = true;
+    global._lidLastProofIso = '2026-08-25T10:00:00.000Z';
+    global.trackingManager = {
+      isTracking: true,
+      currentTimeLogId: 'open-row',
+      _stopTimeLogCheckpoint: jest.fn(),
+    };
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        timeLogId: 'open-row',
+        checkpointAt: new Date().toISOString(),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    global.isTracking = prev.isTracking;
+    global.currentTimeLogId = prev.currentTimeLogId;
+    global._lidDownArmed = prev._lidDownArmed;
+    global._lidLastProofIso = prev._lidLastProofIso;
+    global.trackingManager = prev.trackingManager;
+  });
+
+  it('never continues the pre-sleep session after lid down', async () => {
+    const result = await reconcileAfterWake();
+    expect(result.continued).toBeUndefined();
+    expect(result.lidStop).toBe(true);
+    expect(global.isTracking).toBe(false);
   });
 });

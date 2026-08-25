@@ -34,14 +34,14 @@ function isTrackingActive() {
 }
 
 /**
- * URL AppleScript poll delay. Active browsing stays responsive enough for
- * session switches; idle/locked back off hard.
+ * URL AppleScript poll delay. Tab/URL rows still open and close on change;
+ * 30s active is enough for Pulse and does not spawn osascript every few seconds.
  */
 function getUrlPollDelayMs() {
-  if (!isTrackingActive()) return envMs('POWER_URL_POLL_INACTIVE_MS', 30000);
+  if (!isTrackingActive()) return envMs('POWER_URL_POLL_INACTIVE_MS', 60000);
   if (isScreenLocked()) return envMs('POWER_URL_POLL_LOCKED_MS', 90000);
-  if (isUserIdle()) return envMs('POWER_URL_POLL_IDLE_MS', 45000);
-  return envMs('POWER_URL_POLL_ACTIVE_MS', 15000);
+  if (isUserIdle()) return envMs('POWER_URL_POLL_IDLE_MS', 60000);
+  return envMs('POWER_URL_POLL_ACTIVE_MS', 30000);
 }
 
 /**
@@ -50,8 +50,13 @@ function getUrlPollDelayMs() {
  */
 function getAppDetectIntervalMs() {
   if (isScreenLocked()) return envMs('POWER_APP_DETECT_LOCKED_MS', 90000);
-  if (isUserIdle()) return envMs('POWER_APP_DETECT_IDLE_MS', 45000);
-  return envMs('POWER_APP_DETECT_ACTIVE_MS', 20000);
+  if (isUserIdle()) return envMs('POWER_APP_DETECT_IDLE_MS', 90000);
+  return envMs('POWER_APP_DETECT_ACTIVE_MS', 45000);
+}
+
+/** last_alive_at floor. Crash still loses at most this window, not hours. */
+function getSessionCheckpointMs() {
+  return envMs('POWER_SESSION_CHECKPOINT_MS', 30000);
 }
 
 function shouldSkipAppDetection() {
@@ -84,6 +89,7 @@ module.exports = {
   isTrackingActive,
   getUrlPollDelayMs,
   getAppDetectIntervalMs,
+  getSessionCheckpointMs,
   shouldSkipAppDetection,
   shouldSkipUrlCapture,
   ANTI_CHEAT,

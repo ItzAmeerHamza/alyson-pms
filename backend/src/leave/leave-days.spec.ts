@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_LEAVE_CREDIT_HOURS_PER_DAY,
   isWeekdayDateKey,
+  leaveCreditSecondsPerDay,
   leaveDaysInclusive,
   leaveWeekdayKeys,
   matchesTeamLocation,
@@ -35,5 +37,22 @@ describe('leave-days', () => {
       true,
     );
     expect(matchesTeamLocation('Lahore', 'Checkout', 'Karachi', 'Checkout')).toBe(false);
+  });
+
+  it('returns no days for inverted or invalid ranges', () => {
+    expect(leaveDaysInclusive('2026-08-14', '2026-08-10')).toBe(0);
+    expect(leaveWeekdayKeys('not-a-date', '2026-08-10')).toEqual([]);
+  });
+
+  it('credits 7h per weekday by default (Team Time leave adjustment)', () => {
+    expect(DEFAULT_LEAVE_CREDIT_HOURS_PER_DAY).toBe(7);
+    expect(leaveCreditSecondsPerDay()).toBe(7 * 3600);
+    expect(leaveCreditSecondsPerDay(7)).toBe(25200);
+  });
+
+  it('uses a custom hours-per-day credit and rejects non-positive values', () => {
+    expect(leaveCreditSecondsPerDay(8)).toBe(8 * 3600);
+    expect(leaveCreditSecondsPerDay(0)).toBe(7 * 3600);
+    expect(leaveCreditSecondsPerDay(-3)).toBe(7 * 3600);
   });
 });

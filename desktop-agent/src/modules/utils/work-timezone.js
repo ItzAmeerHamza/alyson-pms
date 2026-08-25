@@ -9,7 +9,7 @@
  * 4. Overnight / odd-hour shifts are normal: clamp session elapsed to
  *    company midnight; do not invent wall-clock-since-wrong-midnight.
  *
- * Default fallback: America/Los_Angeles until company TZ is applied.
+ * Default fallback: America/Chicago (company / Time Doctor Central).
  * Override: WORK_TIMEZONE env or config.work_timezone / WORK_TIMEZONE.
  */
 
@@ -28,14 +28,14 @@ function resolveWorkTimezone(config = global?.config) {
     config?.work_timezone ||
     config?.WORK_TIMEZONE ||
     process.env.WORK_TIMEZONE ||
-    'America/Los_Angeles';
-  return isValidIanaTimezone(candidate) ? String(candidate).trim() : 'America/Los_Angeles';
+    'America/Chicago';
+  return isValidIanaTimezone(candidate) ? String(candidate).trim() : 'America/Chicago';
 }
 
-let _tz = 'America/Los_Angeles';
+let _tz = 'America/Chicago';
 
 function setWorkTimezone(tz) {
-  _tz = isValidIanaTimezone(tz) ? String(tz).trim() : 'America/Los_Angeles';
+  _tz = isValidIanaTimezone(tz) ? String(tz).trim() : 'America/Chicago';
   return _tz;
 }
 
@@ -87,6 +87,13 @@ function workTimezoneDateTimeToUtc(year, month, day, hour = 0, minute = 0, secon
 function addCalendarDaysYmd(year, month, day, deltaDays) {
   const d = new Date(Date.UTC(year, month - 1, day + deltaDays));
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
+/** YYYY-MM-DD compares correctly as strings. Never roll the work day backward. */
+function shouldAcceptWorkDayKey(currentKey, incomingKey) {
+  if (!incomingKey || typeof incomingKey !== 'string') return false;
+  if (!currentKey || typeof currentKey !== 'string') return true;
+  return incomingKey >= currentKey;
 }
 
 /** YYYY-MM-DD in the work timezone (not UTC, not machine local). */
@@ -204,6 +211,7 @@ module.exports = {
   getWorkTimezone,
   isValidIanaTimezone,
   getWorkTzParts,
+  shouldAcceptWorkDayKey,
   workDateKey,
   startOfWorkDay,
   endOfWorkDayExclusive,

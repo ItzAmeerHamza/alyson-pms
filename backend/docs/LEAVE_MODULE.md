@@ -7,7 +7,7 @@ Postgres leave ledger + People Ops Gmail intake (AlysonHR product rules), adapte
 | AlysonHR spec | Pulse implementation |
 |---------------|----------------------|
 | S3 `leave/data.json` | Postgres `time_doctor.leave_*` |
-| Clerk Super Access | Cognito admin/manager (`canAdjustPulseTime`) |
+| Clerk Super Access | Cognito admin (`canAdjustPulseTime`) |
 | Asia/Kolkata dates | **Company work TZ** (`workspace_settings.timezone`) |
 | Leave credit in pacing | Ledger → pacing at **8h**/day; Team Time adjustments still **7h**/day |
 

@@ -25,6 +25,12 @@ import {
 } from '../lib/work-timezone';
 import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
+import {
+  intervalContains,
+  mergeCapturedAtsIntoIntervals,
+  subtractIntervals,
+  type TimeInterval,
+} from './meeting-intervals';
 
 /**
  * Which workspace to restrict to, or null for no restriction (super admins, and
@@ -83,7 +89,7 @@ export class EffectiveTimeService {
         log.start_time instanceof Date ? log.start_time : new Date(log.start_time),
         workTz,
       );
-      const hours = Math.round((seconds / 3600) * 10) / 10;
+      const hours = seconds / 3600;
       if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
       const dayMap = byUserDay.get(log.user_id)!;
       dayMap.set(day, (dayMap.get(day) ?? 0) + hours);
@@ -104,39 +110,106 @@ export class EffectiveTimeService {
       duration_seconds: number | null;
     }>,
     tz?: string,
+    meetingIntervalsByUser?: Map<string, TimeInterval[]>,
   ): Map<string, Map<string, number>> {
     const workTz = normalizeWorkTimezone(tz);
     const byUserDay = new Map<string, Map<string, number>>();
 
     for (const log of logs) {
       const startMs = new Date(log.idle_start).getTime();
-      let endMs = log.idle_end ? new Date(log.idle_end).getTime() : Date.now();
+      // Never end an open row at Date.now() — every Pulse poll would grow
+      // non-effective, then a checkpoint with a real duration would snap it down.
+      let endMs = log.idle_end ? new Date(log.idle_end).getTime() : NaN;
       if (log.duration_seconds && log.duration_seconds > 0) {
         const fromDuration = startMs + log.duration_seconds * 1000;
-        if (!log.idle_end || fromDuration > endMs) endMs = fromDuration;
+        if (!Number.isFinite(endMs) || fromDuration > endMs) endMs = fromDuration;
       }
       if (!(endMs > startMs)) continue;
 
-      const totalSeconds = Math.round((endMs - startMs) / 1000);
-      if (totalSeconds < EffectiveTimeService.MIN_IDLE_REPORT_SECONDS) continue;
-
-      let cursor = startMs;
-      while (cursor < endMs) {
-        const day = workDateKey(new Date(cursor), workTz);
-        const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day, workTz);
-        const clipStart = Math.max(startMs, dayStart);
-        const clipEnd = Math.min(endMs, dayEnd);
-        if (clipEnd > clipStart) {
-          const hours = Math.round(((clipEnd - clipStart) / 3600000) * 10) / 10;
+      // Stamp the day even when every minute is later clipped as a meeting.
+      // mergeIdleHours treats "key present" as "idle_logs exist"; a missing key
+      // falls back to time_logs.idle_seconds, which still includes meeting idle.
+      {
+        let cursor = startMs;
+        while (cursor < endMs) {
+          const day = workDateKey(new Date(cursor), workTz);
+          const { endMs: dayEnd } = workDayBoundsMs(day, workTz);
           if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
           const dayMap = byUserDay.get(log.user_id)!;
-          dayMap.set(day, Math.round(((dayMap.get(day) ?? 0) + hours) * 10) / 10);
+          if (!dayMap.has(day)) dayMap.set(day, 0);
+          cursor = dayEnd;
         }
-        cursor = dayEnd;
+      }
+
+      const meetings = meetingIntervalsByUser?.get(log.user_id) ?? [];
+      const remaining = subtractIntervals({ startMs, endMs }, meetings);
+      for (const piece of remaining) {
+        const totalSeconds = Math.round((piece.endMs - piece.startMs) / 1000);
+        if (totalSeconds < EffectiveTimeService.MIN_IDLE_REPORT_SECONDS) continue;
+
+        let cursor = piece.startMs;
+        while (cursor < piece.endMs) {
+          const day = workDateKey(new Date(cursor), workTz);
+          const { startMs: dayStart, endMs: dayEnd } = workDayBoundsMs(day, workTz);
+          const clipStart = Math.max(piece.startMs, dayStart);
+          const clipEnd = Math.min(piece.endMs, dayEnd);
+          if (clipEnd > clipStart) {
+            const hours = (clipEnd - clipStart) / 3600000;
+            if (!byUserDay.has(log.user_id)) byUserDay.set(log.user_id, new Map());
+            const dayMap = byUserDay.get(log.user_id)!;
+            dayMap.set(day, (dayMap.get(day) ?? 0) + hours);
+          }
+          cursor = dayEnd;
+        }
       }
     }
 
     return byUserDay;
+  }
+
+  async meetingIntervalsByUser(
+    filter: WorkspaceFilter,
+    start: string,
+    end: string,
+    intervalMinutes: number,
+    userId?: string,
+  ): Promise<Map<string, TimeInterval[]>> {
+    const scope = this.scope(filter, 'ext');
+    const params: unknown[] = [...scope.params, start, end];
+    const startIdx = scope.params.length + 1;
+    const endIdx = scope.params.length + 2;
+    let userFilter = '';
+    if (userId) {
+      params.push(parseTenantUserId(userId));
+      userFilter = `AND s.user_id = $${params.length}`;
+    }
+    const result = await this.db.query<{ user_id: string; captured_at: string }>(
+      `SELECT s.user_id::text AS user_id, s.captured_at
+       FROM time_doctor.screenshots s
+       JOIN tenant."user" u ON u.id = s.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND s.captured_at >= $${startIdx}::timestamptz
+         AND s.captured_at < $${endIdx}::timestamptz
+         AND ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
+         AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         ${userFilter}
+       ORDER BY s.user_id, s.captured_at ASC`,
+      params,
+    );
+    const coverageMs = Math.max(1, Number(intervalMinutes) || 1) * 60 * 1000;
+    const byUser = new Map<string, number[]>();
+    for (const row of result.rows) {
+      const ms = new Date(row.captured_at).getTime();
+      if (!Number.isFinite(ms)) continue;
+      if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
+      byUser.get(row.user_id)!.push(ms);
+    }
+    const out = new Map<string, TimeInterval[]>();
+    for (const [uid, times] of byUser) {
+      out.set(uid, mergeCapturedAtsIntoIntervals(times, coverageMs));
+    }
+    return out;
   }
 
   /** Prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows exist. */
@@ -156,8 +229,8 @@ export class EffectiveTimeService {
       for (const day of days) {
         const logHours = fromLogs.get(day) ?? 0;
         const secondsHours = fromSeconds.get(day) ?? 0;
-        const hours = logHours > 0 ? logHours : secondsHours;
-        if (hours > 0) dayMap.set(day, Math.round(hours * 10) / 10);
+        const hours = fromLogs.has(day) ? logHours : secondsHours;
+        if (hours > 0) dayMap.set(day, hours);
       }
 
       if (dayMap.size > 0) merged.set(userId, dayMap);
@@ -199,6 +272,7 @@ export class EffectiveTimeService {
       activity_date: string;
       captured_at: string;
       activity_percent: number | null;
+      is_meeting: boolean;
       is_low: boolean;
     }>(
       `SELECT
@@ -206,6 +280,7 @@ export class EffectiveTimeService {
          ${sqlWorkDate('s.captured_at', workTz)}::text AS activity_date,
          s.captured_at,
          s.activity_percent,
+         (${SCREENSHOT_IS_VIDEO_MEETING_SQL}) AS is_meeting,
          (
            s.activity_percent IS NOT NULL
            AND s.activity_percent < $${thresholdIdx}
@@ -251,13 +326,32 @@ export class EffectiveTimeService {
       params,
     );
 
-    type Shot = { activity_date: string; is_low: boolean };
+    type Shot = { activity_date: string; captured_at_ms: number; is_low: boolean };
+    const meetingTimes = new Map<string, number[]>();
+    for (const row of result.rows) {
+      if (!Boolean(row.is_meeting)) continue;
+      const ms = new Date(row.captured_at).getTime();
+      if (!Number.isFinite(ms)) continue;
+      if (!meetingTimes.has(row.user_id)) meetingTimes.set(row.user_id, []);
+      meetingTimes.get(row.user_id)!.push(ms);
+    }
+    const coverageMs = Math.max(1, Number(intervalMinutes) || 1) * 60 * 1000;
+    const meetingIv = new Map<string, ReturnType<typeof mergeCapturedAtsIntoIntervals>>();
+    for (const [uid, times] of meetingTimes) {
+      meetingIv.set(uid, mergeCapturedAtsIntoIntervals(times, coverageMs));
+    }
+
     const byUserShots = new Map<string, Shot[]>();
     for (const row of result.rows) {
+      const capturedMs = new Date(row.captured_at).getTime();
+      const inMeeting =
+        Boolean(row.is_meeting) ||
+        (Number.isFinite(capturedMs) && intervalContains(capturedMs, meetingIv.get(row.user_id) ?? []));
       if (!byUserShots.has(row.user_id)) byUserShots.set(row.user_id, []);
       byUserShots.get(row.user_id)!.push({
         activity_date: row.activity_date,
-        is_low: Boolean(row.is_low),
+        captured_at_ms: capturedMs,
+        is_low: Boolean(row.is_low) && !inMeeting,
       });
     }
 
@@ -282,12 +376,6 @@ export class EffectiveTimeService {
           }
         }
         i = j;
-      }
-    }
-
-    for (const dayMap of byUserDay.values()) {
-      for (const [day, hours] of dayMap) {
-        dayMap.set(day, Math.round(hours * 10) / 10);
       }
     }
 
@@ -342,8 +430,15 @@ export class EffectiveTimeService {
       [userIdText, opts.startIso, opts.endIso],
     );
 
+    const meetings = await this.meetingIntervalsByUser(
+      filter,
+      opts.startIso,
+      opts.endIso,
+      opts.intervalMinutes,
+      userIdText,
+    );
     const idleByDay = this.mergeIdleHours(
-      this.idleHoursFromIdleLogs(idleRows.rows, opts.tz),
+      this.idleHoursFromIdleLogs(idleRows.rows, opts.tz, meetings),
       this.idleHoursFromTimeLogs(timeLogRows.rows, opts.tz),
     );
     const lowByDay = await this.lowActivityHoursFromScreenshots(

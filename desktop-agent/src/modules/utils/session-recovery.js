@@ -685,8 +685,39 @@ function clearLocalTrackingAfterStaleClose() {
  * BEFORE any new heartbeat/checkpoint can stamp NOW and re-freshen the orphan.
  */
 async function reconcileAfterWake() {
+  const { isSleepGap } = require('./sleep-aware-elapsed');
   const checkpointAt = readLocalCheckpointAt();
-  const stale = !isIsoRecent(checkpointAt, STALE_CHECKPOINT_MS);
+  const now = Date.now();
+  const lidDown = !!global._lidDownArmed;
+  const proofIso = global._lidLastProofIso || checkpointAt;
+  const sleepGap = lidDown || isSleepGap(proofIso, now);
+  const stale = sleepGap || !isIsoRecent(checkpointAt, STALE_CHECKPOINT_MS);
+
+  if (sleepGap) {
+    global._startAfterSleep = true;
+    global._lastWakeAtMs = now;
+  }
+
+  if (lidDown || sleepGap) {
+    log.warn({
+      step: 'WAKE_LID_STOP',
+      message: 'Lid/sleep was a full stop — will not continue the pre-sleep session',
+      ctx: { checkpointAt, endAt: proofIso, isTracking: !!global.isTracking },
+    });
+    try {
+      global.trackingManager?._stopTimeLogCheckpoint?.();
+    } catch (_) { /* ignore */ }
+    try {
+      if (global.isTracking || global.trackingManager?.isTracking || global.currentTimeLogId) {
+        await closeOpenSessionsAfterExplicitStop({ end_time: proofIso || checkpointAt || undefined });
+      }
+    } catch (err) {
+      log.warn({ step: 'WAKE_LID_CLOSE_FAILED', message: err?.message || String(err) });
+    }
+    clearLocalTrackingAfterStaleClose();
+    return { closedStale: true, lidStop: true, end_time: proofIso || checkpointAt || null };
+  }
+
   if (!stale && (global.isTracking || global.trackingManager?.isTracking)) {
     log.info({ step: 'WAKE_CONTINUE', message: 'Checkpoint is fresh — keeping session' });
     return { continued: true };
@@ -698,18 +729,18 @@ async function reconcileAfterWake() {
   log.warn({
     step: 'WAKE_STALE_SESSION',
     message: 'Closing stale open session at last checkpoint/heartbeat (not NOW)',
-    ctx: { checkpointAt, isTracking: !!global.isTracking },
+    ctx: { checkpointAt, endAt: proofIso, sleepGap, isTracking: !!global.isTracking },
   });
   try {
     global.trackingManager?._stopTimeLogCheckpoint?.();
   } catch (_) { /* ignore */ }
   try {
-    await closeOpenSessionsAfterExplicitStop({ end_time: checkpointAt || undefined });
+    await closeOpenSessionsAfterExplicitStop({ end_time: proofIso || checkpointAt || undefined });
   } catch (err) {
     log.warn({ step: 'WAKE_STALE_CLOSE_FAILED', message: err?.message || String(err) });
   }
   clearLocalTrackingAfterStaleClose();
-  return { closedStale: true, end_time: checkpointAt || null };
+  return { closedStale: true, end_time: proofIso || checkpointAt || null };
 }
 
 module.exports = {

@@ -28,7 +28,9 @@ function endOfLocalDayExclusive(d = new Date()) {
 }
 
 function elapsedSecondsSinceLocalMidnight(sessionStart, nowMs = Date.now()) {
-  return elapsedSecondsSinceWorkMidnight(sessionStart, nowMs);
+  const { effectiveSessionStart } = require('./sleep-aware-elapsed');
+  const wake = Number(typeof global !== 'undefined' ? global._lastWakeAtMs : 0) || 0;
+  return elapsedSecondsSinceWorkMidnight(effectiveSessionStart(sessionStart, wake), nowMs);
 }
 
 function secondsWithinLocalDay(startMs, endMs, dayRef = new Date()) {
@@ -308,6 +310,120 @@ function finalizeTodayAggregate(timeLogs, currentTimeLogId, isTracking, offlineC
   };
 }
 
+/**
+ * Remote today-stats miss must keep the last painted closed total and add
+ * the current live session. Never return a lower total than last-good.
+ * Garima 25 Aug 17:47: fetch failed → 431s live-only, clock sawed 3.49h → 0.12h.
+ */
+function statsWorkDayKey(stats) {
+  if (!stats || typeof stats !== 'object') return null;
+  const key =
+    (stats.workDay && stats.workDay.todayKey) ||
+    stats.workDate ||
+    stats.date ||
+    null;
+  return typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : null;
+}
+
+/**
+ * Renderer today-stats cache.
+ * Same-day failed/stale fetch must not rewind the clock.
+ * A new work day at 0 is real — leftover yesterday is phantom (Thirumalai
+ * Aug 24 10:00 PKT: 2,800 "ignoring wipe-to-zero" after Chicago midnight).
+ */
+function shouldKeepCachedTodayStats(prev, incoming, { trackingLive = false, rendererDayKey = null } = {}) {
+  if (!prev || prev.error) return { keep: false };
+  const incomingTotal = Math.max(0, Math.floor(Number(incoming?.totalTime) || 0));
+  const prevTotal = Math.max(0, Math.floor(Number(prev.totalTime) || 0));
+  const prevDay = statsWorkDayKey(prev);
+  const incomingDay = statsWorkDayKey(incoming);
+  const rendererDay =
+    typeof rendererDayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rendererDayKey)
+      ? rendererDayKey
+      : null;
+  const newWorkDay =
+    (prevDay && incomingDay && incomingDay > prevDay) ||
+    (prevDay && rendererDay && rendererDay > prevDay);
+
+  if (newWorkDay) {
+    return { keep: false, reason: 'new-work-day' };
+  }
+  if (incoming?.error && prevTotal > 0) {
+    return { keep: true, reason: 'error', value: prev };
+  }
+  if (
+    (incoming?.backendFetchFailed === true || incoming?.stale === true) &&
+    prevTotal > incomingTotal
+  ) {
+    return { keep: true, reason: 'backend-miss', value: prev };
+  }
+  // Same-day empty response while tracking (legacy wipe without a fail flag).
+  // Stopped + 0 is an empty / new day — never glue leftover hours back on.
+  if (prevTotal > 60 && incomingTotal < 30 && !incoming?.offlinePendingCount && !incoming?.error) {
+    if (!trackingLive) {
+      return { keep: false, reason: 'stopped-empty-day' };
+    }
+    return { keep: true, reason: 'wipe-to-zero', value: prev };
+  }
+  if (
+    trackingLive &&
+    prevTotal > 60 &&
+    incomingTotal + 15 < prevTotal &&
+    !incoming?.floorHeld
+  ) {
+    return {
+      keep: true,
+      reason: 'sync-drop',
+      value: {
+        ...prev,
+        ongoingCurrentSessionSeconds:
+          incoming?.ongoingCurrentSessionSeconds ?? prev.ongoingCurrentSessionSeconds,
+        offlinePendingCount: incoming?.offlinePendingCount ?? prev.offlinePendingCount,
+      },
+    };
+  }
+  return { keep: false };
+}
+
+function holdLastGoodOnFailedFetch(agg, lastGood, { isTracking = false } = {}) {
+  const live = isTracking
+    ? Math.max(0, Math.floor(Number(agg?.ongoingCurrentSessionSeconds) || 0))
+    : 0;
+  const failedClosed = Math.max(0, Math.floor(Number(agg?.completedClosedSeconds) || 0));
+  const failedTotal = Math.max(0, Math.floor(Number(agg?.totalTime) || 0));
+  const base = agg && typeof agg === 'object' ? agg : {};
+
+  if (!lastGood || typeof lastGood !== 'object') {
+    return {
+      ...base,
+      completedClosedSeconds: failedClosed,
+      ongoingCurrentSessionSeconds: live,
+      totalTime: Math.max(failedTotal, failedClosed + live),
+      backendFetchFailed: true,
+    };
+  }
+
+  const lastClosed = Math.max(
+    0,
+    Math.floor(
+      Number(
+        lastGood.completedTodayBeforeCurrentSessionSeconds ?? lastGood.completedClosedSeconds,
+      ) || 0,
+    ),
+  );
+  const lastTotal = Math.max(0, Math.floor(Number(lastGood.totalTime) || 0));
+  const closed = Math.max(failedClosed, lastClosed);
+  const total = Math.max(lastTotal, closed + live, failedTotal);
+  return {
+    ...base,
+    completedClosedSeconds: closed,
+    ongoingCurrentSessionSeconds: live,
+    totalTime: total,
+    backendFetchFailed: true,
+    floorHeld: total > failedTotal || closed > failedClosed,
+  };
+}
+
 async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking = false) {
   if (!userId) {
     return {
@@ -335,7 +451,10 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
         );
         // Keep recording from local Start + any queued rows; sync failure must not
         // wipe ongoing time while the employee is still tracking.
-        return finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount);
+        return {
+          ...finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount),
+          backendFetchFailed: true,
+        };
       }
       const overlapping = logsOverlappingLocalDay(timeLogs);
       const withActive = await includeCrossMidnightActiveLog(
@@ -349,6 +468,12 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend path failed:', err.message);
+    if (offlineCount > 0 || (isTracking && currentTimeLogId)) {
+      return {
+        ...finalizeTodayAggregate(offlineLogs, currentTimeLogId, isTracking, offlineCount),
+        backendFetchFailed: true,
+      };
+    }
   }
 
   // RDS is the only remote source; without it, show queued + live local time
@@ -371,4 +496,8 @@ module.exports = {
   logsOverlappingLocalDay,
   loadOfflineQueuedTimeLogRows,
   mergeIntervalsSeconds,
+  aggregateTimeLogRows,
+  holdLastGoodOnFailedFetch,
+  statsWorkDayKey,
+  shouldKeepCachedTodayStats,
 };

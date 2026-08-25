@@ -122,25 +122,20 @@ class GracefulShutdownManager {
     // and other subsystems skip expensive work immediately during shutdown.
     global.isShuttingDown = true;
 
-    // Sleep/suspend is NOT an explicit employee stop — arm wake auto-resume.
-    // Manual/idle/shutdown remain explicit so health-check won't re-adopt orphans.
+    // Lid-close / sleep is a full stop. Stay stopped until the employee Starts.
     const isAutoSleepStop = reason === 'system_sleep' || reason === 'suspend';
     if (isAutoSleepStop) {
-      global.userExplicitlyStopped = false;
+      global._resumeTrackingAfterWake = null;
       try {
-        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
-        clearUserExplicitlyStopped();
-      } catch (_) { /* ignore */ }
-      global._resumeTrackingAfterWake = {
-        projectId:
-          global.trackingManager?.currentProjectId ||
-          global.currentProjectId ||
-          global.config?.project_id ||
-          null,
-        stoppedAt: Date.now(),
-        reason,
-      };
-      console.log('💤 [GRACEFUL-SHUTDOWN] Sleep stop — wake auto-resume armed');
+        const { markUserExplicitlyStopped } = require('../utils/session-recovery');
+        markUserExplicitlyStopped({
+          reason,
+          timeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId,
+        });
+      } catch (_) {
+        global.userExplicitlyStopped = true;
+      }
+      console.log('💤 [GRACEFUL-SHUTDOWN] Sleep stop — processes halted, no wake auto-resume');
     } else {
       try {
         const { markUserExplicitlyStopped } = require('../utils/session-recovery');
