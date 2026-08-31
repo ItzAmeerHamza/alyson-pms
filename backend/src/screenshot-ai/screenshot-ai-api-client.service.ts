@@ -17,6 +17,7 @@ export interface ScreenshotAiCompletePayload {
   distraction_score: number;
   vision_summary: string;
   vision_analysis: Record<string, unknown>;
+  thumb_s3_key?: string | null;
 }
 
 @Injectable()

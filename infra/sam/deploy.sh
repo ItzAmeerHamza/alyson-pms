@@ -113,6 +113,18 @@ EMAIL_SENDERS_PARAM="${EMAIL_SENDERS_PARAM// /}"
 echo "==> EMAIL_FROM: ${EMAIL_FROM_PARAM}"
 echo "==> EMAIL_SENDERS: ${EMAIL_SENDERS_PARAM}"
 
+THUMB_CDN_SECRET="${SCREENSHOT_THUMB_CDN_HMAC_SECRET:-}"
+if [[ -n "$THUMB_CDN_SECRET" ]]; then
+  if [[ ! "$THUMB_CDN_SECRET" =~ ^[0-9a-fA-F]{32,128}$ ]]; then
+    echo "ERROR: SCREENSHOT_THUMB_CDN_HMAC_SECRET must be 32–128 hex characters."
+    echo "Generate with: openssl rand -hex 32"
+    exit 1
+  fi
+  echo "==> Screenshot thumb CDN: enabled (CloudFront + HMAC)"
+else
+  echo "==> Screenshot thumb CDN: disabled (S3-presigned thumb_url). Set SCREENSHOT_THUMB_CDN_HMAC_SECRET to enable."
+fi
+
 # SAM --parameter-overrides splits on spaces. PEM headers contain spaces
 # ("-----BEGIN PRIVATE KEY-----"), which truncated the key to "-----BEGIN" in Lambda.
 # Pass base64(PEM); leave GmailDwdService decodes when value has no BEGIN marker.
@@ -166,7 +178,8 @@ sam deploy \
     "SqsVpcEndpointDnsName=${SQS_VPC_ENDPOINT_DNS}" \
     "LambdaEndpointSubnetId=${LAMBDA_ENDPOINT_SUBNET_ID}" \
     "EmailFrom=${EMAIL_FROM_PARAM}" \
-    "EmailSenders=${EMAIL_SENDERS_PARAM}"
+    "EmailSenders=${EMAIL_SENDERS_PARAM}" \
+    "ScreenshotThumbCdnHmacSecret=${THUMB_CDN_SECRET}"
 
 echo "==> Stack outputs"
 aws cloudformation describe-stacks \
@@ -174,6 +187,11 @@ aws cloudformation describe-stacks \
   --region "$AWS_REGION" \
   --query 'Stacks[0].Outputs' \
   --output table
+
+if [[ -n "$THUMB_CDN_SECRET" ]]; then
+  echo "==> Ensure shared-bucket policy allows CloudFront OAC (thumbs prefix only)"
+  bash "$SCRIPT_DIR/ensure-thumb-cdn-bucket-policy.sh"
+fi
 
 echo "==> Tag external resources (S3, ECR, RDS Proxy, security group)"
 bash "$SCRIPT_DIR/tag-resources.sh"

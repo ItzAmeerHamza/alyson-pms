@@ -15,7 +15,8 @@ RUN npm run build
 
 FROM public.ecr.aws/lambda/nodejs:20-arm64
 WORKDIR ${LAMBDA_TASK_ROOT}
-# OCR is tesseract.js (AL2023 has no tesseract RPM). Optional system binary via TESSERACT_BIN.
+# OCR is tesseract.js on a downscaled grayscale JPEG (AL2023 has no tesseract RPM).
+# Optional native binary via TESSERACT_BIN / /opt/bin/tesseract.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist

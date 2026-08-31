@@ -112,10 +112,40 @@ async function uploadScreenshotViaS3Api({
 
   log.info({ step: 'S3_PUT_OK', ctx: { s3_key: init.s3_key } });
 
+  let thumbS3Key = null;
+  if (init.thumb_upload_url && init.thumb_s3_key) {
+    try {
+      const sharp = require('sharp');
+      const thumbBuffer = await sharp(uploadBuffer)
+        .rotate()
+        .resize({ width: 480, withoutEnlargement: true })
+        .jpeg({ quality: 70 })
+        .toBuffer();
+      const thumbRes = await fetchWithTimeout(
+        init.thumb_upload_url,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': init.thumb_content_type || 'image/jpeg' },
+          body: thumbBuffer,
+        },
+        UPLOAD_TIMEOUT_MS,
+      );
+      if (thumbRes.ok) {
+        thumbS3Key = init.thumb_s3_key;
+        log.info({ step: 'S3_THUMB_PUT_OK', ctx: { thumb_s3_key: thumbS3Key, bytes: thumbBuffer.length } });
+      } else {
+        log.warn({ step: 'S3_THUMB_PUT_FAILED', ctx: { status: thumbRes.status } });
+      }
+    } catch (thumbErr) {
+      log.warn({ step: 'S3_THUMB_SKIPPED', message: thumbErr?.message || String(thumbErr) });
+    }
+  }
+
   const completePayload = {
     id: init.id,
     user_id: userId,
     s3_key: init.s3_key,
+    thumb_s3_key: thumbS3Key,
     time_log_id: timeLogId,
     file_path: init.s3_key,
     file_size: uploadBuffer.length,
@@ -279,7 +309,7 @@ async function uploadScreenshotBuffer({
   } catch (error) {
     const msg =
       error?.name === 'AbortError'
-        ? 'Upload timed out — is the backend running on localhost:3000?'
+        ? 'Screenshot upload timed out'
         : error.message;
     log.error({ step: 'EXCEPTION', message: msg });
     console.error(`❌ [SCREENSHOT-UPLOAD] Exception:`, msg);

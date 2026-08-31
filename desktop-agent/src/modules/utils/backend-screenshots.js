@@ -88,14 +88,45 @@ function normalizeScreenshotRow(row) {
   if (!row) return row;
   const key = row.s3_key || row.file_path;
   if (!isValidS3ScreenshotKey(key)) {
-    return { ...row, image_url: null };
+    return { ...row, image_url: null, thumb_url: null };
   }
   const imageUrl = row.image_url;
   const filePath = row.file_path;
   const displayUrl =
     imageUrl ||
     (filePath && /^https?:\/\//i.test(String(filePath)) ? filePath : null);
-  return { ...row, image_url: displayUrl };
+  return { ...row, image_url: displayUrl, thumb_url: row.thumb_url || null };
+}
+
+function screenshotTileUrl(shot) {
+  return shot?.thumb_url || shot?.image_url || shot?.file_path || '';
+}
+
+function screenshotPopupUrl(shot) {
+  return shot?.image_url || shot?.file_path || shot?.thumb_url || '';
+}
+
+function escapeHtmlAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;');
+}
+
+const THUMB_IMG_ONERROR =
+  "if(this.dataset.full&&this.dataset.failed!=='1'){this.dataset.failed='1';this.src=this.dataset.full;}else{this.onerror=null;this.style.display='none';}";
+
+/** Gallery <img>: CloudFront thumb, fall back to full image. Keeps exp/sig. */
+function screenshotTileImgTag(shot, attrs = {}) {
+  const tile = screenshotTileUrl(shot);
+  const full = screenshotPopupUrl(shot);
+  if (!tile) return '';
+  const extra = Object.entries(attrs)
+    .filter(([, v]) => v != null && v !== '')
+    .map(([key, val]) => `${key}="${escapeHtmlAttr(val)}"`)
+    .join(' ');
+  return `<img src="${escapeHtmlAttr(tile)}" data-full="${escapeHtmlAttr(full)}" onerror="${THUMB_IMG_ONERROR}"${extra ? ` ${extra}` : ''}>`;
 }
 
 async function fetchScreenshotsViaInternalApi(userId, config, opts = {}) {
@@ -313,6 +344,10 @@ module.exports = {
   applyActivityFilter,
   buildEnhancedResponse,
   normalizeScreenshotRow,
+  screenshotTileUrl,
+  screenshotPopupUrl,
+  escapeHtmlAttr,
+  screenshotTileImgTag,
   localDateIso,
   sameUserId,
 };

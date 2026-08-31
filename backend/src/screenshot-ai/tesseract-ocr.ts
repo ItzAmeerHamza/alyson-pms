@@ -8,6 +8,8 @@ import type { Worker } from 'tesseract.js';
 
 export const MAX_OCR_CHARS = 6000;
 export const TESSERACT_TIMEOUT_MS = 25_000;
+/** Dual-monitor JPEGs are huge; OCR only needs readable UI text. */
+export const OCR_MAX_WIDTH = 1600;
 
 export function imageExtension(buffer: Buffer): string {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
@@ -42,10 +44,27 @@ export function normalizeOcrText(raw: string, maxChars = MAX_OCR_CHARS): string 
 
 const TESSERACT_CANDIDATES = [
   process.env.TESSERACT_BIN,
+  '/opt/bin/tesseract',
   '/usr/bin/tesseract',
   '/opt/homebrew/bin/tesseract',
   '/usr/local/bin/tesseract',
 ];
+
+/** Downscale + grayscale so Lambda WASM OCR is seconds, not ~15s on full shots. */
+export async function prepareOcrBuffer(buffer: Buffer): Promise<Buffer> {
+  if (buffer.length === 0) return buffer;
+  try {
+    const sharp = (await import('sharp')).default;
+    return await sharp(buffer)
+      .rotate()
+      .resize({ width: OCR_MAX_WIDTH, withoutEnlargement: true })
+      .grayscale()
+      .jpeg({ quality: 85 })
+      .toBuffer();
+  } catch {
+    return buffer;
+  }
+}
 
 export function resolveTesseractBin(): string | null {
   for (const candidate of TESSERACT_CANDIDATES) {
@@ -60,11 +79,12 @@ export async function ocrWithTesseract(buffer: Buffer): Promise<string> {
     return '';
   }
 
+  const prepared = await prepareOcrBuffer(buffer);
   const cli = resolveTesseractBin();
   if (cli) {
-    return ocrWithCli(buffer, cli);
+    return ocrWithCli(prepared, cli);
   }
-  return ocrWithTesseractJs(buffer);
+  return ocrWithTesseractJs(prepared);
 }
 
 async function ocrWithCli(buffer: Buffer, bin: string): Promise<string> {
@@ -123,8 +143,9 @@ async function getJsWorker(): Promise<Worker> {
   if (jsWorker) return jsWorker;
   if (!jsWorkerReady) {
     jsWorkerReady = (async () => {
-      const { createWorker } = await import('tesseract.js');
-      const worker = await createWorker('eng');
+      const { createWorker, OEM, PSM } = await import('tesseract.js');
+      const worker = await createWorker('eng', OEM.LSTM_ONLY, { logger: () => undefined });
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
       jsWorker = worker;
       return worker;
     })().catch((err) => {
@@ -135,8 +156,40 @@ async function getJsWorker(): Promise<Worker> {
   return jsWorkerReady;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`tesseract timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+async function resetJsWorker(): Promise<void> {
+  const worker = jsWorker;
+  jsWorker = null;
+  jsWorkerReady = null;
+  if (worker) {
+    await worker.terminate().catch(() => undefined);
+  }
+}
+
 async function ocrWithTesseractJs(buffer: Buffer): Promise<string> {
   const worker = await getJsWorker();
-  const { data } = await worker.recognize(buffer);
-  return normalizeOcrText(data.text || '');
+  try {
+    const { data } = await withTimeout(worker.recognize(buffer), TESSERACT_TIMEOUT_MS);
+    return normalizeOcrText(data.text || '');
+  } catch (err) {
+    await resetJsWorker();
+    throw err;
+  }
 }

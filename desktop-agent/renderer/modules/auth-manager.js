@@ -119,6 +119,38 @@ class AuthManager {
     console.log('[AUTH] Deferring DOM event binding to renderer (avoids duplicates)');
   }
 
+  showAuthLoading(message) {
+    try {
+      if (typeof window !== 'undefined' && typeof window.showAuthLoading === 'function') {
+        window.showAuthLoading(message);
+        return;
+      }
+      if (typeof document === 'undefined') return;
+      const overlay = document.getElementById('authLoadingOverlay');
+      const status = document.getElementById('authLoadingStatus');
+      if (status && message) status.textContent = message;
+      if (overlay) {
+        overlay.classList.add('is-visible');
+        overlay.setAttribute('aria-hidden', 'false');
+      }
+    } catch (_) {}
+  }
+
+  hideAuthLoading() {
+    try {
+      if (typeof window !== 'undefined' && typeof window.hideAuthLoading === 'function') {
+        window.hideAuthLoading();
+        return;
+      }
+      if (typeof document === 'undefined') return;
+      const overlay = document.getElementById('authLoadingOverlay');
+      if (overlay) {
+        overlay.classList.remove('is-visible');
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+    } catch (_) {}
+  }
+
   async loadRememberedCredentials() {
     try {
       // Check for auth reset flag (can be set via developer tools)
@@ -196,6 +228,7 @@ class AuthManager {
 
   async tryAutoLogin() {
     try {
+      if (this.currentUser?.id) return true;
       console.log('🔄 [AUTH] Checking for saved session...');
       const savedUserSession = await this.ipcRenderer.invoke('load-user-session');
       console.log('📋 [AUTH] Load session result:', savedUserSession);
@@ -208,6 +241,7 @@ class AuthManager {
           remember_me: session.remember_me
         });
 
+        this.showAuthLoading('Restoring your session…');
         return await this.tryAutoLoginCognito(session);
       }
       return false;
@@ -226,11 +260,13 @@ class AuthManager {
 
   async tryAutoLoginCognito(savedSession) {
     try {
+      this.showAuthLoading('Signing you in…');
       await this.ensureAuthConfig();
 
       // Hydrate renderer Cognito store from disk (refresh token survives ID-token expiry)
       cognitoAuth.hydrateCognitoSessionFromDisk(savedSession);
 
+      this.showAuthLoading('Refreshing your sign-in…');
       let stored = await cognitoAuth.getCurrentCognitoSession(this.authConfig);
       if (!stored?.idToken && savedSession?.refresh_token) {
         stored = await cognitoAuth.refreshCognitoSession(this.authConfig, {
@@ -245,11 +281,13 @@ class AuthManager {
         console.warn('⚠️ [AUTH] Cognito auto-login: no usable tokens');
         await this.ipcRenderer.invoke('user-logged-out');
         cognitoAuth.clearCognitoSession();
+        this.hideAuthLoading();
         return false;
       }
 
       let profile;
       try {
+        this.showAuthLoading('Verifying your account…');
         profile = await fetchAuthMe(idToken, this.authConfig, this.ipcRenderer);
       } catch (meErr) {
         // Access token may be stale — force one refresh then retry /auth/me
@@ -272,6 +310,7 @@ class AuthManager {
       if (!/^\d+$/.test(normalizedId)) {
         await this.ipcRenderer.invoke('user-logged-out');
         cognitoAuth.clearCognitoSession();
+        this.hideAuthLoading();
         return false;
       }
 
@@ -312,13 +351,16 @@ class AuthManager {
       }
 
       if (window.__updateGateActive) {
+        this.hideAuthLoading();
         return false;
       }
 
+      this.showAuthLoading('Loading your workspace…');
       try {
         const updateStatus = await this.ipcRenderer.invoke('check-for-update');
         if (updateStatus?.updateAvailable) {
           window.__updateGateActive = true;
+          this.hideAuthLoading();
           this.uiManager?.showMandatoryUpdateGate?.({
             newVersion: updateStatus.newVersion,
             currentVersion: updateStatus.currentVersion,
@@ -353,13 +395,16 @@ class AuthManager {
         await this.ipcRenderer.invoke('user-logged-out');
         cognitoAuth.clearCognitoSession();
       }
+      this.hideAuthLoading();
       return false;
     }
   }
 
   async handleCognitoLogin(email, password, company, rememberMe) {
+    this.showAuthLoading('Signing in…');
     await this.ensureAuthConfig();
     const stored = await cognitoAuth.signInWithEmailPassword(email, password, this.authConfig);
+    this.showAuthLoading('Verifying your account…');
     const profile = await fetchAuthMe(stored.idToken, this.authConfig, this.ipcRenderer);
     const details = profile.user;
     const org = profile.organization;
@@ -406,6 +451,7 @@ class AuthManager {
       localStorage.setItem('alyson_remember_company', companySlug);
     }
 
+    this.showAuthLoading('Loading your workspace…');
     await this.ipcRenderer.invoke('user-logged-in', {
       user: this.currentUser,
       session: {
@@ -425,19 +471,20 @@ class AuthManager {
 
     try {
       const updateStatus = await this.ipcRenderer.invoke('check-for-update');
-      if (updateStatus?.updateAvailable) {
-        window.__updateGateActive = true;
-        this.uiManager?.showMandatoryUpdateGate?.({
-          newVersion: updateStatus.newVersion,
-          currentVersion: updateStatus.currentVersion,
-          updateDownloaded: updateStatus.updateDownloaded,
-          manualInstallRequired: updateStatus.manualInstallRequired,
-          dmgInstallReady: updateStatus.dmgInstallReady,
-          manualDownloadUrl: updateStatus.manualDownloadUrl,
-        });
-        this.notificationManager.showNotification('Update required before continuing.', 'warning');
-        return;
-      }
+        if (updateStatus?.updateAvailable) {
+          window.__updateGateActive = true;
+          this.hideAuthLoading();
+          this.uiManager?.showMandatoryUpdateGate?.({
+            newVersion: updateStatus.newVersion,
+            currentVersion: updateStatus.currentVersion,
+            updateDownloaded: updateStatus.updateDownloaded,
+            manualInstallRequired: updateStatus.manualInstallRequired,
+            dmgInstallReady: updateStatus.dmgInstallReady,
+            manualDownloadUrl: updateStatus.manualDownloadUrl,
+          });
+          this.notificationManager.showNotification('Update required before continuing.', 'warning');
+          return;
+        }
     } catch (updateError) {
       console.log('⚠️ [AUTH] Update check failed, proceeding:', updateError.message);
     }
@@ -518,6 +565,7 @@ class AuthManager {
     if (loginBtnText) loginBtnText.textContent = 'Signing In...';
     if (loginLoader) loginLoader.classList.remove('hidden');
     if (errorDiv) errorDiv.style.display = 'none';
+    this.showAuthLoading('Signing in…');
 
     try {
       await this.handleCognitoLogin(email, password, company, rememberMe);
@@ -588,6 +636,7 @@ class AuthManager {
       }
       
       this.notificationManager.showNotification(errorMessage, 'error');
+      this.hideAuthLoading();
     } finally {
       // Reset loading state
       if (loginBtn) loginBtn.disabled = false;
@@ -667,6 +716,11 @@ class AuthManager {
     
     if (userName) {
       userName.textContent = displayName;
+    }
+
+    const userEmail = document.getElementById('userEmail');
+    if (userEmail) {
+      userEmail.textContent = this.currentUser.email || '';
     }
 
     const welcomeName = document.getElementById('welcomeUserName');

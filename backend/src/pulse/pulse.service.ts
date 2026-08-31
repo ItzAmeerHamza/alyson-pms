@@ -818,6 +818,10 @@ export class PulseService {
       `ext.paused_at IS NULL`,
     ];
     if (restrictToUserId) {
+      const visibleIds = await this.visibleEmployeeIds(user);
+      if (visibleIds && !visibleIds.includes(String(restrictToUserId))) {
+        throw new ForbiddenException('Insufficient permissions for this user');
+      }
       userParams.push(parseTenantUserId(restrictToUserId));
       userFilters.push(`u.id = $${userParams.length}`);
     } else {
@@ -842,37 +846,38 @@ export class PulseService {
     const endKey = String(end).slice(0, 10);
     const workTz = settings.timezone;
     const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey, workTz);
-    const logs = await this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId);
-    const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso, restrictToUserId);
-    const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
-      user,
-      startKey,
-      endKey,
-      restrictToUserId,
-    );
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
-    const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
-      user,
-      startIso,
-      endExclusiveIso,
-      lowActivityCutoff,
+    const [logs, idleLogs, adjustmentByUser, screenshotRows] = await Promise.all([
+      this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
+      this.fetchIdleLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
+      this.fetchAdjustmentHoursInRange(user, startKey, endKey, restrictToUserId),
+      this.effectiveTime.loadScreenshotActivityRows(
+        this.effectiveTimeFilter(user),
+        startIso,
+        endExclusiveIso,
+        lowActivityCutoff,
+        restrictToUserId,
+        workTz,
+      ),
+    ]);
+    const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
+    const lowActivityByUser = this.effectiveTime.lowActivityHoursFromRows(
+      screenshotRows,
+      idleLogs,
       settings.screenshot_interval_minutes,
-      restrictToUserId,
       workTz,
     );
     // Idle: OS inactivity stretches ≥ 5 min (idle_logs); short periods ignored.
     // Fallback time_logs.idle_seconds only when no idle_logs exist for that day.
     // Meeting minutes are subtracted so a 1h Meet with no typing stays effective.
     const idleByUser = this.dailyIdleHoursByUserDay(
-      await this.dailyLowActivityFromIdleLogs(
-        user,
-        startIso,
-        endExclusiveIso,
+      this.effectiveTime.idleHoursFromIdleLogs(
         idleLogs,
         workTz,
-        settings.screenshot_interval_minutes,
-        restrictToUserId,
+        this.effectiveTime.meetingIntervalsFromRows(
+          screenshotRows,
+          settings.screenshot_interval_minutes,
+        ),
       ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
@@ -1291,7 +1296,9 @@ export class PulseService {
       id: string;
       captured_at: string;
       description: string | null;
-      vision_analysis: Record<string, unknown> | null;
+      feedback: string | null;
+      productivity_flag: string | null;
+      vision_used: boolean | null;
     }>(
       `SELECT
          s.user_id::text AS user_id,
@@ -1302,7 +1309,9 @@ export class PulseService {
          s.id::text AS id,
          s.captured_at,
          s.vision_summary AS description,
-         s.vision_analysis
+         COALESCE(s.vision_analysis #>> '{parsed,feedback_for_employee}', s.vision_analysis->>'feedback_for_employee') AS feedback,
+         COALESCE(s.vision_analysis #>> '{parsed,productivity_flag}', s.vision_analysis->>'productivity_flag') AS productivity_flag,
+         CASE WHEN s.vision_analysis->>'vision_used' = 'true' THEN true ELSE false END AS vision_used
        FROM time_doctor.screenshots s
        JOIN tenant."user" u ON u.id = s.user_id
        JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
@@ -1349,7 +1358,6 @@ export class PulseService {
           confidence_score: number | null;
           distraction_score: number | null;
           productivity_flag: string | null;
-          vision_analysis: Record<string, unknown> | null;
           vision_used?: boolean;
         }>;
       }
@@ -1378,26 +1386,29 @@ export class PulseService {
         );
       }
       if (entry.recent_insights.length < 3) {
-        const fields = parsedVisionFields(row.vision_analysis, row.description);
-        if (fields.description || fields.feedback) {
+        const description = row.description?.trim() || null;
+        const feedback =
+          row.feedback?.trim() && row.feedback.trim() !== description
+            ? row.feedback.trim()
+            : null;
+        if (description || feedback) {
           entry.recent_insights.push({
             screenshot_id: row.id,
             captured_at: row.captured_at,
-            description: fields.description || fields.feedback || '',
-            feedback: fields.feedback,
+            description: description || feedback || '',
+            feedback,
             activity_type: row.activity_type,
             category: row.category,
             confidence_score: row.confidence_score,
             distraction_score: row.distraction_score,
-            productivity_flag: fields.productivity_flag,
-            vision_analysis: fields.vision_analysis as Record<string, unknown> | null,
-            vision_used: fields.vision_used,
+            productivity_flag: row.productivity_flag,
+            vision_used: row.vision_used === true,
           });
         }
       }
     }
 
-    return {
+    const payload = {
       start,
       end,
       pipeline,
@@ -1422,6 +1433,36 @@ export class PulseService {
         };
       }),
     };
+    // #region agent log
+    {
+      const jsonBytes = Buffer.byteLength(JSON.stringify(payload));
+      const insightVision = payload.employees.reduce(
+        (n, emp) =>
+          n +
+          emp.recent_insights.filter((i) => (i as { vision_analysis?: unknown }).vision_analysis)
+            .length,
+        0,
+      );
+      fetch('http://127.0.0.1:7612/ingest/1c3b1140-705f-4d26-95d3-63a9580b70d3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'dd6ce4' },
+        body: JSON.stringify({
+          sessionId: 'dd6ce4',
+          runId: 'post-slim',
+          hypothesisId: 'B',
+          location: 'pulse.service.ts:getAiInsights',
+          message: 'ai-insights payload',
+          data: {
+            employeeCount: payload.employees.length,
+            jsonBytes,
+            insightVisionBlobs: insightVision,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    return payload;
   }
 
   async getNotTracking(user: ScopedAuthUser, anchorDate?: string) {

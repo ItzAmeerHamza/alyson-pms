@@ -37,9 +37,9 @@ async function fetchTimeLogs(userId, opts, config) {
 }
 
 /**
- * @param {{ global: object, config: object }} deps
+ * @param {{ global: object, config: object, monthOffset?: number }} deps
  */
-async function buildMonthlyReportData({ global, config }) {
+async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   if (!usesRdsBackend(config)) {
     return { error: 'Database service not available' };
   }
@@ -61,14 +61,28 @@ async function buildMonthlyReportData({ global, config }) {
   const userId = normalizeTenantUserId(rawUserId);
   if (!userId) return { error: 'User not authenticated' };
 
+  const parsedOffset = Number(monthOffset);
+  const offset = Number.isFinite(parsedOffset) ? Math.min(0, Math.max(-24, Math.trunc(parsedOffset))) : 0;
   const today = new Date();
+  const currentMonth = workMonthBounds(today);
+  let targetYear = currentMonth.year;
+  let targetMonth = currentMonth.month + offset;
+  while (targetMonth < 1) {
+    targetMonth += 12;
+    targetYear -= 1;
+  }
+  while (targetMonth > 12) {
+    targetMonth -= 12;
+    targetYear += 1;
+  }
+  const monthRefDate = new Date(Date.UTC(targetYear, targetMonth - 1, 15, 12, 0, 0));
   const {
     year: workYear,
     month: workMonth,
     startMs: mStartMs,
     endExclusiveMs: mEndMs,
     daysInMonth,
-  } = workMonthBounds(today);
+  } = workMonthBounds(monthRefDate);
   const monthStartIso = new Date(mStartMs).toISOString();
   const monthEndExclusive = new Date(mEndMs).toISOString();
   const workTz = getWorkTimezone();

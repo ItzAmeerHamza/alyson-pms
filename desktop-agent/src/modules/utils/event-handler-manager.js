@@ -98,6 +98,7 @@ class EventHandlerManager {
   /**
    * Lid close, OS sleep, or display-off: stop tracking and kill leftover
    * capture / heartbeat / IPC. Stay stopped until the employee clicks Start.
+   * A leftover or live meeting must not keep the session open.
    */
   handleLidCloseOrSleep(source = 'suspend') {
     if (this._lidHaltInProgress) {
@@ -116,6 +117,10 @@ class EventHandlerManager {
     global._lidDownArmed = true;
     global._startAfterSleep = true;
     global._resumeTrackingAfterWake = null;
+    try {
+      const { clearMeetingSession } = require('../../lib/meeting-context');
+      clearMeetingSession();
+    } catch (_) { /* meeting must never keep a session open across sleep */ }
 
     if (this.global.trayManager) {
       this.global.trayManager.onSystemSleep();

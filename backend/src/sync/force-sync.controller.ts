@@ -7,6 +7,7 @@ import { S3Service } from '../common/s3.service';
 import { ScreenshotAiBackfillService } from '../screenshot-ai/screenshot-ai-backfill.service';
 import { EffectiveTimeService } from '../pulse/effective-time.service';
 import { buildScreenshotS3Key } from '../lib/screenshot-s3-key';
+import { thumbS3KeyFromOriginal } from '../lib/screenshot-thumb';
 import { buildLogS3Key } from '../lib/log-s3-key';
 import {
   parseTenantUserId as parseTenantUserIdStrict,
@@ -142,6 +143,7 @@ export class ForceSyncController {
     user_id: number;
     time_log_id: string | null;
     s3_key: string | null;
+    thumb_s3_key: string | null;
     file_path: string | null;
     captured_at: string;
   }> {
@@ -153,10 +155,11 @@ export class ForceSyncController {
       user_id: number;
       time_log_id: string | null;
       s3_key: string | null;
+      thumb_s3_key: string | null;
       file_path: string | null;
       captured_at: string;
     }>(
-      `SELECT id, user_id, time_log_id, s3_key, file_path, captured_at
+      `SELECT id, user_id, time_log_id, s3_key, thumb_s3_key, file_path, captured_at
        FROM time_doctor.screenshots WHERE id = $1 LIMIT 1`,
       [screenshotId],
     );
@@ -1669,7 +1672,18 @@ export class ForceSyncController {
           ext,
         });
         const uploadUrl = await this.s3.getPresignedPutUrl(s3Key, contentType);
-        return { success: true, id: screenshotId, s3_key: s3Key, upload_url: uploadUrl, content_type: contentType };
+        const thumbS3Key = thumbS3KeyFromOriginal(s3Key);
+        const thumbUploadUrl = await this.s3.getPresignedPutUrl(thumbS3Key, 'image/jpeg');
+        return {
+          success: true,
+          id: screenshotId,
+          s3_key: s3Key,
+          upload_url: uploadUrl,
+          content_type: contentType,
+          thumb_s3_key: thumbS3Key,
+          thumb_upload_url: thumbUploadUrl,
+          thumb_content_type: 'image/jpeg',
+        };
       }
       case 'log_upload_init': {
         // Desktop-agent diagnostic JSONL — Hive-partitioned for Athena; PUT directly to S3.
@@ -1711,7 +1725,7 @@ export class ForceSyncController {
           filters.push(`s.captured_at <= $${params.length}`);
         }
         const result = await this.db.query(
-          `SELECT s.id, s.user_id::text AS user_id, s.time_log_id, s.s3_key, s.file_path, s.file_size,
+          `SELECT s.id, s.user_id::text AS user_id, s.time_log_id, s.s3_key, s.thumb_s3_key, s.file_path, s.file_size,
                   s.captured_at, s.activity_percent, s.focus_percent, s.mouse_clicks,
                   s.keystrokes, s.mouse_movements, s.app_name, s.window_title,
                   s.ai_analysis_status, s.category, s.is_work_related,
@@ -1735,14 +1749,19 @@ export class ForceSyncController {
         }
         const workspaceId = await this.resolveWorkspaceId(userId, meta.organization_id);
         const timeLogId = await this.resolveTimeLogId(meta.time_log_id);
+        const thumbS3Key =
+          typeof meta.thumb_s3_key === 'string' && this.s3.isValidScreenshotObjectKey(meta.thumb_s3_key)
+            ? meta.thumb_s3_key.trim()
+            : null;
         const insert = await this.db.query<{ id: string }>(
           `INSERT INTO time_doctor.screenshots
-            (id, user_id, time_log_id, image_url, file_path, file_size, s3_key, captured_at,
+            (id, user_id, time_log_id, image_url, file_path, file_size, s3_key, thumb_s3_key, captured_at,
              activity_percent, focus_percent, mouse_clicks, keystrokes, mouse_movements,
              app_name, window_title, agent_version, workspace_id, ai_analysis_status)
-           VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending')
+           VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'pending')
            ON CONFLICT (id) DO UPDATE SET
              s3_key = EXCLUDED.s3_key,
+             thumb_s3_key = COALESCE(EXCLUDED.thumb_s3_key, time_doctor.screenshots.thumb_s3_key),
              file_path = EXCLUDED.file_path,
              file_size = EXCLUDED.file_size,
              captured_at = EXCLUDED.captured_at,
@@ -1755,6 +1774,7 @@ export class ForceSyncController {
             s3Key,
             meta.file_size || null,
             s3Key,
+            thumbS3Key,
             meta.captured_at || new Date().toISOString(),
             this.toScreenshotInt(meta.activity_percent, 0),
             this.toScreenshotInt(meta.focus_percent, 0),
@@ -1804,6 +1824,7 @@ export class ForceSyncController {
 
         // Remove the S3 object (best-effort; row deletion is the source of truth).
         await this.s3.deleteObject(screenshot.s3_key || screenshot.file_path);
+        await this.s3.deleteObject(screenshot.thumb_s3_key);
 
         // Deduct the owned interval from the parent session's tracked time.
         if (screenshot.time_log_id && deductedSeconds > 0) {

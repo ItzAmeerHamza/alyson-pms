@@ -42,6 +42,9 @@ describe('lid close / display-sleep halt', () => {
     global._resumeTrackingAfterWake = null;
     global._lidDownArmed = false;
     global._lidLastProofIso = null;
+    try {
+      require('../../../lib/meeting-context')._resetMeetingSessionForTests();
+    } catch (_) { /* ignore */ }
   });
 
   it('stops leftover processes even when tracking is already Stopped', () => {
@@ -70,4 +73,22 @@ describe('lid close / display-sleep halt', () => {
     mgr.handleLidCloseOrSleep('suspend');
     expect(halt).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['Google Meet', 'Zoom', 'Microsoft Teams', 'Webex', 'Skype'])(
+    'stops and closes the session even when leftover %s is still open',
+    (label) => {
+      const { _setPresenceForTests, isInMeetingSession } = require('../../../lib/meeting-context');
+      _setPresenceForTests({ active: true, label });
+      expect(isInMeetingSession()).toBe(true);
+
+      mgr._lidHaltInProgress = false;
+      mgr.global.isTracking = true;
+      mgr.global.currentTimeLogId = 'meet-row';
+      mgr.handleLidCloseOrSleep('suspend');
+
+      expect(stopTracking).toHaveBeenCalledWith('system_sleep');
+      expect(halt).toHaveBeenCalled();
+      expect(isInMeetingSession()).toBe(false);
+    },
+  );
 });

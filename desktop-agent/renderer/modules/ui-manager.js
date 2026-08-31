@@ -5,6 +5,11 @@ const {
   workDateKey,
 } = require('../../src/modules/utils/work-timezone');
 const { shouldKeepCachedTodayStats } = require('../../src/modules/utils/today-time-log-stats');
+const {
+  escapeHtmlAttr,
+  screenshotPopupUrl,
+  screenshotTileImgTag,
+} = require('../../src/modules/utils/backend-screenshots');
 
 class UIManager {
   constructor(ipcRenderer, notificationManager) {
@@ -13,6 +18,8 @@ class UIManager {
     this.reportsRefreshInterval = null;
     this.screenshotActivityInterval = null;
     this.monthlyReportRefreshInterval = null;
+    this._monthlyReportMonthOffset = 0;
+    this._monthlyReportCacheByOffset = {};
     
     // UI state
     this.cachedElements = null;
@@ -295,10 +302,12 @@ class UIManager {
   }
 
   /** Retry IPC invoke while main process is still registering handlers at startup. */
-  async _invokeIpcWhenReady(channel, maxAttempts = 24, delayMs = 250) {
+  async _invokeIpcWhenReady(channel, payload, maxAttempts = 24, delayMs = 250) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        return await this.ipcRenderer.invoke(channel);
+        return payload !== undefined
+          ? await this.ipcRenderer.invoke(channel, payload)
+          : await this.ipcRenderer.invoke(channel);
       } catch (err) {
         const msg = String(err?.message || err);
         const notReady = msg.includes('No handler registered');
@@ -1627,6 +1636,16 @@ class UIManager {
     if (sidebarName) {
       sidebarName.textContent = displayName;
     }
+
+    const sidebarEmail = document.getElementById('userEmail');
+    if (sidebarEmail) {
+      sidebarEmail.textContent = userProfile.email || '';
+    }
+
+    const sidebarAvatar = document.getElementById('userAvatar');
+    if (sidebarAvatar) {
+      sidebarAvatar.textContent = initials || '—';
+    }
     
     // Update dashboard welcome (if exists)
     const welcomeName = document.getElementById('welcomeUserName');
@@ -1927,12 +1946,10 @@ class UIManager {
         const keys = it.keystrokes || it.keys || 0;
         const moves = it.mouse_movements || it.moves || 0;
         const activity = it.activity_percent ?? 0;
-        const img = it.image_url || it.file_path || '';
-        
         return `
           <div class="recent-screenshot-item" style="display:flex;gap:12px;align-items:center;padding:12px;border-bottom:1px solid #e5e7eb;">
             <div style="width:84px;height:52px;background:#f1f5f9;border-radius:6px;overflow:hidden;flex:none;">
-              ${img ? `<img src="${img}" alt="Screenshot ${idx+1}" style="width:100%;height:100%;object-fit:contain;background:#f1f5f9;" onerror="this.style.display='none'">` : ''}
+              ${screenshotTileImgTag(it, { alt: `Screenshot ${idx + 1}`, style: 'width:100%;height:100%;object-fit:contain;background:#f1f5f9;' })}
             </div>
             <div style="flex:1;">
               <div style="font-size:13px;color:#0f172a;font-weight:500;margin-bottom:4px;">${it.window_title || it.app_name || 'Screenshot'}</div>
@@ -2129,11 +2146,14 @@ class UIManager {
         
         const timestamp = new Date(screenshot.captured_at);
         const activityPercent = screenshot.activity_percent || 0;
-        const imageUrl = screenshot.image_url || screenshot.file_path || '';
         
         screenshotEl.innerHTML = `
           <div style="position: relative; aspect-ratio: 32/10; background: #f8fafc; border-radius: 6px; margin-bottom: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
-            <img src="${imageUrl}" loading="lazy" alt="Screenshot ${timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}" style="width: 100%; height: 100%; object-fit: contain; display: block; background: #f1f5f9;" onerror="this.onerror=null; this.src='/placeholder-screenshot.png';" />
+            ${screenshotTileImgTag(screenshot, {
+              loading: 'lazy',
+              alt: `Screenshot ${timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`,
+              style: 'width: 100%; height: 100%; object-fit: contain; display: block; background: #f1f5f9;',
+            })}
             <div style="position: absolute; top: 8px; right: 8px; font-size: 11px; background: white; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 999px; padding: 2px 6px;">${activityPercent}%</div>
           </div>
           <div style="font-size: 12px; color: #374151; font-weight: 600; margin-bottom: 4px;">
@@ -2326,8 +2346,12 @@ class UIManager {
   }
 
   showScreenshotModal(screenshot) {
+    const popupUrl = screenshotPopupUrl(screenshot);
+    if (popupUrl) {
+      window.open(popupUrl, '_blank');
+      return;
+    }
     console.log('🖼️ [TODAY-HISTORY] Showing screenshot modal:', screenshot);
-    // TODO: Implement screenshot modal
     alert(`Screenshot from ${new Date(screenshot.captured_at).toLocaleString()}\nApp: ${screenshot.app_name}\nActivity: ${screenshot.activity_percent}%`);
   }
 
@@ -2562,6 +2586,9 @@ class UIManager {
     try {
       const overlay = document.getElementById('startupOverlay');
       if (overlay) overlay.style.display = 'none';
+    } catch (_) {}
+    try {
+      if (typeof window.hideAuthLoading === 'function') window.hideAuthLoading();
     } catch (_) {}
     
     console.log('🔐 Showing login screen');
@@ -3217,6 +3244,9 @@ class UIManager {
       try {
         const overlay = document.getElementById('startupOverlay');
         if (overlay) overlay.style.display = 'none';
+      } catch (_) {}
+      try {
+        if (typeof window.hideAuthLoading === 'function') window.hideAuthLoading();
       } catch (_) {}
       
       const loginContainer = document.getElementById('loginContainer');
@@ -4678,11 +4708,11 @@ class UIManager {
       const productivity = this._resolveScreenshotProductivityBadge(screenshot);
 
       html += `
-        <div class="tracker-screenshot-card" onclick="window.open('${screenshot.image_url}', '_blank')">
-          <img class="tracker-screenshot-img"
-               src="${screenshot.image_url}"
-               alt="Screenshot ${index + 1}"
-               onerror="this.onerror=null; this.style.display='none'; this.parentElement.querySelector('.tracker-screenshot-info').insertAdjacentHTML('afterbegin', '<div style=\\'text-align:center;padding:20px;color:#94a3b8;font-size:24px;\\'>📸</div>');">
+        <div class="tracker-screenshot-card" data-popup="${escapeHtmlAttr(screenshotPopupUrl(screenshot))}" onclick="if(this.dataset.popup)window.open(this.dataset.popup,'_blank')">
+          ${screenshotTileImgTag(screenshot, {
+            class: 'tracker-screenshot-img',
+            alt: `Screenshot ${index + 1}`,
+          })}
           <div class="tracker-screenshot-info">
             <div class="tracker-screenshot-time">${timeStr}</div>
             <div class="tracker-screenshot-meta">
@@ -4785,34 +4815,49 @@ class UIManager {
    * @param {boolean} forceRefresh
    * @param {{ silent?: boolean }} [options] — silent skips loading skeleton (auto-refresh)
    */
+  _syncMonthlyReportNavButtons() {
+    const offset = this._monthlyReportMonthOffset || 0;
+    const prevBtn = document.getElementById('monthlyReportPrevBtn');
+    const nextBtn = document.getElementById('monthlyReportNextBtn');
+    if (prevBtn) prevBtn.disabled = offset <= -24;
+    if (nextBtn) nextBtn.disabled = offset >= 0;
+  }
+
+  _applyMonthlyReportToDom(reportData) {
+    const loadingEl = document.getElementById('monthlyReportLoading');
+    const emptyEl = document.getElementById('monthlyReportEmpty');
+    const contentEl = document.getElementById('monthlyReportContent');
+    const labelEl = document.getElementById('monthlyReportLabel');
+    if (!contentEl) return;
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'none';
+    contentEl.style.display = 'block';
+    this._renderMonthlyReportSummary(reportData);
+    this._renderMonthlyDailyChart(reportData);
+    this._renderMonthlyWeeklyBreakdown(reportData);
+    this._renderMonthlyProjectBreakdown(reportData);
+    this._renderMonthlySessionList(reportData);
+    if (labelEl) labelEl.textContent = reportData.monthLabel || '';
+    this._syncMonthlyReportNavButtons();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
+
   async loadMonthlyReport(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
     // Short TTL: effective/non-effective must stay aligned with Today's cards.
     const CACHE_TTL_MS = 60 * 1000;
     const now = Date.now();
+    const offset = this._monthlyReportMonthOffset || 0;
+    this._syncMonthlyReportNavButtons();
 
     // Check cache — if valid, re-render from cached data instead of fetching.
     // We must still touch the DOM because page navigation re-creates the HTML
     // with default visibility (loading skeleton shown, content hidden).
-    if (!forceRefresh && this._monthlyReportCache && (now - this._monthlyReportCacheTime) < CACHE_TTL_MS) {
+    const cacheStore = this._monthlyReportCacheByOffset || (this._monthlyReportCacheByOffset = {});
+    const cached = cacheStore[offset];
+    if (!forceRefresh && cached?.reportData && (now - cached.time) < CACHE_TTL_MS) {
       console.log('[MONTHLY-REPORT] Using cached data — re-rendering');
-      const { reportData } = this._monthlyReportCache;
-      const loadingEl = document.getElementById('monthlyReportLoading');
-      const emptyEl = document.getElementById('monthlyReportEmpty');
-      const contentEl = document.getElementById('monthlyReportContent');
-      const labelEl = document.getElementById('monthlyReportLabel');
-      if (contentEl) {
-        if (loadingEl) loadingEl.style.display = 'none';
-        if (emptyEl) emptyEl.style.display = 'none';
-        contentEl.style.display = 'block';
-        this._renderMonthlyReportSummary(reportData);
-        this._renderMonthlyDailyChart(reportData);
-        this._renderMonthlyWeeklyBreakdown(reportData);
-        this._renderMonthlyProjectBreakdown(reportData);
-        this._renderMonthlySessionList(reportData);
-        if (labelEl) labelEl.textContent = reportData.monthLabel || '';
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-      }
+      this._applyMonthlyReportToDom(cached.reportData);
       return;
     }
 
@@ -4833,7 +4878,9 @@ class UIManager {
     }
 
     try {
-      const reportData = await this._invokeIpcWhenReady('get-monthly-report-data');
+      const reportData = await this._invokeIpcWhenReady('get-monthly-report-data', {
+        monthOffset: offset,
+      });
 
       console.log('[MONTHLY-REPORT] Data fetched:', {
         totalSeconds: reportData?.totalSeconds,
@@ -4856,39 +4903,35 @@ class UIManager {
         }
         if (contentEl) contentEl.style.display = 'none';
         if (labelEl) labelEl.textContent = 'Unavailable';
+        this._syncMonthlyReportNavButtons();
         return;
       }
 
       // Check for empty state
       if (!reportData || (reportData.totalSessions === 0 && reportData.totalSeconds === 0)) {
-        if (emptyEl) emptyEl.style.display = 'block';
+        if (emptyEl) {
+          emptyEl.style.display = 'block';
+          const emptyCopy = emptyEl.querySelector('p');
+          if (emptyCopy) {
+            emptyCopy.innerHTML = offset === 0
+              ? 'No sessions tracked this month yet.<br>Start your first session above!'
+              : `No sessions tracked in ${reportData?.monthLabel || 'this month'}.`;
+          }
+        }
         if (contentEl) contentEl.style.display = 'none';
         if (labelEl) labelEl.textContent = reportData?.monthLabel || 'No data';
+        this._syncMonthlyReportNavButtons();
         return;
       }
 
-      // Cache the data
-      this._monthlyReportCache = { reportData };
-      this._monthlyReportCacheTime = now;
-
-      // Show content
-      if (emptyEl) emptyEl.style.display = 'none';
-      if (contentEl) contentEl.style.display = 'block';
-
-      // Populate
-      this._renderMonthlyReportSummary(reportData);
-      this._renderMonthlyDailyChart(reportData);
-      this._renderMonthlyWeeklyBreakdown(reportData);
-      this._renderMonthlyProjectBreakdown(reportData);
-      this._renderMonthlySessionList(reportData);
-
-      // Month label
-      if (labelEl) labelEl.textContent = reportData.monthLabel || '';
-
-      // Re-init lucide icons for newly added elements
-      if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
+      // Cache the data (keyed by month offset so prev/next don't collide)
+      cacheStore[offset] = { reportData, time: now };
+      if (offset === 0) {
+        this._monthlyReportCache = { reportData };
+        this._monthlyReportCacheTime = now;
       }
+
+      this._applyMonthlyReportToDom(reportData);
 
     } catch (err) {
       console.error('[MONTHLY-REPORT] Error loading report:', err);
@@ -4902,6 +4945,7 @@ class UIManager {
           `;
         }
       }
+      this._syncMonthlyReportNavButtons();
     }
   }
 
@@ -5070,23 +5114,38 @@ class UIManager {
       return;
     }
 
-    // Find max seconds for scaling
-    const maxSeconds = Math.max(...daily.map(d => d.totalSeconds), 1);
+    const daySeconds = (day) => {
+      const tracked = Math.max(0, Math.floor(Number(day.totalSeconds) || 0));
+      const effective = Math.max(
+        0,
+        Math.floor(
+          Number(day.effectiveSeconds != null ? day.effectiveSeconds : tracked) || 0,
+        ),
+      );
+      return { tracked, effective };
+    };
+
+    // Scale bars to effective (adjusted) time so the chart matches the Effective KPI.
+    const maxSeconds = Math.max(...daily.map((d) => daySeconds(d).effective), 1);
     // Company work calendar — matches daily totals and session dates
     const todayStr = this._localDateStr();
 
     let html = '';
     daily.forEach(day => {
-      const heightPct = Math.max(2, (day.totalSeconds / maxSeconds) * 100);
+      const { tracked, effective } = daySeconds(day);
+      const heightPct = Math.max(2, (effective / maxSeconds) * 100);
       const isToday = day.date === todayStr;
-      const isZero = day.totalSeconds === 0;
+      const isZero = effective === 0;
       const dayNum = parseInt(day.date.split('-')[2], 10);
-      const tooltip = `${day.dayName} ${dayNum}: ${this.formatReportDuration(day.totalSeconds)}`;
+      const effectiveLabel = this.formatReportDuration(effective);
+      const trackedLabel = this.formatReportDuration(tracked);
+      const tooltip = tracked !== effective
+        ? `${day.dayName} ${dayNum}: ${effectiveLabel} effective · ${trackedLabel} tracked`
+        : `${day.dayName} ${dayNum}: ${effectiveLabel} effective`;
       html += `
-        <div class="mr-day-bar-wrapper">
+        <div class="mr-day-bar-wrapper" data-tooltip="${this._escapeHtml(tooltip)}">
           <div class="mr-day-bar ${isToday ? 'today' : ''} ${isZero ? 'zero' : ''}"
-               style="height: ${isZero ? '2px' : heightPct + '%'};"
-               data-tooltip="${tooltip}"></div>
+               style="height: ${isZero ? '2px' : heightPct + '%'};"></div>
           <div class="mr-day-label ${isToday ? 'today' : ''}">${dayNum}</div>
         </div>
       `;

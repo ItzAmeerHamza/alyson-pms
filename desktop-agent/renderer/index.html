@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alyson Time Doctor</title>
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('alyson_theme');
+                if (theme === 'black') theme = 'dark';
+                if (theme !== 'dark' && theme !== 'light') theme = 'light';
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
     <style>
         * {
@@ -12,10 +24,58 @@
             box-sizing: border-box;
         }
 
+        :root {
+            color-scheme: light;
+            --bg-app: #f1f5f9;
+            --bg-app-wash: rgba(56, 189, 248, 0.05);
+            --bg-surface: #ffffff;
+            --bg-surface-2: #f8fafc;
+            --bg-sidebar: #ffffff;
+            --bg-sidebar-footer: #f8fafc;
+            --bg-header: rgba(255, 255, 255, 0.92);
+            --bg-input: #ffffff;
+            --bg-hover: #f1f5f9;
+            --bg-active: #e0f2fe;
+            --text: #0f172a;
+            --text-2: #334155;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --border-strong: #cbd5e1;
+            --accent: #0284c7;
+            --accent-text: #0369a1;
+            --accent-soft: #e0f2fe;
+            --accent-border: #bae6fd;
+            --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+
+        html[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-app: #0f172a;
+            --bg-app-wash: rgba(56, 189, 248, 0.06);
+            --bg-surface: #1e293b;
+            --bg-surface-2: #162032;
+            --bg-sidebar: #111827;
+            --bg-sidebar-footer: #0f172a;
+            --bg-header: #111827;
+            --bg-input: #0f172a;
+            --bg-hover: #243044;
+            --bg-active: rgba(56, 189, 248, 0.16);
+            --text: #f8fafc;
+            --text-2: #e2e8f0;
+            --text-muted: #cbd5e1;
+            --border: #334155;
+            --border-strong: #475569;
+            --accent: #38bdf8;
+            --accent-text: #7dd3fc;
+            --accent-soft: rgba(56, 189, 248, 0.16);
+            --accent-border: rgba(56, 189, 248, 0.38);
+            --shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.22);
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f6f7fb;
-            color: #1e293b;
+            background: var(--bg-app);
+            color: var(--text);
             overflow: hidden;
             height: 100vh;
         }
@@ -27,7 +87,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: #f6f7fb;
+            background: var(--bg-app);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -48,11 +108,11 @@
         }
 
         .login-card {
-            background: white;
+            background: var(--bg-surface);
             padding: 48px 40px;
             border-radius: 16px;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.10);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
             width: 100%;
             text-align: center;
         }
@@ -282,12 +342,12 @@
 
         .password-toggle:focus {
             outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.18);
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
         }
 
         .form-input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #0369a1;
             background: white;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
@@ -295,7 +355,7 @@
         .login-btn {
             width: 100%;
             padding: 16px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: #0284c7;
             color: white;
             border: none;
             border-radius: 12px;
@@ -308,11 +368,11 @@
 
         .login-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 10px 30px rgba(2, 132, 199, 0.25);
         }
 
         .login-btn:disabled {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: #0284c7;
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
@@ -388,29 +448,45 @@
         /* === HEADER === */
         .app-header {
             grid-area: header;
-            background: rgba(255, 255, 255, 0.86);
+            background: var(--bg-header);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 28px;
-            min-height: 72px;
+            padding: 0 20px 0 24px;
+            min-height: 64px;
             box-shadow: none;
+            overflow: visible;
         }
 
         .page-title {
             font-size: 22px;
             font-weight: 750;
-            color: #0f172a;
+            color: var(--text);
             letter-spacing: -0.03em;
         }
 
         .header-actions {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .app-detection-heartbeat {
+            display: none;
+            font-size: 12px;
+            color: #64748b;
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .app-detection-heartbeat:not(:empty) {
+            display: block;
         }
 
         .tracking-status {
@@ -462,26 +538,23 @@
 
         /* === SIDEBAR === */
         .sidebar {
-            --sb-bg: #0f172a;
-            --sb-bg-elevated: rgba(255, 255, 255, 0.04);
-            --sb-border: rgba(148, 163, 184, 0.14);
-            --sb-text: #e2e8f0;
-            --sb-muted: #94a3b8;
-            --sb-accent: #7dd3fc;
-            --sb-accent-soft: rgba(56, 189, 248, 0.14);
-            --sb-active: rgba(56, 189, 248, 0.16);
+            --sb-bg: var(--bg-sidebar);
+            --sb-bg-elevated: var(--bg-hover);
+            --sb-border: var(--border);
+            --sb-text: var(--text);
+            --sb-muted: var(--text-muted);
+            --sb-accent: var(--accent);
+            --sb-accent-soft: var(--accent-soft);
+            --sb-active: var(--bg-active);
 
             grid-area: sidebar;
-            background:
-                radial-gradient(120% 80% at 0% 0%, rgba(56, 189, 248, 0.12) 0%, transparent 55%),
-                linear-gradient(180deg, #152033 0%, #0f172a 48%, #0b1220 100%);
+            background: var(--bg-sidebar);
             color: var(--sb-text);
             display: flex;
             flex-direction: column;
             max-width: 212px !important;
             width: 212px !important;
             border-right: 1px solid var(--sb-border);
-            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
         }
 
         .sidebar-header {
@@ -494,7 +567,7 @@
             font-weight: 700;
             letter-spacing: -0.02em;
             line-height: 1.25;
-            color: #f8fafc;
+            color: var(--text);
             margin-bottom: 6px;
         }
 
@@ -532,7 +605,7 @@
             gap: 10px;
             margin: 2px 0;
             padding: 9px 12px;
-            color: #cbd5e1;
+            color: var(--text-2);
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
@@ -544,15 +617,15 @@
 
         .nav-item:hover {
             background: var(--sb-bg-elevated);
-            color: #f1f5f9;
-            border-color: rgba(148, 163, 184, 0.12);
+            color: var(--text);
+            border-color: var(--border);
         }
 
         .nav-item.active {
             background: var(--sb-active);
-            color: #f0f9ff;
-            border-color: rgba(56, 189, 248, 0.28);
-            box-shadow: inset 3px 0 0 0 #38bdf8;
+            color: var(--accent-text);
+            border-color: var(--accent-border);
+            box-shadow: inset 3px 0 0 0 var(--accent);
             font-weight: 600;
         }
 
@@ -561,11 +634,11 @@
         }
 
         .nav-item-external {
-            color: #94a3b8;
+            color: var(--text-muted);
         }
 
         .nav-item-external:hover {
-            color: #e0f2fe;
+            color: var(--text);
         }
 
         .nav-badge {
@@ -592,7 +665,7 @@
         .sidebar-footer {
             padding: 12px 12px 14px;
             border-top: 1px solid var(--sb-border);
-            background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
+            background: var(--bg-sidebar-footer);
         }
 
         .app-version {
@@ -602,7 +675,7 @@
             margin-top: 12px;
             padding: 4px 8px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.04);
+            background: var(--bg-surface-2);
             border: 1px solid var(--sb-border);
             font-size: 10px;
             color: var(--sb-muted);
@@ -617,7 +690,7 @@
         }
 
         .app-version .version-number {
-            color: #bae6fd;
+            color: #0369a1;
             font-weight: 600;
         }
 
@@ -631,6 +704,57 @@
             display: flex;
             align-items: center;
             margin-bottom: 16px;
+        }
+
+        .signed-in-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-surface);
+            min-width: 0;
+        }
+
+        .signed-in-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            flex-shrink: 0;
+        }
+
+        .signed-in-meta {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .signed-in-name {
+            font-size: 12.5px;
+            font-weight: 650;
+            color: var(--text);
+            line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .signed-in-email {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* URL Activity Page Styles */
@@ -1573,6 +1697,43 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
+        .screenshot-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .screenshot-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .screenshot-thumb-frame {
+            width: 100%;
+            aspect-ratio: 32 / 10;
+            background: var(--bg-surface-2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screenshot-card-img,
+        .screenshot-thumb-frame img {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+            display: block;
+            border: none !important;
+            border-radius: 0 !important;
+            background: var(--bg-surface-2) !important;
+        }
+
         .screenshot-item .time {
             font-size: 13px;
             color: #64748b;
@@ -1810,21 +1971,21 @@
 
         .copy-logs-btn {
             margin-bottom: 8px;
-            background: rgba(56, 189, 248, 0.08);
-            color: #bae6fd;
-            border-color: rgba(56, 189, 248, 0.22);
+            background: var(--bg-surface);
+            color: var(--accent-text);
+            border-color: var(--accent-border);
         }
 
         .copy-logs-btn:hover {
-            background: rgba(56, 189, 248, 0.16);
-            color: #f0f9ff;
-            border-color: rgba(56, 189, 248, 0.35);
+            background: var(--accent-soft);
+            color: var(--accent-text);
+            border-color: var(--accent);
         }
 
         .copy-logs-btn.copied {
-            background: rgba(34, 197, 94, 0.14);
-            border-color: rgba(34, 197, 94, 0.35);
-            color: #bbf7d0;
+            background: #ecfdf5;
+            border-color: #86efac;
+            color: #166534;
         }
 
         .copy-logs-btn .nav-icon,
@@ -1841,8 +2002,8 @@
             margin-bottom: 12px;
             padding: 10px;
             border-radius: 12px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(148, 163, 184, 0.12);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
         }
 
         .platform-privacy-shortcuts[hidden] {
@@ -1871,9 +2032,9 @@
         .platform-privacy-btn {
             width: 100%;
             padding: 7px 10px;
-            background: rgba(15, 23, 42, 0.45);
-            color: #cbd5e1;
-            border: 1px solid rgba(148, 163, 184, 0.14);
+            background: var(--bg-surface);
+            color: var(--text-2);
+            border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 11.5px;
             font-weight: 500;
@@ -1883,21 +2044,21 @@
         }
 
         .platform-privacy-btn:hover {
-            background: rgba(56, 189, 248, 0.12);
-            border-color: rgba(56, 189, 248, 0.28);
-            color: #e0f2fe;
+            background: var(--accent-soft);
+            border-color: var(--accent-border);
+            color: var(--accent-text);
         }
 
         .logout-btn {
-            background: rgba(255, 255, 255, 0.04);
-            color: #94a3b8;
-            border-color: rgba(148, 163, 184, 0.14);
+            background: var(--bg-surface);
+            color: var(--text-muted);
+            border-color: var(--border);
         }
 
         .logout-btn:hover {
-            background: rgba(248, 113, 113, 0.12);
-            border-color: rgba(248, 113, 113, 0.28);
-            color: #fecaca;
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
         }
 
         /* === MAIN CONTENT === */
@@ -1906,9 +2067,8 @@
             overflow-y: auto;
             padding: 28px 32px 40px;
             background:
-                radial-gradient(1200px 420px at 100% -10%, rgba(102, 126, 234, 0.08) 0%, transparent 55%),
-                radial-gradient(900px 360px at 0% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
-                #f1f5f9;
+                radial-gradient(900px 360px at 0% 0%, var(--bg-app-wash) 0%, transparent 50%),
+                var(--bg-app);
         }
 
         /* === PAGE SECTIONS === */
@@ -1930,11 +2090,11 @@
         }
 
         .dashboard-card {
-            background: #ffffff;
+            background: var(--bg-surface);
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
         }
 
         .card-header {
@@ -1947,7 +2107,7 @@
         .card-icon {
             width: 48px;
             height: 48px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: #e0f2fe;
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -1974,7 +2134,7 @@
         .metric-value {
             font-size: 36px;
             font-weight: 800;
-            color: #4f46e5;
+            color: var(--text);
             margin-bottom: 8px;
             letter-spacing: -0.02em;
         }
@@ -1990,9 +2150,8 @@
             margin: 8px 0 28px;
             padding: 28px 20px;
             border-radius: 16px;
-            background:
-                linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
         }
 
         #timetrackerPage .tracker-clock-caption {
@@ -2012,7 +2171,7 @@
             font-variant-numeric: tabular-nums;
             font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
             letter-spacing: 0.04em;
-            color: #312e81;
+            color: var(--text);
             margin-bottom: 10px;
         }
 
@@ -2033,8 +2192,8 @@
         #timetrackerPage .tracker-time-stat {
             padding: 10px 8px;
             border-radius: 12px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
         }
 
         #timetrackerPage .tracker-time-stat-value {
@@ -2042,7 +2201,7 @@
             font-weight: 700;
             font-variant-numeric: tabular-nums;
             font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
-            color: #0f172a;
+            color: var(--text);
             line-height: 1.2;
         }
 
@@ -2055,15 +2214,25 @@
         }
 
         #timetrackerPage .tracker-time-stat--tracked .tracker-time-stat-value {
-            color: #1e293b;
+            color: var(--text);
+        }
+
+        #timetrackerPage .tracker-time-stat--effective {
+            background: var(--accent-soft);
+            border-color: var(--accent-border);
+        }
+
+        #timetrackerPage .tracker-time-stat--non-effective {
+            background: var(--bg-surface-2);
+            border-color: var(--border);
         }
 
         #timetrackerPage .tracker-time-stat--non-effective .tracker-time-stat-value {
-            color: #b45309;
+            color: #64748b;
         }
 
         #timetrackerPage .tracker-time-stat--effective .tracker-time-stat-value {
-            color: #312e81;
+            color: #0369a1;
         }
 
         #timetrackerPage #trackerTodayHint {
@@ -2088,18 +2257,18 @@
         }
 
         #timetrackerPage .form-input {
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
+            background: var(--bg-input);
+            border: 1px solid var(--border-strong);
             border-radius: 12px;
             padding: 14px 16px;
             font-size: 15px;
-            color: #0f172a;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            color: var(--text);
+            box-shadow: var(--shadow);
         }
 
         #timetrackerPage .form-input:focus {
-            border-color: #818cf8;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
         }
 
         /* Smooth custom project dropdown */
@@ -2128,12 +2297,12 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
+            background: var(--bg-input);
+            border: 1px solid var(--border-strong);
             border-radius: 12px;
             padding: 14px 16px;
             font-size: 15px;
-            color: #0f172a;
+            color: var(--text);
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
             cursor: pointer;
             text-align: left;
@@ -2141,15 +2310,15 @@
         }
 
         .project-dd-trigger:hover {
-            border-color: #94a3b8;
-            background: #fafbfc;
+            border-color: var(--border-strong);
+            background: var(--bg-hover);
         }
 
         .project-dd.is-open .project-dd-trigger,
         .project-dd-trigger:focus {
             outline: none;
-            border-color: #818cf8;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
         }
 
         .project-dd-trigger.is-disabled {
@@ -2167,20 +2336,20 @@
         }
 
         .project-dd-trigger-label.is-placeholder {
-            color: #64748b;
+            color: var(--text-muted);
             font-weight: 400;
         }
 
         .project-dd-chevron {
             display: inline-flex;
-            color: #64748b;
+            color: var(--text-muted);
             transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
             flex-shrink: 0;
         }
 
         .project-dd.is-open .project-dd-chevron {
             transform: rotate(180deg);
-            color: #4f46e5;
+            color: var(--accent);
         }
 
         .project-dd-menu {
@@ -2189,8 +2358,8 @@
             right: 0;
             top: calc(100% + 6px);
             z-index: 40;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 14px;
             box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
             overflow: hidden;
@@ -2209,25 +2378,25 @@
 
         .project-dd-search-wrap {
             padding: 10px 10px 6px;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid var(--border);
         }
 
         .project-dd-search {
             width: 100%;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
             border-radius: 10px;
             padding: 10px 12px;
             font-size: 14px;
-            color: #0f172a;
-            background: #f8fafc;
+            color: var(--text);
+            background: var(--bg-surface-2);
             outline: none;
             transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
         }
 
         .project-dd-search:focus {
-            border-color: #818cf8;
-            background: #ffffff;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+            border-color: var(--accent);
+            background: var(--bg-input);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
         }
 
         .project-dd-options {
@@ -2247,7 +2416,7 @@
             padding: 11px 12px;
             font-size: 14px;
             font-weight: 500;
-            color: #0f172a;
+            color: var(--text);
             cursor: pointer;
             transition: background 120ms ease, color 120ms ease, transform 80ms ease;
         }
@@ -2255,39 +2424,39 @@
         .project-dd-option:hover,
         .project-dd-option:focus {
             outline: none;
-            background: #eef2ff;
-            color: #312e81;
+            background: var(--bg-hover);
+            color: var(--text);
         }
 
         .project-dd-option.is-selected {
-            background: #e0e7ff;
-            color: #312e81;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
 
         .project-dd-option.is-selected::after {
             content: '✓';
             float: right;
-            color: #4f46e5;
+            color: var(--accent);
             font-weight: 700;
         }
 
         .project-dd-empty {
             padding: 16px 12px;
             text-align: center;
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 13px;
         }
 
         #timetrackerPage #selectedProjectInfo {
-            background: #eef2ff !important;
-            border: 1px solid #c7d2fe !important;
+            background: var(--accent-soft) !important;
+            border: 1px solid var(--accent-border) !important;
             border-radius: 12px !important;
             padding: 12px 14px !important;
             transition: opacity 180ms ease, transform 180ms ease;
         }
 
         #timetrackerPage #selectedProjectInfo > div {
-            color: #3730a3 !important;
+            color: var(--accent-text) !important;
         }
 
         .metric-change {
@@ -2307,42 +2476,60 @@
             color: #991b1b;
         }
 
-        /* === USER WELCOME SECTION === */
         .user-welcome-section {
-            background:
-                linear-gradient(120deg, rgba(255, 255, 255, 0.1) 0%, transparent 40%),
-                linear-gradient(135deg, #4f46e5 0%, #6366f1 42%, #0ea5e9 100%);
-            border-radius: 18px;
-            padding: 22px 26px;
-            margin-bottom: 22px;
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.14);
-            box-shadow: 0 10px 28px rgba(79, 70, 229, 0.18);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow);
         }
 
         .welcome-content {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 14px;
+            width: 100%;
         }
 
         .welcome-text {
             flex: 1;
+            min-width: 0;
         }
 
         .welcome-title {
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 700;
-            margin-bottom: 0;
-            color: white;
+            margin-bottom: 2px;
+            color: var(--text);
             letter-spacing: -0.02em;
             line-height: 1.25;
         }
 
         .welcome-subtitle {
-            font-size: 15px;
-            color: rgba(255, 255, 255, 0.88);
+            font-size: 13px;
+            color: var(--text-muted);
             font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .welcome-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            flex-shrink: 0;
         }
 
         .user-avatar {
@@ -2352,34 +2539,34 @@
         .avatar-circle {
             width: 80px;
             height: 80px;
-            background: rgba(255, 255, 255, 0.2);
+            background: #e0f2fe;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 3px solid rgba(255, 255, 255, 0.3);
+            border: 3px solid #bae6fd;
         }
 
         .avatar-circle span {
             font-size: 32px;
             font-weight: 800;
-            color: white;
+            color: #0369a1;
         }
 
         /* === ANALYTICS CARDS === */
         .analytics-card {
-            background: #ffffff;
+            background: var(--bg-surface);
             border-radius: 16px;
             padding: 24px;
             margin-bottom: 22px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
         }
 
         .analytics-title {
             font-size: 18px;
             font-weight: 700;
-            color: #1e293b;
+            color: var(--text);
             margin-bottom: 20px;
         }
 
@@ -2568,28 +2755,28 @@
 
         /* === CONTROL BUTTONS === */
         .control-section {
-            background: #ffffff;
+            background: var(--bg-surface);
             border-radius: 16px;
             padding: 28px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
             margin-bottom: 22px;
         }
 
         .control-header {
             display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 22px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #f1f5f9;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
         }
 
         .control-title {
             font-size: 18px;
             font-weight: 700;
-            color: #0f172a;
+            color: var(--text);
             margin-bottom: 0;
             letter-spacing: -0.02em;
         }
@@ -2633,13 +2820,18 @@
         }
 
         .btn-secondary {
-            background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
-            color: white;
+            background: var(--bg-surface);
+            color: var(--text-2);
+            border-color: var(--border-strong);
+            box-shadow: none;
         }
 
         .btn-secondary:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 10px 22px rgba(245, 158, 11, 0.28);
+            background: var(--bg-hover);
+            color: var(--text);
+            border-color: var(--border-strong);
+            transform: none;
+            box-shadow: none;
         }
 
         .btn-danger {
@@ -2677,6 +2869,36 @@
             color: #94a3b8 !important;
             border-color: #cbd5e1 !important;
             background: #f8fafc !important;
+        }
+
+        /* App Updates — navy / sky to match the sidebar, not orange / lime */
+        .updates-page .btn-primary {
+            background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%);
+            color: #0b1220;
+            box-shadow: 0 6px 16px rgba(14, 165, 233, 0.22);
+        }
+
+        .updates-page .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 10px 22px rgba(14, 165, 233, 0.3);
+        }
+
+        .updates-page .btn-secondary {
+            background: #ffffff;
+            color: #334155;
+            border-color: #cbd5e1;
+            box-shadow: none;
+        }
+
+        .updates-page .btn-secondary:hover:not(:disabled) {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        .updates-page .updates-version-box {
+            background:
+                radial-gradient(120% 80% at 0% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 55%),
+                #f8fafc;
+            border-color: rgba(148, 163, 184, 0.28);
         }
 
         /* === NOTIFICATIONS === */
@@ -2811,6 +3033,316 @@
             .report-card-content {
                 padding: 18px;
             }
+        }
+
+        /* === AUTH / JWT SIGN-IN LOADER === */
+        .auth-loading-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        .auth-loading-overlay.is-visible {
+            display: flex;
+        }
+
+        .auth-loading-card {
+            width: 280px;
+            padding: 28px 24px 24px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .auth-loading-spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 16px;
+            border: 3px solid #e0f2fe;
+            border-top-color: #0284c7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        .auth-loading-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+            letter-spacing: -0.02em;
+            margin-bottom: 6px;
+        }
+
+        .auth-loading-status {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        .theme-toggle {
+            display: inline-flex;
+            align-items: stretch;
+            padding: 3px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle-btn {
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+            padding: 5px 10px;
+            border-radius: 999px;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+
+        .theme-toggle-btn:hover {
+            color: var(--text);
+            background: var(--bg-hover);
+        }
+
+        .theme-toggle-btn.is-active {
+            background: var(--bg-surface);
+            color: var(--text);
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+        }
+
+        html[data-theme="dark"] .theme-toggle-btn.is-active,
+        html[data-theme="dark"] .theme-toggle-btn.is-active {
+            background: var(--bg-active);
+            color: var(--accent-text);
+            box-shadow: none;
+        }
+
+        .sidebar .theme-toggle {
+            width: 100%;
+            margin-bottom: 10px;
+            justify-content: space-between;
+        }
+
+        .sidebar .theme-toggle-btn {
+            flex: 1;
+        }
+
+        .nav-icon {
+            color: var(--text-2);
+            opacity: 1;
+        }
+
+        .nav-item.active .nav-icon {
+            color: var(--accent);
+        }
+
+        #timetrackerPage .control-header {
+            display: none;
+        }
+
+        #timetrackerPage #selectedProjectInfo {
+            display: none !important;
+        }
+
+        #timetrackerPage .control-section {
+            padding: 24px;
+        }
+
+        .faq-list {
+            max-width: 720px;
+        }
+
+        .faq-list details {
+            margin-bottom: 8px;
+            padding: 14px 16px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .faq-list summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text);
+            list-style: none;
+        }
+
+        .faq-list summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .faq-list summary::before {
+            content: "▸";
+            display: inline-block;
+            width: 1em;
+            color: var(--accent);
+            margin-right: 6px;
+        }
+
+        .faq-list details[open] summary::before {
+            content: "▾";
+        }
+
+        .faq-list details > :not(summary) {
+            margin-top: 12px;
+            color: var(--text-2);
+            line-height: 1.55;
+            font-size: 14px;
+        }
+
+        .updates-page .btn {
+            flex: 0 0 auto;
+            min-height: 40px;
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        .updates-page .updates-version-box,
+        .updates-page #updatesStatusRow {
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .monthly-report-refresh-btn {
+            background: var(--bg-surface) !important;
+            border: 1px solid var(--border-strong) !important;
+            color: var(--text-2) !important;
+            border-radius: 10px !important;
+        }
+
+        html[data-theme="dark"] .faq-list details,
+        html[data-theme="dark"] .faq-list details {
+            background: var(--bg-surface-2);
+            border-color: var(--border);
+        }
+
+        .screenshot-filters {
+            margin-bottom: 8px;
+        }
+
+        html[data-theme="dark"] .form-input,
+        html[data-theme="dark"] .form-input {
+            background: var(--bg-input);
+            color: var(--text);
+            border-color: var(--border-strong);
+        }
+
+        html[data-theme="dark"] .form-label,
+        html[data-theme="dark"] .form-label,
+        html[data-theme="dark"] .login-logo,
+        html[data-theme="dark"] .login-logo,
+        html[data-theme="dark"] .login-subtitle,
+        html[data-theme="dark"] .login-subtitle,
+        html[data-theme="dark"] .monthly-report-title,
+        html[data-theme="dark"] .monthly-report-title,
+        html[data-theme="dark"] .mr-stat-value,
+        html[data-theme="dark"] .mr-stat-value,
+        html[data-theme="dark"] .mr-card-title,
+        html[data-theme="dark"] .mr-card-title,
+        html[data-theme="dark"] .auth-loading-title,
+        html[data-theme="dark"] .auth-loading-title {
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .mr-card,
+        html[data-theme="dark"] .mr-card,
+        html[data-theme="dark"] .mr-stat-card,
+        html[data-theme="dark"] .mr-stat-card {
+            background: var(--bg-surface-2);
+            border-color: var(--border);
+        }
+
+        html[data-theme="dark"] .monthly-report-refresh-btn,
+        html[data-theme="dark"] .monthly-report-refresh-btn {
+            background: var(--bg-surface-2);
+            border-color: var(--border);
+            color: var(--text-2);
+        }
+
+        html[data-theme="dark"] .monthly-report-refresh-btn:hover,
+        html[data-theme="dark"] .monthly-report-refresh-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .btn-primary:disabled,
+        html[data-theme="dark"] .btn-primary:disabled {
+            background: var(--bg-surface-2) !important;
+            color: var(--text-muted) !important;
+            border-color: var(--border-strong) !important;
+        }
+
+        html[data-theme="dark"] .notification,
+        html[data-theme="dark"] .notification {
+            background: var(--bg-surface);
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .project-dd-trigger,
+        html[data-theme="dark"] .project-dd-trigger,
+        html[data-theme="dark"] .project-dd-menu,
+        html[data-theme="dark"] .project-dd-menu {
+            background: var(--bg-input);
+            color: var(--text);
+            border-color: var(--border-strong);
+        }
+
+        html[data-theme="dark"] details summary,
+        html[data-theme="dark"] details summary {
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] #startupOverlay,
+        html[data-theme="dark"] #startupOverlay {
+            background: var(--bg-app) !important;
+        }
+
+        html[data-theme="dark"] #startupOverlay h1,
+        html[data-theme="dark"] #startupOverlay h1 {
+            color: var(--text) !important;
+        }
+
+        html[data-theme="dark"] #startupStatus,
+        html[data-theme="dark"] #startupStatus {
+            color: var(--text-muted) !important;
+        }
+
+        html[data-theme="dark"] .login-os-access,
+        html[data-theme="dark"] .login-os-access,
+        html[data-theme="dark"] .login-os-access--outside,
+        html[data-theme="dark"] .login-os-access--outside {
+            background: var(--bg-surface);
+            border-color: var(--border);
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .login-os-access-toggle,
+        html[data-theme="dark"] .login-os-access-toggle {
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .project-dd-search,
+        html[data-theme="dark"] .project-dd-search {
+            background: var(--bg-input);
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        html[data-theme="dark"] .project-dd-search-wrap,
+        html[data-theme="dark"] .project-dd-search-wrap {
+            border-bottom-color: var(--border);
         }
 
         /* === HIDDEN UTILITY === */
@@ -3165,7 +3697,7 @@
 
         .project-dropdown:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #0369a1;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -3202,13 +3734,13 @@
         }
 
         .onboarding-btn.primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
+            background: #0284c7;
             color: white;
         }
 
         .onboarding-btn.primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 10px 30px rgba(2, 132, 199, 0.25);
         }
 
         .onboarding-btn.success {
@@ -3254,7 +3786,7 @@
         }
 
         .dot.active {
-            background: #667eea;
+            background: #0ea5e9;
             transform: scale(1.2);
         }
 
@@ -3731,13 +4263,6 @@
             border: 1px solid #e2e8f0;
         }
 
-        .control-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-        }
-
         .stats-grid.dimmed {
             opacity: 0.6;
         }
@@ -3995,7 +4520,7 @@
         .update-modal-icon {
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0ea5e9;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -4023,7 +4548,7 @@
         }
 
         .update-modal-version strong {
-            color: #667eea;
+            color: #0369a1;
         }
 
         .update-modal-message {
@@ -4053,7 +4578,7 @@
 
         .update-progress-bar {
             height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0ea5e9;
             border-radius: 6px;
             transition: width 0.3s ease;
             width: 0%;
@@ -4067,7 +4592,7 @@
         .update-btn {
             width: 100%;
             padding: 18px 32px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #0284c7;
             color: white;
             border: none;
             border-radius: 14px;
@@ -4175,6 +4700,14 @@
             ">Starting...</p>
         </div>
     </div>
+
+    <div id="authLoadingOverlay" class="auth-loading-overlay" aria-hidden="true" role="status" aria-live="polite">
+        <div class="auth-loading-card">
+            <div class="auth-loading-spinner" aria-hidden="true"></div>
+            <div class="auth-loading-title">Signing you in</div>
+            <p id="authLoadingStatus" class="auth-loading-status">Checking your session…</p>
+        </div>
+    </div>
     <style>
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -4186,11 +4719,11 @@
            ============================================ */
         .monthly-report-section {
             margin-top: 0;
-            background: #ffffff;
+            background: var(--bg-surface);
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
-            border: 1px solid #e2e8f0;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
         }
 
         .monthly-report-header {
@@ -4199,19 +4732,34 @@
             justify-content: space-between;
             margin-bottom: 20px;
             padding-bottom: 16px;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid var(--border);
         }
 
         .monthly-report-title {
             font-size: 18px;
             font-weight: 700;
-            color: #1e293b;
+            color: var(--text);
         }
 
         .monthly-report-subtitle {
             font-size: 13px;
-            color: #64748b;
+            color: var(--text-muted);
             margin-top: 2px;
+        }
+
+        .monthly-report-month-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .monthly-report-month-nav .monthly-report-subtitle {
+            margin-top: 0;
+            min-width: 8.5em;
+            text-align: center;
+            font-weight: 600;
+            color: var(--text-2);
         }
 
         .monthly-report-refresh-btn {
@@ -4289,6 +4837,72 @@
             align-items: center;
             justify-content: center;
             margin: 0 auto 10px;
+            color: #0369a1;
+            background: #dbeafe;
+        }
+
+        .mr-stat-icon svg,
+        .mr-stat-icon i {
+            width: 20px !important;
+            height: 20px !important;
+            color: inherit !important;
+            stroke: currentColor !important;
+            fill: none !important;
+            display: block;
+        }
+
+        .mr-stat-icon--total { background: #dbeafe; color: #1d4ed8; }
+        .mr-stat-icon--non { background: #e2e8f0; color: #334155; }
+        .mr-stat-icon--effective { background: #d1fae5; color: #047857; }
+        .mr-stat-icon--avg { background: #e0f2fe; color: #0369a1; }
+
+        html[data-theme="dark"] .mr-stat-icon--total,
+        html[data-theme="dark"] .mr-stat-icon--total {
+            background: rgba(56, 189, 248, 0.18);
+            color: #7dd3fc;
+        }
+
+        html[data-theme="dark"] .mr-stat-icon--non,
+        html[data-theme="dark"] .mr-stat-icon--non {
+            background: rgba(148, 163, 184, 0.18);
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .mr-stat-icon--effective,
+        html[data-theme="dark"] .mr-stat-icon--effective {
+            background: rgba(16, 185, 129, 0.16);
+            color: #6ee7b7;
+        }
+
+        html[data-theme="dark"] .mr-stat-icon--avg,
+        html[data-theme="dark"] .mr-stat-icon--avg {
+            background: rgba(14, 165, 233, 0.16);
+            color: #7dd3fc;
+        }
+
+        .mr-card-title svg,
+        .mr-card-title i,
+        .monthly-report-refresh-btn svg,
+        .monthly-report-refresh-btn i {
+            color: inherit;
+            stroke: currentColor;
+        }
+
+        .mr-card-title {
+            color: var(--text-2);
+        }
+
+        .mr-card-title svg,
+        .mr-card-title i {
+            color: #0369a1;
+            stroke: currentColor;
+        }
+
+        html[data-theme="dark"] .mr-card-title svg,
+        html[data-theme="dark"] .mr-card-title i,
+        html[data-theme="dark"] .mr-card-title svg,
+        html[data-theme="dark"] .mr-card-title i {
+            color: #7dd3fc;
         }
 
         .mr-stat-value {
@@ -4334,8 +4948,9 @@
             display: flex;
             align-items: flex-end;
             gap: 2px;
-            height: 100px;
-            padding-top: 8px;
+            height: 128px;
+            padding-top: 28px;
+            overflow: visible;
         }
 
         .mr-day-bar-wrapper {
@@ -4344,13 +4959,20 @@
             flex-direction: column;
             align-items: center;
             height: 100%;
+            position: relative;
+            overflow: visible;
+            z-index: 1;
+        }
+
+        .mr-day-bar-wrapper:hover {
+            z-index: 30;
         }
 
         .mr-day-bar {
             width: 100%;
             min-height: 2px;
             border-radius: 3px 3px 0 0;
-            background: linear-gradient(180deg, #667eea, #764ba2);
+            background: #0ea5e9;
             transition: height 0.4s ease;
             cursor: pointer;
             position: relative;
@@ -4362,7 +4984,7 @@
         }
 
         .mr-day-bar.today {
-            background: linear-gradient(180deg, #f59e0b, #ef4444);
+            background: #0284c7;
         }
 
         .mr-day-bar.zero {
@@ -4378,25 +5000,55 @@
         }
 
         .mr-day-label.today {
-            color: #f59e0b;
+            color: #0369a1;
             font-weight: 600;
         }
 
-        /* Tooltip for bar chart */
-        .mr-day-bar[data-tooltip]:hover::after {
+        /* Tooltip sits above the column so taller neighbor bars cannot cover it */
+        .mr-day-bar-wrapper[data-tooltip]:hover::after {
             content: attr(data-tooltip);
             position: absolute;
-            bottom: calc(100% + 6px);
+            top: 0;
             left: 50%;
-            transform: translateX(-50%);
-            background: #1e293b;
-            color: white;
+            transform: translate(-50%, -4px);
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #475569;
             font-size: 11px;
-            padding: 4px 8px;
+            font-weight: 600;
+            line-height: 1.3;
+            padding: 5px 8px;
             border-radius: 6px;
             white-space: nowrap;
-            z-index: 10;
+            z-index: 40;
             pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+        }
+
+        .mr-day-bar-wrapper:first-child[data-tooltip]:hover::after,
+        .mr-day-bar-wrapper:nth-child(2)[data-tooltip]:hover::after {
+            left: 0;
+            transform: translate(0, -4px);
+        }
+
+        .mr-day-bar-wrapper:nth-last-child(-n+2)[data-tooltip]:hover::after {
+            left: auto;
+            right: 0;
+            transform: translate(0, -4px);
+        }
+
+        html[data-theme="dark"] .mr-day-bar-wrapper[data-tooltip]:hover::after {
+            background: #334155;
+            border-color: #64748b;
+            color: #f8fafc;
+        }
+
+        html[data-theme="dark"] .mr-day-bar.zero {
+            background: #475569;
+        }
+
+        html[data-theme="dark"] .mr-day-label.today {
+            color: #7dd3fc;
         }
 
         /* Weekly Breakdown */
@@ -4431,7 +5083,7 @@
         }
 
         .mr-week-row.is-current .mr-week-label-title {
-            color: #667eea;
+            color: #0369a1;
         }
 
         .mr-card-subtitle {
@@ -4453,7 +5105,7 @@
         .mr-week-bar-fill {
             height: 100%;
             border-radius: 10px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
+            background: #0ea5e9;
             transition: width 0.6s ease;
             min-width: 0;
         }
@@ -4517,11 +5169,11 @@
             transition: width 0.6s ease;
         }
 
-        .mr-project-bar-fill.color-0 { background: linear-gradient(90deg, #667eea, #764ba2); }
-        .mr-project-bar-fill.color-1 { background: linear-gradient(90deg, #f093fb, #f5576c); }
-        .mr-project-bar-fill.color-2 { background: linear-gradient(90deg, #4facfe, #00f2fe); }
-        .mr-project-bar-fill.color-3 { background: linear-gradient(90deg, #43e97b, #38f9d7); }
-        .mr-project-bar-fill.color-4 { background: linear-gradient(90deg, #fa709a, #fee140); }
+        .mr-project-bar-fill.color-0 { background: #0369a1; }
+        .mr-project-bar-fill.color-1 { background: #0ea5e9; }
+        .mr-project-bar-fill.color-2 { background: #38bdf8; }
+        .mr-project-bar-fill.color-3 { background: #64748b; }
+        .mr-project-bar-fill.color-4 { background: #94a3b8; }
 
         .mr-project-stats {
             font-size: 12px;
@@ -4549,26 +5201,26 @@
             align-items: center;
             gap: 12px;
             padding: 10px 12px;
-            background: white;
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 12px;
             transition: background 0.15s;
         }
 
         .mr-session-row:hover {
-            background: #f8fafc;
+            background: var(--bg-hover);
         }
 
         .mr-session-date {
-            color: #64748b;
+            color: var(--text-muted);
             min-width: 65px;
             flex-shrink: 0;
         }
 
         .mr-session-project {
             font-weight: 600;
-            color: #1e293b;
+            color: var(--text);
             flex: 1;
             min-width: 0;
             white-space: nowrap;
@@ -4577,7 +5229,7 @@
         }
 
         .mr-session-time {
-            color: #64748b;
+            color: var(--text-muted);
             min-width: 100px;
             text-align: center;
             flex-shrink: 0;
@@ -4585,7 +5237,7 @@
 
         .mr-session-duration {
             font-weight: 600;
-            color: #334155;
+            color: var(--text-2);
             min-width: 72px;
             text-align: right;
             flex-shrink: 0;
@@ -4595,16 +5247,16 @@
         .mr-session-footer {
             margin-top: 4px;
             padding: 10px 12px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid var(--border);
             font-size: 12px;
-            color: #64748b;
+            color: var(--text-muted);
             text-align: right;
-            background: #f8fafc;
+            background: var(--bg-surface-2);
             border-radius: 0 0 8px 8px;
         }
 
         .mr-session-footer strong {
-            color: #334155;
+            color: var(--text);
         }
 
         .mr-session-status {
@@ -4662,11 +5314,11 @@
            ============================================ */
         .tracker-screenshots-section {
             margin-top: 22px;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04);
+            box-shadow: var(--shadow);
         }
 
         .tracker-screenshots-header {
@@ -4682,12 +5334,12 @@
             gap: 10px;
             font-size: 16px;
             font-weight: 700;
-            color: #1e293b;
+            color: var(--text);
         }
 
         .tracker-screenshots-subtitle {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-muted);
             margin-top: 2px;
         }
 
@@ -4698,8 +5350,8 @@
         }
 
         .tracker-screenshot-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
             border-radius: 12px;
             overflow: hidden;
             cursor: pointer;
@@ -4709,7 +5361,7 @@
         .tracker-screenshot-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-            border-color: #667eea;
+            border-color: #0369a1;
         }
 
         .tracker-screenshot-img {
@@ -4717,24 +5369,36 @@
             aspect-ratio: 32 / 10;
             object-fit: contain;
             display: block;
-            background: #e2e8f0;
+            background: var(--bg-hover);
         }
 
         .tracker-screenshot-info {
             padding: 10px 12px;
         }
 
-        .tracker-screenshot-time {
+        .tracker-screenshot-time,
+        .screenshot-card-time {
             font-size: 13px;
             font-weight: 600;
-            color: #1e293b;
+            color: var(--text);
             margin-bottom: 4px;
         }
 
-        .tracker-screenshot-meta {
+        .screenshot-card-time {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .tracker-screenshot-meta,
+        .screenshot-card-meta {
             font-size: 11px;
-            color: #94a3b8;
+            color: var(--text-muted);
             line-height: 1.4;
+        }
+
+        .screenshot-card-meta {
+            font-size: 13px;
+            margin-bottom: 12px;
         }
 
         .tracker-screenshot-badge {
@@ -4784,26 +5448,167 @@
             gap: 8px;
         }
 
-        .tracker-screenshots-date-nav button {
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 4px 8px;
+        .date-nav-btn,
+        .tracker-screenshots-date-nav button,
+        .monthly-report-month-nav button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border-strong);
+            border-radius: 8px;
             cursor: pointer;
-            color: #475569;
-            transition: background 0.15s ease;
+            color: var(--text);
+            flex-shrink: 0;
+            transition: background 0.15s ease, border-color 0.15s ease;
         }
 
-        .tracker-screenshots-date-nav button:hover {
-            background: #e2e8f0;
+        .date-nav-btn:hover:not(:disabled),
+        .tracker-screenshots-date-nav button:hover:not(:disabled),
+        .monthly-report-month-nav button:hover:not(:disabled) {
+            background: var(--bg-hover);
+        }
+
+        .date-nav-btn:disabled,
+        .monthly-report-month-nav button:disabled {
+            opacity: 0.38;
+            cursor: default;
+        }
+
+        .date-nav-btn svg,
+        .date-nav-btn i,
+        .tracker-screenshots-date-nav button svg,
+        .tracker-screenshots-date-nav button i,
+        .monthly-report-month-nav button svg,
+        .monthly-report-month-nav button i {
+            width: 16px;
+            height: 16px;
+            color: inherit !important;
+            stroke: currentColor !important;
         }
 
         .tracker-screenshots-date-nav input[type="date"] {
             padding: 4px 8px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
             border-radius: 6px;
             font-size: 13px;
-            color: #475569;
+            color: var(--text);
+            background: var(--bg-input);
+            color-scheme: inherit;
+        }
+
+        html[data-theme="dark"] input,
+        html[data-theme="dark"] select,
+        html[data-theme="dark"] textarea {
+            background: var(--bg-input);
+            color: var(--text);
+            border-color: var(--border-strong);
+            color-scheme: dark;
+        }
+
+        html[data-theme="dark"] [style*="background: white"],
+        html[data-theme="dark"] [style*="background:white"],
+        html[data-theme="dark"] [style*="background: #ffffff"],
+        html[data-theme="dark"] [style*="background:#ffffff"],
+        html[data-theme="dark"] [style*="background: #fff"],
+        html[data-theme="dark"] [style*="background:#fff"] {
+            background: var(--bg-surface) !important;
+            border-color: var(--border) !important;
+        }
+
+        html[data-theme="dark"] [style*="color: #0f172a"],
+        html[data-theme="dark"] [style*="color:#0f172a"],
+        html[data-theme="dark"] [style*="color: #111827"],
+        html[data-theme="dark"] [style*="color:#111827"],
+        html[data-theme="dark"] [style*="color: #1e293b"],
+        html[data-theme="dark"] [style*="color:#1e293b"],
+        html[data-theme="dark"] [style*="color: #334155"],
+        html[data-theme="dark"] [style*="color:#334155"],
+        html[data-theme="dark"] [style*="color: #374151"],
+        html[data-theme="dark"] [style*="color:#374151"] {
+            color: var(--text) !important;
+        }
+
+        html[data-theme="dark"] [style*="color: #6b7280"],
+        html[data-theme="dark"] [style*="color:#6b7280"],
+        html[data-theme="dark"] [style*="color: #64748b"],
+        html[data-theme="dark"] [style*="color:#64748b"] {
+            color: var(--text-muted) !important;
+        }
+
+        html[data-theme="dark"] [style*="background: #f3f4f6"],
+        html[data-theme="dark"] [style*="background:#f3f4f6"],
+        html[data-theme="dark"] [style*="background: #f1f5f9"],
+        html[data-theme="dark"] [style*="background:#f1f5f9"] {
+            background: var(--bg-surface-2) !important;
+            color: var(--text) !important;
+            border-color: var(--border-strong) !important;
+        }
+
+        html[data-theme="dark"] .mr-project-name,
+        html[data-theme="dark"] .mr-week-label-title,
+        html[data-theme="dark"] .mr-week-value,
+        html[data-theme="dark"] .mr-project-stats strong,
+        html[data-theme="dark"] .mr-stat-value,
+        html[data-theme="dark"] .control-title,
+        html[data-theme="dark"] .page-title,
+        html[data-theme="dark"] .form-label {
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .mr-project-stats,
+        html[data-theme="dark"] .mr-week-label,
+        html[data-theme="dark"] .mr-week-label-range,
+        html[data-theme="dark"] .mr-card-subtitle,
+        html[data-theme="dark"] .control-subtitle,
+        html[data-theme="dark"] .mr-stat-label {
+            color: var(--text-muted);
+        }
+
+        html[data-theme="dark"] .mr-project-bar-track,
+        html[data-theme="dark"] .mr-week-bar-track {
+            background: #334155;
+        }
+
+        html[data-theme="dark"] .mr-session-status.completed {
+            background: #243044;
+            color: #cbd5e1;
+        }
+
+        html[data-theme="dark"] .mr-session-status.active {
+            background: rgba(16, 185, 129, 0.18);
+            color: #6ee7b7;
+        }
+
+        html[data-theme="dark"] .btn:disabled,
+        html[data-theme="dark"] .btn-primary:disabled,
+        html[data-theme="dark"] .btn-danger:disabled,
+        html[data-theme="dark"] .btn-secondary:disabled {
+            background: var(--bg-surface-2) !important;
+            color: var(--text-muted) !important;
+            border-color: var(--border) !important;
+        }
+
+        html[data-theme="dark"] .date-nav-btn,
+        html[data-theme="dark"] .tracker-screenshots-date-nav button,
+        html[data-theme="dark"] .monthly-report-month-nav button,
+        html[data-theme="dark"] .monthly-report-refresh-btn,
+        html[data-theme="dark"] .tracker-screenshots-view-all {
+            background: var(--bg-surface-2);
+            color: var(--text);
+            border-color: var(--border-strong);
+        }
+
+        html[data-theme="dark"] .welcome-title,
+        html[data-theme="dark"] .welcome-subtitle {
+            color: var(--text);
+        }
+
+        html[data-theme="dark"] .welcome-subtitle {
+            color: var(--text-muted);
         }
 
         @media (max-width: 600px) {
@@ -4815,13 +5620,67 @@
     <script>
         // Hide startup overlay when app is ready
         function hideStartupOverlay() {
+            if (window.__authLoading) return;
             const overlay = document.getElementById('startupOverlay');
             if (overlay && overlay.style.display !== 'none') {
                 overlay.style.opacity = '0';
                 setTimeout(() => {
+                    if (window.__authLoading) return;
                     if (overlay) overlay.style.display = 'none';
                 }, 300);
             }
+        }
+
+        window.showAuthLoading = function(message) {
+            window.__authLoading = true;
+            const overlay = document.getElementById('authLoadingOverlay');
+            const status = document.getElementById('authLoadingStatus');
+            if (status && message) status.textContent = message;
+            if (overlay) {
+                overlay.classList.add('is-visible');
+                overlay.setAttribute('aria-hidden', 'false');
+            }
+            const startupStatus = document.getElementById('startupStatus');
+            if (startupStatus && message) startupStatus.textContent = message;
+        };
+
+        window.hideAuthLoading = function() {
+            window.__authLoading = false;
+            const overlay = document.getElementById('authLoadingOverlay');
+            if (overlay) {
+                overlay.classList.remove('is-visible');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+        };
+
+        window.applyAlysonTheme = function(theme) {
+            if (theme === 'black') theme = 'dark';
+            if (theme !== 'dark' && theme !== 'light') theme = 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            try { localStorage.setItem('alyson_theme', theme); } catch (e) {}
+            document.querySelectorAll('[data-theme-option]').forEach(function (btn) {
+                var on = btn.getAttribute('data-theme-option') === theme;
+                btn.classList.toggle('is-active', on);
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            if (typeof lucide !== 'undefined' && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        };
+
+        document.addEventListener('click', function (event) {
+            var btn = event.target.closest('[data-theme-option]');
+            if (!btn) return;
+            window.applyAlysonTheme(btn.getAttribute('data-theme-option'));
+        });
+
+        function syncAlysonThemeButtons() {
+            window.applyAlysonTheme(document.documentElement.getAttribute('data-theme') || 'light');
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', syncAlysonThemeButtons);
+        } else {
+            syncAlysonThemeButtons();
         }
 
         if (typeof require !== 'undefined') {
@@ -4835,7 +5694,7 @@
                 }
             });
             
-            // Hide overlay when app is ready
+            // Hide overlay when app is ready — keep it if JWT/sign-in is in progress
             ipcRenderer.on('app-ready', hideStartupOverlay);
             
             // Fallback: hide overlay after 3 seconds if no ready signal
@@ -4853,6 +5712,11 @@
             <div class="login-header">
                 <h1 class="login-logo">Alyson Time Doctor</h1>
                 <p class="login-subtitle">Employee Desktop Portal</p>
+                <div class="theme-toggle" role="group" aria-label="Color theme" style="margin: 16px auto 0;">
+                    <button type="button" class="theme-toggle-btn" data-theme-option="light">Light</button>
+                    <button type="button" class="theme-toggle-btn" data-theme-option="dark">Dark</button>
+                   
+                </div>
             </div>
 
             <form id="loginForm">
@@ -4970,8 +5834,11 @@
         <div class="app-header">
             <h1 id="pageTitle" class="page-title">Time Tracker</h1>
             <div class="header-actions">
-                <!-- DEBUG: App Detection Heartbeat (optional) -->
-                <div id="appDetectionHeartbeat" style="font-size:12px;color:#64748b;min-width:260px"></div>
+                <div class="theme-toggle" role="group" aria-label="Color theme">
+                    <button type="button" class="theme-toggle-btn" data-theme-option="light">Light</button>
+                    <button type="button" class="theme-toggle-btn" data-theme-option="dark">Dark</button>
+                </div>
+                <div id="appDetectionHeartbeat" class="app-detection-heartbeat"></div>
                 <div id="trackingStatus" class="tracking-status stopped">
                     <div class="status-dot"></div>
                     <span>Not Tracking</span>
@@ -5068,6 +5935,10 @@
                         <button type="button" class="platform-privacy-btn" data-pane="automation" data-role="extra">Automation</button>
                     </div>
                 </div>
+                <div class="theme-toggle" role="group" aria-label="Color theme">
+                    <button type="button" class="theme-toggle-btn" data-theme-option="light">Light</button>
+                    <button type="button" class="theme-toggle-btn" data-theme-option="dark">Dark</button>
+                </div>
                 <button id="copyLogsBtn" class="copy-logs-btn" title="Copy diagnostic logs to clipboard for IT support">
                     <i data-lucide="clipboard-copy" class="nav-icon"></i>
                     <span>Copy Logs</span>
@@ -5128,11 +5999,12 @@
             </script>
             <!-- DASHBOARD PAGE -->
             <div id="dashboardPage" class="page-section">
-                <!-- USER WELCOME SECTION -->
                 <div class="user-welcome-section">
                     <div class="welcome-content">
+                        <div id="userInitials" class="welcome-avatar">—</div>
                         <div class="welcome-text">
-                            <h1 class="welcome-title">Welcome back, <span id="welcomeUserName">User</span>! 👋</h1>
+                            <h1 class="welcome-title">Welcome back, <span id="welcomeUserName">User</span></h1>
+                            <p class="welcome-subtitle">Signed in to Alyson Time Doctor</p>
                         </div>
                     </div>
                 </div>
@@ -5143,7 +6015,7 @@
                     <div class="dashboard-card">
                         <div class="card-header">
                             <div class="card-icon">
-                                <i data-lucide="clock" style="color: white; width: 24px; height: 24px;"></i>
+                                <i data-lucide="clock" style="color: #0369a1; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
                                 <div class="card-title">Today's Effective Time</div>
@@ -5160,7 +6032,7 @@
                     <div class="dashboard-card">
                         <div class="card-header">
                             <div class="card-icon">
-                                <i data-lucide="play-circle" style="color: white; width: 24px; height: 24px;"></i>
+                                <i data-lucide="play-circle" style="color: #0369a1; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
                                 <div class="card-title">Current Session</div>
@@ -5177,7 +6049,7 @@
                     <div class="dashboard-card">
                         <div class="card-header">
                             <div class="card-icon">
-                                <i data-lucide="calendar" style="color: white; width: 24px; height: 24px;"></i>
+                                <i data-lucide="calendar" style="color: #0369a1; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
                                 <div class="card-title">This Week</div>
@@ -5194,7 +6066,7 @@
                     <div class="dashboard-card">
                         <div class="card-header">
                             <div class="card-icon">
-                                <i data-lucide="trending-up" style="color: white; width: 24px; height: 24px;"></i>
+                                <i data-lucide="trending-up" style="color: #0369a1; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
                                 <div class="card-title">This Month</div>
@@ -5269,11 +6141,15 @@
 
             <!-- TIME TRACKER PAGE -->
             <div id="timetrackerPage" class="page-section">
-                <!-- USER WELCOME SECTION -->
                 <div class="user-welcome-section">
                     <div class="welcome-content">
+                        <div id="userAvatar" class="welcome-avatar">—</div>
                         <div class="welcome-text">
-                            <h1 class="welcome-title">Welcome back, <span id="trackerWelcomeUserName">User</span>! 👋</h1>
+                            <h1 class="welcome-title">Welcome back, <span id="trackerWelcomeUserName">User</span></h1>
+                            <p class="welcome-subtitle">
+                                <span id="userName" hidden></span>
+                                <span id="userEmail"></span>
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -5281,7 +6157,7 @@
                 <div class="control-section">
                     <div class="control-header">
                         <div class="control-title">Time Tracker</div>
-                        <div class="control-subtitle">Manage your work sessions</div>
+                        <div class="control-subtitle">Select a project and start tracking</div>
                     </div>
                     
                     <!-- PROJECT SELECTION -->
@@ -5338,7 +6214,15 @@
                     <div class="monthly-report-header">
                         <div>
                             <div class="monthly-report-title">This Month at a Glance</div>
-                            <div class="monthly-report-subtitle" id="monthlyReportLabel">Loading...</div>
+                            <div class="monthly-report-month-nav">
+                                <button id="monthlyReportPrevBtn" type="button" class="date-nav-btn" title="Previous month">
+                                    <i data-lucide="chevron-left"></i>
+                                </button>
+                                <div class="monthly-report-subtitle" id="monthlyReportLabel">Loading...</div>
+                                <button id="monthlyReportNextBtn" type="button" class="date-nav-btn" title="Next month" disabled>
+                                    <i data-lucide="chevron-right"></i>
+                                </button>
+                            </div>
                         </div>
                         <button id="monthlyReportRefreshBtn" class="monthly-report-refresh-btn" title="Refresh report">
                             <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
@@ -5365,29 +6249,29 @@
                         <!-- Summary Stats Cards -->
                         <div class="mr-stats-grid">
                             <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">
-                                    <i data-lucide="clock" style="width: 20px; height: 20px; color: white;"></i>
+                                <div class="mr-stat-icon mr-stat-icon--total">
+                                    <i data-lucide="clock"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrTotalHours">0h 0m</div>
                                 <div class="mr-stat-label">Total Tracked</div>
                             </div>
                             <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: #FB7185;">
-                                    <i data-lucide="alert-triangle" style="width: 20px; height: 20px; color: white;"></i>
+                                <div class="mr-stat-icon mr-stat-icon--non">
+                                    <i data-lucide="alert-triangle"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrNonEffectiveHours">0h 0m</div>
                                 <div class="mr-stat-label">Non-effective</div>
                             </div>
                             <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: #22C55E;">
-                                    <i data-lucide="check-circle" style="width: 20px; height: 20px; color: white;"></i>
+                                <div class="mr-stat-icon mr-stat-icon--effective">
+                                    <i data-lucide="check-circle"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrEffectiveHours">0h 0m</div>
                                 <div class="mr-stat-label">Effective</div>
                             </div>
                             <div class="mr-stat-card">
-                                <div class="mr-stat-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
-                                    <i data-lucide="calendar-check" style="width: 20px; height: 20px; color: white;"></i>
+                                <div class="mr-stat-icon mr-stat-icon--avg">
+                                    <i data-lucide="calendar-check"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrAvgPerDay">0h 0m</div>
                                 <div class="mr-stat-label">Avg Effective / Day</div>
@@ -5397,9 +6281,10 @@
                         <!-- Daily Activity Chart -->
                         <div class="mr-card">
                             <div class="mr-card-title">
-                                <i data-lucide="bar-chart-3" style="width: 16px; height: 16px; color: #667eea;"></i>
+                                <i data-lucide="bar-chart-3" style="width: 16px; height: 16px;"></i>
                                 Daily Activity
                             </div>
+                            <p class="mr-card-subtitle">Effective hours per day (idle and low activity removed). Hover a bar to see effective vs tracked.</p>
                             <div id="mrDailyChart" class="mr-daily-chart">
                                 <!-- Bars injected by JS -->
                             </div>
@@ -5408,7 +6293,7 @@
                         <!-- Weekly Breakdown -->
                         <div class="mr-card">
                             <div class="mr-card-title">
-                                <i data-lucide="calendar" style="width: 16px; height: 16px; color: #667eea;"></i>
+                                <i data-lucide="calendar" style="width: 16px; height: 16px;"></i>
                                 Weekly Breakdown
                             </div>
                             <p class="mr-card-subtitle">How your tracked time is spread across each calendar week (Sunday–Saturday). A week can include days from the previous or next month.</p>
@@ -5420,7 +6305,7 @@
                         <!-- Top Projects -->
                         <div class="mr-card">
                             <div class="mr-card-title">
-                                <i data-lucide="folder" style="width: 16px; height: 16px; color: #667eea;"></i>
+                                <i data-lucide="folder" style="width: 16px; height: 16px; color: #0369a1;"></i>
                                 Top Projects
                             </div>
                             <div id="mrProjectBreakdown" class="mr-project-breakdown">
@@ -5431,7 +6316,7 @@
                         <!-- Recent Sessions -->
                         <div class="mr-card">
                             <div class="mr-card-title">
-                                <i data-lucide="list" style="width: 16px; height: 16px; color: #667eea;"></i>
+                                <i data-lucide="list" style="width: 16px; height: 16px; color: #0369a1;"></i>
                                 Recent Sessions
                             </div>
                             <div id="mrSessionList" class="mr-session-list">
@@ -5446,19 +6331,19 @@
                     <div class="tracker-screenshots-header">
                         <div>
                             <div class="tracker-screenshots-title">
-                                <i data-lucide="camera" style="width: 18px; height: 18px; color: #667eea;"></i>
+                                <i data-lucide="camera" style="width: 18px; height: 18px; color: #0369a1;"></i>
                                 Recent Screenshots
                             </div>
                             <div class="tracker-screenshots-subtitle">Your latest captured screenshots · Company work day</div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="tracker-screenshots-date-nav">
-                                <button id="trackerScreenshotPrevDate" title="Previous company work day">
-                                    <i data-lucide="chevron-left" style="width: 14px; height: 14px;"></i>
+                                <button id="trackerScreenshotPrevDate" type="button" class="date-nav-btn" title="Previous company work day">
+                                    <i data-lucide="chevron-left"></i>
                                 </button>
                                 <input type="date" id="trackerScreenshotDate" style="font-size: 13px;" title="Company work day">
-                                <button id="trackerScreenshotNextDate" title="Next company work day">
-                                    <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                                <button id="trackerScreenshotNextDate" type="button" class="date-nav-btn" title="Next company work day">
+                                    <i data-lucide="chevron-right"></i>
                                 </button>
                             </div>
                             <button id="trackerScreenshotRefreshBtn" class="tracker-screenshots-view-all" title="Refresh screenshots">
@@ -5494,25 +6379,25 @@
                         <div class="control-title">Frequently asked questions</div>
                         <div class="control-subtitle">How Alyson Time Doctor tracks time, uses screenshots, and which permissions it needs</div>
                     </div>
-                    <div class="faq-list" style="max-width: 720px;">
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How does the app track my time?</summary>
+                    <div class="faq-list">
+                        <details>
+                            <summary>How does the app track my time?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">When you start the timer, the agent records your active work session. Time is counted while tracking is on, along with optional signals your organization enables (idle detection, focused app, and URLs where supported). Stop the timer or log out to end the session.</p>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How do screenshots work?</summary>
+                        <details>
+                            <summary>How do screenshots work?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">If enabled by your organization, the desktop agent captures still images of your displays on a schedule while you are clocked in. They are still images—not continuous screen recording unless your company uses a separate product or policy that says otherwise.</p>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How often are screenshots taken?</summary>
+                        <details>
+                            <summary>How often are screenshots taken?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">The interval is set by your administrator in the web portal (often about one to several minutes). The agent follows that schedule while tracking is active. Your org may also enforce a maximum gap without a successful capture—ask IT if tracking stops unexpectedly.</p>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">Does the app record audio or the microphone?</summary>
+                        <details>
+                            <summary>Does the app record audio or the microphone?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">No. The agent does not record microphone input or system audio for time tracking or screenshots.</p>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">What permissions does the app need?</summary>
+                        <details>
+                            <summary>What permissions does the app need?</summary>
                             <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
                                 <p style="margin: 0 0 8px;">Typical prompts include:</p>
                                 <ul style="margin: 0; padding-left: 1.25rem;">
@@ -5522,20 +6407,20 @@
                                 </ul>
                             </div>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">How do I grant permissions?</summary>
+                        <details>
+                            <summary>How do I grant permissions?</summary>
                             <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
                                 <p style="margin: 0 0 8px;"><strong style="color: #0f172a;">macOS:</strong> System Settings → Privacy &amp; Security → Screen Recording and Accessibility. Enable this app, then quit and reopen if prompted.</p>
                                 <p style="margin: 0;"><strong style="color: #0f172a;">Windows:</strong> Follow the installer or IT guide under Settings → Privacy for screen capture if asked.</p>
                                 <p style="margin: 8px 0 0;">You can also use the Privacy shortcuts in the sidebar footer when shown.</p>
                             </div>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">What is AI analysis?</summary>
+                        <details>
+                            <summary>What is AI analysis?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">In the web portal, administrators may run AI-assisted reporting (for example AI Insights) on data that was already collected—such as summarizing patterns from screenshots and activity. It analyzes existing records; it is not a separate hidden recorder. Ask your admin for the official policy that applies to your organization.</p>
                         </details>
-                        <details style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <summary style="cursor: pointer; font-weight: 600; color: #0f172a;">macOS blocked Alyson Time Doctor (not from an identified developer)</summary>
+                        <details>
+                            <summary>macOS blocked Alyson Time Doctor (not from an identified developer)</summary>
                             <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
                                 <p style="margin: 0 0 10px;">The app may not be notarized yet. You can allow it manually.</p>
                                 <p style="margin: 0 0 8px; font-weight: 600; color: #0f172a;">Option 1: Allow the app manually in System Preferences</p>
@@ -5554,7 +6439,7 @@
             </div>
 
             <!-- APP UPDATES — update without waiting for the next app restart -->
-            <div id="updatesPage" class="page-section">
+            <div id="updatesPage" class="page-section updates-page">
                 <div class="control-section">
                     <div class="control-header">
                         <div class="control-title">App updates</div>
@@ -5562,7 +6447,7 @@
                     </div>
 
                     <div style="max-width: 720px;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <div class="updates-version-box" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
                             <div>
                                 <div style="font-size: 13px; color: #64748b;">Installed version</div>
                                 <div id="updatesCurrentVersion" style="font-size: 18px; font-weight: 700; color: #0f172a;">—</div>
@@ -5602,18 +6487,18 @@
                         <div class="control-subtitle">View your activity screenshots with advanced filters</div>
                     </div>
 
-                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                    <div class="screenshot-filters">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
                             <div>
                                 <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Company work day)</span></label>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <button id="prevDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
-                                        <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                                    <button id="prevDateBtn" type="button" class="date-nav-btn" title="Previous day">
+                                        <i data-lucide="chevron-left"></i>
                                     </button>
                                     <input type="date" id="screenshotDate" title="Company work day"
                                            style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
-                                    <button id="nextDateBtn" type="button" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
-                                        <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                                    <button id="nextDateBtn" type="button" class="date-nav-btn" title="Next day">
+                                        <i data-lucide="chevron-right"></i>
                                     </button>
                                 </div>
                             </div>

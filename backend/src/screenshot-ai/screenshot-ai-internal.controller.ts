@@ -43,6 +43,7 @@ export class ScreenshotAiInternalController {
       distraction_score?: number;
       vision_summary?: string;
       vision_analysis?: Record<string, unknown>;
+      thumb_s3_key?: string;
     },
   ) {
     const screenshotId = body?.screenshotId?.trim();
@@ -62,6 +63,7 @@ export class ScreenshotAiInternalController {
         ...(body.vision_analysis || {}),
         source: body.source,
       },
+      thumb_s3_key: body.thumb_s3_key?.trim() || null,
     });
 
     return { success: true };

@@ -102,7 +102,7 @@ Index: `(ai_analysis_status, captured_at)` for backfill polling.
 
 1. `UPDATE … SET ai_analysis_status = 'processing' WHERE id = $1 AND ai_analysis_status IN ('queued', 'processing')`
 2. Download JPEG from S3 (`GetObject`) — max 4 MB; reject larger.
-3. OCR with **Tesseract.js** in the worker (`SCREENSHOT_OCR_PROVIDER=tesseract`). System `tesseract` is used when present.
+3. OCR with **Tesseract.js** in the worker (`SCREENSHOT_OCR_PROVIDER=tesseract`) on a ≤1600px grayscale JPEG. System `tesseract` is used when present.
 4. Call DeepSeek text API with OCR + app/window metadata (images are not sent to DeepSeek).
 5. Validate response schema; map to columns.
 6. `UPDATE … SET ai_analysis_status = 'completed', vision_analysis = $json, …`

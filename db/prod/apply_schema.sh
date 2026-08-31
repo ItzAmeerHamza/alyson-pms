@@ -52,6 +52,7 @@ run_file "$MIG_DIR/007_screenshot_ai_analysis.sql"
 run_file "$MIG_DIR/008_access_grants.sql"
 run_file "$MIG_DIR/010_project_delete_fk_actions.sql"
 run_file "$MIG_DIR/011_low_hours_email_period.sql"
+run_file "$MIG_DIR/026_screenshot_thumb_s3_key.sql"
 
 # B. Grants (tenant write + refresh time_doctor privileges)
 run_file "$SCRIPT_DIR/01_grants_api_role.sql"

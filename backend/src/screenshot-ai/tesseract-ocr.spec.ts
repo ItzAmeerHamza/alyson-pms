@@ -4,7 +4,14 @@ import { execFileSync } from 'child_process';
 import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 import { ConfigService } from '@nestjs/config';
-import { imageExtension, normalizeOcrText, ocrWithTesseract, resolveTesseractBin } from './tesseract-ocr';
+import {
+  OCR_MAX_WIDTH,
+  imageExtension,
+  normalizeOcrText,
+  ocrWithTesseract,
+  prepareOcrBuffer,
+  resolveTesseractBin,
+} from './tesseract-ocr';
 import { ScreenshotImageContextService } from './screenshot-image-context.service';
 
 const FIXTURE_DIR = join(__dirname, '__fixtures__');
@@ -37,6 +44,33 @@ describe('normalizeOcrText', () => {
   });
 });
 
+describe('prepareOcrBuffer', () => {
+  it('downscales wide images to a grayscale JPEG', async () => {
+    const sharp = (await import('sharp')).default;
+    const wide = await sharp({
+      create: { width: 3200, height: 400, channels: 3, background: '#ffffff' },
+    })
+      .jpeg()
+      .toBuffer();
+    const prepared = await prepareOcrBuffer(wide);
+    const meta = await sharp(prepared).metadata();
+    expect(meta.width).toBe(OCR_MAX_WIDTH);
+    expect(meta.format).toBe('jpeg');
+    expect(prepared.length).toBeLessThan(wide.length);
+  });
+
+  it('does not enlarge a smaller fixture', async () => {
+    ensureFixture();
+    const sharp = (await import('sharp')).default;
+    const source = await readFile(FIXTURE_PNG);
+    const srcMeta = await sharp(source).metadata();
+    const prepared = await prepareOcrBuffer(source);
+    const outMeta = await sharp(prepared).metadata();
+    expect(outMeta.width).toBeLessThanOrEqual(Math.min(srcMeta.width || 0, OCR_MAX_WIDTH));
+    expect(prepared.length).toBeGreaterThan(200);
+  });
+});
+
 describe('imageExtension', () => {
   it('detects jpeg and png magic bytes', () => {
     expect(imageExtension(Buffer.from([0xff, 0xd8, 0xff, 0x00]))).toBe('jpg');
@@ -55,6 +89,26 @@ describe('ScreenshotImageContextService providers', () => {
     const ctx = await service.extractFromImage(Buffer.from([0xff, 0xd8, 0xff]));
     expect(ctx).toEqual({ ocrText: null, labels: [], route: 'unavailable' });
   });
+});
+
+describe('Tesseract.js Lambda path', () => {
+  it('reads known words after downscale (same path as the worker image)', async () => {
+    ensureFixture();
+    const buffer = await readFile(FIXTURE_PNG);
+    const prepared = await prepareOcrBuffer(buffer);
+    const { createWorker, OEM, PSM } = await import('tesseract.js');
+    const worker = await createWorker('eng', OEM.LSTM_ONLY, { logger: () => undefined });
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+      const { data } = await worker.recognize(prepared);
+      const lower = (data.text || '').toLowerCase();
+      expect(lower).toMatch(/alyson/);
+      expect(lower).toMatch(/pulse|ocr/);
+      expect(lower).toMatch(/cursor|typescript|ide/);
+    } finally {
+      await worker.terminate();
+    }
+  }, 90_000);
 });
 
 describe.skipIf(!tesseractAvailable())('Tesseract OCR live', () => {

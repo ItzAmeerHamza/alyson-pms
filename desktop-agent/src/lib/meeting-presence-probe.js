@@ -21,11 +21,19 @@ const WIN_TAB_UIA_TIMEOUT_MS = 2500;
 
 let _cache = { at: 0, result: null };
 
+/** Leftover "you left / meeting ended" pages are not a live call. */
+function isEndedOrLeftMeetingHay(hay) {
+  return /you (have )?left|left the (meeting|call)|meeting ended|call ended|postattendee|\/leave(\b|[/?#])/.test(
+    String(hay || '').toLowerCase(),
+  );
+}
+
 function isActiveGoogleMeetCallUrl(url) {
   const u = String(url || '').toLowerCase();
   const host = /meet\.google\.com/.test(u) || /(^|[/.])meet\.com([/?#:]|$)/.test(u);
   if (!host) return false;
   // Lobby / left-call / new-meeting pages are NOT an active call
+  if (isEndedOrLeftMeetingHay(u)) return false;
   if (/meet\.(google\.)?com\/?(landing|new)?\/?(\?|#|$)/.test(u)) return false;
   if (/\/landing|\/new(\?|#|$)/.test(u)) return false;
   // In-call URLs look like meet.google.com/abc-defg-hij (or meet.com/…)
@@ -35,10 +43,11 @@ function isActiveGoogleMeetCallUrl(url) {
 function isVideoMeetingUrl(url) {
   const u = String(url || '').toLowerCase();
   if (!u) return false;
+  if (isEndedOrLeftMeetingHay(u)) return false;
   if (isActiveGoogleMeetCallUrl(u)) return true;
-  if (/zoom\.us\/(j|s|wc)\//.test(u)) return true;
-  if (/teams\.microsoft\.com\/.*meetup-join/.test(u)) return true;
-  if (/webex\.com\/(meet|wbxmjs)/.test(u)) return true;
+  if (/zoom\.us\/(j|s|wc|my)\//.test(u)) return true;
+  if (/teams\.(microsoft|live)\.com\/.*(meetup-join|meet\/)/.test(u)) return true;
+  if (/webex\.com\/(meet|wbxmjs|webappng)/.test(u)) return true;
   if (/join\.skype\.com|skype\.com\/.*\/(call|join)/.test(u)) return true;
   return false;
 }
@@ -46,7 +55,7 @@ function isVideoMeetingUrl(url) {
 /** Chrome tab title while Google Meet is open (selected window or tab-strip name). */
 function isGoogleMeetWindowTitle(title, appName = '') {
   const hay = `${appName} ${title}`.toLowerCase();
-  if (!hay.trim()) return false;
+  if (!hay.trim() || isEndedOrLeftMeetingHay(hay)) return false;
   if (/google meet|meet\.google\.com|(^|[/.])meet\.com([/?#:]|$)/.test(hay)) return true;
   if (/\bmeet\s+-/.test(hay)) return true;
   return /\b[a-z]{3}-[a-z]{4}-[a-z]{3}\b/.test(hay) && /chrome|edge|brave|arc|dia|chromium/.test(hay);
@@ -54,7 +63,7 @@ function isGoogleMeetWindowTitle(title, appName = '') {
 
 function isZoomOrTeamsCallTitle(title, appName = '') {
   const hay = `${appName} ${title}`.toLowerCase();
-  if (!hay.trim()) return false;
+  if (!hay.trim() || isEndedOrLeftMeetingHay(hay)) return false;
   if (/zoom/.test(hay) && /(meeting|webinar|personal room|waiting room|zoom workplace)/.test(hay)) {
     return true;
   }
@@ -363,6 +372,7 @@ module.exports = {
   probeMeetingStillOpen,
   clearMeetingPresenceCache,
   isActiveGoogleMeetCallUrl,
+  isEndedOrLeftMeetingHay,
   isVideoMeetingUrl,
   isGoogleMeetWindowTitle,
   isZoomOrTeamsCallTitle,

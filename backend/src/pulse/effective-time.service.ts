@@ -46,6 +46,22 @@ export interface IdleAndLowActivity {
   lowActivitySeconds: number;
 }
 
+export type IdleLogRow = {
+  user_id: string;
+  idle_start: string | Date;
+  idle_end: string | Date | null;
+  duration_seconds: number | null;
+};
+
+export type ScreenshotActivityRow = {
+  user_id: string;
+  activity_date: string;
+  captured_at: string;
+  activity_percent: number | null;
+  is_meeting: boolean;
+  is_low: boolean;
+};
+
 @Injectable()
 export class EffectiveTimeService {
   constructor(private readonly db: DatabaseService) {}
@@ -212,6 +228,102 @@ export class EffectiveTimeService {
     return out;
   }
 
+  /**
+   * Idle windows this report counts (≥ 5 min). Matches the old per-screenshot
+   * SQL overlap test so a low shot inside idle is not charged twice.
+   */
+  countedIdleIntervalsByUser(logs: IdleLogRow[]): Map<string, TimeInterval[]> {
+    const byUser = new Map<string, TimeInterval[]>();
+    for (const log of logs) {
+      const startMs = new Date(log.idle_start).getTime();
+      let endMs = log.idle_end ? new Date(log.idle_end).getTime() : NaN;
+      if (log.duration_seconds && log.duration_seconds > 0) {
+        const fromDuration = startMs + log.duration_seconds * 1000;
+        if (!Number.isFinite(endMs) || fromDuration > endMs) endMs = fromDuration;
+      }
+      if (!Number.isFinite(endMs) || endMs <= startMs) continue;
+      if ((endMs - startMs) / 1000 < EffectiveTimeService.MIN_IDLE_REPORT_SECONDS) continue;
+      if (!byUser.has(log.user_id)) byUser.set(log.user_id, []);
+      byUser.get(log.user_id)!.push({ startMs, endMs });
+    }
+    return byUser;
+  }
+
+  meetingIntervalsFromRows(
+    rows: ScreenshotActivityRow[],
+    intervalMinutes: number,
+  ): Map<string, TimeInterval[]> {
+    const meetingTimes = new Map<string, number[]>();
+    for (const row of rows) {
+      if (!row.is_meeting) continue;
+      const ms = new Date(row.captured_at).getTime();
+      if (!Number.isFinite(ms)) continue;
+      if (!meetingTimes.has(row.user_id)) meetingTimes.set(row.user_id, []);
+      meetingTimes.get(row.user_id)!.push(ms);
+    }
+    const coverageMs = Math.max(1, Number(intervalMinutes) || 1) * 60 * 1000;
+    const out = new Map<string, TimeInterval[]>();
+    for (const [uid, times] of meetingTimes) {
+      out.set(uid, mergeCapturedAtsIntoIntervals(times, coverageMs));
+    }
+    return out;
+  }
+
+  lowActivityHoursFromRows(
+    rows: ScreenshotActivityRow[],
+    idleLogs: IdleLogRow[],
+    intervalMinutes: number,
+    tz?: string,
+  ): Map<string, Map<string, number>> {
+    const workTz = normalizeWorkTimezone(tz);
+    const intervalHours = Math.max(1, Number(intervalMinutes) || 1) / 60;
+    const streakNeeded = this.sustainedLowStreakNeeded(intervalMinutes);
+    const meetingIv = this.meetingIntervalsFromRows(rows, intervalMinutes);
+    const idleIv = this.countedIdleIntervalsByUser(idleLogs);
+
+    type Shot = { activity_date: string; captured_at_ms: number; is_low: boolean };
+    const byUserShots = new Map<string, Shot[]>();
+    for (const row of rows) {
+      const capturedMs = new Date(row.captured_at).getTime();
+      const inMeeting =
+        Boolean(row.is_meeting) ||
+        (Number.isFinite(capturedMs) &&
+          intervalContains(capturedMs, meetingIv.get(row.user_id) ?? []));
+      const inIdle =
+        Number.isFinite(capturedMs) &&
+        intervalContains(capturedMs, idleIv.get(row.user_id) ?? []);
+      if (!byUserShots.has(row.user_id)) byUserShots.set(row.user_id, []);
+      byUserShots.get(row.user_id)!.push({
+        activity_date: row.activity_date || workDateKey(new Date(row.captured_at), workTz),
+        captured_at_ms: capturedMs,
+        is_low: Boolean(row.is_low) && !inMeeting && !inIdle,
+      });
+    }
+
+    const byUserDay = new Map<string, Map<string, number>>();
+    for (const [uid, shots] of byUserShots) {
+      let i = 0;
+      while (i < shots.length) {
+        if (!shots[i].is_low) {
+          i += 1;
+          continue;
+        }
+        let j = i;
+        while (j < shots.length && shots[j].is_low) j += 1;
+        if (j - i >= streakNeeded) {
+          for (let k = i; k < j; k += 1) {
+            const day = shots[k].activity_date;
+            if (!byUserDay.has(uid)) byUserDay.set(uid, new Map());
+            const dayMap = byUserDay.get(uid)!;
+            dayMap.set(day, (dayMap.get(day) ?? 0) + intervalHours);
+          }
+        }
+        i = j;
+      }
+    }
+    return byUserDay;
+  }
+
   /** Prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows exist. */
   mergeIdleHours(
     idleLogHours: Map<string, Map<string, number>>,
@@ -239,20 +351,14 @@ export class EffectiveTimeService {
     return merged;
   }
 
-  /**
-   * Low-activity duration from screenshots below threshold.
-   * Only counts low shots that sit in a consecutive streak of length >= N
-   * (interval-aware), so 1/min capture does not treat every brief pause as LOW.
-   */
-  async lowActivityHoursFromScreenshots(
+  async loadScreenshotActivityRows(
     filter: WorkspaceFilter,
     start: string,
     end: string,
     lowActivityThreshold: number,
-    intervalMinutes: number,
     userId?: string,
     tz?: string,
-  ): Promise<Map<string, Map<string, number>>> {
+  ): Promise<ScreenshotActivityRow[]> {
     const workTz = normalizeWorkTimezone(tz);
     const scope = this.scope(filter, 'ext');
     const params: unknown[] = [...scope.params, lowActivityThreshold, start, end];
@@ -264,17 +370,8 @@ export class EffectiveTimeService {
       params.push(parseTenantUserId(userId));
       userFilter = `AND s.user_id = $${params.length}`;
     }
-    const intervalHours = Math.max(1, Number(intervalMinutes) || 1) / 60;
-    const streakNeeded = this.sustainedLowStreakNeeded(intervalMinutes);
 
-    const result = await this.db.query<{
-      user_id: string;
-      activity_date: string;
-      captured_at: string;
-      activity_percent: number | null;
-      is_meeting: boolean;
-      is_low: boolean;
-    }>(
+    const result = await this.db.query<ScreenshotActivityRow>(
       `SELECT
          s.user_id::text AS user_id,
          ${sqlWorkDate('s.captured_at', workTz)}::text AS activity_date,
@@ -286,33 +383,6 @@ export class EffectiveTimeService {
            AND s.activity_percent < $${thresholdIdx}
            AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
            AND NOT ${SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL}
-           -- An idle minute produces a zero-activity screenshot by definition.
-           -- Counting it here as well charges the same minute twice, because
-           -- non_effective = min(total, low_activity + idle) adds the two. Once
-           -- the sum passed the tracked total the min() clamped it and the whole
-           -- day reported as non-effective: one employee had 8,404s of idle and
-           -- 80 low shots, 67 of them inside those idle windows, against 12,933s
-           -- tracked. The minute is already counted as idle, so it is not low.
-           --
-           -- Only periods this report actually counts as idle are excluded. Idle
-           -- shorter than MIN_IDLE_REPORT_SECONDS is dropped from the idle side,
-           -- so excluding its screenshots too would erase those minutes from
-           -- both halves and overstate effective time. The end of a period is
-           -- derived the same way idleHoursFromIdleLogs derives it.
-           AND NOT EXISTS (
-             SELECT 1
-             FROM time_doctor.idle_logs il
-             WHERE il.user_id = s.user_id
-               AND s.captured_at >= il.idle_start
-               AND s.captured_at < GREATEST(
-                     COALESCE(il.idle_end, il.idle_start),
-                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
-                   )
-               AND GREATEST(
-                     COALESCE(il.idle_end, il.idle_start),
-                     il.idle_start + make_interval(secs => COALESCE(il.duration_seconds, 0))
-                   ) - il.idle_start >= make_interval(secs => ${EffectiveTimeService.MIN_IDLE_REPORT_SECONDS})
-           )
          ) AS is_low
        FROM time_doctor.screenshots s
        JOIN tenant."user" u ON u.id = s.user_id
@@ -325,61 +395,63 @@ export class EffectiveTimeService {
        ORDER BY s.user_id, s.captured_at ASC`,
       params,
     );
+    return result.rows;
+  }
 
-    type Shot = { activity_date: string; captured_at_ms: number; is_low: boolean };
-    const meetingTimes = new Map<string, number[]>();
-    for (const row of result.rows) {
-      if (!Boolean(row.is_meeting)) continue;
-      const ms = new Date(row.captured_at).getTime();
-      if (!Number.isFinite(ms)) continue;
-      if (!meetingTimes.has(row.user_id)) meetingTimes.set(row.user_id, []);
-      meetingTimes.get(row.user_id)!.push(ms);
+  /**
+   * Low-activity duration from screenshots below threshold.
+   * Only counts low shots that sit in a consecutive streak of length >= N
+   * (interval-aware), so 1/min capture does not treat every brief pause as LOW.
+   * Idle overlap is applied in memory so month ranges do not run a per-row
+   * idle_logs lookup (that is what blew the 29s API Gateway budget).
+   */
+  async lowActivityHoursFromScreenshots(
+    filter: WorkspaceFilter,
+    start: string,
+    end: string,
+    lowActivityThreshold: number,
+    intervalMinutes: number,
+    userId?: string,
+    tz?: string,
+    idleLogs?: IdleLogRow[],
+  ): Promise<Map<string, Map<string, number>>> {
+    const [rows, idle] = await Promise.all([
+      this.loadScreenshotActivityRows(filter, start, end, lowActivityThreshold, userId, tz),
+      idleLogs
+        ? Promise.resolve(idleLogs)
+        : this.fetchIdleLogsForRange(filter, start, end, userId),
+    ]);
+    return this.lowActivityHoursFromRows(rows, idle, intervalMinutes, tz);
+  }
+
+  private async fetchIdleLogsForRange(
+    filter: WorkspaceFilter,
+    start: string,
+    end: string,
+    userId?: string,
+  ): Promise<IdleLogRow[]> {
+    const scope = this.scope(filter, 'ext');
+    const params: unknown[] = [...scope.params, start, end];
+    let userFilter = '';
+    if (userId) {
+      params.push(parseTenantUserId(userId));
+      userFilter = `AND i.user_id = $${params.length}`;
     }
-    const coverageMs = Math.max(1, Number(intervalMinutes) || 1) * 60 * 1000;
-    const meetingIv = new Map<string, ReturnType<typeof mergeCapturedAtsIntoIntervals>>();
-    for (const [uid, times] of meetingTimes) {
-      meetingIv.set(uid, mergeCapturedAtsIntoIntervals(times, coverageMs));
-    }
-
-    const byUserShots = new Map<string, Shot[]>();
-    for (const row of result.rows) {
-      const capturedMs = new Date(row.captured_at).getTime();
-      const inMeeting =
-        Boolean(row.is_meeting) ||
-        (Number.isFinite(capturedMs) && intervalContains(capturedMs, meetingIv.get(row.user_id) ?? []));
-      if (!byUserShots.has(row.user_id)) byUserShots.set(row.user_id, []);
-      byUserShots.get(row.user_id)!.push({
-        activity_date: row.activity_date,
-        captured_at_ms: capturedMs,
-        is_low: Boolean(row.is_low) && !inMeeting,
-      });
-    }
-
-    const byUserDay = new Map<string, Map<string, number>>();
-
-    for (const [uid, shots] of byUserShots) {
-      let i = 0;
-      while (i < shots.length) {
-        if (!shots[i].is_low) {
-          i += 1;
-          continue;
-        }
-        let j = i;
-        while (j < shots.length && shots[j].is_low) j += 1;
-        const streakLen = j - i;
-        if (streakLen >= streakNeeded) {
-          for (let k = i; k < j; k += 1) {
-            const day = shots[k].activity_date;
-            if (!byUserDay.has(uid)) byUserDay.set(uid, new Map());
-            const dayMap = byUserDay.get(uid)!;
-            dayMap.set(day, (dayMap.get(day) ?? 0) + intervalHours);
-          }
-        }
-        i = j;
-      }
-    }
-
-    return byUserDay;
+    const result = await this.db.query<IdleLogRow>(
+      `SELECT i.user_id::text AS user_id, i.idle_start, i.idle_end, i.duration_seconds
+       FROM time_doctor.idle_logs i
+       JOIN tenant."user" u ON u.id = i.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       WHERE ${scope.clause}
+         AND i.idle_start < $${scope.params.length + 2}::timestamptz
+         AND COALESCE(i.idle_end, NOW()) > $${scope.params.length + 1}::timestamptz
+         AND i.idle_start >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
+         AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         ${userFilter}
+       ORDER BY i.idle_start`,
+      params,
+    );
+    return result.rows;
   }
 
   /**
@@ -449,6 +521,7 @@ export class EffectiveTimeService {
       opts.intervalMinutes,
       userIdText,
       opts.tz,
+      idleRows.rows,
     );
 
     const sumHours = (m: Map<string, Map<string, number>>) => {

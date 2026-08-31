@@ -84,6 +84,17 @@ describe('EnhancedIdleMonitor', () => {
       monitor = new EnhancedIdleMonitor({ user_id: 'test', auto_stop_on_idle: true });
       expect(monitor.config.idle_threshold_minutes).toBe(10);
     });
+
+    test('phantom idle defaults to 10 min even when NODE_ENV is not production', () => {
+      const prev = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'test';
+      try {
+        monitor = new EnhancedIdleMonitor({ user_id: 'test', auto_stop_on_idle: true });
+        expect(monitor.PHANTOM_IDLE_THRESHOLD_MS).toBe(10 * 60 * 1000);
+      } finally {
+        process.env.NODE_ENV = prev;
+      }
+    });
   });
 
   // ─── Phantom idle detection ───
@@ -415,6 +426,79 @@ describe('EnhancedIdleMonitor', () => {
 
       expect(monitor.wasIdleLastCheck).toBe(false);
       expect(monitor.currentIdleStartTime).toBeNull();
+    });
+
+    test.each(['Google Meet', 'Zoom', 'Microsoft Teams', 'Webex', 'Skype'])(
+      'leftover %s does not block the 10-min still-working prompt',
+      async (label) => {
+        monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+        monitor.initialize({ isTracking: true });
+        monitor.isTracking = true;
+        global.isTracking = true;
+        global.unifiedInputManager.getIdleTime.mockReturnValue(600);
+        _setPresenceForTests({ active: true, label });
+        monitor._evaluateIdlePrompt = jest.fn();
+
+        await monitor._evaluateIdleState();
+
+        expect(monitor._evaluateIdlePrompt).toHaveBeenCalledWith(600, expect.any(Number));
+      },
+    );
+
+    test.each(['Google Meet', 'Zoom', 'Microsoft Teams', 'Webex', 'Skype'])(
+      'lid close / sleep stops tracking even during leftover %s',
+      async (label) => {
+        monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+        monitor.initialize({ isTracking: true });
+        monitor.isTracking = true;
+        global.isTracking = true;
+        monitor._lastEvaluationAt = Date.now() - 9 * 60 * 60 * 1000;
+        global.unifiedInputManager.getIdleTime.mockReturnValue(34020);
+        _setPresenceForTests({ active: true, label });
+        global.stopTracking = jest.fn().mockResolvedValue({ success: true });
+        global.trackingManager = {
+          noteMachineSlept: jest.fn().mockResolvedValue({ split: true }),
+        };
+        monitor._evaluateIdlePrompt = jest.fn();
+
+        await monitor._evaluateIdleState();
+
+        expect(global.trackingManager.noteMachineSlept).toHaveBeenCalled();
+        expect(global.stopTracking).toHaveBeenCalledWith('system_sleep');
+        expect(monitor._evaluateIdlePrompt).not.toHaveBeenCalled();
+        expect(monitor.currentIdleStartTime).toBeNull();
+      },
+    );
+
+    test('leftover meeting does not dismiss the still-working prompt while still idle', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(600);
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+      monitor._idlePromptActive = true;
+      monitor._resolveIdlePrompt = jest.fn();
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor._resolveIdlePrompt).not.toHaveBeenCalled();
+      expect(monitor._idlePromptActive).toBe(true);
+    });
+
+    test('meeting plus resumed input dismisses the idle prompt as working', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      monitor.initialize({ isTracking: true });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      global.unifiedInputManager.getIdleTime.mockReturnValue(30);
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+      monitor._idlePromptActive = true;
+      monitor._resolveIdlePrompt = jest.fn();
+
+      await monitor._evaluateIdleState();
+
+      expect(monitor._resolveIdlePrompt).toHaveBeenCalledWith('working');
     });
 
     test('Windows Zoom window presence also blocks idle writes', async () => {

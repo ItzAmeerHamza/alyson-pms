@@ -170,6 +170,7 @@ export class ScreenshotAiRepository {
       distraction_score: number;
       vision_summary: string;
       vision_analysis: Record<string, unknown>;
+      thumb_s3_key?: string | null;
     },
   ): Promise<void> {
     await this.db.query(
@@ -184,7 +185,8 @@ export class ScreenshotAiRepository {
            confidence_score = $6,
            distraction_score = $7,
            vision_summary = $8,
-           vision_analysis = $9::jsonb
+           vision_analysis = $9::jsonb,
+           thumb_s3_key = COALESCE($10, thumb_s3_key)
        WHERE id = $1`,
       [
         id,
@@ -196,6 +198,7 @@ export class ScreenshotAiRepository {
         payload.distraction_score,
         payload.vision_summary,
         JSON.stringify(payload.vision_analysis),
+        payload.thumb_s3_key || null,
       ],
     );
   }

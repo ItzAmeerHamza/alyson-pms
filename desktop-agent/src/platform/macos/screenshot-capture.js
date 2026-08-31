@@ -4,13 +4,7 @@
  */
 
 const { getPermissionDiagnosticSnapshot } = require('../../system/permissions-check');
-const {
-  captureAllDisplaysStitched,
-  captureViaDesktopCapturerStitched,
-  captureViaMacScreencaptureDashD,
-  stitchCaptures,
-  getPreferredThumbnailSize
-} = require('../../modules/utils/multi-display-screenshot');
+const { captureAllDisplaysStitched } = require('../../modules/utils/multi-display-screenshot');
 
 function getElectronDisplayCount() {
   try {
@@ -49,46 +43,9 @@ async function captureScreenshot() {
 
     const electronCount = getElectronDisplayCount();
     console.log(`[MACOS-SCREENSHOT][${attemptId}] Electron display count=${electronCount}`);
-    let result = await captureAllDisplaysStitched();
-
-    // Hot-plug / profiler under-count: if Electron still sees 2+ monitors but we
-    // only got one pane, force native -D capture then desktopCapturer.
-    if (
-      result.success &&
-      result.buffer &&
-      (result.displayCount || 1) < 2 &&
-      electronCount >= 2
-    ) {
-      console.warn(
-        `[MACOS-SCREENSHOT][${attemptId}] Single-display capture despite multi-monitor; forcing -D + desktopCapturer`
-      );
-
-      try {
-        const panes = await captureViaMacScreencaptureDashD(electronCount);
-        if (panes.length >= 2) {
-          const buffer = await stitchCaptures(panes);
-          result = {
-            success: true,
-            buffer,
-            method: 'screencapture-D-stitched-retry',
-            displayCount: panes.length,
-          };
-        }
-      } catch (dashErr) {
-        console.warn(`[MACOS-SCREENSHOT][${attemptId}] screencapture -D retry failed:`, dashErr.message);
-      }
-
-      if ((result.displayCount || 1) < 2) {
-        try {
-          const stitched = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
-          if (stitched.success && (stitched.displayCount || 1) >= 2) {
-            result = stitched;
-          }
-        } catch (retryErr) {
-          console.warn(`[MACOS-SCREENSHOT][${attemptId}] desktopCapturer retry failed:`, retryErr.message);
-        }
-      }
-    }
+    // Do not retry -D / desktopCapturer here. captureAllDisplaysStitched already
+    // tried those paths; a second ladder is what froze dual-display Macs.
+    const result = await captureAllDisplaysStitched();
 
     if (!result.success || !result.buffer || result.buffer.length === 0) {
       console.warn(`[MACOS-SCREENSHOT][${attemptId}] Capture failed:`, result.error || 'Empty buffer');

@@ -14,7 +14,16 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const screenshot = require('screenshot-desktop');
 
-const MAX_STITCH_EDGE_PX = 7680;
+const MAX_STITCH_EDGE_PX = 3840;
+const MAX_PANE_EDGE_PX = 1600;
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 /**
  * @returns {Promise<{success: boolean, buffer?: Buffer, method: string, displayCount?: number, error?: string}>}
@@ -531,6 +540,10 @@ async function stitchCaptures(captures) {
   }
 }
 
+/**
+ * Downscale each pane first, then resize-to-fit before composite.
+ * Avoids full-resolution raw buffers (the main-thread hang / RSS spike).
+ */
 async function stitchCapturesWithSharp(captures) {
   let sharp;
   try {
@@ -540,73 +553,177 @@ async function stitchCapturesWithSharp(captures) {
   }
 
   const sorted = sortCapturesForStitch(captures);
-  const metas = await Promise.all(sorted.map((c) => sharp(c.buffer).metadata()));
-  const electronLayouts = getElectronLayouts();
-
-  let composites;
-  let canvasW;
-  let canvasH;
-
-  const layoutMatch =
-    electronLayouts &&
-    electronLayouts.length === sorted.length &&
-    layoutsMatchCaptureSizes(electronLayouts, metas);
-
-  if (layoutMatch) {
-    const placed = sorted.map((c, i) => {
-      const layout = electronLayouts[i];
-      return {
-        input: c.buffer,
-        left: layout.x,
-        top: layout.y,
-        width: metas[i].width || 0,
-        height: metas[i].height || 0,
-      };
-    });
-    const minX = Math.min(...placed.map((p) => p.left));
-    const minY = Math.min(...placed.map((p) => p.top));
-    composites = placed.map((p) => ({
-      input: p.input,
-      left: Math.max(0, p.left - minX),
-      top: Math.max(0, p.top - minY),
-    }));
-    canvasW = Math.max(...composites.map((p, i) => p.left + (metas[i].width || 0)));
-    canvasH = Math.max(...composites.map((p, i) => p.top + (metas[i].height || 0)));
-  } else {
-    let left = 0;
-    canvasH = Math.max(...metas.map((m) => m.height || 0));
-    composites = sorted.map((c, i) => {
-      const top = Math.floor((canvasH - (metas[i].height || 0)) / 2);
-      const item = { input: c.buffer, left, top: Math.max(0, top) };
-      left += metas[i].width || 0;
-      return item;
-    });
-    canvasW = left;
+  const panes = [];
+  for (const c of sorted) {
+    panes.push(await downscalePane(sharp, c));
+  }
+  if (panes.length < 2) {
+    throw new Error('Need at least 2 decoded panes to stitch');
   }
 
+  const electronLayouts = getElectronLayouts();
+  const canUseLayout =
+    electronLayouts &&
+    electronLayouts.length === panes.length &&
+    electronLayouts.every((l) => l.width > 0 && l.height > 0);
+
+  try {
+    if (canUseLayout) {
+      const slots = layoutSlots(panes, electronLayouts);
+      if (!slotsOverlap(slots)) {
+        return await compositeFittedPanes(sharp, slots);
+      }
+      console.warn('[MULTI-DISPLAY] Electron slots overlap (mixed DPI); using side-by-side');
+    }
+  } catch (layoutErr) {
+    console.warn(
+      '[MULTI-DISPLAY] layout stitch failed, using side-by-side:',
+      layoutErr?.message || layoutErr,
+    );
+  }
+
+  return await compositeFittedPanes(sharp, sideBySideSlots(panes));
+}
+
+function slotsOverlap(slots) {
+  for (let i = 0; i < slots.length; i++) {
+    for (let j = i + 1; j < slots.length; j++) {
+      const a = slots[i];
+      const b = slots[j];
+      if (
+        a.left < b.left + b.width &&
+        a.left + a.width > b.left &&
+        a.top < b.top + b.height &&
+        a.top + a.height > b.top
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function downscalePane(sharp, capture) {
+  const buffer = await sharp(capture.buffer)
+    .rotate()
+    .resize({
+      width: MAX_PANE_EDGE_PX,
+      height: MAX_PANE_EDGE_PX,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .png({ compressionLevel: 1 })
+    .toBuffer();
+  const meta = await sharp(buffer).metadata();
+  const width = meta.width || 0;
+  const height = meta.height || 0;
+  if (!width || !height) {
+    throw new Error('Pane has no dimensions');
+  }
+  return {
+    buffer,
+    width,
+    height,
+    id: capture.id,
+    primary: capture.primary,
+  };
+}
+
+function layoutSlots(panes, layouts) {
+  const minX = Math.min(...layouts.map((l) => l.x));
+  const minY = Math.min(...layouts.map((l) => l.y));
+  return panes.map((pane, i) => ({
+    pane,
+    left: Math.max(0, layouts[i].x - minX),
+    top: Math.max(0, layouts[i].y - minY),
+    width: Math.max(1, layouts[i].width),
+    height: Math.max(1, layouts[i].height),
+  }));
+}
+
+function sideBySideSlots(panes) {
+  const nativeW = panes.reduce((sum, p) => sum + p.width, 0);
+  const nativeH = Math.max(...panes.map((p) => p.height));
+  let scale = 1;
+  if (nativeW > MAX_STITCH_EDGE_PX || nativeH > MAX_STITCH_EDGE_PX) {
+    scale = Math.min(
+      nativeW > 0 ? MAX_STITCH_EDGE_PX / nativeW : 1,
+      nativeH > 0 ? MAX_STITCH_EDGE_PX / nativeH : 1,
+    );
+  }
+  const canvasH = Math.max(1, Math.round(nativeH * scale));
+
+  let left = 0;
+  return panes.map((pane) => {
+    const width = Math.max(1, Math.round(pane.width * scale));
+    const height = Math.max(1, Math.round(pane.height * scale));
+    const slot = {
+      pane,
+      left,
+      top: Math.max(0, Math.floor((canvasH - height) / 2)),
+      width,
+      height,
+    };
+    left += width;
+    return slot;
+  });
+}
+
+function scaleSlotsToMaxEdge(slots) {
+  const rawW = Math.max(...slots.map((s) => s.left + s.width));
+  const rawH = Math.max(...slots.map((s) => s.top + s.height));
+  if (rawW <= MAX_STITCH_EDGE_PX && rawH <= MAX_STITCH_EDGE_PX) return slots;
+  const scale = Math.min(
+    rawW > 0 ? MAX_STITCH_EDGE_PX / rawW : 1,
+    rawH > 0 ? MAX_STITCH_EDGE_PX / rawH : 1,
+  );
+  return slots.map((s) => ({
+    ...s,
+    left: Math.round(s.left * scale),
+    top: Math.round(s.top * scale),
+    width: Math.max(1, Math.round(s.width * scale)),
+    height: Math.max(1, Math.round(s.height * scale)),
+  }));
+}
+
+async function compositeFittedPanes(sharp, slots) {
+  const fittedSlots = scaleSlotsToMaxEdge(slots);
+  const canvasW = Math.max(...fittedSlots.map((s) => s.left + s.width));
+  const canvasH = Math.max(...fittedSlots.map((s) => s.top + s.height));
   if (!canvasW || !canvasH) {
     throw new Error('Invalid stitch canvas dimensions');
   }
 
-  let pipeline = sharp({
+  const composites = [];
+  for (const slot of fittedSlots) {
+    const fitted = await sharp(slot.pane.buffer)
+      .resize(slot.width, slot.height, {
+        fit: 'fill',
+      })
+      .png({ compressionLevel: 1 })
+      .toBuffer();
+    composites.push({
+      input: fitted,
+      left: slot.left,
+      top: slot.top,
+    });
+    slot.pane.buffer = null;
+  }
+
+  const out = await sharp({
     create: {
       width: canvasW,
       height: canvasH,
       channels: 3,
       background: { r: 16, g: 16, b: 16 },
     },
-  }).composite(composites);
+  })
+    .composite(composites)
+    .png({ compressionLevel: 4 })
+    .toBuffer();
 
-  if (canvasW > MAX_STITCH_EDGE_PX || canvasH > MAX_STITCH_EDGE_PX) {
-    pipeline = pipeline.resize({
-      width: canvasW > canvasH ? MAX_STITCH_EDGE_PX : undefined,
-      height: canvasH >= canvasW ? MAX_STITCH_EDGE_PX : undefined,
-      fit: 'inside',
-      withoutEnlargement: true,
-    });
-  }
-
-  return pipeline.png({ compressionLevel: 6 }).toBuffer();
+  for (const item of composites) item.input = null;
+  return out;
 }
 
 /**
@@ -729,12 +846,14 @@ function getElectronLayouts() {
     const ordered = [primary, ...others];
     return ordered.map((d) => {
       const sf = d.scaleFactor || 1;
+      const bw = d.bounds?.width || d.size?.width || 0;
+      const bh = d.bounds?.height || d.size?.height || 0;
       return {
         id: d.id,
-        x: Math.round(d.bounds.x * sf),
-        y: Math.round(d.bounds.y * sf),
-        width: Math.round(d.size.width * sf),
-        height: Math.round(d.size.height * sf),
+        x: Math.round((d.bounds?.x || 0) * sf),
+        y: Math.round((d.bounds?.y || 0) * sf),
+        width: Math.round(bw * sf),
+        height: Math.round(bh * sf),
       };
     });
   } catch (_) {
@@ -775,11 +894,15 @@ async function captureViaDesktopCapturerStitched(thumbnailSize) {
   let usedSize = preferred;
   for (const size of sizesToTry) {
     usedSize = size;
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: size,
-      fetchWindowIcons: false,
-    });
+    const sources = await withTimeout(
+      desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: size,
+        fetchWindowIcons: false,
+      }),
+      20000,
+      `desktopCapturer.getSources ${size.width}x${size.height}`,
+    );
     withImages = (sources || []).filter((s) => s?.thumbnail && !s.thumbnail.isEmpty());
     console.log(
       `[MULTI-DISPLAY] desktopCapturer sources=${(sources || []).length}, withImages=${withImages.length}, size=${size.width}x${size.height}`,
@@ -864,8 +987,8 @@ function getPreferredThumbnailSize() {
       maxW = Math.max(maxW, Math.round(d.size.width * sf));
       maxH = Math.max(maxH, Math.round(d.size.height * sf));
     }
-    maxW = Math.min(maxW, 3840);
-    maxH = Math.min(maxH, 2160);
+    maxW = Math.min(maxW, 1920);
+    maxH = Math.min(maxH, 1080);
     return { width: maxW, height: maxH };
   } catch (_) {
     return { width: 1920, height: 1080 };

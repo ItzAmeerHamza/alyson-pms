@@ -261,7 +261,7 @@ This is the payroll clock path. **Read carefully when researching “silent eati
 4. Pacific midnight → UI “today” resets; prior day preserved in DB.
 5. Tray clock and in-app clock must stay aligned; tray is authority while tracking.
 6. Soft **pause** does **not** close the DB row (wall clock still accrues if `isTracking` stays true — verify behavior against `TrackingController` vs tray).
-7. Sleep / screen lock must **not** auto-stop tracking (stopping on sleep previously “ate” hours).
+7. Lid close / OS sleep **stops** tracking and closes the session (Mac + Windows), even during a meeting. Screen lock alone does not stop. Sleep hours are not billed (end at last proof-of-life).
 
 ### State flags
 

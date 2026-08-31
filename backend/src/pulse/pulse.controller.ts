@@ -78,14 +78,21 @@ export class PulseController {
     @Req() req: { user: any },
     @Query('start') start: string,
     @Query('end') end: string,
+    @Query('userId') userId?: string,
   ) {
     if (!start || !end) {
       throw new BadRequestException('start and end query params are required');
     }
-    if (
+    const canSeeTeam =
       canAccessPulseTeamReports(req.user) ||
-      (await this.pulse.hasDelegatedAccess(req.user))
-    ) {
+      (await this.pulse.hasDelegatedAccess(req.user));
+    if (userId) {
+      if (!canSeeTeam && String(userId) !== String(req.user.id)) {
+        throw new ForbiddenException('Insufficient permissions for this user');
+      }
+      return this.pulse.getDailyHours(req.user, start, end, userId);
+    }
+    if (canSeeTeam) {
       return this.pulse.getDailyHours(req.user, start, end);
     }
     return this.pulse.getDailyHours(req.user, start, end, req.user.id);

@@ -11,6 +11,10 @@
  * - If the probe cannot list tabs (UIA/CDP failed) we keep the meeting until a
  *   conclusive miss. A 2-hour call with Word in front stays effective.
  * - 2-min grace only when we never confirmed presence and the probe cannot run.
+ * - Idle auto-stop is separate: after 10 min of OS idle the still-working
+ *   prompt still fires. Leftover Meet / Zoom / Teams / Webex / Skype tabs
+ *   or desktop windows must not keep tracking all day.
+ * - Lid close / OS sleep always stops tracking, even if a meeting is still open.
  */
 
 const MEETING_ACTIVITY_FLOOR_PERCENT = 50;

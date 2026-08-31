@@ -7,6 +7,12 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import {
+  THUMB_CDN_CONFIG_S3_KEY,
+  buildThumbCdnUrl,
+  isScreenshotThumbKey,
+  isThumbCdnConfigured,
+} from '../lib/screenshot-thumb-cdn';
 
 @Injectable()
 export class S3Service {
@@ -16,6 +22,9 @@ export class S3Service {
   private readonly prefix: string;
   private readonly defaultTtlSec: number;
   private readonly putTtlSec: number;
+  private thumbCdnDomain: string;
+  private thumbCdnSecret: string;
+  private thumbCdnLoad: Promise<void> | null = null;
 
   constructor(private readonly config: ConfigService) {
     const region = this.config.get<string>('AWS_REGION');
@@ -26,6 +35,8 @@ export class S3Service {
       /^\/+|\/+$/g,
       '',
     );
+    this.thumbCdnDomain = (this.config.get<string>('SCREENSHOT_THUMB_CDN_DOMAIN') || '').trim();
+    this.thumbCdnSecret = (this.config.get<string>('SCREENSHOT_THUMB_CDN_HMAC_SECRET') || '').trim();
 
     if (region && bucket) {
       const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID');
@@ -101,9 +112,14 @@ export class S3Service {
     return true;
   }
 
-  async attachPresignedUrls<T extends { s3_key?: string | null; image_url?: string | null }>(
-    rows: T[],
-  ): Promise<T[]> {
+  async attachPresignedUrls<
+    T extends {
+      s3_key?: string | null;
+      thumb_s3_key?: string | null;
+      image_url?: string | null;
+      thumb_url?: string | null;
+    },
+  >(rows: T[]): Promise<T[]> {
     if (!this.isEnabled()) return rows;
 
     return Promise.all(
@@ -113,14 +129,23 @@ export class S3Service {
           if (key) {
             this.logger.warn(`Skipping presign for invalid screenshot s3_key: ${key}`);
           }
-          return { ...row, image_url: null };
+          return { ...row, image_url: null, thumb_url: null };
         }
         try {
           const url = await this.getPresignedGetUrl(key!);
-          return { ...row, image_url: url };
+          const thumbKey = row.thumb_s3_key?.trim();
+          let thumbUrl: string | null = null;
+          if (this.isValidScreenshotObjectKey(thumbKey)) {
+            try {
+              thumbUrl = await this.resolveThumbUrl(thumbKey!);
+            } catch {
+              thumbUrl = null;
+            }
+          }
+          return { ...row, image_url: url, thumb_url: thumbUrl };
         } catch (err) {
           this.logger.warn(`Presign failed for key ${key}`);
-          return { ...row, image_url: null };
+          return { ...row, image_url: null, thumb_url: null };
         }
       }),
     );
@@ -131,6 +156,7 @@ export class S3Service {
     key: string,
     body: string | Buffer,
     contentType: string,
+    cacheControl?: string,
   ): Promise<void> {
     if (!this.client || !this.bucket) {
       throw new Error('S3 is not configured');
@@ -141,8 +167,44 @@ export class S3Service {
         Key: key,
         Body: body,
         ContentType: contentType,
+        ...(cacheControl ? { CacheControl: cacheControl } : {}),
       }),
     );
+  }
+
+  private async resolveThumbUrl(thumbKey: string): Promise<string> {
+    await this.ensureThumbCdnConfig();
+    if (
+      isThumbCdnConfigured(this.thumbCdnDomain, this.thumbCdnSecret) &&
+      isScreenshotThumbKey(thumbKey)
+    ) {
+      return buildThumbCdnUrl(this.thumbCdnDomain, thumbKey, this.thumbCdnSecret);
+    }
+    return this.getPresignedGetUrl(thumbKey);
+  }
+
+  private async ensureThumbCdnConfig(): Promise<void> {
+    if (isThumbCdnConfigured(this.thumbCdnDomain, this.thumbCdnSecret)) return;
+    if (!this.thumbCdnLoad) {
+      this.thumbCdnLoad = this.loadThumbCdnConfigFromS3();
+    }
+    await this.thumbCdnLoad;
+  }
+
+  private async loadThumbCdnConfigFromS3(): Promise<void> {
+    try {
+      const text = await this.getObjectText(THUMB_CDN_CONFIG_S3_KEY, 4096);
+      if (!text) return;
+      const parsed = JSON.parse(text) as { domain?: unknown; secret?: unknown };
+      const domain = typeof parsed.domain === 'string' ? parsed.domain.trim() : '';
+      const secret = typeof parsed.secret === 'string' ? parsed.secret.trim() : '';
+      if (!isThumbCdnConfigured(domain, secret)) return;
+      this.thumbCdnDomain = domain;
+      this.thumbCdnSecret = secret;
+      this.logger.log(`Screenshot thumb CDN enabled: ${domain}`);
+    } catch {
+      this.thumbCdnLoad = null;
+    }
   }
 
   /** Read a UTF-8 object body. Returns null on missing key. */

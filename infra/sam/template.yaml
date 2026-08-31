@@ -115,9 +115,15 @@ Parameters:
     Type: String
     Default: hamza@cintara.ai,mohita@cintara.ai
     Description: Comma-separated allowlisted SES From addresses for Email Reporting picker
+  ScreenshotThumbCdnHmacSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Hex HMAC secret (32–128 chars) to enable CloudFront thumbs. Empty keeps S3-presigned thumb_url.
 
 Conditions:
   ScreenshotAiEnabled: !Equals [!Ref ScreenshotAiEnabled, 'true']
+  ThumbCdnEnabled: !Not [!Equals [!Ref ScreenshotThumbCdnHmacSecret, '']]
 
 Globals:
   Function:
@@ -325,7 +331,7 @@ Resources:
           SCREENSHOT_AI_API_BASE_URL: !Sub 'https://${AlysonTimeDoctorHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
           INTERNAL_API_KEY: !Ref InternalApiKey
       Policies:
-        - S3ReadPolicy:
+        - S3CrudPolicy:
             BucketName: !Ref S3BucketName
       Events:
         ScreenshotAiQueueEvent:
@@ -610,6 +616,108 @@ Resources:
       # Auth is enforced in Nest (Cognito JWT + INTERNAL_API_KEY for /sync).
       # Do not set a default API Gateway JWT authorizer — it would block /sync/desktop-action.
 
+  # Thumbs only. Full JPEGs stay S3-presigned. Bucket stays private (OAC + HMAC).
+  # deploy.sh merges one GetObject statement onto the existing shared-bucket policy.
+  ScreenshotThumbOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Condition: ThumbCdnEnabled
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub 'alyson-time-doctor-thumbs-${EnvironmentName}'
+        Description: Pulse screenshot thumbs — private S3 origin
+        SigningBehavior: always
+        SigningProtocol: sigv4
+        OriginAccessControlOriginType: s3
+
+  ScreenshotThumbAuthFunction:
+    Type: AWS::CloudFront::Function
+    Condition: ThumbCdnEnabled
+    Properties:
+      Name: !Sub 'alyson-time-doctor-thumbs-auth-${EnvironmentName}'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Pulse thumbs — HMAC query + .thumb.jpg under the screenshots prefix
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub
+        - |
+          import crypto from 'crypto';
+          var SECRET = '${Secret}';
+          var PREFIX = '/${Prefix}/';
+          function deny() {
+            return {
+              statusCode: 403,
+              statusDescription: 'Forbidden',
+              headers: { 'content-type': { value: 'text/plain' } },
+              body: 'Forbidden'
+            };
+          }
+          function timingSafeEqual(a, b) {
+            if (a.length !== b.length) return false;
+            var out = 0;
+            for (var i = 0; i < a.length; i++) {
+              out |= a.charCodeAt(i) ^ b.charCodeAt(i);
+            }
+            return out === 0;
+          }
+          function handler(event) {
+            var request = event.request;
+            var uri = request.uri;
+            if (uri.indexOf(PREFIX) !== 0 || !uri.endsWith('.thumb.jpg')) {
+              return deny();
+            }
+            var expQ = request.querystring.exp;
+            var sigQ = request.querystring.sig;
+            if (!expQ || !sigQ || !expQ.value || !sigQ.value) {
+              return deny();
+            }
+            var exp = Number(expQ.value);
+            if (!(exp > 0) || exp * 1000 < Date.now()) {
+              return deny();
+            }
+            var expected = crypto.createHmac('sha256', SECRET).update(String(exp) + uri).digest('hex');
+            if (!timingSafeEqual(expected, sigQ.value)) {
+              return deny();
+            }
+            return request;
+          }
+        - Secret: !Ref ScreenshotThumbCdnHmacSecret
+          Prefix: !Ref S3Prefix
+
+  ScreenshotThumbDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: ThumbCdnEnabled
+    Properties:
+      Tags:
+        - Key: team
+          Value: Alyson PM
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'alyson-time-doctor screenshot thumbs ${EnvironmentName}'
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        IPV6Enabled: true
+        Origins:
+          - Id: ScreenshotsBucket
+            DomainName: !Sub '${S3BucketName}.s3.${AWS::Region}.amazonaws.com'
+            OriginAccessControlId: !GetAtt ScreenshotThumbOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: ScreenshotsBucket
+          ViewerProtocolPolicy: https-only
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          # Managed CachingOptimized — query strings (exp/sig) are not in the cache key
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt ScreenshotThumbAuthFunction.FunctionARN
+
 Outputs:
   ApiEndpoint:
     Description: HTTP API base URL (no trailing slash)
@@ -645,3 +753,11 @@ Outputs:
       - !Split
         - ':'
         - !Select [0, !GetAtt LambdaVpcEndpoint.DnsEntries]
+  ScreenshotThumbCdnDomain:
+    Condition: ThumbCdnEnabled
+    Description: CloudFront domain for signed screenshot thumb_url values
+    Value: !GetAtt ScreenshotThumbDistribution.DomainName
+  ScreenshotThumbCdnDistributionId:
+    Condition: ThumbCdnEnabled
+    Description: CloudFront distribution id (bucket policy SourceArn)
+    Value: !Ref ScreenshotThumbDistribution

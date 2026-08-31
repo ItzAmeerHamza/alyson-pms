@@ -3,6 +3,7 @@ import { S3Service } from '../common/s3.service';
 import { DeepseekVisionService } from './deepseek-vision.service';
 import { ScreenshotImageContextService } from './screenshot-image-context.service';
 import { ScreenshotAiRepository } from './screenshot-ai.repository';
+import { writeScreenshotThumb } from '../lib/screenshot-thumb';
 import { ScreenshotAiJobMessage, ScreenshotRowForAnalysis } from './screenshot-ai.types';
 
 const MAX_RETRIES = 3;
@@ -50,6 +51,7 @@ export class ScreenshotAiAnalyzerService {
       }
 
       const { buffer, contentType } = await this.s3.getObjectBuffer(row.s3_key);
+      const thumbS3Key = await writeScreenshotThumb(this.s3, row.s3_key, buffer);
       const extracted = await this.imageContext.extractFromImage(buffer);
       const { result, raw } = await this.deepseek.analyzeScreenshot({
         imageBase64: buffer.toString('base64'),
@@ -74,6 +76,7 @@ export class ScreenshotAiAnalyzerService {
           source: job.source,
           analyzed_at: new Date().toISOString(),
         },
+        thumb_s3_key: thumbS3Key,
       });
 
       this.logger.log(

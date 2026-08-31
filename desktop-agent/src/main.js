@@ -6003,7 +6003,7 @@ if (isElectronContext && ipcMain) {
 
   // Monthly work report (always register — renderer loads before DataStatsManager.initialize())
   try { ipcMain.removeHandler('get-monthly-report-data'); } catch {}
-  ipcMain.handle('get-monthly-report-data', async () => {
+  ipcMain.handle('get-monthly-report-data', async (_event, opts = {}) => {
     try {
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
       const { buildMonthlyReportData } = require('./modules/utils/monthly-report-data');
@@ -6013,6 +6013,7 @@ if (isElectronContext && ipcMain) {
       return await buildMonthlyReportData({
         global,
         config,
+        monthOffset: opts?.monthOffset,
       });
     } catch (error) {
       console.error('❌ [MONTHLY-REPORT] get-monthly-report-data error:', error);

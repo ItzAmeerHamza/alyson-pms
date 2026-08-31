@@ -38,12 +38,13 @@ class EnhancedIdleMonitor {
     this._phantomIdleStartTime = null;
     this._lastSeenKeystrokes = 0;
     this._lastSeenClicks = 0;
-    const defaultPhantomIdleMinutes =
-      process.env.NODE_ENV === 'production'
-        ? 10
-        : 60; // Dev/test: avoid unexpected auto-stops while validating uploads
+    // Packaged Electron often has NODE_ENV unset — never treat that as "dev 60 min".
+    // Ameer 1.0.234 logged "60 min phantom idle" on a shipped Mac build.
+    const configuredPhantom = Number(
+      this.config?.phantom_idle_minutes || global?.appSettings?.phantom_idle_minutes,
+    );
     this.PHANTOM_IDLE_THRESHOLD_MS =
-      (this.config?.phantom_idle_minutes || global?.appSettings?.phantom_idle_minutes || defaultPhantomIdleMinutes) * 60 * 1000;
+      (Number.isFinite(configuredPhantom) && configuredPhantom > 0 ? configuredPhantom : 10) * 60 * 1000;
     
     // Idle logging: OS idle only (any keyboard/mouse/trackpad resets it).
     // Default 5 minutes so reading/scrolling is not counted as idle.
@@ -102,7 +103,8 @@ class EnhancedIdleMonitor {
     //      main tracked clock except via (2)
     //   4) "I'm working" → keep tracking (no cut); "On break" → stop now (no 10m cut)
     //   5) Never cut/stop if the prompt UI was not actually shown
-    //   6) Sleep / screen lock must NOT stop tracking (Windows/macOS) — continuous clock
+    //   6) Lid close / OS sleep stops tracking and closes the session (Mac + Windows),
+    //      even during a meeting. Screen lock alone does not stop.
     this._idlePromptActive = false;
     this._idlePromptShown = false; // true only after UI successfully displayed
     this._idlePromptTimeout = null;
@@ -386,17 +388,8 @@ class EnhancedIdleMonitor {
 
     console.warn(
       `😴 [IDLE-MONITOR] ${Math.round(gap / 1000)}s gap between checks — machine was asleep. ` +
-        'Crediting idle up to the last check and ignoring the sleep.',
+        'Closing the session at last proof-of-life (sleep is not billed).',
     );
-
-    try {
-      global._lastWakeAtMs = now;
-      global._startAfterSleep = true;
-      global._lidLastProofIso = new Date(lastSeen).toISOString();
-      if (typeof global.trackingManager?.noteMachineSlept === 'function') {
-        void global.trackingManager.noteMachineSlept(lastSeen);
-      }
-    } catch (_) { /* session split is best-effort */ }
 
     if (this.currentIdleStartTime && this.wasIdleLastCheck) {
       await this._flushIdleCheckpoint(lastSeen);
@@ -406,7 +399,44 @@ class EnhancedIdleMonitor {
     this.wasIdleLastCheck = false;
     this.idleThresholdExceeded = false;
     this._phantomIdleStartTime = null;
+
+    try {
+      global._lastWakeAtMs = now;
+      global._startAfterSleep = true;
+      global._lidLastProofIso = new Date(lastSeen).toISOString();
+      // Lid-close / sleep is a full stop. Meeting presence must not keep the
+      // session open if Electron missed the suspend event (common on both OS).
+      let slept = null;
+      if (typeof global.trackingManager?.noteMachineSlept === 'function') {
+        slept = await global.trackingManager.noteMachineSlept(lastSeen);
+      }
+      const stillTracking = this.isTracking || global.isTracking;
+      if (stillTracking && slept?.reason !== 'session-started-after-sleep') {
+        console.warn(
+          '💤 [IDLE-MONITOR] Sleep gap — stopping tracking and closing the session (meeting does not block)',
+        );
+        if (typeof global.stopTracking === 'function') {
+          await global.stopTracking('system_sleep');
+        }
+      }
+    } catch (_) { /* stop is best-effort; wake path still returns */ }
+
     return true;
+  }
+
+  /**
+   * A leftover Meet / Zoom / Teams / Webex / Skype tab or window must not
+   * block the 10-min "still working?" prompt. Real calls stay effective
+   * (no idle_logs) until OS idle hits that threshold.
+   */
+  _shouldSuppressIdleForMeeting(osIdleSeconds) {
+    try {
+      const { isInMeetingSession } = require('../../lib/meeting-context');
+      if (!isInMeetingSession()) return false;
+      return osIdleSeconds * 1000 < this.IDLE_PROMPT_THRESHOLD_MS;
+    } catch (_) {
+      return false;
+    }
   }
 
   /**
@@ -415,25 +445,27 @@ class EnhancedIdleMonitor {
   async _evaluateIdleState() {
     if (await this._handleSuspendGap()) return;
 
-    // Listening on Meet/Zoom/Teams is work. OS idle would otherwise write idle_logs
-    // while a live probe (or 2-min grace) still says the call is open.
-    try {
-      const { isInMeetingSession } = require('../../lib/meeting-context');
-      if (isInMeetingSession()) {
-        if (this._idlePromptActive || this.wasIdleLastCheck || this.currentIdleStartTime) {
-          console.log('📹 [IDLE-MONITOR] In a video meeting — not counting idle');
-          if (this._idlePromptActive) this._resolveIdlePrompt('working');
-          this.currentIdleStartTime = null;
-          this._lastIdleCheckpointTime = null;
-          this.wasIdleLastCheck = false;
-          this.idleThresholdExceeded = false;
-          this._phantomIdleStartTime = null;
-        }
-        return;
-      }
-    } catch (_) {}
-
     const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
+
+    // Listening on Meet/Zoom/Teams is work. OS idle would otherwise write
+    // idle_logs while a live probe still says the call is open. Only suppress
+    // below the prompt threshold — after 10 min of no input, ask anyway.
+    if (this._shouldSuppressIdleForMeeting(os)) {
+      if (this._idlePromptActive) {
+        // OS idle dropped below the prompt threshold (mouse/keyboard resumed)
+        // while a call is still open — same as clicking "I'm working".
+        this._resolveIdlePrompt('working');
+      } else if (this.wasIdleLastCheck || this.currentIdleStartTime) {
+        console.log('📹 [IDLE-MONITOR] In a video meeting — not counting idle');
+        this.currentIdleStartTime = null;
+        this._lastIdleCheckpointTime = null;
+        this.wasIdleLastCheck = false;
+        this.idleThresholdExceeded = false;
+        this._phantomIdleStartTime = null;
+      }
+      return;
+    }
+
     const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
 
     if (isIdle && !this.wasIdleLastCheck) {

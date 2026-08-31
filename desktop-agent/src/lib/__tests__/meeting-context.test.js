@@ -19,6 +19,7 @@ const {
 
 const {
   isActiveGoogleMeetCallUrl,
+  isEndedOrLeftMeetingHay,
   isVideoMeetingUrl,
   isGoogleMeetWindowTitle,
   isZoomOrTeamsCallTitle,
@@ -253,5 +254,18 @@ describe('meeting-presence-probe helpers', () => {
     expect(isZoomOrTeamsCallTitle('Zoom Meeting', 'zoom.us')).toBe(true);
     expect(isZoomOrTeamsCallTitle('Daily standup | Microsoft Teams', 'Microsoft Teams')).toBe(true);
     expect(isZoomOrTeamsCallTitle('Inbox', 'Mail')).toBe(false);
+  });
+
+  test('leftover ended/left pages are not a live Zoom, Teams, Meet, Webex, or Skype call', () => {
+    expect(isEndedOrLeftMeetingHay('You have left the meeting')).toBe(true);
+    expect(isVideoMeetingUrl('https://zoom.us/wc/leave')).toBe(false);
+    expect(isVideoMeetingUrl('https://zoom.us/j/123456789')).toBe(true);
+    expect(isVideoMeetingUrl('https://teams.live.com/meet/abc123')).toBe(true);
+    expect(isVideoMeetingUrl('https://teams.microsoft.com/l/meetup-join/19:room')).toBe(true);
+    expect(isVideoMeetingUrl('https://webex.com/meet/jane')).toBe(true);
+    expect(isZoomOrTeamsCallTitle('You have left the meeting', 'Zoom')).toBe(false);
+    expect(isZoomOrTeamsCallTitle('Call ended | Microsoft Teams', 'Microsoft Teams')).toBe(false);
+    expect(isGoogleMeetWindowTitle('You left the meeting - Google Chrome', 'Google Chrome')).toBe(false);
+    expect(isMeetingBrowserTabTitle('Zoom Meeting')).toBe(true);
   });
 });

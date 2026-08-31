@@ -32,6 +32,41 @@ const SCREENSHOT_SORTS: ScreenshotSort[] = ['newest', 'least_productive', 'low_a
 
 /** productivity_flag lives in vision_analysis JSONB (parsed or top-level). */
 const PRODUCTIVITY_FLAG_SQL = `COALESCE(s.vision_analysis #>> '{parsed,productivity_flag}', s.vision_analysis->>'productivity_flag', '')`;
+const FEEDBACK_SQL = `COALESCE(s.vision_analysis #>> '{parsed,feedback_for_employee}', s.vision_analysis->>'feedback_for_employee')`;
+
+/** List/gallery columns only — never the raw DeepSeek vision_analysis blob. */
+const SCREENSHOT_LIST_SELECT = `
+  s.id,
+  s.user_id::text AS user_id,
+  s.time_log_id,
+  s.workspace_id,
+  s.s3_key,
+  s.thumb_s3_key,
+  s.file_path,
+  s.file_size,
+  s.captured_at,
+  s.activity_percent,
+  s.focus_percent,
+  s.mouse_clicks,
+  s.keystrokes,
+  s.mouse_movements,
+  s.app_name,
+  s.window_title,
+  s.agent_version,
+  s.created_at,
+  s.ai_analysis_status,
+  s.ai_analyzed_at,
+  s.ai_model_used,
+  s.activity_type,
+  s.category,
+  s.is_work_related,
+  s.confidence_score,
+  s.distraction_score,
+  s.vision_summary,
+  ${FEEDBACK_SQL} AS feedback,
+  ${PRODUCTIVITY_FLAG_SQL} AS productivity_flag,
+  CASE WHEN s.vision_analysis->>'vision_used' = 'true' THEN true ELSE false END AS vision_used
+`;
 
 export function normalizeScreenshotProductivityFilter(
   value?: string,
@@ -1119,7 +1154,7 @@ export class DataService {
     const orderBy = screenshotOrderByClause(sort);
 
     const result = await this.database.query(
-      `SELECT s.*, s.user_id::text AS user_id
+      `SELECT ${SCREENSHOT_LIST_SELECT}
        FROM time_doctor.screenshots s
        WHERE ${filters.join(' AND ')}
        ORDER BY ${orderBy}
@@ -1127,7 +1162,7 @@ export class DataService {
        OFFSET $${dataParams.length}`,
       dataParams,
     );
-    return this.s3.attachPresignedUrls(
+    const rows = await this.s3.attachPresignedUrls(
       result.rows.map((row) => {
         // Meetings expect low input; floor activity so they are not labelled low activity.
         const activityPercent = applyMeetingActivityFloor(
@@ -1148,6 +1183,31 @@ export class DataService {
         };
       }),
     );
+    // #region agent log
+    {
+      const jsonBytes = Buffer.byteLength(JSON.stringify(rows));
+      const withVision = rows.filter((r) => 'vision_analysis' in r).length;
+      fetch('http://127.0.0.1:7612/ingest/1c3b1140-705f-4d26-95d3-63a9580b70d3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'dd6ce4' },
+        body: JSON.stringify({
+          sessionId: 'dd6ce4',
+          runId: 'post-slim',
+          hypothesisId: 'A',
+          location: 'data.service.ts:listScreenshots',
+          message: 'screenshot list payload',
+          data: {
+            rowCount: rows.length,
+            jsonBytes,
+            visionAnalysisRows: withVision,
+            avgBytes: rows.length ? Math.round(jsonBytes / rows.length) : 0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
+    return rows;
   }
 
   /**
@@ -1227,10 +1287,11 @@ export class DataService {
       user_id: number;
       time_log_id: string | null;
       s3_key: string | null;
+      thumb_s3_key: string | null;
       file_path: string | null;
       captured_at: string;
     }>(
-      `SELECT s.id, s.user_id, s.time_log_id, s.s3_key, s.file_path, s.captured_at
+      `SELECT s.id, s.user_id, s.time_log_id, s.s3_key, s.thumb_s3_key, s.file_path, s.captured_at
        FROM time_doctor.screenshots s
        WHERE ${filters.join(' AND ')}
        LIMIT 1`,
@@ -1245,6 +1306,7 @@ export class DataService {
 
     // Best-effort S3 removal; the RDS row is the source of truth.
     await this.s3.deleteObject(screenshot.s3_key || screenshot.file_path);
+    await this.s3.deleteObject(screenshot.thumb_s3_key);
 
     if (screenshot.time_log_id && deductedSeconds > 0) {
       await this.database.query(

@@ -81,4 +81,110 @@ describe('multi-display-screenshot', () => {
     // Side-by-side or geometry stitch should be wider than a single pane
     expect(meta.width).toBeGreaterThan(200);
   });
+
+  test('stitches Hanan-sized 3440×1964 thumbs onto mixed-DPI Mac layouts', async () => {
+    const { screen } = require('electron');
+    screen.getAllDisplays.mockReturnValue([
+      {
+        id: 1,
+        bounds: { x: 0, y: 0, width: 1512, height: 982 },
+        size: { width: 1512, height: 982 },
+        scaleFactor: 2,
+      },
+      {
+        id: 2,
+        bounds: { x: 1512, y: -229, width: 3440, height: 1440 },
+        size: { width: 3440, height: 1440 },
+        scaleFactor: 1,
+      },
+    ]);
+    screen.getPrimaryDisplay.mockReturnValue({
+      id: 1,
+      bounds: { x: 0, y: 0, width: 1512, height: 982 },
+      size: { width: 1512, height: 982 },
+      scaleFactor: 2,
+    });
+
+    const makePane = (w, h, r, g, b) =>
+      sharp({
+        create: { width: w, height: h, channels: 3, background: { r, g, b } },
+      })
+        .png()
+        .toBuffer();
+
+    const { stitchCaptures } = require('../multi-display-screenshot');
+    const buffer = await stitchCaptures([
+      { id: 1, primary: true, buffer: await makePane(3440, 1964, 255, 0, 0) },
+      { id: 2, primary: false, buffer: await makePane(3440, 1964, 0, 0, 255) },
+    ]);
+
+    expect(buffer.length).toBeGreaterThan(1000);
+    const meta = await sharp(buffer).metadata();
+    expect(meta.width).toBeGreaterThan(2000);
+    expect(meta.width).toBeLessThanOrEqual(3840);
+    expect(meta.height).toBeGreaterThan(700);
+    expect(meta.height).toBeLessThanOrEqual(3840);
+  });
+
+  test('stitches ultrawide primary + retina laptop when both thumbs are 3440×1964', async () => {
+    const { screen } = require('electron');
+    screen.getAllDisplays.mockReturnValue([
+      {
+        id: 2,
+        bounds: { x: 0, y: 0, width: 3440, height: 1440 },
+        size: { width: 3440, height: 1440 },
+        scaleFactor: 1,
+      },
+      {
+        id: 1,
+        bounds: { x: -1512, y: 229, width: 1512, height: 982 },
+        size: { width: 1512, height: 982 },
+        scaleFactor: 2,
+      },
+    ]);
+    screen.getPrimaryDisplay.mockReturnValue({
+      id: 2,
+      bounds: { x: 0, y: 0, width: 3440, height: 1440 },
+      size: { width: 3440, height: 1440 },
+      scaleFactor: 1,
+    });
+
+    const makePane = (w, h, r, g, b) =>
+      sharp({
+        create: { width: w, height: h, channels: 3, background: { r, g, b } },
+      })
+        .png()
+        .toBuffer();
+
+    const { stitchCaptures } = require('../multi-display-screenshot');
+    const buffer = await stitchCaptures([
+      { id: 2, primary: true, buffer: await makePane(3440, 1964, 255, 40, 0) },
+      { id: 1, primary: false, buffer: await makePane(3440, 1964, 0, 40, 255) },
+    ]);
+
+    const meta = await sharp(buffer).metadata();
+    expect(meta.width).toBeGreaterThan(2000);
+    expect(meta.width).toBeLessThanOrEqual(3840);
+    expect(meta.height).toBeGreaterThan(700);
+  });
+
+  test('stitches mixed physical pane sizes without compositing overflow', async () => {
+    const makePane = (w, h, r, g, b) =>
+      sharp({
+        create: { width: w, height: h, channels: 3, background: { r, g, b } },
+      })
+        .png()
+        .toBuffer();
+
+    const { stitchCaptures } = require('../multi-display-screenshot');
+    const buffer = await stitchCaptures([
+      { id: 1, primary: true, buffer: await makePane(3024, 1964, 20, 180, 20) },
+      { id: 2, primary: false, buffer: await makePane(3440, 1440, 20, 20, 180) },
+    ]);
+
+    const meta = await sharp(buffer).metadata();
+    expect(meta.width).toBeGreaterThan(2000);
+    expect(meta.width).toBeLessThanOrEqual(3840);
+    expect(buffer.length).toBeGreaterThan(1000);
+  });
 });

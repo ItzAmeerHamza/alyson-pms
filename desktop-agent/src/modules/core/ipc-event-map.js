@@ -892,6 +892,7 @@ class IPCEventMap {
         ...screenshot,
         // Backend rows already carry a presigned image_url; file_path is the fallback
         image_url: screenshot.image_url || screenshot.file_path,
+        thumb_url: screenshot.thumb_url || null,
         timestamp: screenshot.captured_at  // Add timestamp alias
       }));
 

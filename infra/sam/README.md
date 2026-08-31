@@ -84,6 +84,20 @@ Skips: Cognito User Pool, RDS PostgreSQL, Cognito VPC endpoint.
 
 - `ApiEndpoint` — set as `VITE_BACKEND_URL` (web) and `BACKEND_API_URL` (desktop agent; append `/sync/desktop-action` for agent sync URL if needed).
 
+## Screenshot thumb CloudFront
+
+Gallery `thumb_url` can go through CloudFront instead of S3 presign. Full `image_url` stays S3-presigned. The bucket stays private (OAC + HMAC query). Set a hex secret and redeploy:
+
+```bash
+openssl rand -hex 32
+# add to deploy.env:
+# export SCREENSHOT_THUMB_CDN_HMAC_SECRET=<that value>
+```
+
+`deploy.sh` creates the distribution, merges **one** `s3:GetObject` statement (`AllowAlysonPulseThumbCloudFront`) onto the existing shared-bucket policy, and writes `s3://<bucket>/alyson-td-internal/thumb-cdn.json` (domain + HMAC). The API reads that object so Lambda env stays under 4KB. First CloudFront deploy can take 10–15 minutes.
+
+Leave the secret empty to keep S3-presigned `thumb_url`.
+
 ## Security notes
 
 - Store `DATABASE_PASSWORD` and `INTERNAL_API_KEY` in **Secrets Manager**; reference from SAM `Secrets` (not plain parameters in prod).

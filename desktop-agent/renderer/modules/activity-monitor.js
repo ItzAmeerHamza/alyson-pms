@@ -1,3 +1,5 @@
+const { screenshotTileImgTag } = require('../../src/modules/utils/backend-screenshots');
+
 class ActivityMonitor {
   constructor(ipcRenderer) {
     this.ipcRenderer = ipcRenderer;
@@ -521,12 +523,12 @@ class ActivityMonitor {
     }
 
     const html = items.map((s, idx) => {
-      const url = s.image_url || s.file_path || '';
       const ts = s.captured_at || s.timestamp || new Date().toISOString();
       const time = new Date(ts).toLocaleTimeString();
+      const img = screenshotTileImgTag(s, { alt: `Screenshot ${idx + 1}` });
       return `
         <div class="screenshot-item">
-          ${url ? `<img src="${url}" alt="Screenshot ${idx+1}" onerror="this.style.display='none'">` : '<div style="width:80px;height:50px;background:#1e293b;border-radius:6px;"></div>'}
+          ${img || '<div style="width:80px;height:50px;background:#1e293b;border-radius:6px;"></div>'}
           <span class="time">${time}</span>
         </div>`;
     }).join('');

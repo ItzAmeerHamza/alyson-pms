@@ -18,6 +18,11 @@ const {
   formatWorkTimezoneLabel,
   getWorkTimezone,
 } = require('../src/modules/utils/work-timezone');
+const {
+  escapeHtmlAttr,
+  screenshotPopupUrl,
+  screenshotTileImgTag,
+} = require('../src/modules/utils/backend-screenshots');
 
 try {
   initWorkTimezone(typeof global !== 'undefined' ? global.config : undefined);
@@ -3238,6 +3243,33 @@ function setupLegacyEventListeners() {
     });
   }
 
+  const monthlyReportPrevBtn = document.getElementById('monthlyReportPrevBtn');
+  const monthlyReportNextBtn = document.getElementById('monthlyReportNextBtn');
+  if (monthlyReportPrevBtn) {
+    monthlyReportPrevBtn.addEventListener('click', async () => {
+      const ui = moduleInstances.uiManager;
+      if (!ui?.loadMonthlyReport) return;
+      ui._monthlyReportMonthOffset = Math.max(-24, (ui._monthlyReportMonthOffset || 0) - 1);
+      try {
+        await ui.loadMonthlyReport(false);
+      } catch (err) {
+        console.error('[RENDERER] Monthly report previous month failed:', err);
+      }
+    });
+  }
+  if (monthlyReportNextBtn) {
+    monthlyReportNextBtn.addEventListener('click', async () => {
+      const ui = moduleInstances.uiManager;
+      if (!ui?.loadMonthlyReport) return;
+      ui._monthlyReportMonthOffset = Math.min(0, (ui._monthlyReportMonthOffset || 0) + 1);
+      try {
+        await ui.loadMonthlyReport(false);
+      } catch (err) {
+        console.error('[RENDERER] Monthly report next month failed:', err);
+      }
+    });
+  }
+
   // Dashboard buttons fallback wiring (if present on dashboard page)
   const dashboardStopBtn = document.getElementById('stopBtn');
   if (dashboardStopBtn) {
@@ -3528,14 +3560,14 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                     <div>
                         <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Pacific Time)</span></label>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <button id="prevDateBtn" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
-                                <i data-lucide="chevron-left" style="width: 16px; height: 16px;"></i>
+                            <button id="prevDateBtn" type="button" class="date-nav-btn" title="Previous day">
+                                <i data-lucide="chevron-left"></i>
                             </button>
                             <input type="date" id="screenshotDate" value="${currentDate}" 
                                    title="Work day in Pacific Time"
                                    style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
-                            <button id="nextDateBtn" style="background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px; cursor: pointer;">
-                                <i data-lucide="chevron-right" style="width: 16px; height: 16px;"></i>
+                            <button id="nextDateBtn" type="button" class="date-nav-btn" title="Next day">
+                                <i data-lucide="chevron-right"></i>
                             </button>
                         </div>
                     </div>
@@ -3629,22 +3661,10 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
             const productivity = resolveProductivityBadge(screenshot);
             
                         screenshotHTML += `
-                <div class="screenshot-item" style="
-                    background: white; 
-                    border: 1px solid ${isDuplicate ? '#f59e0b' : '#e2e8f0'}; 
-                    border-radius: 16px; 
-                    overflow: hidden;
-                    transition: all 0.2s; 
-                    cursor: pointer;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    display: flex;
-                    flex-direction: column;
-                    height: 100%;
-                    ${isDuplicate ? 'box-shadow: 0 0 0 2px #fef3c7;' : ''}
-                " 
-                     onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(0,0,0,0.15)'" 
-                     onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='${isDuplicate ? '0 0 0 2px #fef3c7' : '0 1px 3px rgba(0, 0, 0, 0.1)'}'"
-                     onclick="openScreenshot('${screenshot.image_url}')">
+                <div class="screenshot-card${isDuplicate ? ' is-duplicate' : ''}"
+                     ${isDuplicate ? 'style="border-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7;"' : ''}
+                     data-popup="${escapeHtmlAttr(screenshotPopupUrl(screenshot))}"
+                     onclick="openScreenshot(this.dataset.popup)">
                     
                     ${isDuplicate ? `
                     <div style="background: #fef3c7; color: #92400e; padding: 8px; font-size: 12px; font-weight: 500; text-align: center; border-bottom: 1px solid #fcd34d;">
@@ -3653,20 +3673,18 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                     </div>
                     ` : ''}
                     
-                    <!-- Wide frame so dual-monitor stitched shots are fully visible -->
-                    <div style="width: 100%; aspect-ratio: 32/10; background: #f8fafc; position: relative; overflow: hidden;">
-                        <img src="${screenshot.image_url}" 
-                             alt="Screenshot ${index + 1}" 
-                             style="width: 100%; height: 100%; object-fit: contain; display: block; background: #f1f5f9;"
-                             onload="console.log('✅ Image loaded successfully:', '${screenshot.image_url}');"
-                             onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 32px;\'>📸</div>';">
+                    <div class="screenshot-thumb-frame">
+                        ${screenshotTileImgTag(screenshot, {
+                          alt: `Screenshot ${index + 1}`,
+                          class: 'screenshot-card-img',
+                        })}
                     </div>
                     
                     <!-- Info section below image -->
                     <div style="padding: 16px; flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
                         <div>
-                            <div style="font-size: 16px; color: #111827; font-weight: 600; margin-bottom: 8px;">${timeString}</div>
-                            <div style="font-size: 13px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
+                            <div class="screenshot-card-time">${timeString}</div>
+                            <div class="screenshot-card-meta">
                                 Focus: ${focusPercent}% · Clicks: ${screenshot.mouse_clicks || 0} · Keys: ${screenshot.keystrokes || 0} · Moves: ${screenshot.mouse_movements || 0}
                             </div>
                         </div>
