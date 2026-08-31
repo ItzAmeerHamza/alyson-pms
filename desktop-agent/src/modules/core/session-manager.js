@@ -292,7 +292,11 @@ class SessionManager {
         const userId = global.currentUserId || this.config?.user_id;
         if (userId) {
           const { closeOpenSessionsAfterExplicitStop } = require('../utils/session-recovery');
-          await closeOpenSessionsAfterExplicitStop({ userId, reason: 'user_logout' });
+          await closeOpenSessionsAfterExplicitStop({
+            userId,
+            reason: 'user_logout',
+            protectLive: false,
+          });
         }
       } catch (stopErr) {
         console.warn('⚠️ [SESSION] Stop-on-logout failed:', stopErr?.message || stopErr);

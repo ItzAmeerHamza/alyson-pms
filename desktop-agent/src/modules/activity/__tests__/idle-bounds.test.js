@@ -98,6 +98,17 @@ describe('idle periods are bounded by their session', () => {
     expect(monitor.currentIdleStartTime).toBeNull();
   });
 
+  it('a new Start does not inherit the previous session last-check as sleep', async () => {
+    const monitor = makeMonitor();
+    monitor._lastEvaluationAt = T('2026-08-31T11:30:46Z');
+    jest.spyOn(Date, 'now').mockReturnValue(T('2026-08-31T11:58:39Z'));
+    monitor.startIdleMonitoring();
+    expect(monitor._lastEvaluationAt).toBeNull();
+    const handled = await monitor._handleSuspendGap();
+    expect(handled).toBe(false);
+    await monitor.stopIdleMonitoring();
+  });
+
   it('treats an ordinary interval between checks as no gap at all', async () => {
     const monitor = makeMonitor();
     const base = T('2026-08-17T09:00:00Z');

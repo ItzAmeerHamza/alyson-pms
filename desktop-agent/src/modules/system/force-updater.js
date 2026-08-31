@@ -549,7 +549,12 @@ class ForceUpdater {
     });
 
     autoUpdater.on('error', (err) => {
-      console.error('❌ [FORCE-UPDATER] Update error:', err.message);
+      const transient = this.isTransientNetworkUpdateError(err);
+      if (transient) {
+        console.warn('⚠️ [FORCE-UPDATER] Update check deferred (network):', err.message);
+      } else {
+        console.error('❌ [FORCE-UPDATER] Update error:', err.message);
+      }
       
       // Check if this is a development mode bundle ID mismatch error
       const isDevModeError = err.message.includes('Could not locate update bundle') && 
@@ -846,7 +851,11 @@ class ForceUpdater {
         console.log(`📡 [FORCE-UPDATER] electron-updater remote: ${electronRemote}`);
       }
     } catch (error) {
-      console.error('❌ [FORCE-UPDATER] electron-updater check error:', error.message);
+      if (this.isTransientNetworkUpdateError(error)) {
+        console.warn('⚠️ [FORCE-UPDATER] electron-updater check deferred (network):', error.message);
+      } else {
+        console.error('❌ [FORCE-UPDATER] electron-updater check error:', error.message);
+      }
       if (!apiLatest) {
         const fallback = await this.checkGithubFallbackForUpdate();
         if (fallback) {

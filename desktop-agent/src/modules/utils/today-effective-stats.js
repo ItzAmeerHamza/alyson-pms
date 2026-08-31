@@ -11,6 +11,7 @@ const {
   resolveScreenshotIntervalMinutes,
 } = require('./effective-time');
 const { normalizeTenantUserId } = require('./tenant-user-id');
+const { overlapSeconds, screenshotOwnedRangeMs } = require('./screenshot-owned-interval');
 
 const LOW_ACTIVITY_PERCENT = 10;
 // Same floor Pulse uses. The agent records idle after 60s so the raw periods
@@ -56,8 +57,8 @@ function sumLowActivitySecondsFromScreenshots(
   dayEndMs,
   idleIntervals = [],
 ) {
-  const lowSecondsPerShot = Math.max(10, Math.floor(Number(intervalSeconds) || 60));
-  const streakNeeded = Math.max(1, Math.ceil(SUSTAINED_LOW_MINUTES / (lowSecondsPerShot / 60)));
+  const capMs = Math.max(10_000, Math.floor(Number(intervalSeconds) || 60) * 1000);
+  const minRunSeconds = SUSTAINED_LOW_MINUTES * 60;
   const insideIdle = (ms) =>
     idleIntervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
 
@@ -71,9 +72,18 @@ function sumLowActivitySecondsFromScreenshots(
       Number.isFinite(pct) &&
       pct < LOW_ACTIVITY_PERCENT &&
       !(Number.isFinite(ms) && insideIdle(ms));
-    flags.push({ ms: Number.isFinite(ms) ? ms : 0, isLow });
+    flags.push({ ms: Number.isFinite(ms) ? ms : 0, isLow, ownedSeconds: 0 });
   }
   flags.sort((a, b) => a.ms - b.ms);
+
+  for (let i = 0; i < flags.length; i += 1) {
+    const prev = i > 0 ? flags[i - 1].ms : null;
+    const next = i + 1 < flags.length ? flags[i + 1].ms : null;
+    const owned = screenshotOwnedRangeMs(prev, flags[i].ms, next, capMs);
+    let remaining = (owned.endMs - owned.startMs) / 1000;
+    for (const cut of idleIntervals) remaining -= overlapSeconds(owned, cut);
+    flags[i].ownedSeconds = Math.max(0, Math.round(remaining));
+  }
 
   let low = 0;
   let i = 0;
@@ -83,8 +93,12 @@ function sumLowActivitySecondsFromScreenshots(
       continue;
     }
     let j = i;
-    while (j < flags.length && flags[j].isLow) j += 1;
-    if (j - i >= streakNeeded) low += (j - i) * lowSecondsPerShot;
+    let runSeconds = 0;
+    while (j < flags.length && flags[j].isLow) {
+      runSeconds += flags[j].ownedSeconds;
+      j += 1;
+    }
+    if (runSeconds >= minRunSeconds) low += runSeconds;
     i = j;
   }
   return low;

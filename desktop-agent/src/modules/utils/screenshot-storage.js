@@ -1,5 +1,6 @@
 const { createFeatureLogger } = require('./logger');
 const { computeDHash } = require('./perceptual-hash');
+const { prepareScreenshotForUpload } = require('./prepare-screenshot-upload');
 
 const log = createFeatureLogger('SCREEN', { adapter: 'storage' });
 
@@ -12,6 +13,12 @@ try {
 }
 
 const UPLOAD_TIMEOUT_MS = 45000;
+
+function isTransientUploadError(message) {
+  return /timed out|AbortError|fetch failed|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|socket hang up|network/i.test(
+    String(message || ''),
+  );
+}
 
 function resolveDesktopSyncConfig() {
   const cfg = global.config || {};
@@ -118,8 +125,8 @@ async function uploadScreenshotViaS3Api({
       const sharp = require('sharp');
       const thumbBuffer = await sharp(uploadBuffer)
         .rotate()
-        .resize({ width: 480, withoutEnlargement: true })
-        .jpeg({ quality: 70 })
+        .resize({ width: 320, withoutEnlargement: true })
+        .jpeg({ quality: 60 })
         .toBuffer();
       const thumbRes = await fetchWithTimeout(
         init.thumb_upload_url,
@@ -183,77 +190,52 @@ async function uploadScreenshotViaS3Api({
   };
 }
 
-async function uploadScreenshotBuffer({
-  buffer,
-  userId,
-  capturedAt,
-  timeLogId = null,
-  activityPercent = 0,
-  focusPercent = 0,
-  clicks = 0,
-  keys = 0,
-  moves = 0,
-  activityLevel = null,
-  appName = null,
-  windowTitle = null,
-  agentVersion = null,
-}) {
+async function uploadScreenshotBuffer(args) {
+  const {
+    buffer,
+    userId,
+    capturedAt,
+    timeLogId = null,
+    activityPercent = 0,
+    focusPercent = 0,
+    clicks = 0,
+    keys = 0,
+    moves = 0,
+    activityLevel = null,
+    appName = null,
+    windowTitle = null,
+    agentVersion = null,
+    _retried = false,
+  } = args || {};
   try {
-    let uploadBuffer = buffer;
-    let ext = 'png';
-    let contentType = 'image/png';
-    let convertRoute = 'none';
     const convertStartedAt = Date.now();
+    const prepared = await prepareScreenshotForUpload(buffer, { nativeImage });
+    let uploadBuffer = prepared.buffer;
+    let ext = prepared.ext;
+    let contentType = prepared.contentType;
+    const convertRoute = prepared.route;
 
-    // Encode off the main thread.
-    //
-    // nativeImage.createFromBuffer + toJPEG are synchronous Electron calls, so
-    // decoding a multi-megabyte PNG and re-encoding it blocks the event loop for
-    // as long as it takes — measured at ~10s on an Intel Mac under memory
-    // pressure, once a minute, every minute. The tray timer runs on this same
-    // thread, so the clock visibly froze for the duration.
-    //
-    // sharp hands the work to libvips' thread pool and yields, so the timer keeps
-    // ticking. nativeImage stays as the fallback for builds where sharp's native
-    // binary does not load (it ships per-architecture and has been wrong before).
-    try {
-      const sharp = require('sharp');
-      uploadBuffer = await sharp(buffer).jpeg({ quality: 80 }).toBuffer();
-      ext = 'jpg';
-      contentType = 'image/jpeg';
-      convertRoute = 'sharp-async';
-    } catch (sharpErr) {
-      if (nativeImage) {
-        try {
-          const img = nativeImage.createFromBuffer(buffer);
-          if (!img.isEmpty()) {
-            uploadBuffer = img.toJPEG(80);
-            ext = 'jpg';
-            contentType = 'image/jpeg';
-            convertRoute = 'nativeimage-sync';
-          }
-        } catch (convertErr) {
-          log.warn({ step: 'JPEG_CONVERT_FAILED', message: convertErr.message });
-        }
-      }
-      if (convertRoute === 'none') {
-        log.warn({ step: 'JPEG_CONVERT_FALLBACK', message: sharpErr.message });
-      }
+    // Last guard: never PUT an empty body (would store a blind screenshot).
+    if (!uploadBuffer?.length) {
+      uploadBuffer = buffer;
+      ext = 'png';
+      contentType = 'image/png';
+      log.warn({ step: 'JPEG_CONVERT_EMPTY', message: 'Keeping original capture' });
     }
 
-    if (convertRoute !== 'none') {
-      log.debug({
-        step: 'JPEG_CONVERT',
-        ctx: {
-          pngBytes: buffer.length,
-          jpegBytes: uploadBuffer.length,
-          ratio: `${((1 - uploadBuffer.length / buffer.length) * 100).toFixed(0)}%`,
-          route: convertRoute,
-          // Blocking time when route is nativeimage-sync; wall time otherwise.
-          duration_ms: Date.now() - convertStartedAt,
-        },
-      });
-    }
+    log.debug({
+      step: 'JPEG_CONVERT',
+      ctx: {
+        pngBytes: buffer.length,
+        jpegBytes: uploadBuffer.length,
+        ratio: buffer.length
+          ? `${((1 - uploadBuffer.length / buffer.length) * 100).toFixed(0)}%`
+          : '0%',
+        route: convertRoute,
+        resized: prepared.resized,
+        duration_ms: Date.now() - convertStartedAt,
+      },
+    });
 
     let perceptualHash = null;
     try {
@@ -281,7 +263,7 @@ async function uploadScreenshotBuffer({
     }
 
     log.info({ step: 'S3_PATH', message: 'Uploading via backend presigned URL' });
-    const s3Result = await uploadScreenshotViaS3Api({
+    const uploadArgs = {
       userId,
       uploadBuffer,
       contentType,
@@ -297,7 +279,13 @@ async function uploadScreenshotBuffer({
       windowTitle,
       agentVersion,
       perceptualHash,
-    });
+    };
+    let s3Result = await uploadScreenshotViaS3Api(uploadArgs);
+    if (s3Result.error && isTransientUploadError(s3Result.error)) {
+      log.warn({ step: 'S3_UPLOAD_RETRY', message: s3Result.error });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      s3Result = await uploadScreenshotViaS3Api(uploadArgs);
+    }
     if (s3Result.error) {
       log.error({ step: 'S3_UPLOAD_FAILED', message: s3Result.error });
       console.error(`❌ [SCREENSHOT-UPLOAD] S3 upload failed: ${s3Result.error}`);
@@ -311,6 +299,11 @@ async function uploadScreenshotBuffer({
       error?.name === 'AbortError'
         ? 'Screenshot upload timed out'
         : error.message;
+    if (isTransientUploadError(msg) && !_retried) {
+      log.warn({ step: 'S3_UPLOAD_RETRY', message: msg });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return uploadScreenshotBuffer({ ...args, _retried: true });
+    }
     log.error({ step: 'EXCEPTION', message: msg });
     console.error(`❌ [SCREENSHOT-UPLOAD] Exception:`, msg);
     return { error: msg };
@@ -320,4 +313,5 @@ async function uploadScreenshotBuffer({
 module.exports = {
   uploadScreenshotBuffer,
   resolveDesktopSyncConfig,
+  isTransientUploadError,
 };

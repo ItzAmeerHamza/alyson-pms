@@ -150,7 +150,17 @@ class EventHandlerManager {
       }
       try {
         const { closeOpenSessionsAfterExplicitStop } = require('./session-recovery');
-        void closeOpenSessionsAfterExplicitStop({ reason: 'system_sleep', timeoutMs: 4000 });
+        void closeOpenSessionsAfterExplicitStop({
+          reason: 'system_sleep',
+          timeoutMs: 4000,
+          protectLive: false,
+        })
+          .catch((closeErr) => {
+            this.console.warn(
+              '⚠️ [SLEEP] Session close queued locally:',
+              closeErr?.message || closeErr,
+            );
+          });
       } catch (_) { /* ignore */ }
     }
 

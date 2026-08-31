@@ -2079,6 +2079,7 @@ try {
   async _checkpointCurrentTimeLog() {
     const timeLogId = this.currentTimeLogId || global.currentTimeLogId;
     if (!this.isTracking || !timeLogId) return;
+    if (global._stopAuthorizedIdleCut) return;
 
     const nowIso = new Date().toISOString();
     const startTime =
@@ -2614,9 +2615,7 @@ try {
       const result = await closeOpenSessionsAfterExplicitStop({
         userId,
         deviceId,
-          // No id: this closes every open row on the device, so no single
-          // session's checkpoint applies. Falls through to each row's own
-          // last_alive_at on the server.
+          // Pre-start orphan sweep. A live Start that already landed is excepted.
           end_time: resolveExplicitStopEndTime() || undefined,
         config: this.config,
       });
@@ -3436,7 +3435,13 @@ try {
             continue;
           }
         } catch (error) {
-          console.error('❌ [TRACKING-MANAGER] Failed to sync offline item (will retry forever):', error?.message || error);
+          const syncMsg = error?.message || String(error);
+          const transient = /timeout|fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|offline/i.test(syncMsg);
+          if (transient) {
+            console.warn('⚠️ [TRACKING-MANAGER] Offline item still queued (network):', syncMsg);
+          } else {
+            console.error('❌ [TRACKING-MANAGER] Failed to sync offline item (will retry forever):', syncMsg);
+          }
           if (item.data) {
             item.data._retryCount = (item.data._retryCount || 0) + 1;
           }

@@ -14,6 +14,29 @@ class CredentialManager {
     this.init();
   }
 
+  /**
+   * After an in-place upgrade the window can load before main registers IPC.
+   * Retry briefly instead of throwing "No handler registered".
+   */
+  async _invokeWhenReady(channel, ...args) {
+    const delays = [0, 150, 400];
+    let lastError = null;
+    for (const delay of delays) {
+      if (delay) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      try {
+        return await this.ipcRenderer.invoke(channel, ...args);
+      } catch (error) {
+        lastError = error;
+        if (!/No handler registered/i.test(error?.message || '')) {
+          throw error;
+        }
+      }
+    }
+    throw lastError;
+  }
+
   async init() {
     try {
       // Check if we're in renderer process and use IPC instead of direct keytar access
@@ -47,7 +70,7 @@ class CredentialManager {
       // Use IPC to communicate with main process
       try {
         console.log('🔐 Saving credentials securely via IPC for:', email);
-        const success = await this.ipcRenderer.invoke('save-credentials', email, password);
+        const success = await this._invokeWhenReady('save-credentials', email, password);
         
         if (success) {
           // Also save email preference in localStorage for easy access (if available)
@@ -129,7 +152,7 @@ class CredentialManager {
           return null;
         }
 
-        const credentials = await this.ipcRenderer.invoke('get-credentials', email);
+        const credentials = await this._invokeWhenReady('get-credentials', email);
         
         if (credentials) {
           console.log('✅ Retrieved stored credentials via IPC for:', email);
@@ -142,7 +165,12 @@ class CredentialManager {
           return null;
         }
       } catch (error) {
-        console.error('❌ IPC get credentials failed:', error);
+        const msg = error?.message || String(error);
+        if (/No handler registered/i.test(msg)) {
+          console.warn('⚠️ IPC get-credentials not ready yet — using local fallback');
+        } else {
+          console.error('❌ IPC get credentials failed:', error);
+        }
         return this.getCredentialsLocalStorage();
       }
     } else if (this.keytar) {

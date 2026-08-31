@@ -31,10 +31,14 @@ function withTimeout(promise, ms, label) {
 async function captureAllDisplaysStitched() {
   const electronCount = getElectronDisplayCount();
   let listed = [];
-  try {
-    listed = await screenshot.listDisplays();
-  } catch (err) {
-    console.warn('[MULTI-DISPLAY] listDisplays failed:', err.message);
+  // Windows: screenshot-desktop unpacks a Temp .exe that Device Guard blocks.
+  // Electron already knows the display count; PowerShell is the capture path.
+  if (process.platform !== 'win32') {
+    try {
+      listed = await screenshot.listDisplays();
+    } catch (err) {
+      console.warn('[MULTI-DISPLAY] listDisplays failed:', err.message);
+    }
   }
 
   const listedCount = Array.isArray(listed) ? listed.length : 0;

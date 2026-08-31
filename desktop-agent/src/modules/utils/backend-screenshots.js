@@ -244,6 +244,12 @@ async function fetchScreenshotsFromBackend(userId, config, opts = {}) {
     return internalRows;
   }
 
+  // Desktop always has the internal API key. A stale JWT 401 after a wake
+  // is not a second source of truth — skip it so we don't log Unauthorized.
+  if (resolveDesktopSync(config)) {
+    return null;
+  }
+
   const session = await loadDesktopSession();
   const token = session?.access_token;
   if (!token) {
@@ -257,6 +263,7 @@ async function fetchScreenshotsFromBackend(userId, config, opts = {}) {
     start: start.toISOString(),
     end: end.toISOString(),
     limit: String(limit),
+    full: '1',
   });
 
   const controller = new AbortController();

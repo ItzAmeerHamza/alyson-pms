@@ -198,6 +198,22 @@ function loadUserExplicitlyStoppedFromDisk() {
 }
 
 /**
+ * Startup pending-close must not kill-all a session the employee just started.
+ * Ameer 31 Aug: processPendingSessionCloses ran 15s after Start and closed a402c6b3.
+ */
+function liveTimeLogId(state = global) {
+  return state.currentTimeLogId || state.trackingManager?.currentTimeLogId || null;
+}
+
+function hasLiveSessionToProtect(state = global) {
+  return !!(
+    state.isTracking ||
+    state.trackingManager?.isTracking ||
+    liveTimeLogId(state)
+  );
+}
+
+/**
  * Close all still-open sessions on this device after an intentional Stop.
  *
  * The server is told how the end time was established — local checkpoint,
@@ -238,13 +254,24 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
   // that genuinely knows one session's end names it via timeLogId; everyone else
   // gets per-row liveness, which is right for every row by construction.
   const targetsOneSession = options.timeLogId != null;
+  // Leftover / startup sweeps must never close a session the employee just
+  // started (Ameer 31 Aug a402c6b3, Aryan 090c3598). Intentional stop / lid /
+  // wake / logout pass protectLive: false.
+  const exceptTimeLogId =
+    options.protectLive === false || targetsOneSession
+      ? null
+      : liveTimeLogId();
   if (!targetsOneSession && backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
     try {
       const killed = await backendTimeLogs.killAllSessions(
         userId,
         deviceId,
         options.config || global.config,
-        { reason: options.reason || 'explicit_stop', timeoutMs: options.timeoutMs },
+        {
+          reason: options.reason || 'explicit_stop',
+          timeoutMs: options.timeoutMs,
+          exceptTimeLogId,
+        },
       );
       log.info({
         step: 'EXPLICIT_STOP_CLOSED',
@@ -332,32 +359,49 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
   // A pending close or on-disk checkpoint IS local-checkpoint confirmation.
   // Only a server-derived or caller-supplied end is genuinely unconfirmed.
   const locallyConfirmed = isLocallyConfirmed(endSource);
-  const result = await backendTimeLogs.closeActiveSessions(
-    userId,
-    deviceId,
-    options.config || global.config,
-    {
-      end_time: endTime,
-      confirm_with_local_checkpoint: locallyConfirmed,
-      allow_unconfirmed_end: !locallyConfirmed,
-      prefer_recover: false,
-      client_last_seen_at: readLocalCheckpointAt(),
-      timeoutMs: options.timeoutMs || 12000,
-    },
-  );
-  log.info({
-    step: 'EXPLICIT_STOP_CLOSED',
-    message: 'Closed open sessions after intentional stop',
-    ctx: {
-      end_source: endSource,
-      confirmed: locallyConfirmed,
-      closed: result?.closed ?? 0,
-      closed_ids: result?.closed_ids || [],
-      endTime,
+  try {
+    const result = await backendTimeLogs.closeActiveSessions(
+      userId,
       deviceId,
-    },
-  });
-  return result;
+      options.config || global.config,
+      {
+        end_time: endTime,
+        confirm_with_local_checkpoint: locallyConfirmed,
+        allow_unconfirmed_end: !locallyConfirmed,
+        prefer_recover: false,
+        client_last_seen_at: readLocalCheckpointAt(),
+        timeoutMs: options.timeoutMs || 12000,
+      },
+    );
+    log.info({
+      step: 'EXPLICIT_STOP_CLOSED',
+      message: 'Closed open sessions after intentional stop',
+      ctx: {
+        end_source: endSource,
+        confirmed: locallyConfirmed,
+        closed: result?.closed ?? 0,
+        closed_ids: result?.closed_ids || [],
+        endTime,
+        deviceId,
+      },
+    });
+    return result;
+  } catch (closeErr) {
+    // Lid-close / wake often has no DNS yet. The end is already durable locally
+    // (pending close + offline queue). Never let this become an unhandled rejection.
+    log.warn({
+      step: 'EXPLICIT_STOP_CLOSE_FAILED',
+      message: closeErr?.message || String(closeErr),
+      ctx: { endTime, deviceId, queued: true },
+    });
+    return {
+      success: false,
+      closed: 0,
+      reason: 'close_failed',
+      end_time: endTime,
+      queued: true,
+    };
+  }
 }
 
 function applyRecoveredSession(activeLog) {
@@ -510,7 +554,10 @@ function startSessionHealthCheck() {
           global.trackingManager?._stopTimeLogCheckpoint?.();
         } catch (_) { /* ignore */ }
         try {
-          await closeOpenSessionsAfterExplicitStop({ end_time: checkpointAt || undefined });
+          await closeOpenSessionsAfterExplicitStop({
+            end_time: checkpointAt || undefined,
+            protectLive: false,
+          });
         } catch (closeErr) {
           log.warn({
             step: 'HEALTH_CHECK_STALE_CLOSE_FAILED',
@@ -709,7 +756,10 @@ async function reconcileAfterWake() {
     } catch (_) { /* ignore */ }
     try {
       if (global.isTracking || global.trackingManager?.isTracking || global.currentTimeLogId) {
-        await closeOpenSessionsAfterExplicitStop({ end_time: proofIso || checkpointAt || undefined });
+        await closeOpenSessionsAfterExplicitStop({
+          end_time: proofIso || checkpointAt || undefined,
+          protectLive: false,
+        });
       }
     } catch (err) {
       log.warn({ step: 'WAKE_LID_CLOSE_FAILED', message: err?.message || String(err) });
@@ -735,7 +785,10 @@ async function reconcileAfterWake() {
     global.trackingManager?._stopTimeLogCheckpoint?.();
   } catch (_) { /* ignore */ }
   try {
-    await closeOpenSessionsAfterExplicitStop({ end_time: proofIso || checkpointAt || undefined });
+    await closeOpenSessionsAfterExplicitStop({
+      end_time: proofIso || checkpointAt || undefined,
+      protectLive: false,
+    });
   } catch (err) {
     log.warn({ step: 'WAKE_STALE_CLOSE_FAILED', message: err?.message || String(err) });
   }
@@ -748,6 +801,8 @@ module.exports = {
   forceSyncSessionState,
   reconcileDeviceSessions,
   closeOpenSessionsAfterExplicitStop,
+  hasLiveSessionToProtect,
+  liveTimeLogId,
   markUserExplicitlyStopped,
   clearUserExplicitlyStopped,
   loadUserExplicitlyStoppedFromDisk,

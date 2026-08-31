@@ -19,6 +19,10 @@ class MainCredentialHandler {
     this.keytar = null;
     this.serviceName = 'AlysonWorkTime';
     this.handlersRegistered = false;
+    // Register IPC before keytar loads. After an upgrade the renderer asks for
+    // credentials immediately; if the handler is missing Electron throws
+    // "No handler registered for 'get-credentials'".
+    this.setupIpcHandlers();
     this.init();
   }
 
@@ -26,9 +30,8 @@ class MainCredentialHandler {
     try {
       this.keytar = require('keytar');
       console.log('✅ Keytar initialized in main process');
-      this.setupIpcHandlers();
     } catch (error) {
-      console.error('❌ Failed to initialize keytar in main process:', error);
+      console.warn('⚠️ Keytar unavailable in main process — credential IPC still registered:', error?.message || error);
     }
   }
 

@@ -5,11 +5,6 @@
 
 const EnhancedScreenshotManager = require('../enhanced-screenshot-manager');
 
-// Mock cleanup registry
-jest.mock('../../core/cleanup-registry', () => ({
-  registerResource: jest.fn()
-}));
-
 describe('EnhancedScreenshotManager', () => {
   let screenshotManager;
   let mockConfig;
@@ -45,20 +40,34 @@ describe('EnhancedScreenshotManager', () => {
 
     it('should register with cleanup registry', () => {
       const cleanupRegistry = require('../../core/cleanup-registry');
-      expect(cleanupRegistry.registerResource).toHaveBeenCalledWith({
-        name: 'enhancedScreenshotManager',
-        cleanup: expect.any(Function)
+      const manager = new EnhancedScreenshotManager(mockConfig, mockElectronModules);
+      const registered = [...cleanupRegistry.resources].some(
+        (resource) => resource?.name === 'enhancedScreenshotManager' && typeof resource.cleanup === 'function',
+      );
+      expect(registered).toBe(true);
+      manager.cleanup();
+    });
+
+    it('applies a workspace 3-every-20 schedule', () => {
+      const changed = screenshotManager.applyWorkspaceSchedule({
+        screenshot_count_per_window: 3,
+        screenshot_window_minutes: 20,
       });
+      expect(changed).toBe(true);
+      expect(screenshotManager.windowShots).toBe(3);
+      expect(screenshotManager.windowDurationMs).toBe(20 * 60 * 1000);
     });
   });
 
   describe('screenshot capture control', () => {
     it('should start screenshot capture', () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      screenshotManager.isTracking = true;
+      screenshotManager.currentSession = { id: 'sess-1' };
 
       screenshotManager.startScreenshotCapture();
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Starting 3-per-10min window scheduling')
+        expect.stringContaining('random window scheduling')
       );
 
       consoleSpy.mockRestore();
@@ -82,8 +91,8 @@ describe('EnhancedScreenshotManager', () => {
       const options = screenshotManager.getPlatformScreenshotOptions();
 
       expect(options).toEqual({
-        displayId: 0,
-        format: 'png'
+        format: 'png',
+        stitchAllDisplays: true
       });
     });
 
@@ -94,7 +103,7 @@ describe('EnhancedScreenshotManager', () => {
 
       expect(options).toEqual({
         format: 'png',
-        screen: 0
+        stitchAllDisplays: true
       });
     });
 
@@ -105,6 +114,7 @@ describe('EnhancedScreenshotManager', () => {
 
       expect(options).toEqual({
         format: 'png',
+        stitchAllDisplays: true,
         screen: ':0.0'
       });
     });

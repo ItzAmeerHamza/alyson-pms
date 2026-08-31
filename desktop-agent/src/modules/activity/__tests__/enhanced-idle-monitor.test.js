@@ -194,9 +194,12 @@ describe('EnhancedIdleMonitor', () => {
     });
 
     test('_stopForIdle with allowCut ends session exactly 10 minutes before now', () => {
+      const stopCheckpoint = jest.fn();
+      global.trackingManager = { _stopTimeLogCheckpoint: stopCheckpoint };
       const before = Date.now();
       monitor._stopForIdle('idle_timeout', { allowCut: true });
       const after = Date.now();
+      expect(stopCheckpoint).toHaveBeenCalled();
 
       expect(global.stopTracking).toHaveBeenCalledTimes(1);
       const [, , options] = global.stopTracking.mock.calls[0];
@@ -414,18 +417,20 @@ describe('EnhancedIdleMonitor', () => {
       expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
     });
 
-    test('OS idle during a meeting does not start an idle period', async () => {
+    test('OS idle during a meeting still starts idle and still evaluates the prompt', async () => {
       monitor = new EnhancedIdleMonitor({ user_id: '1195' });
       monitor.initialize({ isTracking: true });
       monitor.isTracking = true;
       global.isTracking = true;
       global.unifiedInputManager.getIdleTime.mockReturnValue(300);
       _setPresenceForTests({ active: true, label: 'Google Meet' });
+      monitor._evaluateIdlePrompt = jest.fn();
 
       await monitor._evaluateIdleState();
 
-      expect(monitor.wasIdleLastCheck).toBe(false);
-      expect(monitor.currentIdleStartTime).toBeNull();
+      expect(monitor.wasIdleLastCheck).toBe(true);
+      expect(monitor.currentIdleStartTime).toBeTruthy();
+      expect(monitor._evaluateIdlePrompt).toHaveBeenCalledWith(300, expect.any(Number));
     });
 
     test.each(['Google Meet', 'Zoom', 'Microsoft Teams', 'Webex', 'Skype'])(

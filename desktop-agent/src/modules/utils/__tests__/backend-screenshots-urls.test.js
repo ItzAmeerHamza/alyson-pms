@@ -30,3 +30,33 @@ describe('screenshot gallery URLs', () => {
     expect(html).toContain(escapeHtmlAttr(THUMB));
   });
 });
+
+describe('fetchScreenshotsFromBackend', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('does not fall through to a stale JWT when the internal API is configured', async () => {
+    const calls = [];
+    global.fetch = jest.fn(async (url) => {
+      calls.push(String(url));
+      return {
+        ok: false,
+        status: 503,
+        text: async () => 'unavailable',
+        json: async () => ({}),
+      };
+    });
+
+    const { fetchScreenshotsFromBackend } = require('../backend-screenshots');
+    const rows = await fetchScreenshotsFromBackend('1233', {
+      backend_api_url: 'https://api.example.com',
+      backend_api_key: 'internal-key',
+    });
+
+    expect(rows).toBeNull();
+    expect(calls.some((url) => url.includes('/data/screenshots'))).toBe(false);
+  });
+});

@@ -376,6 +376,7 @@ class GracefulShutdownManager {
 
       // ONLY authorized idle-alert cut (shown prompt timed out) may use now − 10m.
       // All other stops: wall-clock now. Never silently eat time.
+      // The API must persist this end as-is (not GREATEST with last_alive_at).
       const cutSeconds = Math.max(0, Math.floor(Number(global._idlePromptTimeCutSeconds) || 0));
       const authorizedIdleCut =
         !!global._stopAuthorizedIdleCut && cutSeconds > 0;
@@ -953,6 +954,11 @@ class GracefulShutdownManager {
         ? fs.readdirSync(pendingDir).filter(f => f.endsWith('.json'))
         : [];
       const backendTimeLogs = require('../utils/backend-time-logs');
+      const {
+        closeOpenSessionsAfterExplicitStop,
+        hasLiveSessionToProtect,
+        liveTimeLogId,
+      } = require('../utils/session-recovery');
       const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
 
       if (files.length === 0) {
@@ -988,6 +994,15 @@ class GracefulShutdownManager {
             continue;
           }
           
+          const liveId = liveTimeLogId();
+          if (liveId && String(data.timeLogId) === String(liveId)) {
+            console.warn(
+              `⚠️ [GRACEFUL-SHUTDOWN] Skipping pending close of live session ${liveId}`,
+            );
+            try { fs.unlinkSync(filePath); } catch (_) {}
+            continue;
+          }
+
           console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId} at ${data.endTime}`);
           
           await backendTimeLogs.updateTimeLog(
@@ -1013,23 +1028,18 @@ class GracefulShutdownManager {
         try {
           const { getDeviceId } = require('../utils/device-id');
           const deviceId = getDeviceId();
-          // After pending closes: any leftover open row on this device must be closed.
-          // (closeActiveSessions without end_time only inspected/flagged — that left orphans.)
-          const {
-            closeOpenSessionsAfterExplicitStop,
-            resolveExplicitStopEndTime,
-          } = require('../utils/session-recovery');
+          // After pending closes: leftover orphans may be closed — but never
+          // a session the employee already started (Ameer 31 Aug a402c6b3).
           await closeOpenSessionsAfterExplicitStop({
             userId,
             deviceId,
-            end_time: resolveExplicitStopEndTime(null, {
-              liveStop: true,
-              timeLogId: this._capturedTimeLogId || null,
-            }),
-            timeLogId: this._capturedTimeLogId || null,
-            liveStop: true,
+            reason: 'pending_recovery',
           });
-          console.log('✅ [GRACEFUL-SHUTDOWN] Closed remaining open time_logs via RDS');
+          console.log(
+            hasLiveSessionToProtect()
+              ? '✅ [GRACEFUL-SHUTDOWN] Closed leftover time_logs; live session kept'
+              : '✅ [GRACEFUL-SHUTDOWN] Closed remaining open time_logs via RDS',
+          );
           const reconcileResult = await backendTimeLogs.reconcileInflatedTimeLogs(
             userId,
             deviceId,

@@ -79,6 +79,18 @@ describe('low-activity counting excludes idle periods', () => {
     ).toBe(0);
   });
 
+  it('does not turn a 90-second random dip into a 5-minute low block', () => {
+    const screenshots = [
+      shot('2026-08-17T11:00:00Z', 80),
+      shot('2026-08-17T11:01:30Z', 2),
+      shot('2026-08-17T11:03:00Z', 80),
+    ];
+
+    expect(
+      sumLowActivitySecondsFromScreenshots(screenshots, 5 * 60, DAY_START, DAY_END, []),
+    ).toBe(0);
+  });
+
   it('never counts an active screenshot', () => {
     const screenshots = [
       shot('2026-08-17T11:00:00Z', 40),

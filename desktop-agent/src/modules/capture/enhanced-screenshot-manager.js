@@ -17,6 +17,14 @@ const {
   refreshMeetingPresence,
 } = require('../../lib/meeting-context');
 
+const {
+  WINDOW_MS,
+  SHOTS_PER_WINDOW,
+  MIN_GAP_MS,
+  normalizeRandomScreenshotSchedule,
+  generateRandomScreenshotOffsets,
+} = require('../utils/random-screenshot-schedule');
+
 const log = createFeatureLogger('SCREEN');
 
 class EnhancedScreenshotManager {
@@ -47,11 +55,13 @@ class EnhancedScreenshotManager {
     this._consecutiveCaptureFailures = 0;
 
     // Constants
-    this.SCREENSHOT_INTERVAL = 60; // seconds
+    this.SCREENSHOT_INTERVAL = 60; // seconds (legacy UI default; cadence is window-based)
     this.MANDATORY_SCREENSHOT_INTERVAL = 15 * 60 * 1000; // 15 minutes
-    // Scheduling for 3 screenshots per 10-minute window
-    this.windowDurationMs = 10 * 60 * 1000;
-    this.windowShots = 3;
+    // Random window defaults (2 / 10 min) until workspace settings apply.
+    this.windowDurationMs = WINDOW_MS;
+    this.windowShots = SHOTS_PER_WINDOW;
+    this.windowMinGapMs = MIN_GAP_MS;
+    this.syncScheduleFromConfig();
     this.windowStartTime = null;
     this.windowTimers = [];
     // Cache last non-zero activity to avoid UI flicker between timer updates
@@ -103,22 +113,42 @@ class EnhancedScreenshotManager {
 
   /**
    * Seconds attributed to each low-activity screenshot for effective-time math.
-   * Matches the live capture schedule (fixed interval OR 3 shots / 10-min window).
+   * Matches the live capture schedule (2 shots / 10-min window unless fixed-interval debug).
    */
   getEffectiveLowActivityIntervalSeconds() {
     if (this.usesFixedScreenshotIntervalMode()) {
       return Math.max(10, Math.round(this.getConfiguredScreenshotIntervalMs() / 1000));
     }
-    const windowMs = Number(this.windowDurationMs) || 10 * 60 * 1000;
-    const shots = Math.max(1, Number(this.windowShots) || 3);
+    const windowMs = Number(this.windowDurationMs) || WINDOW_MS;
+    const shots = Math.max(1, Number(this.windowShots) || SHOTS_PER_WINDOW);
     return Math.max(60, Math.round(windowMs / shots / 1000));
   }
 
+  /** Fixed clock only for SCREENSHOT_FIXED_INTERVAL=1 diagnostics. Production is random windows. */
   usesFixedScreenshotIntervalMode() {
-    if (this.config?.screenshot_interval_from_database) {
-      return true;
-    }
-    return this.getConfiguredScreenshotIntervalMs() <= 10 * 60 * 1000;
+    return process.env.SCREENSHOT_FIXED_INTERVAL === '1';
+  }
+
+  syncScheduleFromConfig() {
+    return this.applyWorkspaceSchedule(
+      normalizeRandomScreenshotSchedule({
+        screenshot_count_per_window:
+          this.config?.screenshot_count_per_window ??
+          this.config?.appSettings?.screenshot_count_per_window,
+        screenshot_window_minutes:
+          this.config?.screenshot_window_minutes ??
+          this.config?.appSettings?.screenshot_window_minutes,
+      }),
+    );
+  }
+
+  applyWorkspaceSchedule(schedule = {}) {
+    const next = normalizeRandomScreenshotSchedule(schedule);
+    const changed =
+      this.windowDurationMs !== next.windowMs || this.windowShots !== next.count;
+    this.windowDurationMs = next.windowMs;
+    this.windowShots = next.count;
+    return changed;
   }
 
   resolveActiveUserId() {
@@ -180,22 +210,24 @@ class EnhancedScreenshotManager {
       // CRITICAL FIX v1.0.132: Hard minimum gap check BEFORE rate limiter
       // This prevents duplicate screenshots even if rate limiter was reset on restart
       const configuredIntervalMs = this.getConfiguredScreenshotIntervalMs();
-      const MIN_GAP_MS = Math.max(30 * 1000, configuredIntervalMs - 5 * 1000);
+      const hardMinGapMs = this.usesFixedScreenshotIntervalMode()
+        ? Math.max(30 * 1000, configuredIntervalMs - 5 * 1000)
+        : this.windowMinGapMs || MIN_GAP_MS;
       const lastScreenshotTime = global.lastScreenshotTime || 0;
       const timeSinceLastScreenshot = nowMs - lastScreenshotTime;
       
-      if (lastScreenshotTime > 0 && timeSinceLastScreenshot < MIN_GAP_MS) {
-        const waitTime = MIN_GAP_MS - timeSinceLastScreenshot;
+      if (lastScreenshotTime > 0 && timeSinceLastScreenshot < hardMinGapMs) {
+        const waitTime = hardMinGapMs - timeSinceLastScreenshot;
         log.warn({ 
           step: 'HARD MIN GAP BLOCK', 
-          message: `Screenshot blocked - only ${Math.round(timeSinceLastScreenshot / 1000)}s since last (need ${MIN_GAP_MS / 1000}s)`,
+          message: `Screenshot blocked - only ${Math.round(timeSinceLastScreenshot / 1000)}s since last (need ${hardMinGapMs / 1000}s)`,
           ctx: { timeSinceLastScreenshot, waitTime, lastScreenshotTime: new Date(lastScreenshotTime).toISOString() }
         });
-        console.log(`⏱️ [SCREENSHOT] Blocked - only ${Math.round(timeSinceLastScreenshot / 1000)}s since last screenshot (need 180s minimum)`);
+        console.log(`⏱️ [SCREENSHOT] Blocked - only ${Math.round(timeSinceLastScreenshot / 1000)}s since last screenshot (need ${Math.round(hardMinGapMs / 1000)}s minimum)`);
         return { ok: false, skipped: true, reason: 'hard-min-gap', nextAllowedInMs: waitTime };
       }
       
-      // For short fixed intervals (e.g. every 60s), don't apply the legacy 3/10m limiter.
+      // Rolling limiter is unused in random-window mode (scheduler owns the quota).
       if (this._rateLimiter && configuredIntervalMs >= 3 * 60 * 1000) {
         const check = this._rateLimiter.canTake(nowMs);
         log.debug({ step: 'RATE LIMITER CHECK', ctx: check });
@@ -245,25 +277,9 @@ class EnhancedScreenshotManager {
     // Start lightweight diagnostics heartbeat for visibility and self-heal
     this.startDiagnosticsHeartbeat();
 
-    // Initialize limiter with policy: 3 per 10 minutes, min 180s gap.
-    // Skip limiter when interval comes from workspace_settings (fixed schedule).
-    try {
-      if (
-        !this.config?.screenshot_interval_from_database &&
-        this.getConfiguredScreenshotIntervalMs() >= 3 * 60 * 1000
-      ) {
-        const ScreenshotRateLimiter = require('../utils/screenshot-rate-limiter');
-        this._rateLimiter = new ScreenshotRateLimiter({
-          maxInWindow: 3,
-          windowMs: 10 * 60 * 1000,
-          minGapMs: 3 * 60 * 1000
-        });
-      } else {
-        this._rateLimiter = null;
-      }
-    } catch (e) {
-      log.warn({ step: 'RATE LIMITER INIT FAILED', message: e.message });
-    }
+    // Window scheduler owns the 2/10min quota. No rolling limiter — it can
+    // drop a shot that sits just after a window boundary.
+    this._rateLimiter = null;
   }
 
   /**
@@ -345,17 +361,21 @@ class EnhancedScreenshotManager {
     const configuredIntervalMs = this.getConfiguredScreenshotIntervalMs();
     if (this.usesFixedScreenshotIntervalMode()) {
       console.log(`🚀 [SCREENSHOT] Starting fixed-interval mode (${Math.round(configuredIntervalMs / 1000)}s)...`);
-      // Use direct scheduler for short intervals (e.g. 60s) to honor settings.
       this.scheduleDirectScreenshot();
       return;
     }
 
-    console.log('🚀 [SCREENSHOT] Starting setInterval backbone (10-min windows)...');
+    this.syncScheduleFromConfig();
+    const windowMin = Math.round(this.windowDurationMs / 60000);
+    console.log(
+      `🚀 [SCREENSHOT] Starting ${this.windowShots}-per-${windowMin}min random window scheduling`,
+    );
     log.info({
       step: 'STARTING SETINTERVAL BACKBONE', ctx: {
         session: this.currentSession?.id,
         tracking: this.isTracking,
-        windowDurationMs: this.windowDurationMs
+        windowDurationMs: this.windowDurationMs,
+        windowShots: this.windowShots,
       }
     });
 
@@ -393,7 +413,9 @@ class EnhancedScreenshotManager {
           log.debug({ step: 'BACKBONE TICK SKIPPED', ctx: { shuttingDown: this._shuttingDown, tracking: this.isTracking } });
           return;
         }
-        console.log('🔄 [SCREENSHOT] 10-minute window complete, scheduling new window...');
+        console.log(
+          `🔄 [SCREENSHOT] ${Math.round(this.windowDurationMs / 60000)}-minute window complete, scheduling new window...`,
+        );
         log.info({ step: 'BACKBONE TICK - NEW WINDOW' });
         this.scheduleWindowShots();
       } catch (e) {
@@ -403,8 +425,8 @@ class EnhancedScreenshotManager {
   }
 
   /**
-   * Schedule 3 random screenshot shots within a single 10-minute window.
-   * Called by the backbone interval on each tick (and once immediately on start).
+   * Schedule N random screenshot shots within the configured window.
+   * Offsets are not logged or shown in the employee UI.
    */
   scheduleWindowShots() {
     // Clear any lingering shot timers from the previous window
@@ -414,27 +436,17 @@ class EnhancedScreenshotManager {
     }
 
     this.windowStartTime = Date.now();
-    const minGapMs = 3 * 60 * 1000;
-    const offsets = this.generateRandomOffsetsWithMinGap(this.windowDurationMs, this.windowShots, minGapMs);
-    offsets.sort((a, b) => a - b);
+    const minGapMs = this.windowMinGapMs || MIN_GAP_MS;
+    const offsets = generateRandomScreenshotOffsets(this.windowDurationMs, this.windowShots, minGapMs);
 
-    console.log('📅 [SCREENSHOT] Window start:', new Date(this.windowStartTime).toLocaleTimeString());
-    console.log('📸 [SCREENSHOT] Scheduling 3 shots at:', offsets.map(ms => `${Math.round(ms / 1000 / 60)}m${Math.round((ms / 1000) % 60)}s`).join(', '));
-    log.info({
-      step: 'SCHEDULING 3 SHOTS AT OFFSETS', ctx: {
-        offsets,
-        offsetsFormatted: offsets.map(ms => Math.round(ms / 1000) + 's'),
-        windowStart: new Date(this.windowStartTime).toLocaleTimeString()
-      }
+    log.debug({
+      step: 'SCHEDULING RANDOM WINDOW SHOTS',
+      ctx: { shotCount: offsets.length, windowMs: this.windowDurationMs },
     });
 
-    // CRITICAL FIX: Set nextScreenshotTime for UI display (first shot in window)
     if (offsets.length > 0) {
       this.nextScreenshotTime = new Date(Date.now() + offsets[0]);
       global.nextScreenshotTime = this.nextScreenshotTime;
-      log.debug({ step: 'NEXT SCREENSHOT AT', ctx: { time: this.nextScreenshotTime.toLocaleTimeString() } });
-
-      // Start timer updates for UI
       if (!this.screenshotTimerInterval) {
         this.startScreenshotTimerUpdates();
       }
@@ -452,11 +464,11 @@ class EnhancedScreenshotManager {
       // CRITICAL FIX: Check tracking state, shutdown flag, and pause state before executing
       if (this._shuttingDown || this.screenshotsPaused || !this.isTracking || !this.currentSession || !global.isTracking) {
         log.warn({ step: 'WINDOW SHOT CANCELLED', ctx: { index: idx + 1, shuttingDown: this._shuttingDown, paused: this.screenshotsPaused, tracking: this.isTracking, globalTracking: global.isTracking } });
-        console.log(`🛑 [SCREENSHOT] Timer ${idx + 1}/3 cancelled - ${this._shuttingDown ? 'shutting down' : this.screenshotsPaused ? 'paused (screen locked)' : 'tracking stopped'}`);
+        console.log(`🛑 [SCREENSHOT] Timer ${idx + 1}/${offsets.length} cancelled - ${this._shuttingDown ? 'shutting down' : this.screenshotsPaused ? 'paused (screen locked)' : 'tracking stopped'}`);
         return;
       }
       
-      console.log(`📸 [SCREENSHOT] Timer ${idx + 1}/3 fired at ${new Date().toLocaleTimeString()}`);
+      log.debug({ step: 'WINDOW SHOT FIRED', ctx: { index: idx + 1, of: offsets.length } });
       log.debug({
         step: 'EXECUTING WINDOW SHOT', ctx: {
           index: idx + 1,
@@ -469,10 +481,10 @@ class EnhancedScreenshotManager {
         // If last screenshot was taken less than min gap ago, skip early to avoid pointless request
         const nowMs = Date.now();
         const sinceLast = nowMs - (global.lastScreenshotTime || baseLastTs || 0);
-        const minGapMs = 3 * 60 * 1000;
+        const minGapMs = this.windowMinGapMs || MIN_GAP_MS;
         if (sinceLast < minGapMs) {
           log.warn({ step: 'SKIPPING WINDOW SHOT', message: `Within min gap (${Math.round((minGapMs - sinceLast) / 1000)}s remaining)`, ctx: { index: idx + 1 } });
-          // Reschedule this missed shot toward the end of the current window to preserve 3-per-window target
+          // Reschedule this missed shot toward the end of the current window to preserve 2-per-window target
           const remainingMs = (this.windowStartTime + this.windowDurationMs) - nowMs;
           const retryDelay = Math.min(Math.max(minGapMs - sinceLast + 5000, 15000), Math.max(0, remainingMs - 5000));
           if (retryDelay > 0) {
@@ -515,8 +527,7 @@ class EnhancedScreenshotManager {
       }
     }, offset));
 
-    log.info({ step: '3 SHOTS SCHEDULED WITHIN A 10-MINUTE WINDOW', ctx: { duration: this.windowDurationMs / 1000 } });
-    log.debug({ step: 'NEXT WINDOW STARTS AT', ctx: { time: new Date(Date.now() + this.windowDurationMs).toLocaleTimeString() } });
+    log.debug({ step: 'WINDOW SHOTS ARMED', ctx: { durationSec: this.windowDurationMs / 1000, count: offsets.length } });
   }
 
   /**
@@ -524,7 +535,7 @@ class EnhancedScreenshotManager {
    * Points to the next shot in the current window, or estimates next window.
    */
   _updateNextScreenshotTimeAfterShot(idx, offsets) {
-    const minGapMs = 3 * 60 * 1000;
+    const minGapMs = this.windowMinGapMs || MIN_GAP_MS;
     if (idx < offsets.length - 1) {
       const nextOffset = offsets[idx + 1];
       const nextTime = new Date(this.windowStartTime + nextOffset);
@@ -699,7 +710,7 @@ class EnhancedScreenshotManager {
         log.warn({ step: 'SCHEDULE RANDOM SCREENSHOT WRAPPER FAILED', message: e.message });
       }
     } else {
-      log.warn({ step: 'WRAPPERS NOT AVAILABLE FOR SCREENSHOT SCHEDULING' });
+      log.debug({ step: 'WRAPPERS NOT AVAILABLE FOR SCREENSHOT SCHEDULING' });
     }
 
     // 🚨 FALLBACK: Direct screenshot scheduling when wrappers fail
@@ -714,6 +725,13 @@ class EnhancedScreenshotManager {
     // CRITICAL FIX: Don't schedule if not tracking
     if (!this.isTracking || !this.currentSession) {
       log.warn({ step: 'NOT SCHEDULING - TRACKING INACTIVE' });
+      return;
+    }
+
+    if (!this.usesFixedScreenshotIntervalMode()) {
+      if (!this._windowInterval) {
+        this.startScreenshotCapture();
+      }
       return;
     }
     
@@ -1362,45 +1380,8 @@ if (uploadResult?.id) {
     }
   }
 
-  /**
-   * Generate random offsets with minimum gap between them
-   * FIX: First screenshot now also respects minGapMs from window start
-   */
   generateRandomOffsetsWithMinGap(windowDurationMs, numShots, minGapMs) {
-    const offsets = [];
-    // FIX: Include minimum gap for FIRST shot too (from window start)
-    const totalMinGaps = numShots * minGapMs;
-
-    // Ensure window is large enough for all shots with minimum gaps
-    if (totalMinGaps >= windowDurationMs) {
-      log.warn({ step: 'WINDOW TOO SMALL FOR SCREENSHOTS', message: `Window too small for ${numShots} shots with ${minGapMs / 1000 / 60}min gaps` });
-      // Fallback: distribute evenly with minimum gap from start
-      const interval = windowDurationMs / numShots;
-      return Array.from({ length: numShots }, (_, i) => minGapMs + i * interval + Math.random() * (interval * 0.3));
-    }
-
-    // Available time after accounting for minimum gaps (including first shot)
-    const availableTime = windowDurationMs - totalMinGaps;
-
-    // Generate random positions within available segments
-    // FIX: Start with minimum gap from window start
-    let currentOffset = minGapMs;
-    for (let i = 0; i < numShots; i++) {
-      // Add random time within this segment
-      const segmentSize = availableTime / numShots;
-      const randomWithinSegment = Math.random() * segmentSize;
-      currentOffset += randomWithinSegment;
-      offsets.push(currentOffset);
-
-      // Add minimum gap for next shot (except for last shot)
-      if (i < numShots - 1) {
-        currentOffset += minGapMs;
-      }
-    }
-
-    log.info({ step: 'GENERATED OFFSETS WITH MIN GAPS', ctx: { minGap: minGapMs / 1000 / 60, offsets } });
-
-    return offsets;
+    return generateRandomScreenshotOffsets(windowDurationMs, numShots, minGapMs);
   }
 
   /**
@@ -1708,7 +1689,7 @@ if (uploadResult?.id) {
     }
   }
 
-  // REMOVED: Mandatory screenshot monitoring - window-based 3-per-10-min logic is the single source
+  // REMOVED: Mandatory screenshot monitoring - window-based 2-per-10-min logic is the single source
   // checkMandatoryScreenshot() - removed
   // startMandatoryScreenshotMonitoring() - removed
 
@@ -1840,7 +1821,7 @@ if (uploadResult?.id) {
       // Idempotent starts (internally clear existing intervals first)
       this.startScreenshotCapture();
       this.startScreenshotTimerUpdates();
-      // REMOVED: startMandatoryScreenshotMonitoring() - window-based 3-per-10-min is single source
+      // REMOVED: startMandatoryScreenshotMonitoring() - window-based 2-per-10-min is single source
       this.ensureNextScreenshotTimer();
       this.sendNextScreenshotUpdate();
 
@@ -1892,7 +1873,7 @@ if (uploadResult?.id) {
     }
     this.startScreenshotCapture();
     this.startScreenshotTimerUpdates();
-    // REMOVED: startMandatoryScreenshotMonitoring() - window-based 3-per-10-min is single source
+    // REMOVED: startMandatoryScreenshotMonitoring() - window-based 2-per-10-min is single source
     this.ensureNextScreenshotTimer();
     this.sendNextScreenshotUpdate();
   }

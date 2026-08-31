@@ -3222,8 +3222,6 @@ function setupLegacyEventListeners() {
         console.error('❌ [RENDERER] IPC Manager not available');
       }
     });
-  } else {
-    console.error('❌ [RENDERER] Pause button not found - check HTML element ID');
   }
 
   // Monthly Report refresh button

@@ -97,6 +97,7 @@ class EnhancedIdleMonitor {
     // Idle-confirmation prompt.
     // Policy (product):
     //   1) OS idle for 10 straight minutes → show "still working?" with a 1-min timer
+    //      EVEN during a Meet/Zoom/Teams call. A leftover meeting tab is not an ack.
     //   2) If that timer finishes with NO click on "I'm working" → stop and deduct
     //      exactly 10 minutes from tracked time (ONLY authorized deduction)
     //   3) Non-effective (idle/low activity) is DISPLAY ONLY — never reduces the
@@ -247,10 +248,15 @@ class EnhancedIdleMonitor {
     this._lastSeenKeystrokesForIdle = stats?.keystrokes || 0;
     this._lastSeenClicksForIdle = stats?.mouseClicks || 0;
     const now = Date.now();
-    if (!this._lastInputActivityAt || !this._lastHighActivityAt) {
-      this._lastInputActivityAt = now;
-      this._lastHighActivityAt = now;
-    }
+    // A new Start must not inherit the previous session's last check.
+    // Ameer 31 Aug: 1776s leftover gap looked like sleep 1 min after Start.
+    this._lastEvaluationAt = null;
+    this._lastInputActivityAt = now;
+    this._lastHighActivityAt = now;
+    this.currentIdleStartTime = null;
+    this._lastIdleCheckpointTime = null;
+    this.wasIdleLastCheck = false;
+    this.idleThresholdExceeded = false;
     
     // Check idle state on a fixed interval
     this.idleMonitoringInterval = setInterval(async () => {
@@ -299,6 +305,7 @@ class EnhancedIdleMonitor {
       this.currentIdleStartTime = null;
       this._lastIdleCheckpointTime = null;
       this.wasIdleLastCheck = false;
+      this._lastEvaluationAt = null;
       console.log('🛑 [IDLE-MONITOR] Idle monitoring stopped');
     }
   }
@@ -425,15 +432,13 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * A leftover Meet / Zoom / Teams / Webex / Skype tab or window must not
-   * block the 10-min "still working?" prompt. Real calls stay effective
-   * (no idle_logs) until OS idle hits that threshold.
+   * Meeting windows must never skip the still-working prompt.
+   * Input resume (OS idle dropping) is the only auto-ack, meeting or not.
    */
-  _shouldSuppressIdleForMeeting(osIdleSeconds) {
+  _isInMeetingSession() {
     try {
       const { isInMeetingSession } = require('../../lib/meeting-context');
-      if (!isInMeetingSession()) return false;
-      return osIdleSeconds * 1000 < this.IDLE_PROMPT_THRESHOLD_MS;
+      return isInMeetingSession();
     } catch (_) {
       return false;
     }
@@ -441,30 +446,15 @@ class EnhancedIdleMonitor {
 
   /**
    * Core idle loop — OS idle ≥ threshold starts an idle period for idle_logs.
+   * The 10-min "still working?" prompt always runs, including during a call.
    */
   async _evaluateIdleState() {
     if (await this._handleSuspendGap()) return;
 
     const { effective: idleSeconds, os, input, lowActivity } = this._getEffectiveIdleSeconds();
 
-    // Listening on Meet/Zoom/Teams is work. OS idle would otherwise write
-    // idle_logs while a live probe still says the call is open. Only suppress
-    // below the prompt threshold — after 10 min of no input, ask anyway.
-    if (this._shouldSuppressIdleForMeeting(os)) {
-      if (this._idlePromptActive) {
-        // OS idle dropped below the prompt threshold (mouse/keyboard resumed)
-        // while a call is still open — same as clicking "I'm working".
-        this._resolveIdlePrompt('working');
-      } else if (this.wasIdleLastCheck || this.currentIdleStartTime) {
-        console.log('📹 [IDLE-MONITOR] In a video meeting — not counting idle');
-        this.currentIdleStartTime = null;
-        this._lastIdleCheckpointTime = null;
-        this.wasIdleLastCheck = false;
-        this.idleThresholdExceeded = false;
-        this._phantomIdleStartTime = null;
-      }
-      return;
-    }
+    // A leftover Meet tab is not an acknowledgment. Only real input dismisses
+    // a showing prompt. Do not return early — the prompt must still be evaluated.
 
     const isIdle = idleSeconds >= this.IDLE_THRESHOLD;
 
@@ -733,6 +723,11 @@ class EnhancedIdleMonitor {
       `⏱️ [IDLE-PROMPT] Alert unanswered — cutting ${Math.round(cutMs / 60000)}m and stopping → ${endTimeOverride} (${reason})`,
     );
     global._idlePromptTimeCutSeconds = timeCutSeconds;
+    // Freeze last_alive immediately so dialog heartbeats cannot put the 10m back
+    // before the API write lands (Garima 31 Aug).
+    try {
+      global.trackingManager?._stopTimeLogCheckpoint?.();
+    } catch (_) { /* ignore */ }
     global.stopTracking?.(reason, null, {
       endTimeOverride,
       timeCutSeconds,
@@ -776,15 +771,12 @@ class EnhancedIdleMonitor {
         return;
       }
 
-      try {
-        const { isInMeetingSession } = require('../../lib/meeting-context');
-        if (isInMeetingSession()) {
-          console.log(
-            `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting`,
-          );
-          return;
-        }
-      } catch (_) {}
+      if (this._isInMeetingSession()) {
+        console.log(
+          `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting`,
+        );
+        return;
+      }
 
       if (startTime < sessionStartMs) {
         console.warn(

@@ -1,6 +1,7 @@
 /**
  * Load workspace policy from RDS (time_doctor.workspace_settings) via backend.
- * Screenshot interval is controlled by settings.screenshot_interval_minutes — change in DB only.
+ * Random screenshot cadence is screenshot_count_per_window / screenshot_window_minutes
+ * from Pulse Workspace Settings. screenshot_interval_minutes is report math only.
  * Company work-day timezone (IANA) is applied after login so "today" matches
  * Time Doctor Company Time Zone (not the employee's personal timezone).
  */
@@ -8,9 +9,14 @@
 const { isBackendTimeLogsEnabled, callDesktopAction } = require('./backend-time-logs');
 const { normalizeTenantUserId } = require('./tenant-user-id');
 
+const {
+  normalizeRandomScreenshotSchedule,
+} = require('./random-screenshot-schedule');
+
 const REFRESH_MS = 10 * 60 * 1000;
 let refreshTimer = null;
 let lastAppliedMinutes = null;
+let lastAppliedSchedule = null;
 let lastAppliedTimezone = null;
 
 async function fetchWorkspaceSettings(userId, config = global.config) {
@@ -78,6 +84,58 @@ function applyScreenshotIntervalMinutes(minutes, options = {}) {
   }
 
   return { applied: true, changed, minutes: mins, seconds };
+}
+
+function applyRandomScreenshotSchedule(settings, options = {}) {
+  const schedule = normalizeRandomScreenshotSchedule(settings || {});
+  const targets = [
+    global.config,
+    global.configManager?.config,
+    global.enhancedScreenshotManager?.config,
+  ].filter(Boolean);
+
+  for (const cfg of targets) {
+    cfg.screenshot_count_per_window = schedule.count;
+    cfg.screenshot_window_minutes = schedule.windowMinutes;
+  }
+  if (global.configManager?.appSettings) {
+    global.configManager.appSettings.screenshot_count_per_window = schedule.count;
+    global.configManager.appSettings.screenshot_window_minutes = schedule.windowMinutes;
+  }
+  if (global.appSettings) {
+    global.appSettings.screenshot_count_per_window = schedule.count;
+    global.appSettings.screenshot_window_minutes = schedule.windowMinutes;
+  }
+
+  const managerChanged =
+    global.enhancedScreenshotManager?.applyWorkspaceSchedule?.(schedule) === true;
+  const prev = lastAppliedSchedule;
+  const changed =
+    managerChanged ||
+    !prev ||
+    prev.count !== schedule.count ||
+    prev.windowMinutes !== schedule.windowMinutes;
+  lastAppliedSchedule = {
+    count: schedule.count,
+    windowMinutes: schedule.windowMinutes,
+  };
+
+  console.log(
+    `📸 [WORKSPACE-SETTINGS] Random screenshots: ${schedule.count} every ${schedule.windowMinutes} min`,
+  );
+
+  if (changed && options.restartCapture && global.isTracking && global.enhancedScreenshotManager) {
+    try {
+      global.enhancedScreenshotManager.stopScreenshotCapture();
+      global.enhancedScreenshotManager.startScreenshotCapture();
+      global.enhancedScreenshotManager.startScreenshotTimerUpdates?.();
+      console.log('📸 [WORKSPACE-SETTINGS] Restarted screenshot scheduler with new random window');
+    } catch (err) {
+      console.warn('⚠️ [WORKSPACE-SETTINGS] Failed to restart screenshot scheduler:', err?.message || err);
+    }
+  }
+
+  return { applied: true, changed, ...schedule };
 }
 
 function broadcastWorkTimezone(tz = lastAppliedTimezone) {
@@ -167,10 +225,13 @@ async function refreshWorkspaceSettings(config = global.config, options = {}) {
     }
     const minutes = settings.screenshot_interval_minutes;
     const intervalResult = applyScreenshotIntervalMinutes(minutes, {
+      restartCapture: false,
+    });
+    const scheduleResult = applyRandomScreenshotSchedule(settings, {
       restartCapture: options.restartCapture !== false,
     });
     const tzResult = applyWorkTimezone(settings.timezone);
-    return { ok: true, settings, ...intervalResult, timezone: tzResult };
+    return { ok: true, settings, ...intervalResult, schedule: scheduleResult, timezone: tzResult };
   } catch (err) {
     console.warn('⚠️ [WORKSPACE-SETTINGS] Refresh failed:', err?.message || err);
     return { ok: false, reason: err?.message || String(err) };
@@ -200,6 +261,7 @@ function stopWorkspaceSettingsRefresh() {
 module.exports = {
   fetchWorkspaceSettings,
   applyScreenshotIntervalMinutes,
+  applyRandomScreenshotSchedule,
   applyWorkTimezone,
   broadcastWorkTimezone,
   installWorkTimezoneWindowHooks,
@@ -208,4 +270,5 @@ module.exports = {
   startWorkspaceSettingsRefresh,
   stopWorkspaceSettingsRefresh,
   getLastAppliedScreenshotIntervalMinutes: () => lastAppliedMinutes,
+  getLastAppliedScreenshotSchedule: () => lastAppliedSchedule,
 };

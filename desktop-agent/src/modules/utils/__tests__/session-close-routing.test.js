@@ -22,13 +22,20 @@ jest.mock('../backend-time-logs', () => ({
 jest.mock('../device-id', () => ({ getDeviceId: () => 'device-1' }));
 
 const backendTimeLogs = require('../backend-time-logs');
-const { closeOpenSessionsAfterExplicitStop } = require('../session-recovery');
+const {
+  closeOpenSessionsAfterExplicitStop,
+  hasLiveSessionToProtect,
+  liveTimeLogId,
+} = require('../session-recovery');
 
 describe('device-wide close routing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     global.currentUserId = '1224';
     global.config = {};
+    delete global.isTracking;
+    delete global.currentTimeLogId;
+    delete global.trackingManager;
   });
 
   it('uses per-row liveness for a sweep with no session named', async () => {
@@ -36,6 +43,39 @@ describe('device-wide close routing', () => {
 
     expect(backendTimeLogs.killAllSessions).toHaveBeenCalledTimes(1);
     expect(backendTimeLogs.closeActiveSessions).not.toHaveBeenCalled();
+  });
+
+  it('excepts a live Start from leftover kill-all', async () => {
+    global.isTracking = true;
+    global.currentTimeLogId = 'a402c6b3-0a5f-474b-96c5-f073cbd10668';
+
+    await closeOpenSessionsAfterExplicitStop({ reason: 'pending_recovery' });
+
+    expect(backendTimeLogs.killAllSessions).toHaveBeenCalledWith(
+      '1224',
+      'device-1',
+      {},
+      expect.objectContaining({
+        exceptTimeLogId: 'a402c6b3-0a5f-474b-96c5-f073cbd10668',
+      }),
+    );
+  });
+
+  it('closes the live row when protectLive is false', async () => {
+    global.isTracking = true;
+    global.currentTimeLogId = 'lid-session';
+
+    await closeOpenSessionsAfterExplicitStop({
+      reason: 'system_sleep',
+      protectLive: false,
+    });
+
+    expect(backendTimeLogs.killAllSessions).toHaveBeenCalledWith(
+      '1224',
+      'device-1',
+      {},
+      expect.objectContaining({ exceptTimeLogId: null }),
+    );
   });
 
   it('ignores an ambient end_time when no session is named', async () => {
@@ -59,6 +99,16 @@ describe('device-wide close routing', () => {
     expect(backendTimeLogs.closeActiveSessions).toHaveBeenCalledTimes(1);
   });
 
+  it('protects a live Start from leftover pending-close kill-all', () => {
+    global.isTracking = true;
+    global.currentTimeLogId = 'a402c6b3-0a5f-474b-96c5-f073cbd10668';
+    expect(hasLiveSessionToProtect()).toBe(true);
+    expect(liveTimeLogId()).toBe('a402c6b3-0a5f-474b-96c5-f073cbd10668');
+    delete global.isTracking;
+    delete global.currentTimeLogId;
+    expect(hasLiveSessionToProtect()).toBe(false);
+  });
+
   it('does not reach the network when offline', async () => {
     backendTimeLogs.isLikelyOffline.mockReturnValueOnce(true);
 
@@ -67,5 +117,24 @@ describe('device-wide close routing', () => {
     expect(res).toMatchObject({ success: true, offline: true });
     expect(backendTimeLogs.killAllSessions).not.toHaveBeenCalled();
     expect(backendTimeLogs.closeActiveSessions).not.toHaveBeenCalled();
+  });
+
+  it('swallows a named-session close timeout so lid-close cannot unhandled-reject', async () => {
+    backendTimeLogs.closeActiveSessions.mockRejectedValueOnce(
+      new Error('Backend sync timeout after 4000ms (close_active_sessions)'),
+    );
+
+    await expect(
+      closeOpenSessionsAfterExplicitStop({
+        timeLogId: 'session-A',
+        end_time: '2026-08-31T12:15:47.000Z',
+        reason: 'system_sleep',
+        timeoutMs: 4000,
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      queued: true,
+      reason: 'close_failed',
+    });
   });
 });
