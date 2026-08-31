@@ -3,7 +3,8 @@
  * Registered early from main.js so the renderer can invoke before DataStatsManager finishes init.
  */
 
-const { isBackendRdsEnabled, getTimeLogsInRange } = require('./backend-rds-reads');
+const { isBackendRdsEnabled, getTimeLogsInRange, getTimeAdjustmentsInRange } = require('./backend-rds-reads');
+const { applyAdjustmentSeconds } = require('./today-time-log-stats');
 const { fetchScreenshotsFromBackend } = require('./backend-screenshots');
 const { listUserProjects } = require('./backend-time-logs');
 const { normalizeTenantUserId } = require('./tenant-user-id');
@@ -201,8 +202,25 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   });
 
   const { mergeIntervalsSeconds, computeTodayTimeLogSeconds } = require('./today-time-log-stats');
+  let adjustmentsByDate = {};
+  try {
+    adjustmentsByDate = await getTimeAdjustmentsInRange(
+      userId,
+      { start: dailyBreakdown[0]?.date, end: dailyBreakdown[dailyBreakdown.length - 1]?.date },
+      config,
+    );
+  } catch (adjErr) {
+    console.warn('⚠️ [MONTHLY-REPORT] Time adjustments fetch failed:', adjErr?.message || adjErr);
+  }
   for (let i = 0; i < daysInMonth; i++) {
-    dailyBreakdown[i].totalSeconds = mergeIntervalsSeconds(dayIntervals[i]);
+    const sessionSeconds = mergeIntervalsSeconds(dayIntervals[i]);
+    const applied = applyAdjustmentSeconds(
+      sessionSeconds,
+      adjustmentsByDate[dailyBreakdown[i].date] || 0,
+    );
+    dailyBreakdown[i].trackedSessionSeconds = applied.trackedSessionSeconds;
+    dailyBreakdown[i].adjustmentSeconds = applied.adjustmentSeconds;
+    dailyBreakdown[i].totalSeconds = applied.totalTime;
   }
 
   const projectBreakdown = Object.values(projectMap)
@@ -255,17 +273,21 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
           ) || 0,
         ),
       );
-      // Never lower today's bar vs the merged day total already computed.
-      const todayTotal = Math.max(
-        fromTodayHelper,
-        Math.floor(Number(dailyBreakdown[todayIdx].totalSeconds) || 0),
+      const todayApplied = applyAdjustmentSeconds(
+        Math.max(
+          fromTodayHelper,
+          Math.floor(Number(dailyBreakdown[todayIdx].trackedSessionSeconds) || 0),
+        ),
+        todayAgg.adjustmentSeconds ?? dailyBreakdown[todayIdx].adjustmentSeconds ?? 0,
       );
-      dailyBreakdown[todayIdx].totalSeconds = todayTotal;
+      dailyBreakdown[todayIdx].trackedSessionSeconds = todayApplied.trackedSessionSeconds;
+      dailyBreakdown[todayIdx].adjustmentSeconds = todayApplied.adjustmentSeconds;
+      dailyBreakdown[todayIdx].totalSeconds = todayApplied.totalTime;
 
       const { computeTodayEffectiveStats } = require('./today-effective-stats');
       const todayEff = await computeTodayEffectiveStats({
         userId,
-        totalSeconds: todayTotal,
+        totalSeconds: todayApplied.totalTime,
         config: config || global.config,
         screenshots, // same rows Month already fetched — no second divergent query
       });

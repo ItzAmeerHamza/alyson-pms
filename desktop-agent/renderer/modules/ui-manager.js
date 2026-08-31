@@ -1555,6 +1555,7 @@ class UIManager {
           }
           this.updateTodayTime(todayStats.totalTime, {
             effectiveSeconds: todayStats.effectiveSeconds,
+            adjustmentSeconds: todayStats.adjustmentSeconds,
           });
         }
         
@@ -1693,10 +1694,19 @@ class UIManager {
     if (metaEl) {
       const tracked = Math.max(0, Math.floor(Number(totalSeconds) || 0));
       const nonEff = Math.max(0, tracked - effectiveSeconds);
+      const adj = Math.trunc(Number(options.adjustmentSeconds) || 0);
+      const adjNote =
+        adj > 0
+          ? ` · includes ${this.formatDuration(adj)} leave/adjustment`
+          : adj < 0
+            ? ` · includes −${this.formatDuration(Math.abs(adj))} adjustment`
+            : '';
       metaEl.textContent =
         nonEff > 0
-          ? `Effective · Tracked ${this.formatDuration(tracked)} (−${this.formatDuration(nonEff)} non-effective)`
-          : 'Effective working time';
+          ? `Effective · Tracked ${this.formatDuration(tracked)} (−${this.formatDuration(nonEff)} non-effective)${adjNote}`
+          : adjNote
+            ? `Effective working time${adjNote}`
+            : 'Effective working time';
     }
   }
 
@@ -3586,7 +3596,10 @@ class UIManager {
               ? window.toEffectiveSeconds(totalSec)
               : totalSec;
         if (!statsUntrusted) {
-          this.updateTodayTime(totalSec, { effectiveSeconds: effectiveSec });
+          this.updateTodayTime(totalSec, {
+            effectiveSeconds: effectiveSec,
+            adjustmentSeconds: todayStats.adjustmentSeconds,
+          });
         }
         console.log('✅ [TODAY-TIME] Updated effective display:', effectiveSec, 's (tracked', totalSec, 's)');
         const trackingLive =
@@ -5139,9 +5152,16 @@ class UIManager {
       const dayNum = parseInt(day.date.split('-')[2], 10);
       const effectiveLabel = this.formatReportDuration(effective);
       const trackedLabel = this.formatReportDuration(tracked);
+      const adj = Math.trunc(Number(day.adjustmentSeconds) || 0);
+      const adjNote =
+        adj > 0
+          ? ` · includes ${this.formatReportDuration(adj)} leave/adjustment`
+          : adj < 0
+            ? ` · includes −${this.formatReportDuration(Math.abs(adj))} adjustment`
+            : '';
       const tooltip = tracked !== effective
-        ? `${day.dayName} ${dayNum}: ${effectiveLabel} effective · ${trackedLabel} tracked`
-        : `${day.dayName} ${dayNum}: ${effectiveLabel} effective`;
+        ? `${day.dayName} ${dayNum}: ${effectiveLabel} effective · ${trackedLabel} tracked${adjNote}`
+        : `${day.dayName} ${dayNum}: ${effectiveLabel} effective${adjNote}`;
       html += `
         <div class="mr-day-bar-wrapper" data-tooltip="${this._escapeHtml(tooltip)}">
           <div class="mr-day-bar ${isToday ? 'today' : ''} ${isZero ? 'zero' : ''}"

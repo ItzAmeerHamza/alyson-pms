@@ -17,6 +17,7 @@ import {
   endOfWorkDayExclusiveIso,
   normalizeWorkTimezone,
   startOfWorkDayIso,
+  workDateKey,
 } from '../lib/work-timezone';
 
 function parseUserIdParam(raw: unknown): number {
@@ -74,6 +75,38 @@ export class ForceSyncController {
       [uid],
     );
     return result.rows[0]?.workspace_id ?? null;
+  }
+
+  private async resolveWorkTimezone(userId: number): Promise<string> {
+    const workspaceId = await this.resolveWorkspaceId(userId);
+    if (!workspaceId) return normalizeWorkTimezone(null);
+    const ws = await this.db.query<{ settings: Record<string, unknown> }>(
+      `SELECT settings FROM time_doctor.workspace_settings WHERE workspace_id = $1 LIMIT 1`,
+      [workspaceId],
+    );
+    const raw = ws.rows[0]?.settings ?? {};
+    return normalizeWorkTimezone(typeof raw.timezone === 'string' ? raw.timezone : null);
+  }
+
+  private async netAdjustmentSecondsByDate(
+    userId: number,
+    startDate: string,
+    endDate: string,
+  ): Promise<Array<{ work_date: string; delta_seconds: number }>> {
+    const result = await this.db.query<{ work_date: string; delta_seconds: string | number }>(
+      `SELECT a.work_date::text AS work_date,
+              COALESCE(SUM(a.delta_seconds), 0)::bigint AS delta_seconds
+         FROM time_doctor.time_adjustments a
+        WHERE a.user_id = $1
+          AND a.work_date >= $2::date
+          AND a.work_date <= $3::date
+        GROUP BY a.work_date`,
+      [userId, startDate, endDate],
+    );
+    return result.rows.map((row) => ({
+      work_date: String(row.work_date).slice(0, 10),
+      delta_seconds: Number(row.delta_seconds) || 0,
+    }));
   }
 
   /** RDS screenshots columns are integer — agent may send floats for activity/focus %. */
@@ -1501,22 +1534,50 @@ export class ForceSyncController {
         const end = data?.end_of_day;
         const startOfDay = start || startOfWorkDayIso();
         const endOfDay = end || endOfWorkDayExclusiveIso();
-        const result = await this.db.query<{
-          id: string;
-          start_time: string;
-          end_time: string | null;
-          status: string;
-          idle_seconds: number | null;
-        }>(
-          `SELECT id, start_time, end_time, status, idle_seconds
-           FROM time_doctor.time_logs
-           WHERE user_id = $1
-             AND start_time < $3::timestamptz
-             AND COALESCE(end_time, NOW()) > $2::timestamptz
-           ORDER BY start_time DESC`,
-          [uid, startOfDay, endOfDay],
-        );
-        return { success: true, time_logs: result.rows };
+        const tz = await this.resolveWorkTimezone(uid);
+        const workDate =
+          typeof data?.work_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.work_date)
+            ? data.work_date
+            : workDateKey(new Date(startOfDay), tz);
+        const [result, adjustments] = await Promise.all([
+          this.db.query<{
+            id: string;
+            start_time: string;
+            end_time: string | null;
+            status: string;
+            idle_seconds: number | null;
+          }>(
+            `SELECT id, start_time, end_time, status, idle_seconds
+             FROM time_doctor.time_logs
+             WHERE user_id = $1
+               AND start_time < $3::timestamptz
+               AND COALESCE(end_time, NOW()) > $2::timestamptz
+             ORDER BY start_time DESC`,
+            [uid, startOfDay, endOfDay],
+          ),
+          this.netAdjustmentSecondsByDate(uid, workDate, workDate),
+        ]);
+        return {
+          success: true,
+          time_logs: result.rows,
+          work_date: workDate,
+          adjustment_seconds: adjustments[0]?.delta_seconds || 0,
+        };
+      }
+      case 'get_time_adjustments': {
+        // Desktop Today / Month clocks add these leave + admin credits.
+        const userId = data?.user_id;
+        if (!userId) {
+          throw new HttpException('Missing user_id', HttpStatus.BAD_REQUEST);
+        }
+        const uid = parseUserIdParam(userId);
+        const startDate = String(data?.start || '').slice(0, 10);
+        const endDate = String(data?.end || data?.start || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+          throw new HttpException('start and end (YYYY-MM-DD) are required', HttpStatus.BAD_REQUEST);
+        }
+        const days = await this.netAdjustmentSecondsByDate(uid, startDate, endDate);
+        return { success: true, days };
       }
       case 'get_time_logs_in_range': {
         const userId = data?.user_id;

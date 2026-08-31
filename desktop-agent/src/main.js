@@ -5577,12 +5577,20 @@ if (isElectronContext && ipcMain) {
       }
     } catch (_) { /* ignore */ }
 
+    const adjustmentSeconds = Math.trunc(Number(payload.adjustmentSeconds) || 0);
     if (cap != null) {
-      if (total > cap) {
+      // Leave / admin credits are not wall-clock. Cap session time only.
+      const sessionTracked = Math.max(
+        0,
+        Math.floor(
+          Number(payload.trackedSessionSeconds != null ? payload.trackedSessionSeconds : total - adjustmentSeconds) || 0,
+        ),
+      );
+      if (sessionTracked > cap) {
         console.warn(
-          `⚠️ [TODAY-TIME-STATS] Clamping impossible total ${total}s → ${cap}s (since work midnight)`,
+          `⚠️ [TODAY-TIME-STATS] Clamping impossible session ${sessionTracked}s → ${cap}s (since work midnight)`,
         );
-        total = cap;
+        total = Math.max(0, cap + adjustmentSeconds);
       }
       if (closed > cap) closed = cap;
     }
@@ -5610,8 +5618,10 @@ if (isElectronContext && ipcMain) {
       Math.floor(Number(last.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
     // Don't reinflate from a stale impossible last-good (missed day rollover).
+    // Leave credit is not wall-clock — only session time is capped.
+    const lastAdj = Math.trunc(Number(last.adjustmentSeconds) || 0);
     if (cap != null) {
-      if (lastTotal > cap) lastTotal = cap;
+      if (lastTotal - lastAdj > cap) lastTotal = Math.max(0, cap + lastAdj);
       if (lastClosed > cap) lastClosed = cap;
     }
     const cutPending = !!global._idlePromptTimeCutAppliedPending;
@@ -5862,26 +5872,31 @@ if (isElectronContext && ipcMain) {
       }
 
       const today = new Date();
-      let totalTime = isTracking
+      const lastGood = lastGoodBefore || global._lastGoodTodayStats;
+      const adjustmentSeconds = agg.backendFetchFailed
+        ? Math.trunc(Number(lastGood?.adjustmentSeconds) || 0)
+        : Math.trunc(Number(agg.adjustmentSeconds) || 0);
+      let sessionTotal = isTracking
         ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
         : completedClosedSeconds;
+      sessionTotal = Math.max(0, Math.floor(Number(sessionTotal) || 0));
+      let totalTime = Math.max(0, sessionTotal + adjustmentSeconds);
 
-      // Tray closed-base = DB+offline merge. Exact value (not a high-water mark)
-      // so menu-bar time tracks wall clock 1:1. Ignore wipe-to-zero only.
+      // Tray closed-base = DB+offline merge + leave/admin credit. Ignore wipe-to-zero only.
       try {
         if (global.trayManager && isTracking) {
           const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
-          if (completedClosedSeconds > 0 || prevBase <= 0) {
+          const trayBase = completedClosedSeconds + adjustmentSeconds;
+          if (trayBase > 0 || prevBase <= 0) {
             global.trayManager._cumulativeBaseSeconds = Math.max(
               prevBase,
-              completedClosedSeconds,
+              trayBase,
             );
           }
         }
       } catch (_) { /* ignore */ }
 
       // Sync / network / empty DB must never erase known local time.
-      const lastGood = lastGoodBefore || global._lastGoodTodayStats;
       const todayKey = workDateKey(today);
       if (
         lastGood &&
@@ -5945,6 +5960,8 @@ if (isElectronContext && ipcMain) {
 
       let payload = {
         totalTime,
+        trackedSessionSeconds: sessionTotal,
+        adjustmentSeconds,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,

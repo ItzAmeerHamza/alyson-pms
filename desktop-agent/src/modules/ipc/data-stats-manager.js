@@ -39,6 +39,21 @@ class DataStatsManager {
     }
   }
 
+  async _sumAdjustmentSeconds(userId, start, end) {
+    try {
+      const { getTimeAdjustmentsInRange } = require('../utils/backend-rds-reads');
+      const byDate = await getTimeAdjustmentsInRange(
+        userId,
+        { start, end },
+        this.config,
+      );
+      return Object.values(byDate).reduce((sum, seconds) => sum + (Number(seconds) || 0), 0);
+    } catch (err) {
+      console.warn('⚠️ [DataStats] Time adjustments fetch failed:', err?.message || err);
+      return 0;
+    }
+  }
+
   async _fetchTimeLogs(userId, opts = {}) {
     const { getTimeLogsInRange } = require('../utils/backend-rds-reads');
     try {
@@ -201,7 +216,19 @@ class DataStatsManager {
           }
         });
 
-        return { totalTime: totalSeconds, dailyBreakdown, userId, weekStart: dailyBreakdown[0]?.date, weekEnd: dailyBreakdown[6]?.date };
+        const adjustmentSeconds = await this._sumAdjustmentSeconds(
+          userId,
+          dailyBreakdown[0]?.date,
+          dailyBreakdown[6]?.date,
+        );
+        return {
+          totalTime: Math.max(0, totalSeconds + adjustmentSeconds),
+          adjustmentSeconds,
+          dailyBreakdown,
+          userId,
+          weekStart: dailyBreakdown[0]?.date,
+          weekEnd: dailyBreakdown[6]?.date,
+        };
       } catch (e) {
         return { totalTime: 0, dailyBreakdown: [], error: e.message };
       }
@@ -289,7 +316,17 @@ class DataStatsManager {
           });
         });
 
-        return { totalTime: totalSeconds, weeklyBreakdown, userId, monthStart: startOfMonth.toISOString().split('T')[0], monthEnd: endOfMonth.toISOString().split('T')[0] };
+        const monthStartKey = startOfMonth.toISOString().split('T')[0];
+        const monthEndKey = endOfMonth.toISOString().split('T')[0];
+        const adjustmentSeconds = await this._sumAdjustmentSeconds(userId, monthStartKey, monthEndKey);
+        return {
+          totalTime: Math.max(0, totalSeconds + adjustmentSeconds),
+          adjustmentSeconds,
+          weeklyBreakdown,
+          userId,
+          monthStart: monthStartKey,
+          monthEnd: monthEndKey,
+        };
       } catch (e) {
         return { totalTime: 0, weeklyBreakdown: [], error: e.message };
       }

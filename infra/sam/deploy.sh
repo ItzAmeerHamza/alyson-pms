@@ -49,6 +49,7 @@ aws ecr get-login-password --region "$AWS_REGION" \
 
 docker build --platform linux/arm64 --provenance=false --sbom=false \
   --build-arg "COGNITO_ISSUER=https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}" \
+  --build-arg "SOURCE_SHA=${IMAGE_TAG}" \
   -f Dockerfile.lambda -t "${ECR_REPO}:${IMAGE_TAG}" .
 docker tag "${ECR_REPO}:${IMAGE_TAG}" "$IMAGE_URI"
 docker tag "${ECR_REPO}:${IMAGE_TAG}" "$IMAGE_URI_LATEST"

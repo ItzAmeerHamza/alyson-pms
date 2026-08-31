@@ -1,4 +1,27 @@
-const { holdLastGoodOnFailedFetch, shouldKeepCachedTodayStats } = require('../today-time-log-stats');
+const {
+  applyAdjustmentSeconds,
+  holdLastGoodOnFailedFetch,
+  shouldKeepCachedTodayStats,
+} = require('../today-time-log-stats');
+
+describe('applyAdjustmentSeconds — Pulse leave / admin credits', () => {
+  it('adds a 7h leave credit to a day with no sessions', () => {
+    const applied = applyAdjustmentSeconds(0, 7 * 3600);
+    expect(applied.trackedSessionSeconds).toBe(0);
+    expect(applied.adjustmentSeconds).toBe(7 * 3600);
+    expect(applied.totalTime).toBe(7 * 3600);
+  });
+
+  it('adds leave credit on top of tracked sessions', () => {
+    const applied = applyAdjustmentSeconds(2 * 3600, 7 * 3600);
+    expect(applied.totalTime).toBe(9 * 3600);
+  });
+
+  it('never goes below zero when admin removes time', () => {
+    const applied = applyAdjustmentSeconds(1800, -3600);
+    expect(applied.totalTime).toBe(0);
+  });
+});
 
 describe('holdLastGoodOnFailedFetch — failed BE must not rewind the clock', () => {
   it('Garima 25 Aug 17:47: live-only 431s keeps last-good 3.49h and adds live', () => {

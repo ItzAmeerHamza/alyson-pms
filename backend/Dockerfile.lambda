@@ -10,6 +10,9 @@ FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+# IMAGE_TAG changes every deploy so COPY/build cannot reuse a stale tree.
+ARG SOURCE_SHA=dev
+RUN echo "$SOURCE_SHA" > /tmp/source-sha
 COPY . .
 RUN npm run build
 

@@ -299,6 +299,17 @@ function ensureLiveSessionRow(timeLogs, currentTimeLogId, isTracking) {
   return list;
 }
 
+/** Pulse day total = session seconds + net leave/admin adjustments (never below 0). */
+function applyAdjustmentSeconds(sessionSeconds, adjustmentSeconds) {
+  const session = Math.max(0, Math.floor(Number(sessionSeconds) || 0));
+  const adjustment = Math.trunc(Number(adjustmentSeconds) || 0);
+  return {
+    trackedSessionSeconds: session,
+    adjustmentSeconds: adjustment,
+    totalTime: Math.max(0, session + adjustment),
+  };
+}
+
 function finalizeTodayAggregate(timeLogs, currentTimeLogId, isTracking, offlineCount = 0) {
   const withLive = ensureLiveSessionRow(timeLogs, currentTimeLogId, isTracking);
   const overlapping = logsOverlappingLocalDay(withLive);
@@ -419,6 +430,9 @@ function holdLastGoodOnFailedFetch(agg, lastGood, { isTracking = false } = {}) {
     completedClosedSeconds: closed,
     ongoingCurrentSessionSeconds: live,
     totalTime: total,
+    adjustmentSeconds: Math.trunc(
+      Number(lastGood.adjustmentSeconds ?? base.adjustmentSeconds) || 0,
+    ),
     backendFetchFailed: true,
     floorHeld: total > failedTotal || closed > failedClosed,
   };
@@ -439,11 +453,15 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
   const offlineCount = offlineLogs.length;
 
   try {
-    const { isBackendTimeLogsEnabled, getTodayTimeLogs } = require('./backend-time-logs');
+    const { isBackendTimeLogsEnabled } = require('./backend-time-logs');
     if (isBackendTimeLogsEnabled()) {
       let timeLogs = [];
+      let adjustmentSeconds = 0;
       try {
-        timeLogs = await getTodayTimeLogs(userId);
+        const { getTodayTimeLogsPayload } = require('./backend-time-logs');
+        const payload = await getTodayTimeLogsPayload(userId);
+        timeLogs = payload.timeLogs;
+        adjustmentSeconds = payload.adjustmentSeconds;
       } catch (fetchErr) {
         console.warn(
           '⚠️ [TODAY-TIME-LOG-STATS] Backend fetch failed — using offline queue + local session:',
@@ -464,7 +482,10 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
         isTracking,
       );
       const merged = mergeRemoteAndOfflineLogs(withActive, offlineLogs, currentTimeLogId);
-      return finalizeTodayAggregate(merged, currentTimeLogId, isTracking, offlineCount);
+      return {
+        ...finalizeTodayAggregate(merged, currentTimeLogId, isTracking, offlineCount),
+        adjustmentSeconds,
+      };
     }
   } catch (err) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Backend path failed:', err.message);
@@ -497,6 +518,7 @@ module.exports = {
   loadOfflineQueuedTimeLogRows,
   mergeIntervalsSeconds,
   aggregateTimeLogRows,
+  applyAdjustmentSeconds,
   holdLastGoodOnFailedFetch,
   statsWorkDayKey,
   shouldKeepCachedTodayStats,

@@ -105,6 +105,32 @@ async function getEffectiveStats(userId, { start, end, tz } = {}, config = globa
   };
 }
 
+/** Net leave / admin adjustments per work date. Keys are YYYY-MM-DD. */
+async function getTimeAdjustmentsInRange(userId, { start, end } = {}, config = global.config) {
+  const startDate = String(start || '').slice(0, 10);
+  const endDate = String(end || start || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    return {};
+  }
+  const result = await callDesktopAction(
+    'get_time_adjustments',
+    {
+      user_id: requireTenantUserId(userId),
+      start: startDate,
+      end: endDate,
+    },
+    config,
+    { timeoutMs: 8000 },
+  );
+  const byDate = {};
+  for (const row of result.days || []) {
+    const key = String(row?.work_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
+    byDate[key] = Math.trunc(Number(row.delta_seconds) || 0);
+  }
+  return byDate;
+}
+
 module.exports = {
   isBackendRdsEnabled,
   resolveSyncUrl,
@@ -113,4 +139,5 @@ module.exports = {
   listUrlLogs,
   listIdleLogs,
   getEffectiveStats,
+  getTimeAdjustmentsInRange,
 };
