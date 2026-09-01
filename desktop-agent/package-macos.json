@@ -6,7 +6,7 @@
   "author": "RevCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ItzAmeerHamza/alyson-pms.git"
+    "url": "https://github.com/revcloud/alyson-pms.git"
   },
   "scripts": {
     "start": "./node_modules/.bin/electron .",

@@ -11,7 +11,7 @@ APPLE_ID="${APPLE_ID}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID}"
 GITHUB_TOKEN="${GITHUB_TOKEN}"
-GITHUB_REPO="ItzAmeerHamza/alyson-pms"
+GITHUB_REPO="revcloud/alyson-pms"
 
 # Get current version
 CURRENT_VERSION=$(node -p "require('./web/package.json').version")

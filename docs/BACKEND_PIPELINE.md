@@ -72,7 +72,7 @@ Throttle: global 120/min; **sync skips** throttle.
 
 | Action | Behavior |
 |--------|----------|
-| `get_workspace_settings` | Org thresholds; defaults if missing: `hours_threshold=7`, `high_activity=60`, `low_activity=10`, `screenshot_interval_minutes=10` |
+| `get_workspace_settings` | Org thresholds; defaults if missing: `hours_threshold=7`, `high_activity=60`, `low_activity=10`, `screenshot_count_per_window=2`, `screenshot_window_minutes=10`, derived `screenshot_interval_minutes=5` |
 | `list_user_projects` | Assignments ⋈ projects |
 | `list_app_logs` / `list_url_logs` | Reads; limit 1–5000 (default 500) |
 
@@ -82,7 +82,7 @@ Throttle: global 120/min; **sync skips** throttle.
 |--------|----------|
 | `screenshot_upload_init` | Presign PUT; returns `id`, `s3_key`, `upload_url`, `content_type` |
 | `screenshot_upload_complete` | INSERT/UPSERT RDS row; sets AI pending; fire-and-forget enqueue |
-| `list_screenshots` | Gallery + GET presigned URLs; limit ≤500 |
+| `list_screenshots` | Gallery thumbs (`thumb_url` only unless `full=1` or no thumb); HTTP `GET /data/screenshots` default limit 200. `GET /data/screenshots/:id` signs the original for lightbox |
 | `estimate_screenshot_deduction` | Preview only (midpoint formula); ownership check if `user_id` |
 | `delete_screenshot` | S3 best-effort delete; **add** to `deducted_seconds`; DELETE row |
 | `upload_screenshot` | **HTTP 410 Gone** (deprecated) |
@@ -367,6 +367,8 @@ CC patterns (templates/service): e.g. `alysonclient@cintara.ai`, `mohita@cintara
 | Path | Mutation | Guard difference |
 |------|----------|------------------|
 | `PATCH /data/time-logs/:id` → `closeTimeLog` | Set `end_time` + `completed` for open logs | Admin; **no GREATEST / no 30s floor** — can differ from sync semantics |
+| `GET /data/screenshots` | List: `thumb_url` only unless `full=1` or no thumb; default limit 200 | JWT |
+| `GET /data/screenshots/:id` | Original `image_url` for lightbox | JWT |
 | `DELETE /data/screenshots/:id` | Deduct + delete (same midpoint formula, MAX 240) | JWT |
 | `DELETE /data/projects/:id` | Nulls `time_logs.project_id` / idle project FK | Durations unchanged |
 | Project assignment CRUD | Assignments only | — |

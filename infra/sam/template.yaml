@@ -580,6 +580,7 @@ Resources:
                 - !GetAtt CognitoAdminFunction.Arn
                 - !GetAtt SesEmailFunction.Arn
                 - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:alyson-time-doctor-leave-scan-${EnvironmentName}'
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aws-cost-explorer-lambda'
       Events:
         ProxyApi:
           Type: HttpApi

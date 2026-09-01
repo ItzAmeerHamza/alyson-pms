@@ -277,6 +277,7 @@ export class DataController {
     @Query('includeTotal') includeTotal?: string,
     @Query('productivity') productivity?: string,
     @Query('sort') sort?: string,
+    @Query('full') full?: string,
   ) {
     const userIds = userIdsRaw
       ? userIdsRaw
@@ -300,6 +301,7 @@ export class DataController {
     const parsedOffset = offset ? Number(offset) : undefined;
     const productivityFilter = normalizeScreenshotProductivityFilter(productivity);
     const sortBy = normalizeScreenshotSort(sort);
+    const includeOriginal = full === '1' || full === 'true';
     const rows = await this.dataService.listScreenshots(
       req.user,
       start,
@@ -310,6 +312,7 @@ export class DataController {
       userIds,
       productivityFilter,
       sortBy,
+      includeOriginal,
     );
     if (includeTotal === '1' || includeTotal === 'true') {
       const total = await this.dataService.countScreenshots(
@@ -323,11 +326,18 @@ export class DataController {
       return {
         items: rows,
         total,
-        limit: parsedLimit ?? 10000,
+        limit: parsedLimit ?? 200,
         offset: parsedOffset ?? 0,
       };
     }
     return rows;
+  }
+
+  @Get('screenshots/:id')
+  async screenshot(@Req() req: { user: any }, @Param('id') id: string) {
+    const row = await this.dataService.getScreenshot(req.user, id);
+    if (!row) throw new NotFoundException('Screenshot not found');
+    return row;
   }
 
   @Delete('screenshots/:id')

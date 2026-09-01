@@ -10,7 +10,7 @@
 #   ./scripts/generate-stable-codesign-cert.sh
 #   ./scripts/generate-stable-codesign-cert.sh /path/to/output.p12
 #
-# Then add GitHub Actions secrets (repo ItzAmeerHamza/alyson-pms):
+# Then add GitHub Actions secrets (repo revcloud/alyson-pms):
 #   MAC_CSC_LINK          = contents of the .p12.base64 file (one line)
 #   MAC_CSC_KEY_PASSWORD  = the password printed below
 #
@@ -99,8 +99,8 @@ echo "  MAC_CSC_LINK         = paste contents of ${B64_PATH}"
 echo "  MAC_CSC_KEY_PASSWORD = ${PASSWORD}"
 echo ""
 echo "Or via gh CLI:"
-echo "  gh secret set MAC_CSC_LINK --repo ItzAmeerHamza/alyson-pms < \"${B64_PATH}\""
-echo "  gh secret set MAC_CSC_KEY_PASSWORD --repo ItzAmeerHamza/alyson-pms --body \"${PASSWORD}\""
+echo "  gh secret set MAC_CSC_LINK --repo revcloud/alyson-pms < \"${B64_PATH}\""
+echo "  gh secret set MAC_CSC_KEY_PASSWORD --repo revcloud/alyson-pms --body \"${PASSWORD}\""
 echo ""
 echo "Do NOT commit the .p12 or password. Store them in a password manager."
 echo "=============================================="

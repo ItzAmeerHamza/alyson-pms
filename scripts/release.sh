@@ -289,7 +289,7 @@ main() {
     echo "  ✓ Git changes committed and pushed"
     echo ""
     print_status "Auto-updater will notify users within 6 hours"
-    print_status "Manual downloads available at: https://github.com/ItzAmeerHamza/alyson-pms/releases"
+    print_status "Manual downloads available at: https://github.com/revcloud/alyson-pms/releases"
 }
 
 # Run main function

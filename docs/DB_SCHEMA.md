@@ -140,6 +140,8 @@ Pulse profile layer on top of `tenant."user"`.
 }
 ```
 
+**Runtime JSON keys (no extra columns):** `screenshot_count_per_window` (1–8, default **2**), `screenshot_window_minutes` (5–120, default **10**), and derived `screenshot_interval_minutes` = `round(window / count)` for report math (2-in-10 → **5**). Current desktop builds use the N-in-M pair as a random window, not a fixed interval clock.
+
 **Runtime nuances:**
 
 - Nest sync `get_workspace_settings` may default `low_activity` to **10** if missing.

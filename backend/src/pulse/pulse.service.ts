@@ -50,6 +50,8 @@ export interface OrgSettings {
   high_activity_threshold: number;
   low_activity_threshold: number;
   screenshot_interval_minutes: number;
+  screenshot_count_per_window: number;
+  screenshot_window_minutes: number;
   /** IANA company/work-day TZ (match Time Doctor Company Time Zone, e.g. America/Chicago). */
   timezone: string;
 }
@@ -59,7 +61,9 @@ const DEFAULT_SETTINGS: OrgSettings = {
   high_activity_threshold: 60,
   /** Below this activity_percent a screenshot counts as LOW (was 20 — too noisy). */
   low_activity_threshold: 10,
-  screenshot_interval_minutes: 10,
+  screenshot_interval_minutes: 5,
+  screenshot_count_per_window: 2,
+  screenshot_window_minutes: 10,
   timezone: normalizeWorkTimezone(null),
 };
 
@@ -190,6 +194,24 @@ export class PulseService {
       screenshot_interval_minutes: Number(
         raw.screenshot_interval_minutes ?? DEFAULT_SETTINGS.screenshot_interval_minutes,
       ),
+      screenshot_count_per_window: Math.min(
+        8,
+        Math.max(
+          1,
+          Math.round(
+            Number(raw.screenshot_count_per_window ?? DEFAULT_SETTINGS.screenshot_count_per_window),
+          ) || DEFAULT_SETTINGS.screenshot_count_per_window,
+        ),
+      ),
+      screenshot_window_minutes: Math.min(
+        120,
+        Math.max(
+          5,
+          Math.round(
+            Number(raw.screenshot_window_minutes ?? DEFAULT_SETTINGS.screenshot_window_minutes),
+          ) || DEFAULT_SETTINGS.screenshot_window_minutes,
+        ),
+      ),
       timezone: normalizeWorkTimezone(
         typeof raw.timezone === 'string' ? raw.timezone : DEFAULT_SETTINGS.timezone,
       ),
@@ -218,19 +240,23 @@ export class PulseService {
       end_time: string | null;
       last_alive_at: string | null;
       idle_seconds: number | null;
+      deducted_seconds: number | null;
     }>(
       // Overlap the range (not start_time-only) so day mode includes sessions that
       // began before Pacific midnight but still have time on that day. Lookback
       // avoids pulling ancient never-closed sessions into every day query.
-      `SELECT t.user_id::text AS user_id, t.start_time, t.end_time, t.last_alive_at, t.idle_seconds
+      `SELECT t.user_id::text AS user_id, t.start_time, t.end_time, t.last_alive_at,
+              t.idle_seconds, t.deducted_seconds
        FROM time_doctor.time_logs t
        LEFT JOIN tenant."user" u ON u.id = t.user_id
+       JOIN time_doctor.user_extensions ext ON ext.user_id = t.user_id
        WHERE ${scope.clause}
          AND t.start_time < $${scope.params.length + 2}::timestamptz
          AND COALESCE(t.end_time, t.last_alive_at, NOW()) > $${scope.params.length + 1}::timestamptz
          AND t.start_time >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
          ${userFilter}
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
        ORDER BY t.start_time`,
       params,
     );
@@ -243,6 +269,7 @@ export class PulseService {
       start_time: string | Date;
       end_time: string | Date | null;
       last_alive_at?: string | Date | null;
+      deducted_seconds?: number | null;
     }>,
     tz?: string,
   ): Map<string, Map<string, number>> {
@@ -280,7 +307,26 @@ export class PulseService {
         const merged = mergeTimeIntervals(intervals);
         let ms = 0;
         for (const i of merged) ms += i.endMs - i.startMs;
-        dayMap.set(day, Math.round((ms / 3600000) * 10) / 10);
+        dayMap.set(day, ms / 3600000);
+      }
+
+      // Screenshot deletes (and any other deducted_seconds) come off the
+      // session-start work day. Idle is NOT subtracted here: meetings and
+      // "I'm working" stay in hours_worked; walk-away idle is idle_hours /
+      // non-effective only.
+      for (const log of logs) {
+        if (log.user_id !== userId) continue;
+        const deducted = Math.max(0, Number(log.deducted_seconds) || 0);
+        if (deducted <= 0) continue;
+        const day = workDateKey(
+          log.start_time instanceof Date ? log.start_time : new Date(log.start_time),
+          workTz,
+        );
+        dayMap.set(day, Math.max(0, (dayMap.get(day) ?? 0) - deducted / 3600));
+      }
+
+      for (const [day, hours] of dayMap) {
+        dayMap.set(day, Math.round(hours * 10) / 10);
       }
       byUserDay.set(userId, dayMap);
     }
@@ -869,7 +915,10 @@ export class PulseService {
     );
     // Idle: OS inactivity stretches ≥ 5 min (idle_logs); short periods ignored.
     // Fallback time_logs.idle_seconds only when no idle_logs exist for that day.
-    // Meeting minutes are subtracted so a 1h Meet with no typing stays effective.
+    // A meeting tab does not count as an ack. Legit idle is only "I'm working"
+    // or real keyboard/mouse input. Unanswered idle prompt stops tracking and
+    // cuts 10m. Walk-away idle that did not hit the prompt is idle_hours /
+    // non-effective only — we do not strip it from the tracked card.
     const idleByUser = this.dailyIdleHoursByUserDay(
       this.effectiveTime.idleHoursFromIdleLogs(
         idleLogs,
@@ -1683,6 +1732,7 @@ export class PulseService {
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
        ORDER BY full_name ASC NULLS LAST`,
       scope.params,
     );

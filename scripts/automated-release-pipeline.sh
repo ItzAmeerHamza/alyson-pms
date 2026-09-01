@@ -15,7 +15,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_OWNER="ItzAmeerHamza"
+GITHUB_OWNER="revcloud"
 GITHUB_REPO="alyson-pms"
 
 # Print colored output

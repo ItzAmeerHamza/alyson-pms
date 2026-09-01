@@ -20,8 +20,14 @@ import {
   isPulseOrgAdmin,
 } from '../database/time-doctor-sql';
 import { CreateTimeAdjustmentDto } from './dto/time-adjustment.dto';
+import {
+  CreateWorkspaceDto,
+  UpdateWorkspaceSettingsDto,
+} from './dto/workspace-admin.dto';
 import { PulseService } from './pulse.service';
 import { PacingService } from './pacing.service';
+import { AwsCostsService } from './aws-costs.service';
+import { WorkspaceAdminService } from './workspace-admin.service';
 
 @Controller('pulse')
 @UseGuards(AuthGuard)
@@ -29,6 +35,8 @@ export class PulseController {
   constructor(
     private readonly pulse: PulseService,
     private readonly pacing: PacingService,
+    private readonly awsCosts: AwsCostsService,
+    private readonly workspaceAdmin: WorkspaceAdminService,
   ) {}
 
   private ensureOrgAdmin(user: { role?: string; is_super_admin?: boolean }) {
@@ -183,11 +191,34 @@ export class PulseController {
     return this.pulse.getTeam(req.user);
   }
 
-  /** Org settings (hours threshold, etc.). */
+  /** Org settings (hours threshold, timezone, screenshot interval) plus company name. */
   @Get('settings')
   async settings(@Req() req: { user: any }) {
     this.ensureOrgAdmin(req.user);
-    return this.pulse.getOrgSettings(req.user);
+    return this.workspaceAdmin.getAdminView(req.user);
+  }
+
+  /** Update this workspace's Pulse settings and optional company name/key. */
+  @Patch('settings')
+  async updateSettings(
+    @Req() req: { user: any },
+    @Body() body: UpdateWorkspaceSettingsDto,
+  ) {
+    this.ensureOrgAdmin(req.user);
+    return this.workspaceAdmin.updateSettings(req.user, body);
+  }
+
+  /**
+   * Create a Pulse company (tenant.workspace + settings + default project + first admin)
+   * or enable Pulse on an existing Palisade workspace.
+   */
+  @Post('workspaces')
+  async createWorkspace(
+    @Req() req: { user: any },
+    @Body() body: CreateWorkspaceDto,
+  ) {
+    this.ensureOrgAdmin(req.user);
+    return this.workspaceAdmin.createWorkspace(req.user, body);
   }
 
   /**
@@ -386,5 +417,16 @@ export class PulseController {
   ) {
     this.ensureCanAdjustTime(req.user);
     return this.pacing.sendPacingDigest(req.user, body || {});
+  }
+
+  /** Alyson PM tagged AWS resource spend for a selected day / week / month. */
+  @Get('aws-costs')
+  async awsCostsReport(
+    @Req() req: { user: any },
+    @Query('start') start?: string,
+    @Query('end') end?: string,
+  ) {
+    this.ensureOrgAdmin(req.user);
+    return this.awsCosts.getAlysonPmCosts({ start, end });
   }
 }

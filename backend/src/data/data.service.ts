@@ -1,4 +1,10 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
 import {
@@ -144,6 +150,7 @@ function screenshotOrderByClause(sort: ScreenshotSort): string {
 
 @Injectable()
 export class DataService {
+  private readonly logger = new Logger(DataService.name);
   constructor(
     private readonly database: DatabaseService,
     private readonly s3: S3Service,
@@ -693,20 +700,160 @@ export class DataService {
     return Boolean(result.rows[0]);
   }
 
+  /**
+   * Remove a person from this Pulse workspace and wipe their Pulse data so they
+   * no longer appear on team, hours, screenshots, or assignments.
+   * Does not delete tenant."user" (shared Palisade identity).
+   */
   async deleteUser(user: ScopedAuthUser, targetUserId: string): Promise<boolean> {
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Insufficient permissions to delete user');
     }
+    if (String(user.id) === String(targetUserId)) {
+      throw new BadRequestException('You cannot remove yourself from the workspace');
+    }
+
     const uid = parseTenantUserId(targetUserId);
     const scope = workspaceScope(user, 'ext');
-    const result = await this.database.query(
-      `DELETE FROM time_doctor.user_extensions ext
+    const existing = await this.database.query<{
+      user_id: number;
+      pulse_role: string;
+      workspace_id: number | null;
+    }>(
+      `SELECT ext.user_id, ext.pulse_role, ext.workspace_id
+       FROM time_doctor.user_extensions ext
        WHERE ${scope.clause}
          AND ext.user_id = $${scope.params.length + 1}
-       RETURNING ext.user_id`,
+       LIMIT 1`,
       [...scope.params, uid],
     );
-    return Boolean(result.rows[0]);
+    const row = existing.rows[0];
+    if (!row?.workspace_id) return false;
+
+    if (row.pulse_role === 'admin') {
+      const otherAdmin = await this.database.query(
+        `SELECT ext.user_id
+         FROM time_doctor.user_extensions ext
+         WHERE ext.workspace_id = $1
+           AND ext.pulse_role = 'admin'
+           AND ext.user_id <> $2
+           AND ext.paused_at IS NULL
+         LIMIT 1`,
+        [row.workspace_id, uid],
+      );
+      if (!otherAdmin.rows[0]) {
+        throw new BadRequestException('Cannot remove the last workspace admin');
+      }
+    }
+
+    const objects = await this.database.query<{
+      s3_key: string | null;
+      thumb_s3_key: string | null;
+      file_path: string | null;
+    }>(
+      `SELECT s.s3_key, s.thumb_s3_key, s.file_path
+       FROM time_doctor.screenshots s
+       WHERE s.user_id = $1
+         AND (s.workspace_id = $2 OR s.workspace_id IS NULL)`,
+      [uid, row.workspace_id],
+    );
+
+    const client = await this.database.getClient();
+    try {
+      await client.query('BEGIN');
+      const ws = row.workspace_id;
+      const owned = `user_id = $1 AND (workspace_id = $2 OR workspace_id IS NULL)`;
+
+      await client.query(
+        `DELETE FROM time_doctor.access_grant_targets agt
+         USING time_doctor.access_grants ag
+         WHERE agt.grant_id = ag.id
+           AND ag.workspace_id = $1
+           AND (agt.target_user_id = $2 OR ag.grantee_user_id = $2)`,
+        [ws, uid],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.access_grants
+         WHERE workspace_id = $1 AND grantee_user_id = $2`,
+        [ws, uid],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.employee_project_assignments epa
+         USING time_doctor.projects p
+         WHERE epa.project_id = p.id
+           AND p.workspace_id = $1
+           AND epa.user_id = $2`,
+        [ws, uid],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.screenshots WHERE ${owned}`,
+        [uid, ws],
+      );
+      await client.query(`DELETE FROM time_doctor.app_logs WHERE ${owned}`, [uid, ws]);
+      await client.query(`DELETE FROM time_doctor.url_logs WHERE ${owned}`, [uid, ws]);
+      await client.query(`DELETE FROM time_doctor.idle_logs WHERE ${owned}`, [uid, ws]);
+      await client.query(
+        `DELETE FROM time_doctor.time_log_events WHERE ${owned}`,
+        [uid, ws],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.session_heartbeats WHERE ${owned}`,
+        [uid, ws],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.time_adjustments
+         WHERE user_id = $1 AND workspace_id = $2`,
+        [uid, ws],
+      );
+      await client.query(
+        `DELETE FROM time_doctor.low_hours_email_log
+         WHERE employee_id = $1 AND (workspace_id = $2 OR workspace_id IS NULL)`,
+        [uid, ws],
+      );
+      await client.query(`DELETE FROM time_doctor.time_logs WHERE ${owned}`, [uid, ws]);
+      await client.query(
+        `UPDATE time_doctor.user_extensions
+         SET manager_id = NULL, updated_at = NOW()
+         WHERE workspace_id = $1 AND manager_id = $2`,
+        [ws, uid],
+      );
+      const removed = await client.query(
+        `DELETE FROM time_doctor.user_extensions
+         WHERE workspace_id = $1 AND user_id = $2
+         RETURNING user_id`,
+        [ws, uid],
+      );
+      await client.query('COMMIT');
+
+      if (!removed.rows[0]) return false;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    for (const shot of objects.rows) {
+      await this.s3.deleteObject(shot.s3_key || shot.file_path);
+      await this.s3.deleteObject(shot.thumb_s3_key);
+    }
+
+    try {
+      await this.database.query(
+        `DELETE FROM time_doctor.leave_events
+         WHERE user_id = $1 AND workspace_id = $2`,
+        [uid, row.workspace_id],
+      );
+    } catch (leaveErr) {
+      this.logger.warn(
+        `leave_events cleanup skipped for user ${uid}: ${
+          leaveErr instanceof Error ? leaveErr.message : String(leaveErr)
+        }`,
+      );
+    }
+
+    this.logger.log(`Removed Pulse user ${uid} from workspace ${row.workspace_id}`);
+    return true;
   }
 
   async closeTimeLog(user: ScopedAuthUser, logId: string, endTime?: string) {
@@ -1137,6 +1284,7 @@ export class DataService {
     userIds?: string[],
     productivityFilter: ScreenshotProductivityFilter = 'all',
     sort: ScreenshotSort = 'newest',
+    includeOriginal = false,
   ) {
     const allowedUserIds = await this.getAllowedScreenshotUserIds(user);
     const { filters, params } = this.buildScreenshotFilters(
@@ -1148,7 +1296,7 @@ export class DataService {
       productivityFilter,
       allowedUserIds,
     );
-    const pageLimit = limit ? Math.max(1, Math.min(limit, 10000)) : 10000;
+    const pageLimit = limit ? Math.max(1, Math.min(limit, 10000)) : 200;
     const pageOffset = offset ? Math.max(0, offset) : 0;
     const dataParams = [...params, pageLimit, pageOffset];
     const orderBy = screenshotOrderByClause(sort);
@@ -1163,25 +1311,8 @@ export class DataService {
       dataParams,
     );
     const rows = await this.s3.attachPresignedUrls(
-      result.rows.map((row) => {
-        // Meetings expect low input; floor activity so they are not labelled low activity.
-        const activityPercent = applyMeetingActivityFloor(
-          row.activity_percent,
-          row.app_name,
-          row.window_title,
-        );
-        return {
-          ...row,
-          activity_percent: activityPercent,
-          focus_percent: applyMeetingActivityFloor(
-            row.focus_percent,
-            row.app_name,
-            row.window_title,
-          ),
-          description: row.vision_summary ?? null,
-          ai_status: row.ai_analysis_status ?? 'pending',
-        };
-      }),
+      result.rows.map((row) => this.mapScreenshotListRow(row)),
+      { originals: includeOriginal },
     );
     // #region agent log
     {
@@ -1208,6 +1339,61 @@ export class DataService {
     }
     // #endregion
     return rows;
+  }
+
+  private mapScreenshotListRow<
+    T extends {
+      activity_percent?: number | null;
+      focus_percent?: number | null;
+      app_name?: string | null;
+      window_title?: string | null;
+      vision_summary?: string | null;
+      ai_analysis_status?: string | null;
+    },
+  >(row: T) {
+    return {
+      ...row,
+      activity_percent: applyMeetingActivityFloor(
+        row.activity_percent,
+        row.app_name,
+        row.window_title,
+      ),
+      focus_percent: applyMeetingActivityFloor(
+        row.focus_percent,
+        row.app_name,
+        row.window_title,
+      ),
+      description: row.vision_summary ?? null,
+      ai_status: row.ai_analysis_status ?? 'pending',
+    };
+  }
+
+  /** Full image URL for lightbox — list rows omit image_url when a thumb exists. */
+  async getScreenshot(user: ScopedAuthUser, id: string) {
+    if (!id || typeof id !== 'string') return null;
+
+    const allowedUserIds = await this.getAllowedScreenshotUserIds(user);
+    const scope = workspaceScope(user, 's');
+    const params: unknown[] = [...scope.params];
+    const filters: string[] = [scope.clause];
+    params.push(id);
+    filters.push(`s.id = $${params.length}`);
+    if (allowedUserIds) {
+      params.push(allowedUserIds.map((uid) => parseTenantUserId(uid)));
+      filters.push(`s.user_id = ANY($${params.length}::int[])`);
+    }
+
+    const result = await this.database.query(
+      `SELECT ${SCREENSHOT_LIST_SELECT}
+       FROM time_doctor.screenshots s
+       WHERE ${filters.join(' AND ')}
+       LIMIT 1`,
+      params,
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const [signed] = await this.s3.attachPresignedUrls([this.mapScreenshotListRow(row)]);
+    return signed ?? null;
   }
 
   /**

@@ -50,7 +50,7 @@ npm run build:backend
 npm run db:migrate
 ```
 
-Desktop releases: push `main` + `gh workflow run release.yml -f version=vX.Y.Z` → GitHub `ItzAmeerHamza/alyson-pms`.
+Desktop releases: push `main` + `gh workflow run release.yml -f version=vX.Y.Z` → GitHub `revcloud/alyson-pms`.
 
 ---
 
@@ -104,7 +104,7 @@ API DB role: `alyson_time_doctor_api` (grants in `db/prod/`, migration `014_time
 | Table | Meaning |
 |-------|---------|
 | `time_doctor.user_extensions` | `cognito_sub`, `pulse_role`, manager, department, `workspace_id` |
-| `time_doctor.workspace_settings` | JSONB: hours/activity thresholds, screenshot interval |
+| `time_doctor.workspace_settings` | JSONB: hours/activity thresholds, random N-in-M screenshot schedule (`screenshot_count_per_window`, `screenshot_window_minutes`), plus derived `screenshot_interval_minutes` for report math |
 | `time_doctor.projects` | Projects |
 | `time_doctor.employee_project_assignments` | User ↔ project |
 | `time_doctor.time_logs` | **A session is a row** (no separate sessions table) |
@@ -415,7 +415,7 @@ Overnight open sessions: only the portion after Pacific midnight counts toward �
 
 | System | Notes |
 |--------|-------|
-| Screenshots | Interval from workspace settings / power profile (~60s default in power-profile); activity_percent drives low-activity; upload via presign |
+| Screenshots | Random N-in-M from workspace settings (default **2 per 10 min**). `screenshot_interval_minutes` is derived report math. Older agents that only read the interval still treat it as a fixed clock. Upload via presign + sibling `.thumb.jpg`. |
 | App detection | Adaptive intervals via `power-profile.js` |
 | URL capture | Adaptive poll + CPU budget backoff |
 | Anti-cheat | Pattern/deep/process/USB intervals from power-profile |
@@ -427,7 +427,7 @@ Power profile defaults were lengthened in v1.0.224 to reduce energy impact (URL/
 
 ## 11. Update / release
 
-- GitHub Releases: `ItzAmeerHamza/alyson-pms`
+- GitHub Releases: `revcloud/alyson-pms`
 - Mac: DMG/ZIP; stable self-signed cert when `MAC_CSC_*` secrets set (TCC persistence)
 - Windows: NSIS `Alyson.PM.Setup.{version}.exe`
 - In-app updater: `force-updater.js`

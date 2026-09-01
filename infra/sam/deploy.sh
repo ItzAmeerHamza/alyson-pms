@@ -194,6 +194,9 @@ if [[ -n "$THUMB_CDN_SECRET" ]]; then
   bash "$SCRIPT_DIR/ensure-thumb-cdn-bucket-policy.sh"
 fi
 
+echo "==> Ensure screenshot objects move to cold storage after 30 days (no delete)"
+bash "$SCRIPT_DIR/ensure-screenshot-lifecycle.sh"
+
 echo "==> Tag external resources (S3, ECR, RDS Proxy, security group)"
 bash "$SCRIPT_DIR/tag-resources.sh"
 

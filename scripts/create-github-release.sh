@@ -12,7 +12,7 @@ ls -lh public/downloads/AlysonWorkTime-*.dmg public/downloads/AlysonWorkTime-*.e
 echo ""
 
 echo "🔗 STEP 1: Go to GitHub Releases"
-echo "https://github.com/ItzAmeerHamza/alyson-pms/releases"
+echo "https://github.com/revcloud/alyson-pms/releases"
 echo ""
 
 echo "🎯 STEP 2: Click 'Create a new release'"
@@ -88,9 +88,9 @@ echo "✅ STEP 6: Publish the release"
 echo ""
 
 echo "🎯 After publishing, the download URLs will be:"
-echo "  • ARM DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-ARM.dmg"
-echo "  • Intel DMG: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Intel.dmg"
-echo "  • Windows EXE: https://github.com/ItzAmeerHamza/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Setup.exe"
+echo "  • ARM DMG: https://github.com/revcloud/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-ARM.dmg"
+echo "  • Intel DMG: https://github.com/revcloud/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Intel.dmg"
+echo "  • Windows EXE: https://github.com/revcloud/alyson-pms/releases/download/v1.0.0/AlysonWorkTime-Setup.exe"
 echo ""
 
 echo "🔧 The website is already configured to use these URLs!"

@@ -14,6 +14,12 @@ import {
   parseWorkspaceId,
 } from '../database/time-doctor-sql';
 import {
+  COMPLETED_ROW_KEEPS_END_SQL,
+  LAST_PROOF_OF_LIFE_SQL,
+  updateTimeLogEndSql,
+  updateTimeLogLastAliveSql,
+} from '../lib/time-log-update-sql';
+import {
   endOfWorkDayExclusiveIso,
   normalizeWorkTimezone,
   startOfWorkDayIso,
@@ -35,30 +41,6 @@ function parseUserIdParam(raw: unknown): number {
 export class ForceSyncController {
   private readonly logger = new Logger(ForceSyncController.name);
 
-  /**
-   * Last moment a session can be proven to have been alive, for `time_logs t`.
-   *
-   * last_alive_at is the dead-man's switch and is normally the answer, but
-   * agents on older builds never stamp it. Closing those at COALESCE(.., start)
-   * would collapse real work to a zero-length session, so this falls back to the
-   * same evidence migration 022 backfilled from. Bounded by NOW() so a bad
-   * ended_at in a log row cannot push a session into the future.
-   */
-  private static readonly LAST_PROOF_OF_LIFE_SQL = `LEAST(
-    NOW(),
-    GREATEST(
-      t.start_time,
-      COALESCE(t.last_alive_at, t.start_time),
-      COALESCE((SELECT MAX(h.seen_at) FROM time_doctor.session_heartbeats h
-                 WHERE h.time_log_id = t.id), t.start_time),
-      COALESCE((SELECT MAX(s.captured_at) FROM time_doctor.screenshots s
-                 WHERE s.time_log_id = t.id), t.start_time),
-      COALESCE((SELECT MAX(COALESCE(a.ended_at, a.started_at, a.timestamp))
-                 FROM time_doctor.app_logs a WHERE a.time_log_id = t.id), t.start_time),
-      COALESCE((SELECT MAX(COALESCE(u.ended_at, u.started_at))
-                 FROM time_doctor.url_logs u WHERE u.time_log_id = t.id), t.start_time)
-    )
-  )`;
   constructor(
     private readonly db: DatabaseService,
     private readonly s3: S3Service,
@@ -225,16 +207,26 @@ export class ForceSyncController {
     return projectId;
   }
 
-  /** Desktop may send a session id before upsert_time_log has landed in RDS. */
-  private async resolveTimeLogId(timeLogId: unknown): Promise<string | null> {
-    if (!timeLogId || typeof timeLogId !== 'string') return null;
-    const trimmed = timeLogId.trim();
+  private parseTimeLogUuid(raw: unknown): string | null {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         trimmed,
       )
     ) {
-      this.logger.warn(`Ignoring non-UUID time_log_id: ${trimmed.slice(0, 64)}`);
+      return null;
+    }
+    return trimmed;
+  }
+
+  /** Desktop may send a session id before upsert_time_log has landed in RDS. */
+  private async resolveTimeLogId(timeLogId: unknown): Promise<string | null> {
+    const trimmed = this.parseTimeLogUuid(timeLogId);
+    if (!trimmed) {
+      if (timeLogId != null && String(timeLogId).trim() !== '') {
+        this.logger.warn(`Ignoring non-UUID time_log_id: ${String(timeLogId).slice(0, 64)}`);
+      }
       return null;
     }
     const result = await this.db.query<{ id: string }>(
@@ -869,6 +861,14 @@ export class ForceSyncController {
         const log = data?.log;
         const payload = log?.data ? { ...log.data, id: log.id || log.data.id } : log;
         if (!payload?.id) throw new HttpException('Missing time log id', HttpStatus.BAD_REQUEST);
+        const timeLogId = this.parseTimeLogUuid(payload.id);
+        if (!timeLogId) {
+          this.logger.warn(
+            `upsert_time_log ignored non-UUID id: ${String(payload.id).slice(0, 64)}`,
+          );
+          throw new HttpException('time log id must be a UUID', HttpStatus.BAD_REQUEST);
+        }
+        payload.id = timeLogId;
         const userId = parseUserIdParam(payload.user_id);
         const workspaceId =
           (await this.resolveWorkspaceId(payload.user_id, payload.organization_id)) ?? null;
@@ -917,7 +917,8 @@ export class ForceSyncController {
         }
 
         // PAYROLL CRITICAL: never shorten duration on upsert.
-        // start_time only moves earlier; end_time only moves later (or stays).
+        // start_time only moves earlier. Completed ends stay put so a later
+        // insert retry carrying wall-clock now cannot undo an idle-prompt cut.
         await this.db.query(
           `INSERT INTO time_doctor.time_logs
             (id, user_id, project_id, start_time, end_time, status, idle_seconds, deducted_seconds, workspace_id, device_id, agent_version, updated_at)
@@ -925,11 +926,7 @@ export class ForceSyncController {
            ON CONFLICT (id) DO UPDATE SET
              project_id = COALESCE(EXCLUDED.project_id, time_doctor.time_logs.project_id),
              start_time = LEAST(time_doctor.time_logs.start_time, EXCLUDED.start_time),
-             end_time = CASE
-               WHEN EXCLUDED.end_time IS NULL THEN time_doctor.time_logs.end_time
-               WHEN time_doctor.time_logs.end_time IS NULL THEN EXCLUDED.end_time
-               ELSE GREATEST(time_doctor.time_logs.end_time, EXCLUDED.end_time)
-             END,
+             end_time = ${COMPLETED_ROW_KEEPS_END_SQL},
              status = CASE
                WHEN EXCLUDED.status = 'completed' OR time_doctor.time_logs.status = 'completed'
                  THEN 'completed'
@@ -964,45 +961,21 @@ export class ForceSyncController {
         return { success: true, id: payload.id };
       }
       case 'update_time_log': {
-        const id = data?.id;
+        const id = this.parseTimeLogUuid(data?.id);
         const updates = data?.updates || {};
-        if (!id) throw new HttpException('Missing time log id', HttpStatus.BAD_REQUEST);
+        if (!id) {
+          this.logger.warn(
+            `update_time_log ignored non-UUID id: ${String(data?.id ?? '').slice(0, 64)}`,
+          );
+          return { success: false, id: data?.id ?? null, updated: 0, reason: 'no_row' };
+        }
         const clientEnd = updates.end_time || null;
         const authorizedIdleCut = updates.authorized_idle_cut === true;
-        // The agent computes this end while it is alive, so it is taken at face
-        // value, bounded by the row's own start and last proof-of-life.
-        // The floor is last_alive_at rather than a fixed interval: a client end
-        // that precedes the start is garbage, and padding it to a constant
-        // fabricates work. last_alive_at is the last moment we know the session
-        // existed, so it is the only defensible answer.
-        const proposedEnd = `GREATEST(t.start_time, COALESCE(t.last_alive_at, t.start_time), LEAST($2::timestamptz, NOW()))`;
-        // Re-opening an already-completed row is retroactive: the agent is no
-        // longer living that session, so its clock is not evidence about it.
-        // Offline/pending recovery still needs to extend a premature short
-        // close, but only as far as the session can be PROVEN to have been
-        // alive. Capped only by NOW(), a write carrying the current time
-        // extended sessions that had been cleanly closed hours earlier — one by
-        // 4.69h, having genuinely run 91 seconds.
-        //
-        // GREATEST keeps this from shortening: proof-of-life below the stored
-        // end leaves the row untouched (shortening has its own path). Postgres
-        // evaluates SET expressions against the pre-update row, so the
-        // last_alive_at written below cannot widen this cap for its own write.
-        const provenExtension = `GREATEST(t.end_time, LEAST(${proposedEnd}, ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL}))`;
-        // authorized_idle_cut: the alert timeout cut (now − 10m) while completing.
-        const endTimeSql = authorizedIdleCut
-          ? `CASE
-                 WHEN $2::timestamptz IS NULL THEN t.end_time
-                 ELSE ${proposedEnd}
-               END`
-          : `CASE
-                 WHEN $2::timestamptz IS NULL THEN t.end_time
-                 -- Live stop: the agent is running this session right now, so
-                 -- the request itself is the proof. Capping at the last 10s
-                 -- checkpoint here would shave time off every honest stop.
-                 WHEN t.end_time IS NULL THEN ${proposedEnd}
-                 ELSE ${provenExtension}
-               END`;
+        // authorized_idle_cut: bill the client's now−10m and freeze last_alive
+        // to that same instant. The laptop is still awake; raising to
+        // last_alive / heartbeats undid every 10m cut (Garima 31 Aug).
+        const endTimeSql = updateTimeLogEndSql(authorizedIdleCut);
+        const lastAliveSql = updateTimeLogLastAliveSql(authorizedIdleCut);
         const result = await this.db.query<{ id: string; end_time: Date | string | null }>(
           `UPDATE time_doctor.time_logs t
            SET end_time = ${endTimeSql},
@@ -1017,15 +990,10 @@ export class ForceSyncController {
                -- a late checkpoint from an agent still holding a stale id must
                -- not advance it — proposedEnd reads last_alive_at, so letting it
                -- creep forward on a finished row drags end_time along with it.
-               -- t.end_time here is the pre-update value, so a live stop that
-               -- completes the row in this same statement still records its own.
-               last_alive_at = CASE
-                 WHEN t.end_time IS NOT NULL THEN t.last_alive_at
-                 ELSE GREATEST(
-                   COALESCE(t.last_alive_at, t.start_time),
-                   LEAST(COALESCE($6::timestamptz, t.last_alive_at, t.start_time), NOW())
-                 )
-               END,
+               -- Authorized idle cut is the exception: last_alive is pulled
+               -- back to the billed end so a follow-up write cannot restore
+               -- the unanswered-prompt 10m via heartbeats.
+               last_alive_at = ${lastAliveSql},
                updated_at = NOW()
            WHERE t.id = $1
            RETURNING t.id, t.end_time`,
@@ -1070,11 +1038,7 @@ export class ForceSyncController {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
            ON CONFLICT (id) DO UPDATE SET
              updated_at = NOW(),
-             end_time = CASE
-               WHEN EXCLUDED.end_time IS NULL THEN time_doctor.time_logs.end_time
-               WHEN time_doctor.time_logs.end_time IS NULL THEN EXCLUDED.end_time
-               ELSE GREATEST(time_doctor.time_logs.end_time, EXCLUDED.end_time)
-             END,
+             end_time = ${COMPLETED_ROW_KEEPS_END_SQL},
              status = CASE
                WHEN time_doctor.time_logs.status = 'completed' THEN 'completed'
                WHEN EXCLUDED.status = 'completed' THEN 'completed'
@@ -1115,19 +1079,24 @@ export class ForceSyncController {
         // only ever shorten — there is no caller-supplied end to inflate with.
         if (data?.close_at_own_liveness === true) {
           const p: unknown[] = [uid];
-          let devClause = '';
+          let extraClause = '';
           if (deviceId) {
             p.push(deviceId);
-            devClause = ` AND t.device_id = $${p.length}`;
+            extraClause += ` AND t.device_id = $${p.length}`;
+          }
+          const exceptId = data?.except_time_log_id || data?.exceptTimeLogId || null;
+          if (exceptId) {
+            p.push(String(exceptId));
+            extraClause += ` AND t.id <> $${p.length}::uuid`;
           }
           const killed = await this.db.query<{ id: string; end_time: Date | string }>(
             `UPDATE time_doctor.time_logs t
-             SET end_time = ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL},
+             SET end_time = ${LAST_PROOF_OF_LIFE_SQL},
                  status = 'completed',
                  updated_at = NOW()
              WHERE t.user_id = $1
                AND t.end_time IS NULL
-               ${devClause}
+               ${extraClause}
              RETURNING t.id AS id, t.end_time`,
             p,
           );
@@ -1211,7 +1180,7 @@ export class ForceSyncController {
         const closeResult = await this.db.query<{ id: string; end_time: Date | string }>(
           `UPDATE time_doctor.time_logs t
            SET end_time = GREATEST(
-                 ${ForceSyncController.LAST_PROOF_OF_LIFE_SQL},
+                 ${LAST_PROOF_OF_LIFE_SQL},
                  LEAST($${params.length - 1}::timestamptz, NOW())
                ),
                status = $${params.length},
@@ -1444,7 +1413,9 @@ export class ForceSyncController {
           hours_threshold: 7,
           high_activity_threshold: 60,
           low_activity_threshold: 10,
-          screenshot_interval_minutes: 10,
+          screenshot_interval_minutes: 5,
+          screenshot_count_per_window: 2,
+          screenshot_window_minutes: 10,
           timezone: normalizeWorkTimezone(null),
         };
         if (!workspaceId) {
@@ -1465,6 +1436,12 @@ export class ForceSyncController {
             low_activity_threshold: Number(raw.low_activity_threshold ?? defaults.low_activity_threshold),
             screenshot_interval_minutes: Number(
               raw.screenshot_interval_minutes ?? defaults.screenshot_interval_minutes,
+            ),
+            screenshot_count_per_window: Number(
+              raw.screenshot_count_per_window ?? defaults.screenshot_count_per_window,
+            ),
+            screenshot_window_minutes: Number(
+              raw.screenshot_window_minutes ?? defaults.screenshot_window_minutes,
             ),
             timezone: normalizeWorkTimezone(
               typeof raw.timezone === 'string' ? raw.timezone : defaults.timezone,

@@ -254,7 +254,7 @@ This release includes auto-update functionality. Existing users will be notified
 - Code signed and notarized for macOS
 - Improved cross-platform compatibility
 
-**Full Changelog**: https://github.com/ItzAmeerHamza/alyson-pms/compare/v${OLD_VERSION}...v${NEW_VERSION}"
+**Full Changelog**: https://github.com/revcloud/alyson-pms/compare/v${OLD_VERSION}...v${NEW_VERSION}"
 
 # Create the GitHub release
 gh release create "v${NEW_VERSION}" \
@@ -265,7 +265,7 @@ gh release create "v${NEW_VERSION}" \
   --notes "$RELEASE_NOTES" \
   --latest
 
-echo -e "${GREEN}✅ GitHub release created: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}${NC}"
+echo -e "${GREEN}✅ GitHub release created: https://github.com/revcloud/alyson-pms/releases/tag/v${NEW_VERSION}${NC}"
 
 # Step 9: Commit and push changes
 echo -e "${BLUE}📝 Step 9: Committing and pushing changes...${NC}"
@@ -282,7 +282,7 @@ git commit -m "🚀 Release v${NEW_VERSION} - Enhanced Performance & Security
 - Updated auto-update configuration
 - Added signed and notarized DMG files
 
-Release URL: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
+Release URL: https://github.com/revcloud/alyson-pms/releases/tag/v${NEW_VERSION}"
 
 # Push to main branch
 git push origin main
@@ -311,7 +311,7 @@ echo "  🔄 Auto-Update: Configured"
 echo "  🌐 Web: Deployed to Vercel"
 echo ""
 echo -e "${BLUE}🔗 Important Links:${NC}"
-echo "  📖 Release: https://github.com/ItzAmeerHamza/alyson-pms/releases/tag/v${NEW_VERSION}"
+echo "  📖 Release: https://github.com/revcloud/alyson-pms/releases/tag/v${NEW_VERSION}"
 echo "  🌐 Website: https://time-flow-admin.vercel.app"
 echo "  📥 Downloads: https://time-flow-admin.vercel.app/download"
 echo ""

@@ -6,7 +6,7 @@
   "author": "RevCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ItzAmeerHamza/alyson-pms.git"
+    "url": "https://github.com/revcloud/alyson-pms.git"
   },
   "scripts": {
     "test": "jest",
@@ -195,7 +195,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "ItzAmeerHamza",
+      "owner": "revcloud",
       "repo": "alyson-pms",
       "releaseType": "release"
     }

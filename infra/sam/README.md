@@ -98,6 +98,12 @@ openssl rand -hex 32
 
 Leave the secret empty to keep S3-presigned `thumb_url`.
 
+## Screenshot cold storage
+
+`deploy.sh` (and `ensure-screenshot-lifecycle.sh`) merges **one** lifecycle rule on the shared bucket: objects under `alyson-td-screenshots/` transition to **S3 Glacier Instant Retrieval** after **30 days**. Nothing is deleted. Pulse can still open those shots (same GET path; a retrieval fee applies). Other prefixes (`sam-deploy/`, `tracked-time/`, `alyson-td-internal/`) are not in the rule.
+
+Override with `SCREENSHOT_COLD_AFTER_DAYS` / `SCREENSHOT_COLD_STORAGE_CLASS` if needed.
+
 ## Security notes
 
 - Store `DATABASE_PASSWORD` and `INTERNAL_API_KEY` in **Secrets Manager**; reference from SAM `Secrets` (not plain parameters in prod).

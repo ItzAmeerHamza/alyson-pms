@@ -119,8 +119,9 @@ export class S3Service {
       image_url?: string | null;
       thumb_url?: string | null;
     },
-  >(rows: T[]): Promise<T[]> {
+  >(rows: T[], opts?: { originals?: boolean }): Promise<T[]> {
     if (!this.isEnabled()) return rows;
+    const originals = opts?.originals !== false;
 
     return Promise.all(
       rows.map(async (row) => {
@@ -132,7 +133,6 @@ export class S3Service {
           return { ...row, image_url: null, thumb_url: null };
         }
         try {
-          const url = await this.getPresignedGetUrl(key!);
           const thumbKey = row.thumb_s3_key?.trim();
           let thumbUrl: string | null = null;
           if (this.isValidScreenshotObjectKey(thumbKey)) {
@@ -142,6 +142,8 @@ export class S3Service {
               thumbUrl = null;
             }
           }
+          const needOriginal = originals || !thumbUrl;
+          const url = needOriginal ? await this.getPresignedGetUrl(key!) : null;
           return { ...row, image_url: url, thumb_url: thumbUrl };
         } catch (err) {
           this.logger.warn(`Presign failed for key ${key}`);

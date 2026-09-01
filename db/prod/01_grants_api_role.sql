@@ -37,3 +37,10 @@ GRANT USAGE, SELECT ON SEQUENCE tenant.profile_id_seq TO alyson_time_doctor_api;
 
 GRANT SELECT, INSERT, UPDATE ON TABLE tenant.profile_workspace TO alyson_time_doctor_api;
 GRANT USAGE, SELECT ON SEQUENCE tenant.profile_workspace_id_seq TO alyson_time_doctor_api;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE time_doctor.leave_events TO alyson_time_doctor_api;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE time_doctor.leave_inbox_messages TO alyson_time_doctor_api;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE time_doctor.team_leave_events TO alyson_time_doctor_api;
+
+GRANT SELECT, INSERT, UPDATE ON TABLE tenant.workspace TO alyson_time_doctor_api;
+GRANT USAGE, SELECT ON SEQUENCE tenant.workspace_id_seq TO alyson_time_doctor_api;

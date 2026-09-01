@@ -1,7 +1,7 @@
 import { S3Service } from '../common/s3.service';
 
-export const THUMB_MAX_WIDTH = 480;
-export const THUMB_JPEG_QUALITY = 70;
+export const THUMB_MAX_WIDTH = 320;
+export const THUMB_JPEG_QUALITY = 60;
 
 /** Sibling object: `…/id.jpg` → `…/id.thumb.jpg`. */
 export function thumbS3KeyFromOriginal(s3Key: string): string {

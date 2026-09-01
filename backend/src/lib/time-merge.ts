@@ -17,6 +17,28 @@ export function sessionEndMs(log: {
   return new Date(raw).getTime();
 }
 
+/**
+ * Authorized idle-prompt cut (shown alert, 1 min unanswered).
+ * Bill the client's now−10m. Do NOT raise to last_alive_at — the machine
+ * was still alive; the cut is the product rule, not a crash.
+ */
+export function authorizedIdleCutEndMs(params: {
+  startMs: number;
+  clientEndMs: number;
+  nowMs: number;
+}): number {
+  if (!Number.isFinite(params.startMs) || !Number.isFinite(params.clientEndMs)) {
+    return params.startMs;
+  }
+  const nowMs = Number.isFinite(params.nowMs) ? params.nowMs : Date.now();
+  return Math.max(params.startMs, Math.min(params.clientEndMs, nowMs));
+}
+
+/** Screenshot-delete / authorized deductions, never below zero. */
+export function deductedHours(deductedSeconds: number | null | undefined): number {
+  return Math.max(0, (Number(deductedSeconds) || 0) / 3600);
+}
+
 export function mergeTimeIntervals(intervals: TimeInterval[]): TimeInterval[] {
   if (intervals.length === 0) return [];
 
@@ -48,6 +70,7 @@ export function calculateMergedHoursByUser(
     end_time: string | Date | null;
     last_alive_at?: string | Date | null;
     idle_seconds?: number | null;
+    deducted_seconds?: number | null;
   }>,
 ): Map<string, number> {
   const byUser = new Map<string, Array<{ interval: TimeInterval }>>();
@@ -63,6 +86,13 @@ export function calculateMergedHoursByUser(
     });
   }
 
+  const deductedByUser = new Map<string, number>();
+  for (const log of logs) {
+    const hours = deductedHours(log.deducted_seconds);
+    if (hours <= 0) continue;
+    deductedByUser.set(log.user_id, (deductedByUser.get(log.user_id) ?? 0) + hours);
+  }
+
   const result = new Map<string, number>();
   for (const [userId, entries] of byUser) {
     const merged = mergeTimeIntervals(entries.map((e) => e.interval));
@@ -70,8 +100,8 @@ export function calculateMergedHoursByUser(
     for (const interval of merged) {
       totalMs += interval.endMs - interval.startMs;
     }
-    const hours = totalMs / (1000 * 60 * 60);
-    result.set(userId, Math.round(hours * 10) / 10);
+    const hours = totalMs / (1000 * 60 * 60) - (deductedByUser.get(userId) ?? 0);
+    result.set(userId, Math.max(0, Math.round(hours * 10) / 10));
   }
 
   return result;

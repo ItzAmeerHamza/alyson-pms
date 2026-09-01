@@ -124,7 +124,7 @@ class ForceUpdater {
    * a stale hardcoded fork (which causes perpetual "update required" and broken installs).
    */
   getGithubReleaseTarget() {
-    const fallback = { owner: 'ItzAmeerHamza', repo: 'alyson-pms' };
+    const fallback = { owner: 'revcloud', repo: 'alyson-pms' };
     try {
       const pkgPath = path.join(__dirname, '../../../package.json');
       if (!fs.existsSync(pkgPath)) {

@@ -27,10 +27,12 @@ import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
   intervalContains,
+  intervalOverlapMs,
   mergeCapturedAtsIntoIntervals,
   subtractIntervals,
   type TimeInterval,
 } from './meeting-intervals';
+import { lowActivityCapMs, screenshotOwnedRangeMs } from '../lib/screenshot-owned-interval';
 
 /**
  * Which workspace to restrict to, or null for no restriction (super admins, and
@@ -74,8 +76,9 @@ export class EffectiveTimeService {
   static readonly MIN_IDLE_REPORT_SECONDS = 5 * 60;
 
   /**
-   * Sustained quiet required before a low screenshot counts toward LOW hours.
-   * At 1-min intervals, N=3 (three consecutive quiet minutes). At 10-min, N=1.
+   * Sustained quiet required before a low run counts toward LOW hours.
+   * Measured in owned wall-clock seconds (midpoint spans), not shot count,
+   * so a random N-in-M schedule cannot turn one brief dip into 5–10 minutes.
    */
   static readonly SUSTAINED_LOW_MINUTES = 3;
 
@@ -276,12 +279,17 @@ export class EffectiveTimeService {
     tz?: string,
   ): Map<string, Map<string, number>> {
     const workTz = normalizeWorkTimezone(tz);
-    const intervalHours = Math.max(1, Number(intervalMinutes) || 1) / 60;
-    const streakNeeded = this.sustainedLowStreakNeeded(intervalMinutes);
+    const capMs = lowActivityCapMs(intervalMinutes);
+    const minRunSeconds = EffectiveTimeService.SUSTAINED_LOW_MINUTES * 60;
     const meetingIv = this.meetingIntervalsFromRows(rows, intervalMinutes);
     const idleIv = this.countedIdleIntervalsByUser(idleLogs);
 
-    type Shot = { activity_date: string; captured_at_ms: number; is_low: boolean };
+    type Shot = {
+      activity_date: string;
+      captured_at_ms: number;
+      is_low: boolean;
+      ownedSeconds: number;
+    };
     const byUserShots = new Map<string, Shot[]>();
     for (const row of rows) {
       const capturedMs = new Date(row.captured_at).getTime();
@@ -297,11 +305,25 @@ export class EffectiveTimeService {
         activity_date: row.activity_date || workDateKey(new Date(row.captured_at), workTz),
         captured_at_ms: capturedMs,
         is_low: Boolean(row.is_low) && !inMeeting && !inIdle,
+        ownedSeconds: 0,
       });
     }
 
     const byUserDay = new Map<string, Map<string, number>>();
     for (const [uid, shots] of byUserShots) {
+      shots.sort((a, b) => a.captured_at_ms - b.captured_at_ms);
+      const idleCuts = idleIv.get(uid) ?? [];
+      for (let i = 0; i < shots.length; i += 1) {
+        const prev = i > 0 ? shots[i - 1].captured_at_ms : null;
+        const next = i + 1 < shots.length ? shots[i + 1].captured_at_ms : null;
+        const owned = screenshotOwnedRangeMs(prev, shots[i].captured_at_ms, next, capMs);
+        let remainingMs = owned.endMs - owned.startMs;
+        for (const cut of idleCuts) {
+          remainingMs -= intervalOverlapMs(owned, cut);
+        }
+        shots[i].ownedSeconds = Math.max(0, Math.round(remainingMs / 1000));
+      }
+
       let i = 0;
       while (i < shots.length) {
         if (!shots[i].is_low) {
@@ -309,13 +331,17 @@ export class EffectiveTimeService {
           continue;
         }
         let j = i;
-        while (j < shots.length && shots[j].is_low) j += 1;
-        if (j - i >= streakNeeded) {
+        let runSeconds = 0;
+        while (j < shots.length && shots[j].is_low) {
+          runSeconds += shots[j].ownedSeconds;
+          j += 1;
+        }
+        if (runSeconds >= minRunSeconds) {
           for (let k = i; k < j; k += 1) {
             const day = shots[k].activity_date;
             if (!byUserDay.has(uid)) byUserDay.set(uid, new Map());
             const dayMap = byUserDay.get(uid)!;
-            dayMap.set(day, (dayMap.get(day) ?? 0) + intervalHours);
+            dayMap.set(day, (dayMap.get(day) ?? 0) + shots[k].ownedSeconds / 3600);
           }
         }
         i = j;
@@ -400,10 +426,11 @@ export class EffectiveTimeService {
 
   /**
    * Low-activity duration from screenshots below threshold.
-   * Only counts low shots that sit in a consecutive streak of length >= N
-   * (interval-aware), so 1/min capture does not treat every brief pause as LOW.
-   * Idle overlap is applied in memory so month ranges do not run a per-row
-   * idle_logs lookup (that is what blew the 29s API Gateway budget).
+   * Each qualifying shot owns its midpoint span (capped at the derived average
+   * gap). Consecutive low owned-seconds must reach 3 minutes so 1/min capture
+   * does not treat every brief pause as LOW, and random N-in-M cannot invent
+   * extra minutes. Idle overlap is applied in memory so month ranges do not
+   * run a per-row idle_logs lookup (that is what blew the 29s API Gateway budget).
    */
   async lowActivityHoursFromScreenshots(
     filter: WorkspaceFilter,

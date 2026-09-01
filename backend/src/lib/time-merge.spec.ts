@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { sessionEndMs, mergeTimeIntervals, calculateMergedHoursByUser } from './time-merge';
+import {
+  sessionEndMs,
+  mergeTimeIntervals,
+  calculateMergedHoursByUser,
+  authorizedIdleCutEndMs,
+} from './time-merge';
 
 describe('sessionEndMs', () => {
   it('uses end_time when the session is closed', () => {
@@ -72,6 +77,32 @@ describe('Start / Stop / quit must not inflate Pulse hours', () => {
       },
     ]);
     expect(hours.get('1224')).toBe(2);
+  });
+
+  it('screenshot deducted_seconds come off the Pulse total', () => {
+    const hours = calculateMergedHoursByUser([
+      {
+        user_id: '1224',
+        start_time: '2026-08-31T05:37:00.000Z',
+        end_time: '2026-08-31T10:27:00.000Z',
+        deducted_seconds: 6156,
+      },
+    ]);
+    // 4.83h wall − 1.71h deleted shots
+    expect(hours.get('1224')).toBe(3.1);
+  });
+
+  it('authorized idle cut uses the client now−10m, not last_alive', () => {
+    const start = Date.parse('2026-08-31T05:37:00.000Z');
+    const lastAlive = Date.parse('2026-08-31T10:27:00.000Z');
+    const clientCut = Date.parse('2026-08-31T10:17:00.000Z');
+    const now = lastAlive;
+    expect(
+      authorizedIdleCutEndMs({ startMs: start, clientEndMs: clientCut, nowMs: now }),
+    ).toBe(clientCut);
+    expect(
+      authorizedIdleCutEndMs({ startMs: start, clientEndMs: clientCut, nowMs: now }),
+    ).toBeLessThan(lastAlive);
   });
 
   it('overlapping Start/Stop replay merges instead of summing', () => {
