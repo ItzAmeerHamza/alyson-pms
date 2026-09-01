@@ -1,0 +1,20 @@
+# Alyson Pulse — machine requirements
+#
+# This is not a pip file. Install everything with:
+#   bash scripts/install-requirements.sh
+#
+# Manifests:
+#   requirements/Brewfile     Homebrew (git, node@20, python@3.11, postgresql, awscli, gh, sam)
+#   requirements/python.txt   PyObjC for macOS desktop input monitoring
+#   package-lock.json         Node workspaces: backend, desktop-agent, tasks
+#
+# Versions
+#   Node.js     >= 20
+#   npm         comes with Node 20
+#   Python      >= 3.11 (macOS input helper)
+#   PostgreSQL  client (psql) 16+
+#   Git
+#   GitHub CLI  gh (clone private repo, releases)
+#   AWS CLI     v2 (optional — only for SAM / S3 / Secrets Manager)
+#   AWS SAM CLI optional — API deploy
+#   Xcode CLT   macOS only (native modules + Swift helper)

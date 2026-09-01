@@ -1,0 +1,11 @@
+# System packages for Alyson Pulse (macOS + Homebrew Linux)
+# Install: brew bundle --file requirements/Brewfile
+
+brew "git"
+brew "node@20"
+brew "python@3.11"
+brew "postgresql@16"
+brew "awscli"
+brew "gh"
+brew "jq"
+brew "aws-sam-cli"

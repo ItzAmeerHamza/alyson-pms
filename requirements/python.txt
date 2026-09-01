@@ -1,0 +1,7 @@
+# Python packages used by the desktop agent (macOS input monitoring).
+# Install: python3 -m pip install -r requirements/python.txt
+# Same list as desktop-agent/python-requirements.txt — keep them in sync.
+
+pyobjc-framework-Quartz>=9.0; sys_platform == "darwin"
+pyobjc-framework-Cocoa>=9.0; sys_platform == "darwin"
+pyobjc-core>=9.0; sys_platform == "darwin"

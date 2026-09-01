@@ -1,5 +1,6 @@
 # Python dependencies for desktop agent input monitoring
 # These are bundled with the app to ensure cross-platform compatibility
+# Keep in sync with requirements/python.txt
 
 # macOS Quartz framework for low-level input detection
 pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'
