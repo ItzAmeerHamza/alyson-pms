@@ -119,12 +119,11 @@ class ForceUpdater {
   }
 
   /**
-   * GitHub owner/repo for electron-updater, parsed from bundled package.json
-   * `repository` field. Falls back if missing so packaged builds never point at
-   * a stale hardcoded fork (which causes perpetual "update required" and broken installs).
+   * GitHub owner/repo for electron-updater. Prefer `build.publish` (public
+   * installer feed) over `repository` (may be the private source repo).
    */
   getGithubReleaseTarget() {
-    const fallback = { owner: 'revcloud', repo: 'alyson-pms' };
+    const fallback = { owner: 'revcloud', repo: 'alyson-td-releases' };
     try {
       const pkgPath = path.join(__dirname, '../../../package.json');
       if (!fs.existsSync(pkgPath)) {
@@ -132,11 +131,15 @@ class ForceUpdater {
         return fallback;
       }
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      const pub = pkg.build && pkg.build.publish;
+      if (pub && typeof pub === 'object' && pub.owner && pub.repo) {
+        return { owner: String(pub.owner), repo: String(pub.repo) };
+      }
       const raw =
         pkg.repository &&
         (typeof pkg.repository === 'string' ? pkg.repository : pkg.repository.url);
       if (!raw || typeof raw !== 'string') {
-        console.warn('⚠️ [FORCE-UPDATER] No repository in package.json - using fallback feed');
+        console.warn('⚠️ [FORCE-UPDATER] No publish/repository in package.json - using fallback feed');
         return fallback;
       }
       const normalized = raw

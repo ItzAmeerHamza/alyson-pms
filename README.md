@@ -85,7 +85,7 @@ Electron companion employees run on their machine. It records work, stays usable
 
 ### Auto-update
 
-- In-app updates from GitHub Releases on `revcloud/alyson-pms`
+- In-app updates from GitHub Releases on [`revcloud/alyson-td-releases`](https://github.com/revcloud/alyson-td-releases)
 - Mac: in-place ZIP replace (not a DMG)
 - Windows: silent NSIS (`oneClick: true`)
 - Manual downloads: DMG (arm64 / Intel) and Windows Setup `.exe`
@@ -210,7 +210,7 @@ Stacks: `alyson-time-doctor-api-dev` / `-prod`. See [infra/sam/README.md](infra/
 
 ## Desktop releases
 
-Channel: GitHub Releases on **`revcloud/alyson-pms`**.
+Channel: GitHub Releases on **[`revcloud/alyson-td-releases`](https://github.com/revcloud/alyson-td-releases)** (public). Source stays on private `revcloud/alyson-pms`.
 
 ```bash
 # After pushing main

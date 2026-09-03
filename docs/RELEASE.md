@@ -11,7 +11,7 @@ Unsigned / self-signed GitHub channel. Full gates: `.cursor/rules/desktop-releas
 | appId | `com.alyson.work-time-agent` |
 | Windows NSIS | `oneClick: true` |
 | Mac update | In-place **ZIP** (not DMG) |
-| Feed | GitHub `revcloud/alyson-pms` |
+| Feed | GitHub `revcloud/alyson-td-releases` (public). Source stays on private `revcloud/alyson-pms`. |
 
 A new cert or `appId` forces every Mac user to re-grant Screen Recording and Accessibility.
 
@@ -28,7 +28,9 @@ Also set Cognito + `VITE_API_BASE_URL` / `BACKEND_API_URL` / `INTERNAL_API_KEY` 
 ```bash
 # version in desktop-agent/package.json
 git push origin main
-gh workflow run release.yml -f version=vX.Y.Z --repo revcloud/alyson-pms
+git push hamza main   # CI secrets (MAC_CSC_*) live here today
+gh workflow run release.yml -f version=vX.Y.Z --repo ItzAmeerHamza/alyson-pms
+# After CI: copy the 7 assets to revcloud/alyson-td-releases (public auto-update feed)
 ```
 
 Assets (dots, not spaces/hyphens):

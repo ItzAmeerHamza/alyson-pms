@@ -1,12 +1,12 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.238",
+  "version": "1.0.239",
   "description": "Alyson PM Agent - Desktop companion app",
   "main": "src/main.js",
   "author": "RevCloud",
   "repository": {
     "type": "git",
-    "url": "https://github.com/revcloud/alyson-pms.git"
+    "url": "https://github.com/revcloud/alyson-td-releases.git"
   },
   "scripts": {
     "test": "jest",
@@ -196,7 +196,7 @@
     "publish": {
       "provider": "github",
       "owner": "revcloud",
-      "repo": "alyson-pms",
+      "repo": "alyson-td-releases",
       "releaseType": "release"
     }
   }
