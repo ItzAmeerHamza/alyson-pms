@@ -115,7 +115,9 @@ class SessionManager {
       console.log('✅ [SESSION] User login handled and session persisted for:', email, organizationSlug ? `(org: ${organizationSlug})` : '');
       try {
         const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('../utils/workspace-settings');
-        await refreshWorkspaceSettings(this.config, { restartCapture: false });
+        refreshWorkspaceSettings(this.config, { restartCapture: false }).catch((settingsErr) => {
+          console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
+        });
         startWorkspaceSettingsRefresh(this.config);
       } catch (settingsErr) {
         console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);

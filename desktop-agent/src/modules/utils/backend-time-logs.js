@@ -272,7 +272,9 @@ async function getTodayTimeLogsPayload(userId, config = global.config) {
   );
   return {
     timeLogs: result.time_logs || [],
-    adjustmentSeconds: Math.trunc(Number(result.adjustment_seconds) || 0),
+    adjustmentSeconds: Math.trunc(Number(result.other_seconds) || 0),
+    leaveCreditSeconds: Math.trunc(Number(result.leave_seconds) || 0),
+    otherAdjustmentSeconds: Math.trunc(Number(result.other_seconds) || 0),
   };
 }
 
@@ -371,13 +373,20 @@ async function closeOpenUrlLogs({ user_id, ended_at, site_url } = {}, config = g
   );
 }
 
-async function insertIdleLog(log, config = global.config) {
+async function upsertIdleLog(log, config = global.config, options = {}) {
   const userId = requireTenantUserId(log.user_id);
+  const { idleLogIdempotencyUuid } = require('./idle-log-period-key');
+  const id = log.id || idleLogIdempotencyUuid({ ...log, user_id: userId });
   return callDesktopAction(
-    'insert_idle_log',
-    { log: { ...log, user_id: userId } },
+    'upsert_idle_log',
+    { log: { ...log, user_id: userId, id } },
     config,
+    { timeoutMs: options.timeoutMs || 20_000 },
   );
+}
+
+async function insertIdleLog(log, config = global.config, options = {}) {
+  return upsertIdleLog(log, config, options);
 }
 
 /**
@@ -431,6 +440,7 @@ module.exports = {
   closeOpenAppLogs,
   closeOpenUrlLogs,
   insertIdleLog,
+  upsertIdleLog,
   insertTimeLogEvents,
   getLogUploadUrl,
 };

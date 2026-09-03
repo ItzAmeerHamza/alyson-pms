@@ -17,6 +17,15 @@ describe('screenshot gallery URLs', () => {
     expect(screenshotPopupUrl(shot)).toBe(FULL);
   });
 
+  it('does not treat an S3 object key as a popup URL', () => {
+    const shot = {
+      thumb_url: THUMB,
+      file_path: 'alyson-td-screenshots/user/a.jpg',
+      image_url: null,
+    };
+    expect(screenshotPopupUrl(shot)).toBe(THUMB);
+  });
+
   it('keeps signed query strings in the img tag', () => {
     const html = screenshotTileImgTag(
       { thumb_url: THUMB, image_url: FULL },

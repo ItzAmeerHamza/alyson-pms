@@ -193,7 +193,7 @@ class StartupManager {
       const rc = (global.configManager && global.configManager.appSettings) || {};
       const urlPipelineEnabled = (process.env.URL_PIPELINE_V2_ENABLED !== 'false');
       global.urlCaptureManager = new managers.UrlCaptureManager({
-        debugLogging: true,
+        debugLogging: process.env.URL_DEBUG_LOGGING === 'true',
         // FIXED: Reduced deduplication to allow URL events through
         debounceMs: Number(process.env.URL_TRACKING_DEBOUNCE_MS || rc.url_tracking_debounce_ms || 100), // Reduced from 180ms
         minSliceSec: Number(process.env.URL_TRACKING_MIN_SLICE_SEC || rc.url_tracking_min_slice_sec || 1), // Reduced from 4s to 1s
@@ -220,7 +220,9 @@ class StartupManager {
       // Attach single URL event listener (canonical)
       global.urlCaptureManager.on('url', async (evt) => {
         try {
-console.log('🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER:', { url: evt?.url, source: evt?.source, ts: evt?.ts });
+        if (process.env.URL_DEBUG_LOGGING === 'true') {
+          console.log('🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER:', { url: evt?.url, source: evt?.source, ts: evt?.ts });
+        }
         
         // Guard: drop oversized URLs to avoid DB trigger rejection (>2048 chars)
         const candidateUrl = evt && evt.url;
@@ -259,15 +261,15 @@ console.log('🌐 [URL] EVENT RECEIVED IN STARTUP MANAGER:', { url: evt?.url, so
           ended_at: null // Will be closed by next URL or cleanup
         };
         
-        console.log('🌐 [URL] PROCESSING PAYLOAD:', { domain: payload.domain, browser: payload.browser, hasUserId: !!payload.user_id });
-        
-        // Debug: Check available services
-        console.log('🔍 [URL] DEBUG - Available services:', {
-          enhancedSyncManager: !!global.enhancedSyncManager,
-          enhancedSyncManagerAddToQueue: !!(global.enhancedSyncManager && global.enhancedSyncManager.addToQueue),
-          trackingManager: !!global.trackingManager,
-          currentTimeLogId: global.trackingManager?.currentTimeLogId || null
-        });
+        if (process.env.URL_DEBUG_LOGGING === 'true') {
+          console.log('🌐 [URL] PROCESSING PAYLOAD:', { domain: payload.domain, browser: payload.browser, hasUserId: !!payload.user_id });
+          console.log('🔍 [URL] DEBUG - Available services:', {
+            enhancedSyncManager: !!global.enhancedSyncManager,
+            enhancedSyncManagerAddToQueue: !!(global.enhancedSyncManager && global.enhancedSyncManager.addToQueue),
+            trackingManager: !!global.trackingManager,
+            currentTimeLogId: global.trackingManager?.currentTimeLogId || null
+          });
+        }
         
         // Save via enhancedSyncManager (offline queue + backend sync)
         let queued = false;
@@ -559,7 +561,11 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
 
       try {
         const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('../utils/workspace-settings');
-        await refreshWorkspaceSettings(global.configManager?.config || global.config, { restartCapture: false });
+        // Never block the window on Pulse settings — a bad network used to stall boot.
+        refreshWorkspaceSettings(global.configManager?.config || global.config, { restartCapture: false })
+          .catch((settingsErr) => {
+            console.warn('⚠️ [STARTUP-MANAGER] Workspace settings load failed:', settingsErr?.message || settingsErr);
+          });
         startWorkspaceSettingsRefresh(global.configManager?.config || global.config);
       } catch (settingsErr) {
         console.warn('⚠️ [STARTUP-MANAGER] Workspace settings load failed:', settingsErr?.message || settingsErr);
@@ -580,8 +586,15 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
         }, 1000);
       }
 
-      // Start comprehensive monitoring (or late-start subsystems if already running)
-      await global.monitoringManager.startAllMonitoring();
+      // Start capture systems only while a session is open. Doing this at login
+      // woke screenshots/URL/idle/app polls all day even when the timer was off.
+      if (global.isTracking && (global.trackingManager?.currentTimeLogId || global.currentTimeLogId)) {
+        void global.monitoringManager.startAllMonitoring().catch((err) => {
+          console.warn('⚠️ [STARTUP-MANAGER] Monitoring start failed:', err?.message || err);
+        });
+      } else {
+        console.log('📡 [STARTUP-MANAGER] Capture systems deferred until tracking starts');
+      }
 
       // RACE FIX: If tracking started before _finalizeSetup(), the idle monitor
       // may have been skipped. Force-start it now that the reference is wired.
@@ -620,8 +633,13 @@ console.log('🌐 [URL] Queued via enhancedSyncManager:', payload.domain);
       // Check permissions via consolidated system monitor
       if (global.systemMonitor) {
         console.log('🔐 [STARTUP-MANAGER] Running consolidated permission check...');
-        const healthCheck = await global.systemMonitor.performComprehensiveHealthCheck();
-        console.log(`✅ [STARTUP-MANAGER] Health check completed: ${healthCheck.overall}`);
+        void global.systemMonitor.performComprehensiveHealthCheck()
+          .then((healthCheck) => {
+            console.log(`✅ [STARTUP-MANAGER] Health check completed: ${healthCheck.overall}`);
+          })
+          .catch((err) => {
+            console.warn('⚠️ [STARTUP-MANAGER] Health check failed:', err?.message || err);
+          });
       } else {
         console.log('⚠️ [STARTUP-MANAGER] System monitor not available, skipping permission check');
       }

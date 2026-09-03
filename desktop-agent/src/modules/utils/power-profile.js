@@ -78,6 +78,8 @@ const IPC = {
   consolidatedMs: envMs('POWER_IPC_CONSOLIDATED_MS', 30000),
   activitySyncMs: envMs('POWER_ACTIVITY_SYNC_MS', 60000),
   screenshotTimerUiMs: envMs('POWER_SCREENSHOT_TIMER_UI_MS', 30000),
+  liveActivityMs: envMs('POWER_LIVE_ACTIVITY_MS', 15000),
+  systemHealthMs: envMs('POWER_SYSTEM_HEALTH_MS', 120000),
 };
 
 /** Fixed screenshot cadence — product requirement: 1/min while unlocked + tracking. */

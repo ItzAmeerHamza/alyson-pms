@@ -16,7 +16,7 @@
             }
         })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+    <script defer src="vendor/lucide.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -5364,6 +5364,61 @@
             border-color: #0369a1;
         }
 
+        .screenshot-lightbox {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.86);
+            cursor: zoom-out;
+            padding: 24px;
+            -webkit-app-region: no-drag;
+        }
+
+        .screenshot-lightbox[hidden] {
+            display: none !important;
+        }
+
+        .screenshot-lightbox img {
+            position: relative;
+            z-index: 0;
+            max-width: min(96vw, 1400px);
+            max-height: 90vh;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+            cursor: default;
+            background: #0f172a;
+        }
+
+        .screenshot-lightbox-close {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            z-index: 2;
+            width: 36px;
+            height: 36px;
+            border: none;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            color: #f8fafc;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            pointer-events: auto;
+            -webkit-app-region: no-drag;
+        }
+
+        .screenshot-lightbox-close:hover {
+            background: rgba(255, 255, 255, 0.22);
+        }
+
+        .mr-day-bar-wrapper {
+            cursor: pointer;
+        }
+
         .tracker-screenshot-img {
             width: 100%;
             aspect-ratio: 32 / 10;
@@ -7133,6 +7188,11 @@
     <!-- NOTIFICATION -->
     <div id="notification" class="notification">
         <div id="notificationMessage">Notification message</div>
+    </div>
+
+    <div id="screenshotLightbox" class="screenshot-lightbox" hidden>
+        <button type="button" id="screenshotLightboxClose" class="screenshot-lightbox-close" aria-label="Close screenshot" onclick="closeScreenshotLightbox()">&times;</button>
+        <img id="screenshotLightboxImg" alt="Screenshot">
     </div>
 
     <script src="modules/project-dropdown.js"></script>

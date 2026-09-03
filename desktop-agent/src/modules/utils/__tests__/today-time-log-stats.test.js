@@ -6,15 +6,22 @@ const {
 
 describe('applyAdjustmentSeconds — Pulse leave / admin credits', () => {
   it('adds a 7h leave credit to a day with no sessions', () => {
-    const applied = applyAdjustmentSeconds(0, 7 * 3600);
+    const applied = applyAdjustmentSeconds(0, 0, 7 * 3600);
     expect(applied.trackedSessionSeconds).toBe(0);
     expect(applied.adjustmentSeconds).toBe(7 * 3600);
     expect(applied.totalTime).toBe(7 * 3600);
   });
 
-  it('adds leave credit on top of tracked sessions', () => {
-    const applied = applyAdjustmentSeconds(2 * 3600, 7 * 3600);
+  it('tops up to 7h when they work less than the holiday credit', () => {
+    const applied = applyAdjustmentSeconds(2 * 3600, 0, 7 * 3600);
+    expect(applied.totalTime).toBe(7 * 3600);
+    expect(applied.adjustmentSeconds).toBe(5 * 3600);
+  });
+
+  it('keeps extra hours when they work past the 7h holiday floor', () => {
+    const applied = applyAdjustmentSeconds(9 * 3600, 0, 7 * 3600);
     expect(applied.totalTime).toBe(9 * 3600);
+    expect(applied.adjustmentSeconds).toBe(0);
   });
 
   it('never goes below zero when admin removes time', () => {

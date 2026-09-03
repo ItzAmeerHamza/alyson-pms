@@ -24,14 +24,16 @@ class PythonProvisioner {
     this.platform = process.platform;
     this.provisioned = false;
     this.status = { ready: false, pythonPath: null, message: '', errors: [] };
+    this._allowDownload = false;
   }
 
   /**
    * Main entry point: ensure Python is available and working
    * Returns { ready: boolean, pythonPath: string|null, message: string, errors: string[] }
    */
-  async ensurePython() {
+  async ensurePython(options = {}) {
     console.log(`🐍 [PYTHON-PROVISION] Checking Python availability on ${this.platform}...`);
+    this._allowDownload = options.allowDownload === true;
 
     try {
       if (this.platform === 'win32') {
@@ -88,14 +90,18 @@ class PythonProvisioner {
         }
       }
 
-      // Step 3: Try to auto-download as last resort
-      console.log(`📥 [PYTHON-PROVISION] Downloading Python ${PYTHON_VERSION} embeddable...`);
-      const downloaded = await this._downloadWindowsPython(downloadDir);
-      if (downloaded && fs.existsSync(downloadedPython)) {
-        const verified = await this._verifyPython(downloadedPython);
-        if (verified) {
-          return this._success(downloadedPython, `Downloaded Python ${PYTHON_VERSION} successfully`);
+      // Step 3: Try to auto-download as last resort (never during app boot).
+      if (this._allowDownload) {
+        console.log(`📥 [PYTHON-PROVISION] Downloading Python ${PYTHON_VERSION} embeddable...`);
+        const downloaded = await this._downloadWindowsPython(downloadDir);
+        if (downloaded && fs.existsSync(downloadedPython)) {
+          const verified = await this._verifyPython(downloadedPython);
+          if (verified) {
+            return this._success(downloadedPython, `Downloaded Python ${PYTHON_VERSION} successfully`);
+          }
         }
+      } else {
+        console.log('🐍 [PYTHON-PROVISION] Skipping Python download on startup (will retry when tracking starts)');
       }
     } else {
       // Development mode: check local bundled

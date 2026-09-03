@@ -1,6 +1,7 @@
 const { createFeatureLogger } = require('./logger');
 const { computeDHash } = require('./perceptual-hash');
 const { prepareScreenshotForUpload } = require('./prepare-screenshot-upload');
+const crypto = require('crypto');
 
 const log = createFeatureLogger('SCREEN', { adapter: 'storage' });
 
@@ -86,6 +87,7 @@ async function uploadScreenshotViaS3Api({
   windowTitle,
   agentVersion,
   perceptualHash,
+  screenshotId,
 }) {
   const sync = resolveDesktopSyncConfig();
   if (!sync) {
@@ -99,6 +101,7 @@ async function uploadScreenshotViaS3Api({
     captured_at: capturedAt || new Date().toISOString(),
     content_type: contentType,
     ext,
+    screenshot_id: screenshotId,
   });
 
   log.info({ step: 'S3_PUT_START', ctx: { s3_key: init.s3_key } });
@@ -207,6 +210,7 @@ async function uploadScreenshotBuffer(args) {
     agentVersion = null,
     _retried = false,
   } = args || {};
+  const screenshotId = args?.screenshotId || crypto.randomUUID();
   try {
     const convertStartedAt = Date.now();
     const prepared = await prepareScreenshotForUpload(buffer, { nativeImage });
@@ -279,6 +283,7 @@ async function uploadScreenshotBuffer(args) {
       windowTitle,
       agentVersion,
       perceptualHash,
+      screenshotId,
     };
     let s3Result = await uploadScreenshotViaS3Api(uploadArgs);
     if (s3Result.error && isTransientUploadError(s3Result.error)) {
@@ -302,7 +307,7 @@ async function uploadScreenshotBuffer(args) {
     if (isTransientUploadError(msg) && !_retried) {
       log.warn({ step: 'S3_UPLOAD_RETRY', message: msg });
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      return uploadScreenshotBuffer({ ...args, _retried: true });
+      return uploadScreenshotBuffer({ ...args, _retried: true, screenshotId });
     }
     log.error({ step: 'EXCEPTION', message: msg });
     console.error(`❌ [SCREENSHOT-UPLOAD] Exception:`, msg);
@@ -312,6 +317,7 @@ async function uploadScreenshotBuffer(args) {
 
 module.exports = {
   uploadScreenshotBuffer,
+  uploadScreenshotViaS3Api,
   resolveDesktopSyncConfig,
   isTransientUploadError,
 };

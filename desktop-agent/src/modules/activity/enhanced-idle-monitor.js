@@ -25,6 +25,8 @@ class EnhancedIdleMonitor {
      * time_logs.idle_seconds without querying idle_logs back out of the database.
      */
     this._sessionIdleSeconds = 0;
+    /** Seconds already credited per idle episode (user+start). Checkpoints extend. */
+    this._creditedIdleSecondsByKey = new Map();
     /** Last time we saw a real keystroke or click (ms). Used when OS idle is unreliable. */
     this._lastInputActivityAt = null;
     this._lastSeenKeystrokesForIdle = 0;
@@ -215,15 +217,8 @@ class EnhancedIdleMonitor {
         fraudAlerts: [],
       };
     }
-    if (!global.offlineQueue.idleLogs) {
-      global.offlineQueue.idleLogs = [];
-    }
-    global.offlineQueue.idleLogs.push({
-      ...idleData,
-      queuedAt: new Date().toISOString(),
-      attempts: 0,
-    });
-    global.enhancedSyncManager?.processQueueItem?.('idleLogs', idleData).catch(() => {});
+    const { enqueueIdleLogOnce } = require('../utils/idle-log-period-key');
+    enqueueIdleLogOnce(global.offlineQueue, idleData);
   }
 
   // === IDLE MONITORING FUNCTIONS ===
@@ -736,13 +731,13 @@ class EnhancedIdleMonitor {
   }
 
   /**
-   * Persist idle time accumulated since the last checkpoint (or idle start).
-   * Called while the user is still idle so Pulse shows idle without requiring input.
+   * Persist the current idle episode as one row: original start → now.
+   * Checkpoints must not mint a new idle_start (Pulse drops slices under 5 min).
    */
   async _flushIdleCheckpoint(endTime = Date.now()) {
     if (!this.currentIdleStartTime || !this.wasIdleLastCheck) return;
 
-    const startTime = this._lastIdleCheckpointTime ?? this.currentIdleStartTime;
+    const startTime = this.currentIdleStartTime;
     const duration = endTime - startTime;
     if (duration < this.MIN_IDLE_CHUNK_MS) return;
 
@@ -791,17 +786,37 @@ class EnhancedIdleMonitor {
 
       const durationSeconds = Math.round(duration / 1000);
       const durationMinutes = Math.floor(duration / 60000);
-      this._sessionIdleSeconds += Math.max(0, durationSeconds);
-      console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
-      
+
       const userId = this._resolveUserId();
       const timeLogId = this._resolveTimeLogId();
+      const { idleLogIdempotencyUuid } = require('../utils/idle-log-period-key');
+      const idleStartIso = new Date(startTime).toISOString();
+      const idleEndIso = new Date(endTime).toISOString();
+      const idleId = userId
+        ? idleLogIdempotencyUuid({
+            user_id: userId,
+            idle_start: idleStartIso,
+          })
+        : '';
+      const creditKey = idleId || idleStartIso;
+      const previouslyCredited = this._creditedIdleSecondsByKey.get(creditKey) || 0;
+      const deltaSeconds = Math.max(0, durationSeconds - previouslyCredited);
+      if (deltaSeconds === 0 && previouslyCredited > 0) {
+        console.log(`⏭️ [IDLE-LOG] Skipping retry of already-recorded period ${durationSeconds}s`);
+        return;
+      }
+
+      this._sessionIdleSeconds += deltaSeconds;
+      this._creditedIdleSecondsByKey.set(creditKey, durationSeconds);
 
       if (!userId) {
         console.warn('⚠️ [IDLE-LOG] No valid tenant user_id, skipping idle log');
         return;
       }
-      
+
+      const { persistIdleLog } = require('../utils/idle-log-write');
+      console.log(`📊 [IDLE-LOG] Recording idle period: ${durationSeconds}s (${durationMinutes}m)`);
+
       const organizationId =
         global.currentOrganizationId ||
         this.config?.organization_id ||
@@ -809,69 +824,42 @@ class EnhancedIdleMonitor {
         null;
 
       const idleData = {
+        id: idleId,
         user_id: userId,
         time_log_id: timeLogId,
         organization_id: organizationId,
-        idle_start: new Date(startTime).toISOString(),
-        idle_end: new Date(endTime).toISOString(),
+        idle_start: idleStartIso,
+        idle_end: idleEndIso,
         duration_seconds: durationSeconds,
         duration_minutes: durationMinutes,
       };
 
-      const { isBackendTimeLogsEnabled, insertIdleLog } = require('../utils/backend-time-logs');
       const cfg = this.config || global.config;
-
-      const persistIdleLog = async (payload) => {
-        // RDS is the only backend — throwing keeps the log in the offline queue
-        // below instead of dropping payroll-relevant idle time.
-        if (!isBackendTimeLogsEnabled(cfg)) {
-          throw new Error('Backend not configured for idle logs');
-        }
-
-        await insertIdleLog(payload, cfg);
-        console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
-      };
-
       try {
-        await persistIdleLog(idleData);
-      } catch (firstError) {
-        const message = firstError?.message || String(firstError);
-        if (idleData.time_log_id) {
+        const result = await persistIdleLog(idleData, cfg);
+        if (result.status === 'queue') {
           console.warn(
-            '⚠️ [IDLE-LOG] Insert with time_log_id failed, retrying without FK:',
-            message,
+            '⚠️ [IDLE-LOG] Write not confirmed, queueing the same id:',
+            result.error?.message || result.error,
           );
-          await persistIdleLog({ ...idleData, time_log_id: null });
+          this._queueIdleLog(result.log);
         } else {
-          throw firstError;
+          console.log('✅ [IDLE-LOG] Idle period saved via backend RDS');
         }
+      } catch (firstError) {
+        console.warn(
+          '⚠️ [IDLE-LOG] Insert failed, queueing the same period for retry:',
+          firstError?.message || firstError,
+        );
+        this._queueIdleLog(idleData);
       }
-      
+
       global.safeSendToRenderer?.('idle-period-logged', {
         duration: durationSeconds,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
       console.error('❌ [IDLE-LOG] Error logging idle period:', error?.message || error);
-      try {
-        const userId = this._resolveUserId();
-        if (userId) {
-          this._queueIdleLog({
-            user_id: userId,
-            time_log_id: this._resolveTimeLogId(),
-            organization_id:
-              global.currentOrganizationId ||
-              this.config?.organization_id ||
-              global.config?.organization_id ||
-              null,
-            idle_start: new Date(startTime).toISOString(),
-            idle_end: new Date(endTime).toISOString(),
-            duration_seconds: Math.round(duration / 1000),
-          });
-        }
-      } catch (queueError) {
-        console.error('❌ [IDLE-LOG] Failed to queue idle log:', queueError?.message || queueError);
-      }
     }
   }
 
@@ -1026,6 +1014,7 @@ class EnhancedIdleMonitor {
   /** Call on Start so idle does not carry over from the previous session. */
   resetSessionIdleSeconds() {
     this._sessionIdleSeconds = 0;
+    this._creditedIdleSecondsByKey = new Map();
   }
 
   resetIdleState() {

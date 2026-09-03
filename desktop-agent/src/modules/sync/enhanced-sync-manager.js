@@ -9,8 +9,8 @@ const {
   isBackendTimeLogsEnabled,
   insertAppLogsBatch,
   insertUrlLogsBatch,
-  insertIdleLog,
 } = require('../utils/backend-time-logs');
+const { flushIdleLogQueue } = require('../utils/idle-log-write');
 
 class EnhancedSyncManager {
   constructor(config) {
@@ -516,11 +516,16 @@ class EnhancedSyncManager {
         if ((type === 'urlLogs' || type === 'appLogs') && Array.isArray(data)) {
           normalized = data[0];
         }
-        global.offlineQueue[type].push({
-          ...normalized,
-          queuedAt: new Date().toISOString(),
-          attempts: 0
-        });
+        if (type === 'idleLogs') {
+          const { enqueueIdleLogOnce } = require('../utils/idle-log-period-key');
+          enqueueIdleLogOnce(global.offlineQueue, normalized);
+        } else {
+          global.offlineQueue[type].push({
+            ...normalized,
+            queuedAt: new Date().toISOString(),
+            attempts: 0
+          });
+        }
         
         // Trigger immediate sync attempt if online
         if (this.isTracking) {
@@ -714,27 +719,7 @@ class EnhancedSyncManager {
   
   async processIdleQueue() {
     if (!global.offlineQueue?.idleLogs?.length) return;
-
-    const pending = [...global.offlineQueue.idleLogs];
-    global.offlineQueue.idleLogs = [];
-
-    for (const item of pending) {
-      const { attempts, queuedAt, duration_minutes, ...log } = item;
-      try {
-        if (!isBackendTimeLogsEnabled(this.config)) {
-          // RDS is the only backend — throw so the log stays queued for retry.
-          throw new Error('Backend not configured for idle log sync');
-        }
-        await insertIdleLog(log, this.config);
-        console.log('✅ [IDLE-SYNC] Flushed queued idle log');
-      } catch (error) {
-        console.warn('⚠️ [IDLE-SYNC] Queued idle log failed, will retry:', error?.message || error);
-        global.offlineQueue.idleLogs.push({
-          ...item,
-          attempts: (attempts || 0) + 1,
-        });
-      }
-    }
+    await flushIdleLogQueue(global.offlineQueue, this.config);
   }
 
   /**

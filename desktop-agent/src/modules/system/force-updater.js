@@ -417,8 +417,21 @@ class ForceUpdater {
     // Check for updates (synchronous check)
     safeHandle('check-for-update', async () => {
       console.log('🔍 [FORCE-UPDATER] IPC: check-for-update requested');
-      const result = await this.checkForUpdates();
-      return result;
+      const timeoutMs = Math.max(2000, Number(process.env.UPDATE_CHECK_TIMEOUT_MS) || 8000);
+      const timedOut = {
+        updateAvailable: false,
+        reason: 'timeout',
+        currentVersion: this.currentVersion,
+      };
+      try {
+        return await Promise.race([
+          this.checkForUpdates(),
+          new Promise((resolve) => setTimeout(() => resolve(timedOut), timeoutMs)),
+        ]);
+      } catch (err) {
+        console.warn('⚠️ [FORCE-UPDATER] Update check failed:', err?.message || err);
+        return { ...timedOut, reason: 'error' };
+      }
     });
 
     // Get current update status

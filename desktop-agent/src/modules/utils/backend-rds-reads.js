@@ -65,7 +65,7 @@ async function listUrlLogs(userId, { start, end, limit } = {}, config = global.c
   return result.url_logs || [];
 }
 
-async function listIdleLogs(userId, { start, end, timeLogId, limit } = {}, config = global.config) {
+async function listIdleLogs(userId, { start, end, timeLogId, id, limit } = {}, config = global.config) {
   const result = await callDesktopAction(
     'list_idle_logs',
     {
@@ -73,11 +73,19 @@ async function listIdleLogs(userId, { start, end, timeLogId, limit } = {}, confi
       start,
       end,
       time_log_id: timeLogId,
+      id: id || undefined,
       limit,
     },
     config,
+    { timeoutMs: 8_000 },
   );
   return result.idle_logs || [];
+}
+
+async function idleLogExists(userId, id, config = global.config) {
+  if (!id) return false;
+  const rows = await listIdleLogs(userId, { id, limit: 1 }, config);
+  return rows.some((row) => String(row?.id) === String(id));
 }
 
 /**
@@ -85,7 +93,11 @@ async function listIdleLogs(userId, { start, end, timeLogId, limit } = {}, confi
  * The agent applies min(total, idle + low) itself so the clock never depends
  * on this call.
  */
-async function getEffectiveStats(userId, { start, end, tz } = {}, config = global.config) {
+async function getEffectiveStats(
+  userId,
+  { start, end, tz, timeoutMs } = {},
+  config = global.config,
+) {
   // Display-only. Fail fast so a missing/slow endpoint cannot stall the clock
   // IPC (get-today-time-stats) or offline Start/Stop.
   const result = await callDesktopAction(
@@ -97,11 +109,25 @@ async function getEffectiveStats(userId, { start, end, tz } = {}, config = globa
       tz,
     },
     config,
-    { timeoutMs: 8000 },
+    { timeoutMs: Math.max(2000, Number(timeoutMs) || 8_000) },
   );
+  const daily = {};
+  const rawDaily = result.daily && typeof result.daily === 'object' ? result.daily : {};
+  for (const [date, row] of Object.entries(rawDaily)) {
+    const key = String(date).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || !row || typeof row !== 'object') continue;
+    daily[key] = {
+      idleSeconds: Math.max(0, Math.floor(Number(row.idle_seconds ?? row.idleSeconds) || 0)),
+      lowActivitySeconds: Math.max(
+        0,
+        Math.floor(Number(row.low_activity_seconds ?? row.lowActivitySeconds) || 0),
+      ),
+    };
+  }
   return {
     idleSeconds: Math.max(0, Math.floor(Number(result.idle_seconds) || 0)),
     lowActivitySeconds: Math.max(0, Math.floor(Number(result.low_activity_seconds) || 0)),
+    daily,
   };
 }
 
@@ -126,7 +152,9 @@ async function getTimeAdjustmentsInRange(userId, { start, end } = {}, config = g
   for (const row of result.days || []) {
     const key = String(row?.work_date || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) continue;
-    byDate[key] = Math.trunc(Number(row.delta_seconds) || 0);
+    const leaveSeconds = Math.trunc(Number(row.leave_seconds) || 0);
+    const otherSeconds = Math.trunc(Number(row.other_seconds) || 0);
+    byDate[key] = { otherSeconds, leaveSeconds };
   }
   return byDate;
 }
@@ -138,6 +166,7 @@ module.exports = {
   listAppLogs,
   listUrlLogs,
   listIdleLogs,
+  idleLogExists,
   getEffectiveStats,
   getTimeAdjustmentsInRange,
 };

@@ -12,7 +12,12 @@ jest.mock('../../core/cleanup-registry', () => ({
 
 jest.mock('../../utils/backend-time-logs', () => ({
   isBackendTimeLogsEnabled: jest.fn().mockReturnValue(true),
-  insertIdleLog: jest.fn().mockResolvedValue({})
+  insertIdleLog: jest.fn().mockResolvedValue({}),
+  upsertIdleLog: jest.fn().mockResolvedValue({})
+}));
+
+jest.mock('../../utils/backend-rds-reads', () => ({
+  idleLogExists: jest.fn().mockResolvedValue(false)
 }));
 
 const backendTimeLogs = require('../../utils/backend-time-logs');
@@ -44,6 +49,7 @@ describe('EnhancedIdleMonitor', () => {
 
     backendTimeLogs.isBackendTimeLogsEnabled.mockReturnValue(true);
     backendTimeLogs.insertIdleLog.mockResolvedValue({});
+    backendTimeLogs.upsertIdleLog.mockResolvedValue({});
     _resetMeetingSessionForTests();
 
     jest.useFakeTimers();
@@ -53,6 +59,8 @@ describe('EnhancedIdleMonitor', () => {
     if (monitor) monitor.shutdown();
     delete global.trackingManager;
     delete global.currentSession;
+    delete global.offlineQueue;
+    delete global.enhancedSyncManager;
     global.currentUserId = 'test-user';
     jest.useRealTimers();
     jest.clearAllMocks();
@@ -347,8 +355,32 @@ describe('EnhancedIdleMonitor', () => {
       await monitor._flushIdleCheckpoint(idleStart + 45000);
 
       expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
+      expect(monitor.logIdlePeriod.mock.calls[0][0]).toBe(idleStart);
       expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(45000);
       expect(monitor._lastIdleCheckpointTime).toBe(idleStart + 45000);
+    });
+
+    test('30s checkpoints of a 7.4m idle stretch credit 445s once under one id', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      const start = Date.now() - 445000;
+      global.trackingManager = {
+        sessionStartTime: new Date(start - 60000).toISOString(),
+      };
+      monitor.currentIdleStartTime = start;
+      monitor.wasIdleLastCheck = true;
+
+      await monitor._flushIdleCheckpoint(start + 30000);
+      await monitor._flushIdleCheckpoint(start + 120000);
+      await monitor._flushIdleCheckpoint(start + 445000);
+
+      const ids = backendTimeLogs.upsertIdleLog.mock.calls.map((c) => c[0].id);
+      expect(new Set(ids).size).toBe(1);
+      expect(backendTimeLogs.upsertIdleLog.mock.calls[0][0].idle_start).toBe(
+        new Date(start).toISOString(),
+      );
+      expect(backendTimeLogs.upsertIdleLog.mock.calls.at(-1)[0].duration_seconds).toBe(445);
+      expect(monitor.getSessionIdleSeconds()).toBe(445);
     });
 
     test('logIdlePeriod persists idle time through the RDS backend action', async () => {
@@ -365,15 +397,48 @@ describe('EnhancedIdleMonitor', () => {
       global.trackingManager = { sessionStartTime: new Date(start - 60000).toISOString() };
       await monitor.logIdlePeriod(start, end, 45000);
 
-      expect(backendTimeLogs.insertIdleLog).toHaveBeenCalledTimes(1);
-      const [payload] = backendTimeLogs.insertIdleLog.mock.calls[0];
+      expect(backendTimeLogs.upsertIdleLog).toHaveBeenCalledTimes(1);
+      const [payload] = backendTimeLogs.upsertIdleLog.mock.calls[0];
       expect(payload.user_id).toBe('1195');
       expect(payload.duration_seconds).toBe(45);
       expect(payload.idle_start).toBe(new Date(start).toISOString());
       expect(payload.idle_end).toBe(new Date(end).toISOString());
+      expect(payload.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
     });
 
-    test('flushIdleCheckpoint skips duplicate slices on resume', async () => {
+    test('timeout read-checks the same id and does not insert without time_log_id', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.offlineQueue = { idleLogs: [] };
+      const end = Date.now();
+      const start = end - 445000;
+      const timeLogId = 'bd16d1a3-0000-4000-8000-000000000001';
+      global.trackingManager = {
+        sessionStartTime: new Date(start - 60000).toISOString(),
+        currentTimeLogId: timeLogId,
+      };
+      backendTimeLogs.upsertIdleLog.mockRejectedValue(
+        new Error('Backend sync timeout after 20000ms (upsert_idle_log)'),
+      );
+      const rds = require('../../utils/backend-rds-reads');
+      rds.idleLogExists.mockResolvedValue(false);
+
+      await monitor.logIdlePeriod(start, end, 445000);
+      await monitor.logIdlePeriod(start, end, 445000);
+
+      expect(backendTimeLogs.upsertIdleLog).toHaveBeenCalledTimes(1);
+      expect(backendTimeLogs.upsertIdleLog.mock.calls[0][0].time_log_id).toBe(timeLogId);
+      expect(global.offlineQueue.idleLogs).toHaveLength(1);
+      expect(global.offlineQueue.idleLogs[0].time_log_id).toBe(timeLogId);
+      expect(global.offlineQueue.idleLogs[0].id).toBe(
+        backendTimeLogs.upsertIdleLog.mock.calls[0][0].id,
+      );
+      expect(monitor.getSessionIdleSeconds()).toBe(445);
+    });
+
+    test('flushIdleCheckpoint extends the original start instead of minting a remainder slice', async () => {
       monitor = new EnhancedIdleMonitor({ user_id: '1195' });
       monitor.logIdlePeriod = jest.fn().mockResolvedValue(undefined);
 
@@ -385,8 +450,8 @@ describe('EnhancedIdleMonitor', () => {
       await monitor._flushIdleCheckpoint(t0 + 90000);
 
       expect(monitor.logIdlePeriod).toHaveBeenCalledTimes(1);
-      expect(monitor.logIdlePeriod.mock.calls[0][0]).toBe(t0 + 60000);
-      expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(30000);
+      expect(monitor.logIdlePeriod.mock.calls[0][0]).toBe(t0);
+      expect(monitor.logIdlePeriod.mock.calls[0][2]).toBe(90000);
     });
 
     test('low activity / no keys alone does not start idle (OS-only)', async () => {
@@ -414,7 +479,7 @@ describe('EnhancedIdleMonitor', () => {
       const end = Date.now();
       await monitor.logIdlePeriod(end - 398000, end, 398000);
 
-      expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
+      expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
     });
 
     test('OS idle during a meeting still starts idle and still evaluates the prompt', async () => {
@@ -499,6 +564,7 @@ describe('EnhancedIdleMonitor', () => {
       global.unifiedInputManager.getIdleTime.mockReturnValue(30);
       _setPresenceForTests({ active: true, label: 'Google Meet' });
       monitor._idlePromptActive = true;
+      monitor.wasIdleLastCheck = true;
       monitor._resolveIdlePrompt = jest.fn();
 
       await monitor._evaluateIdleState();
@@ -514,7 +580,7 @@ describe('EnhancedIdleMonitor', () => {
 
       await monitor.logIdlePeriod(Date.now() - 400000, Date.now(), 400000);
 
-      expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
+      expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
     });
 
     test('after a conclusive meeting miss, OS idle is written (non-effective can grow)', async () => {

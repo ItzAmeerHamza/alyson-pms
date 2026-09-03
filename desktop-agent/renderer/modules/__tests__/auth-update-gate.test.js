@@ -129,3 +129,57 @@ describe('auth initialization around the mandatory update gate', () => {
     expect(ipcRenderer.invoke).not.toHaveBeenCalled();
   });
 });
+
+describe('auto-login does not wait on a dead network', () => {
+  beforeEach(() => {
+    global.window = {};
+    global.localStorage = {
+      getItem: jest.fn(),
+      setItem: jest.fn(),
+      removeItem: jest.fn(),
+    };
+    jest.clearAllMocks();
+    authApi.fetchAuthMe.mockImplementation(() => new Promise(() => {}));
+    cognitoAuth.getCurrentCognitoSession.mockImplementation(() => new Promise(() => {}));
+  });
+
+  afterEach(() => {
+    delete global.window;
+    delete global.localStorage;
+  });
+
+  it('opens the app from the disk session without waiting for Cognito or /auth/me', async () => {
+    const ipcRenderer = {
+      invoke: jest.fn(async (channel) => {
+        if (channel === 'get-config') return CONFIG;
+        if (channel === 'load-user-session') {
+          return {
+            success: true,
+            session: {
+              remember_me: true,
+              id: '1196',
+              email: 'mohita@cintara.ai',
+              access_token: 'id-token',
+              refresh_token: 'refresh-token',
+              role: 'admin',
+            },
+          };
+        }
+        if (channel === 'set-current-user-id') return true;
+        if (channel === 'check-for-update') return new Promise(() => {});
+        if (channel === 'user-logged-in') return {};
+        return null;
+      }),
+    };
+    const uiManager = { showMainApp: jest.fn(), showMandatoryUpdateGate: jest.fn() };
+    const manager = new AuthManager(ipcRenderer, uiManager, { showNotification: jest.fn() });
+    manager.authConfig = CONFIG;
+
+    const opened = await manager.tryAutoLogin();
+
+    expect(opened).toBe(true);
+    expect(uiManager.showMainApp).toHaveBeenCalled();
+    expect(manager.currentUser.id).toBe('1196');
+    expect(authApi.fetchAuthMe).not.toHaveBeenCalled();
+  });
+});

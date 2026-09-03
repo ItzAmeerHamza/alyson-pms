@@ -1145,17 +1145,20 @@ try {
 
         try {
           const { refreshWorkspaceSettings, startWorkspaceSettingsRefresh } = require('./modules/utils/workspace-settings');
-          await refreshWorkspaceSettings(global.config, { restartCapture: false });
+          void refreshWorkspaceSettings(global.config, { restartCapture: false }).catch((settingsErr) => {
+            console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
+          });
           startWorkspaceSettingsRefresh(global.config);
         } catch (settingsErr) {
           console.warn('⚠️ [SESSION] Workspace settings load failed:', settingsErr?.message || settingsErr);
         }
 
-        // CRITICAL FIX: Initialize input detection after session is loaded
+        // Warm input detection after session restore — do not block login on Python.
         console.log('🎮 [SESSION] Initializing input detection system after session load...');
         try {
-          await initializeInputDetectionSystem();
-          console.log('✅ [SESSION] Input detection system initialized');
+          void initializeInputDetectionSystem({ allowDownload: false }).catch((error) => {
+            console.error('❌ [SESSION] Failed to initialize input detection:', error);
+          });
         } catch (error) {
           console.error('❌ [SESSION] Failed to initialize input detection:', error);
         }
@@ -1773,7 +1776,7 @@ function initializeUnifiedInputTracking() {
 }
 
 // PERFORMANCE FIX: Initialize SINGLE optimized input detection system
-async function initializeInputDetectionSystem() {
+async function initializeInputDetectionSystem(options = {}) {
   try { const { logger } = require('./modules/utils/logger'); logger && logger.info({ category: 'INPUT', step: 'INIT', message: 'Initializing optimized input detection system' }); } catch { }
 
   // CRITICAL FIX: If input manager is already active and tracking, do NOT re-initialize.
@@ -1789,7 +1792,9 @@ async function initializeInputDetectionSystem() {
     const PythonProvisioner = require('./modules/system/python-provisioner');
     const provisioner = new PythonProvisioner();
     global.pythonProvisioner = provisioner;
-    const provisionResult = await provisioner.ensurePython();
+    const provisionResult = await provisioner.ensurePython({
+      allowDownload: options.allowDownload === true,
+    });
     
     console.log(`🐍 [INPUT-INIT] Python provision result: ${provisionResult.ready ? 'READY' : 'NOT READY'} - ${provisionResult.message}`);
     
@@ -1939,7 +1944,7 @@ global.startInputDetection = async function () {
 
   if (!globalInputManager) {
     try { const { logger } = require('./modules/utils/logger'); logger && logger.warn({ category: 'INPUT', step: 'CONTROL INIT MISSING', message: 'Initializing now' }); } catch { }
-    await initializeInputDetectionSystem();
+    await initializeInputDetectionSystem({ allowDownload: true });
   }
 
   try {
@@ -3941,7 +3946,7 @@ if (isElectronContext && ipcMain) {
         // Only initialize if not already initialized
         if (!global.globalInputManager || !global.globalInputManager.isActive) {
           console.log('🎮 [WRAPPER] Initializing input detection system...');
-          await initializeInputDetectionSystem();
+          await initializeInputDetectionSystem({ allowDownload: true });
           console.log('✅ [WRAPPER] Input detection system initialized');
         } else {
           console.log('✅ [WRAPPER] Input detection already active');
@@ -4559,29 +4564,21 @@ if (isElectronContext && ipcMain) {
               });
               console.log('✅ [STARTUP] URL event handler attached');
               global.primaryUrlEventHandlerAttached = true;
-
-              // CRITICAL: Start the URL capture manager immediately!
-              console.log('🚀 [STARTUP] Starting UrlCaptureManager...');
-              global.urlCaptureManager.start();
-              console.log('✅ [STARTUP] UrlCaptureManager started and polling!');
+              console.log('🌐 [STARTUP] UrlCaptureManager ready (starts when tracking starts)');
             } else {
               console.log('✅ [STARTUP] UrlCaptureManager already exists');
-              // Ensure it's running
-              if (!global.urlCaptureManager.isRunning) {
-                console.log('🚀 [STARTUP] Starting existing UrlCaptureManager...');
-                global.urlCaptureManager.start();
-                console.log('✅ [STARTUP] UrlCaptureManager started!');
-              }
             }
           } catch (error) {
             console.error('❌ [STARTUP] Failed to initialize URL tracking system:', error);
           }
 
-          // CRITICAL FIX: Initialize input detection system at startup
+          // Warm input detection in the background. Never download Python during boot —
+          // a missing bundle + bad network used to freeze the window for minutes.
           try {
-            console.log('🚀 [STARTUP] Initializing input detection system...');
-            await initializeInputDetectionSystem();
-            console.log('✅ [STARTUP] Input detection system initialized successfully');
+            console.log('🚀 [STARTUP] Initializing input detection system (background)...');
+            void initializeInputDetectionSystem({ allowDownload: false }).catch((error) => {
+              console.error('❌ [STARTUP] Failed to initialize input detection system:', error);
+            });
           } catch (error) {
             console.error('❌ [STARTUP] Failed to initialize input detection system:', error);
           }
@@ -4624,7 +4621,7 @@ if (isElectronContext && ipcMain) {
               const { UrlCaptureManager } = require('./modules/url/UrlCaptureManager.js');
 
               global.urlCaptureManager = new UrlCaptureManager({
-                debugLogging: true,
+                debugLogging: process.env.URL_DEBUG_LOGGING === 'true',
                 debounceMs: 250,
                 minSliceSec: 5,
                 maxEventsPerSec: 1,
@@ -4760,9 +4757,7 @@ if (isElectronContext && ipcMain) {
                 }
               });
 
-              // Start immediately
-              global.urlCaptureManager.start();
-              console.log('✅ [URGENT-FIX] UrlCaptureManager initialized and started with event handler');
+              console.log('✅ [URGENT-FIX] UrlCaptureManager initialized (starts when tracking starts)');
             }
           } catch (urlError) {
             console.error('❌ [URGENT-FIX] Failed to initialize URL system:', urlError);
@@ -5077,7 +5072,7 @@ if (isElectronContext && ipcMain) {
                 console.log('🔧 [FALLBACK] Creating UrlCaptureManager (not found in globals)');
                 const { UrlCaptureManager } = require('./modules/url/UrlCaptureManager.js');
                 global.urlCaptureManager = new UrlCaptureManager({
-                  debugLogging: true,
+                  debugLogging: process.env.URL_DEBUG_LOGGING === 'true',
                   debounceMs: 180,
                   minSliceSec: 4,
                   maxEventsPerSec: 2,
@@ -5093,16 +5088,9 @@ if (isElectronContext && ipcMain) {
                 // This fallback instance won't have database saving capability
                 console.warn('⚠️ [FALLBACK] UrlCaptureManager created without event listener - URL saving may not work!');
 
-                // Start it immediately
-                global.urlCaptureManager.start();
-                console.log('✅ [FALLBACK] UrlCaptureManager created and started');
+                console.log('✅ [FALLBACK] UrlCaptureManager created (starts when tracking starts)');
               } else {
                 console.log('✅ [FALLBACK] UrlCaptureManager already exists, skipping creation');
-                // Ensure it's running
-                if (!global.urlCaptureManager.isRunning) {
-                  global.urlCaptureManager.start();
-                  console.log('✅ [FALLBACK] Started existing UrlCaptureManager');
-                }
               }
 
               // Keep old BrowserUrlManager for compatibility
@@ -5577,6 +5565,9 @@ if (isElectronContext && ipcMain) {
       }
     } catch (_) { /* ignore */ }
 
+    const { applyAdjustmentSeconds } = require('./modules/utils/today-time-log-stats');
+    const otherSeconds = Math.trunc(Number(payload.otherAdjustmentSeconds) || 0);
+    const leaveSeconds = Math.max(0, Math.trunc(Number(payload.leaveCreditSeconds) || 0));
     const adjustmentSeconds = Math.trunc(Number(payload.adjustmentSeconds) || 0);
     if (cap != null) {
       // Leave / admin credits are not wall-clock. Cap session time only.
@@ -5590,7 +5581,7 @@ if (isElectronContext && ipcMain) {
         console.warn(
           `⚠️ [TODAY-TIME-STATS] Clamping impossible session ${sessionTracked}s → ${cap}s (since work midnight)`,
         );
-        total = Math.max(0, cap + adjustmentSeconds);
+        total = applyAdjustmentSeconds(cap, otherSeconds, leaveSeconds).totalTime;
       }
       if (closed > cap) closed = cap;
     }
@@ -5775,7 +5766,11 @@ if (isElectronContext && ipcMain) {
       try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD START', ctx: { source: 'get-today-time-stats' } }); } catch { }
 
       const { isBackendTimeLogsEnabled } = require('./modules/utils/backend-time-logs');
-      const { computeTodayTimeLogSeconds, holdLastGoodOnFailedFetch } = require('./modules/utils/today-time-log-stats');
+      const {
+        computeTodayTimeLogSeconds,
+        holdLastGoodOnFailedFetch,
+        applyAdjustmentSeconds,
+      } = require('./modules/utils/today-time-log-stats');
       const { normalizeTenantUserId } = require('./modules/utils/tenant-user-id');
       // Do not re-init from cold config here — that wiped workspace timezone
       // (set after login via refreshWorkspaceSettings) back to Pacific.
@@ -5873,14 +5868,25 @@ if (isElectronContext && ipcMain) {
 
       const today = new Date();
       const lastGood = lastGoodBefore || global._lastGoodTodayStats;
-      const adjustmentSeconds = agg.backendFetchFailed
-        ? Math.trunc(Number(lastGood?.adjustmentSeconds) || 0)
-        : Math.trunc(Number(agg.adjustmentSeconds) || 0);
+      const creditSrc = agg.backendFetchFailed ? lastGood : agg;
+      const otherSeconds = Math.trunc(
+        Number(
+          creditSrc?.otherAdjustmentSeconds != null
+            ? creditSrc.otherAdjustmentSeconds
+            : creditSrc?.adjustmentSeconds,
+        ) || 0,
+      );
+      const leaveSeconds = Math.max(
+        0,
+        Math.trunc(Number(creditSrc?.leaveCreditSeconds) || 0),
+      );
       let sessionTotal = isTracking
         ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
         : completedClosedSeconds;
       sessionTotal = Math.max(0, Math.floor(Number(sessionTotal) || 0));
-      let totalTime = Math.max(0, sessionTotal + adjustmentSeconds);
+      const appliedAdj = applyAdjustmentSeconds(sessionTotal, otherSeconds, leaveSeconds);
+      let totalTime = appliedAdj.totalTime;
+      const adjustmentSeconds = appliedAdj.adjustmentSeconds;
 
       // Tray closed-base = DB+offline merge + leave/admin credit. Ignore wipe-to-zero only.
       try {
@@ -5962,6 +5968,8 @@ if (isElectronContext && ipcMain) {
         totalTime,
         trackedSessionSeconds: sessionTotal,
         adjustmentSeconds,
+        leaveCreditSeconds: leaveSeconds,
+        otherAdjustmentSeconds: otherSeconds,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
         timeLogsCount: agg.timeLogsCount,

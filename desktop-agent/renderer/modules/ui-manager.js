@@ -2357,12 +2357,10 @@ class UIManager {
 
   showScreenshotModal(screenshot) {
     const popupUrl = screenshotPopupUrl(screenshot);
-    if (popupUrl) {
-      window.open(popupUrl, '_blank');
+    if (typeof window.openScreenshot === 'function' && window.openScreenshot(popupUrl)) {
       return;
     }
-    console.log('🖼️ [TODAY-HISTORY] Showing screenshot modal:', screenshot);
-    alert(`Screenshot from ${new Date(screenshot.captured_at).toLocaleString()}\nApp: ${screenshot.app_name}\nActivity: ${screenshot.activity_percent}%`);
+    console.warn('🖼️ [SCREENSHOT] No viewable URL for screenshot', screenshot?.id || '');
   }
 
   setupTodayHistoryEventListeners() {
@@ -4068,7 +4066,13 @@ class UIManager {
    */
   async enforceMandatoryUpdateGateAtStartup() {
     try {
-      const status = await this.ipcRenderer.invoke('check-for-update');
+      const timeoutMs = Math.max(1500, Number(process.env.UPDATE_GATE_TIMEOUT_MS) || 4000);
+      const status = await Promise.race([
+        this.ipcRenderer.invoke('check-for-update'),
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ updateAvailable: false, reason: 'timeout' }), timeoutMs),
+        ),
+      ]);
       if (status?.updateAvailable) {
         window.__updateGateActive = true;
         this.showMandatoryUpdateGate({
@@ -4721,7 +4725,7 @@ class UIManager {
       const productivity = this._resolveScreenshotProductivityBadge(screenshot);
 
       html += `
-        <div class="tracker-screenshot-card" data-popup="${escapeHtmlAttr(screenshotPopupUrl(screenshot))}" onclick="if(this.dataset.popup)window.open(this.dataset.popup,'_blank')">
+        <div class="tracker-screenshot-card">
           ${screenshotTileImgTag(screenshot, {
             class: 'tracker-screenshot-img',
             alt: `Screenshot ${index + 1}`,
@@ -4741,6 +4745,9 @@ class UIManager {
     });
 
     gridEl.innerHTML = html;
+    gridEl.querySelectorAll('.tracker-screenshot-card').forEach((card, index) => {
+      card.addEventListener('click', () => this.showScreenshotModal(screenshots[index]));
+    });
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
@@ -5163,7 +5170,7 @@ class UIManager {
         ? `${day.dayName} ${dayNum}: ${effectiveLabel} effective · ${trackedLabel} tracked${adjNote}`
         : `${day.dayName} ${dayNum}: ${effectiveLabel} effective${adjNote}`;
       html += `
-        <div class="mr-day-bar-wrapper" data-tooltip="${this._escapeHtml(tooltip)}">
+        <div class="mr-day-bar-wrapper" data-date="${this._escapeHtml(day.date)}" data-tooltip="${this._escapeHtml(tooltip)}" role="button" tabindex="0" title="Show screenshots for this day">
           <div class="mr-day-bar ${isToday ? 'today' : ''} ${isZero ? 'zero' : ''}"
                style="height: ${isZero ? '2px' : heightPct + '%'};"></div>
           <div class="mr-day-label ${isToday ? 'today' : ''}">${dayNum}</div>
@@ -5172,6 +5179,29 @@ class UIManager {
     });
 
     container.innerHTML = html;
+    container.querySelectorAll('.mr-day-bar-wrapper[data-date]').forEach((el) => {
+      const openDay = () => this._openScreenshotsForWorkDate(el.getAttribute('data-date'));
+      el.addEventListener('click', openDay);
+      el.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openDay();
+        }
+      });
+    });
+  }
+
+  _openScreenshotsForWorkDate(dateKey) {
+    const key = String(dateKey || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+    const dateInput = document.getElementById('trackerScreenshotDate');
+    if (dateInput) dateInput.value = key;
+    this._trackerScreenshotsCache = null;
+    this.loadTrackerScreenshots(true);
+    document.getElementById('trackerScreenshotsSection')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   }
 
   /** Render the weekly breakdown rows */

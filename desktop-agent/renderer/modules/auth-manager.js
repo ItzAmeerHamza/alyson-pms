@@ -242,7 +242,9 @@ class AuthManager {
         });
 
         this.showAuthLoading('Restoring your session…');
-        return await this.tryAutoLoginCognito(session);
+        const opened = await this.tryAutoLoginCognito(session);
+        this.hideAuthLoading();
+        return opened;
       }
       return false;
     } catch (error) {
@@ -258,22 +260,167 @@ class AuthManager {
     return false;
   }
 
+  _applyDiskSessionUser(savedSession) {
+    this.currentUser = {
+      id: String(savedSession.id).trim(),
+      email: savedSession.email,
+      name: savedSession.full_name || String(savedSession.email || '').split('@')[0],
+      role: savedSession.role || 'employee',
+      organization_id: savedSession.organization_id,
+      organization_slug: savedSession.organization_slug || null,
+      is_org_admin: savedSession.is_org_admin,
+      is_super_admin: savedSession.is_super_admin,
+    };
+  }
+
+  _withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${label || 'request'} timeout`)), ms),
+      ),
+    ]);
+  }
+
+  async _verifyCognitoSessionInBackground(savedSession) {
+    try {
+      await this.ensureAuthConfig();
+      let stored = await this._withTimeout(
+        cognitoAuth.getCurrentCognitoSession(this.authConfig),
+        5000,
+        'cognito session',
+      );
+      if (!stored?.idToken && savedSession?.refresh_token) {
+        stored = await this._withTimeout(
+          cognitoAuth.refreshCognitoSession(this.authConfig, {
+            refreshToken: savedSession.refresh_token,
+            email: savedSession.email,
+            refreshExpiresAt: savedSession.refresh_expires_at,
+          }),
+          5000,
+          'cognito refresh',
+        );
+      }
+      const idToken = stored?.idToken || savedSession.access_token;
+      if (!idToken) return;
+      const profile = await this._withTimeout(
+        fetchAuthMe(idToken, this.authConfig, this.ipcRenderer),
+        5000,
+        'auth/me',
+      );
+      const details = profile?.user;
+      const org = profile?.organization;
+      const normalizedId = String(details?.id || '').trim();
+      if (/^\d+$/.test(normalizedId)) {
+        this.currentUser = {
+          id: normalizedId,
+          email: details.email,
+          name: details.full_name || details.email.split('@')[0],
+          role: details.role || 'employee',
+          organization_id: details.organization_id,
+          organization_slug: org?.slug || savedSession.organization_slug || null,
+          is_org_admin: details.is_org_admin,
+          is_super_admin: details.is_super_admin,
+        };
+        try {
+          await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
+          localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+        } catch (_) {}
+      }
+      if (stored?.idToken && stored?.refreshToken) {
+        try {
+          await this.ipcRenderer.invoke('user-logged-in', {
+            user: this.currentUser,
+            session: {
+              access_token: stored.idToken,
+              refresh_token: stored.refreshToken,
+              expires_at: stored.expiresAt,
+              refresh_expires_at: stored.refreshExpiresAt,
+              email: this.currentUser.email,
+              remember_me: true,
+              auth_provider: 'cognito',
+              organization_id: this.currentUser.organization_id,
+              organization_slug: this.currentUser.organization_slug,
+            },
+          });
+        } catch (_) {}
+      }
+    } catch (error) {
+      const msg = String(error?.message || error);
+      const definitiveAuthFailure =
+        /NotAuthorizedException|Token.*revoked|Refresh Token has expired|Invalid Refresh Token|unauthorized|401|403|user.*not found/i.test(
+          msg,
+        );
+      if (definitiveAuthFailure) {
+        console.warn('⚠️ [AUTH] Background session verify failed — signing out:', msg);
+        try {
+          await this.ipcRenderer.invoke('user-logged-out');
+          cognitoAuth.clearCognitoSession();
+        } catch (_) {}
+      } else {
+        console.warn('⚠️ [AUTH] Background session verify skipped (network):', msg);
+      }
+    }
+
+    try {
+      const updateStatus = await this._withTimeout(
+        this.ipcRenderer.invoke('check-for-update'),
+        4000,
+        'update check',
+      );
+      if (updateStatus?.updateAvailable) {
+        window.__updateGateActive = true;
+        this.uiManager?.showMandatoryUpdateGate?.({
+          newVersion: updateStatus.newVersion,
+          currentVersion: updateStatus.currentVersion,
+          updateDownloaded: updateStatus.updateDownloaded,
+          manualInstallRequired: updateStatus.manualInstallRequired,
+          dmgInstallReady: updateStatus.dmgInstallReady,
+          manualDownloadUrl: updateStatus.manualDownloadUrl,
+        });
+      }
+    } catch (_) { /* update check must never block or bounce a restored session */ }
+  }
+
   async tryAutoLoginCognito(savedSession) {
     try {
-      this.showAuthLoading('Signing you in…');
       await this.ensureAuthConfig();
-
-      // Hydrate renderer Cognito store from disk (refresh token survives ID-token expiry)
       cognitoAuth.hydrateCognitoSessionFromDisk(savedSession);
 
-      this.showAuthLoading('Refreshing your sign-in…');
-      let stored = await cognitoAuth.getCurrentCognitoSession(this.authConfig);
+      const diskId = String(savedSession.id || '').trim();
+      if (/^\d+$/.test(diskId) && savedSession.email) {
+        this._applyDiskSessionUser(savedSession);
+        try {
+          await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
+        } catch (e) {
+          console.warn('⚠️ [AUTH] Failed to set user id from disk session:', e?.message || e);
+        }
+        try {
+          localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
+        } catch (_) {}
+        if (!window.__updateGateActive) {
+          this.uiManager?.showMainApp?.();
+        }
+        void this._verifyCognitoSessionInBackground(savedSession);
+        return true;
+      }
+
+      this.showAuthLoading('Signing you in…');
+      let stored = await this._withTimeout(
+        cognitoAuth.getCurrentCognitoSession(this.authConfig),
+        5000,
+        'cognito session',
+      );
       if (!stored?.idToken && savedSession?.refresh_token) {
-        stored = await cognitoAuth.refreshCognitoSession(this.authConfig, {
-          refreshToken: savedSession.refresh_token,
-          email: savedSession.email,
-          refreshExpiresAt: savedSession.refresh_expires_at,
-        });
+        stored = await this._withTimeout(
+          cognitoAuth.refreshCognitoSession(this.authConfig, {
+            refreshToken: savedSession.refresh_token,
+            email: savedSession.email,
+            refreshExpiresAt: savedSession.refresh_expires_at,
+          }),
+          5000,
+          'cognito refresh',
+        );
       }
 
       const idToken = stored?.idToken || savedSession.access_token;
@@ -288,19 +435,30 @@ class AuthManager {
       let profile;
       try {
         this.showAuthLoading('Verifying your account…');
-        profile = await fetchAuthMe(idToken, this.authConfig, this.ipcRenderer);
+        profile = await this._withTimeout(
+          fetchAuthMe(idToken, this.authConfig, this.ipcRenderer),
+          5000,
+          'auth/me',
+        );
       } catch (meErr) {
-        // Access token may be stale — force one refresh then retry /auth/me
-        const refreshed = await cognitoAuth.refreshCognitoSession(this.authConfig, stored || {
-          refreshToken: savedSession.refresh_token,
-          email: savedSession.email,
-          refreshExpiresAt: savedSession.refresh_expires_at,
-        });
+        const refreshed = await this._withTimeout(
+          cognitoAuth.refreshCognitoSession(this.authConfig, stored || {
+            refreshToken: savedSession.refresh_token,
+            email: savedSession.email,
+            refreshExpiresAt: savedSession.refresh_expires_at,
+          }),
+          5000,
+          'cognito refresh',
+        );
         if (!refreshed?.idToken) {
           throw meErr;
         }
         stored = refreshed;
-        profile = await fetchAuthMe(refreshed.idToken, this.authConfig, this.ipcRenderer);
+        profile = await this._withTimeout(
+          fetchAuthMe(refreshed.idToken, this.authConfig, this.ipcRenderer),
+          5000,
+          'auth/me',
+        );
       }
 
       const details = profile.user;
@@ -328,7 +486,6 @@ class AuthManager {
       await this.ipcRenderer.invoke('set-current-user-id', this.currentUser.id, this.currentUser.role);
       localStorage.setItem('alyson_user', JSON.stringify(this.currentUser));
 
-      // Persist refreshed tokens so next restart keeps the 30-day session
       if (stored?.idToken && stored?.refreshToken) {
         try {
           await this.ipcRenderer.invoke('user-logged-in', {
@@ -355,27 +512,8 @@ class AuthManager {
         return false;
       }
 
-      this.showAuthLoading('Loading your workspace…');
-      try {
-        const updateStatus = await this.ipcRenderer.invoke('check-for-update');
-        if (updateStatus?.updateAvailable) {
-          window.__updateGateActive = true;
-          this.hideAuthLoading();
-          this.uiManager?.showMandatoryUpdateGate?.({
-            newVersion: updateStatus.newVersion,
-            currentVersion: updateStatus.currentVersion,
-            updateDownloaded: updateStatus.updateDownloaded,
-            manualInstallRequired: updateStatus.manualInstallRequired,
-            dmgInstallReady: updateStatus.dmgInstallReady,
-            manualDownloadUrl: updateStatus.manualDownloadUrl,
-          });
-          return true;
-        }
-      } catch (updateError) {
-        console.warn('⚠️ [AUTH] Cognito auto-login update check failed:', updateError?.message || updateError);
-      }
-
       this.uiManager.showMainApp();
+      void this._verifyCognitoSessionInBackground(savedSession);
       this.notificationManager.showNotification('Welcome back! Automatically signed in.', 'success');
       console.log('✅ [AUTH] Cognito auto-login successful');
       return true;
@@ -390,7 +528,6 @@ class AuthManager {
 
       console.warn('⚠️ [AUTH] Cognito auto-login failed:', msg);
 
-      // Only wipe the persisted session on real auth failures — keep it on network blips
       if (definitiveAuthFailure || (!isTransient && /invalid.*(token|session)|expired.*token/i.test(msg))) {
         await this.ipcRenderer.invoke('user-logged-out');
         cognitoAuth.clearCognitoSession();

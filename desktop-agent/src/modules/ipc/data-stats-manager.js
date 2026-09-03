@@ -47,7 +47,11 @@ class DataStatsManager {
         { start, end },
         this.config,
       );
-      return Object.values(byDate).reduce((sum, seconds) => sum + (Number(seconds) || 0), 0);
+      return Object.values(byDate).reduce((sum, row) => {
+        const other = Math.trunc(Number(row?.otherSeconds) || 0);
+        const leave = Math.trunc(Number(row?.leaveSeconds) || 0);
+        return sum + other + leave;
+      }, 0);
     } catch (err) {
       console.warn('⚠️ [DataStats] Time adjustments fetch failed:', err?.message || err);
       return 0;

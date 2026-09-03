@@ -2652,15 +2652,21 @@ if (!window.__rendererInitAttached) {
     // Check for existing authentication before showing login screen
     console.log('🔍 [RENDERER] Checking for existing authentication...');
     
-    // Try to auto-login with saved session
+    // Try to auto-login with saved session (initialize() already attempted this)
     try {
-      const autoLoginSuccess = await moduleInstances.authManager.tryAutoLogin();
-      if (autoLoginSuccess) {
-        console.log('✅ [RENDERER] Auto-login successful, user already authenticated');
-        // Note: tryAutoLogin already calls showMainApp() internally
+      if (moduleInstances.authManager?.currentUser?.id) {
+        console.log('✅ [RENDERER] Session already restored during auth init');
+        if (moduleInstances.uiManager?.showMainApp) {
+          moduleInstances.uiManager.showMainApp();
+        }
       } else {
-        console.log('⚠️ [RENDERER] No valid session found, showing login screen');
-        moduleInstances.uiManager.showLogin();
+        const autoLoginSuccess = await moduleInstances.authManager.tryAutoLogin();
+        if (autoLoginSuccess) {
+          console.log('✅ [RENDERER] Auto-login successful, user already authenticated');
+        } else {
+          console.log('⚠️ [RENDERER] No valid session found, showing login screen');
+          moduleInstances.uiManager.showLogin();
+        }
       }
     } catch (error) {
       console.log('❌ [RENDERER] Auto-login failed, showing login screen:', error);
@@ -3764,11 +3770,47 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
     }
 }
 
-function openScreenshot(imageUrl) {
-    if (imageUrl) {
-        window.open(imageUrl, '_blank');
-    }
+function closeScreenshotLightbox() {
+    const overlay = document.getElementById('screenshotLightbox');
+    const img = document.getElementById('screenshotLightboxImg');
+    if (img) img.removeAttribute('src');
+    if (overlay) overlay.hidden = true;
 }
+
+function openScreenshot(imageUrl) {
+    const url = String(imageUrl || '').trim();
+    if (!url || url === 'null' || url === 'undefined') return false;
+    wireScreenshotLightbox();
+    const overlay = document.getElementById('screenshotLightbox');
+    const img = document.getElementById('screenshotLightboxImg');
+    if (!overlay || !img) return false;
+    img.src = url;
+    overlay.hidden = false;
+    return true;
+}
+
+function wireScreenshotLightbox() {
+    if (document.documentElement.dataset.screenshotLightboxWired === '1') return;
+    document.documentElement.dataset.screenshotLightboxWired = '1';
+    document.addEventListener('click', (event) => {
+        const overlay = document.getElementById('screenshotLightbox');
+        if (!overlay || overlay.hidden) return;
+        const closeBtn = event.target.closest?.('#screenshotLightboxClose');
+        if (closeBtn || event.target === overlay) {
+            event.preventDefault();
+            closeScreenshotLightbox();
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        const overlay = document.getElementById('screenshotLightbox');
+        if (overlay && !overlay.hidden) closeScreenshotLightbox();
+    });
+}
+
+wireScreenshotLightbox();
+window.openScreenshot = openScreenshot;
+window.closeScreenshotLightbox = closeScreenshotLightbox;
 
 // Date navigation for screenshots
 function navigateDate(direction) {

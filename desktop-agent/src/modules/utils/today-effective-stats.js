@@ -12,6 +12,7 @@ const {
 } = require('./effective-time');
 const { normalizeTenantUserId } = require('./tenant-user-id');
 const { overlapSeconds, screenshotOwnedRangeMs } = require('./screenshot-owned-interval');
+const { mergeIntervalsSeconds } = require('./today-time-log-stats');
 
 const LOW_ACTIVITY_PERCENT = 10;
 // Same floor Pulse uses. The agent records idle after 60s so the raw periods
@@ -230,7 +231,7 @@ async function computeTodayEffectiveStats(opts = {}) {
           config,
         );
         idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs);
-        idleSeconds = idleIntervals.reduce((acc, iv) => acc + Math.floor((iv.endMs - iv.startMs) / 1000), 0);
+        idleSeconds = mergeIntervalsSeconds(idleIntervals);
         idleMeasured = true;
       } catch (idleErr) {
         console.warn('⚠️ [TODAY-EFFECTIVE] Idle interval fetch failed:', idleErr?.message || idleErr);

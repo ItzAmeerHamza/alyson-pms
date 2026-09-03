@@ -299,14 +299,23 @@ function ensureLiveSessionRow(timeLogs, currentTimeLogId, isTracking) {
   return list;
 }
 
-/** Pulse day total = session seconds + net leave/admin adjustments (never below 0). */
-function applyAdjustmentSeconds(sessionSeconds, adjustmentSeconds) {
+/**
+ * Pulse day total: holiday/leave is a floor, not a stack.
+ * Work 2h + 7h holiday → 7h. Work 9h + 7h holiday → 9h (keep the extra).
+ * Third arg is leave credit; second is other (admin) adjustments only.
+ */
+function applyAdjustmentSeconds(sessionSeconds, adjustmentSeconds, leaveCreditSeconds = 0) {
   const session = Math.max(0, Math.floor(Number(sessionSeconds) || 0));
-  const adjustment = Math.trunc(Number(adjustmentSeconds) || 0);
+  const other = Math.trunc(Number(adjustmentSeconds) || 0);
+  const leave = Math.max(0, Math.trunc(Number(leaveCreditSeconds) || 0));
+  const leaveApplied = Math.max(0, leave - session);
+  const applied = other + leaveApplied;
   return {
     trackedSessionSeconds: session,
-    adjustmentSeconds: adjustment,
-    totalTime: Math.max(0, session + adjustment),
+    adjustmentSeconds: applied,
+    leaveCreditSeconds: leave,
+    otherAdjustmentSeconds: other,
+    totalTime: Math.max(0, session + applied),
   };
 }
 
@@ -433,6 +442,13 @@ function holdLastGoodOnFailedFetch(agg, lastGood, { isTracking = false } = {}) {
     adjustmentSeconds: Math.trunc(
       Number(lastGood.adjustmentSeconds ?? base.adjustmentSeconds) || 0,
     ),
+    leaveCreditSeconds: Math.max(
+      0,
+      Math.trunc(Number(lastGood.leaveCreditSeconds ?? base.leaveCreditSeconds) || 0),
+    ),
+    otherAdjustmentSeconds: Math.trunc(
+      Number(lastGood.otherAdjustmentSeconds ?? base.otherAdjustmentSeconds) || 0,
+    ),
     backendFetchFailed: true,
     floorHeld: total > failedTotal || closed > failedClosed,
   };
@@ -457,11 +473,13 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
     if (isBackendTimeLogsEnabled()) {
       let timeLogs = [];
       let adjustmentSeconds = 0;
+      let leaveCreditSeconds = 0;
       try {
         const { getTodayTimeLogsPayload } = require('./backend-time-logs');
         const payload = await getTodayTimeLogsPayload(userId);
         timeLogs = payload.timeLogs;
-        adjustmentSeconds = payload.adjustmentSeconds;
+        adjustmentSeconds = payload.otherAdjustmentSeconds ?? payload.adjustmentSeconds;
+        leaveCreditSeconds = payload.leaveCreditSeconds || 0;
       } catch (fetchErr) {
         console.warn(
           '⚠️ [TODAY-TIME-LOG-STATS] Backend fetch failed — using offline queue + local session:',
@@ -485,6 +503,8 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
       return {
         ...finalizeTodayAggregate(merged, currentTimeLogId, isTracking, offlineCount),
         adjustmentSeconds,
+        leaveCreditSeconds,
+        otherAdjustmentSeconds: adjustmentSeconds,
       };
     }
   } catch (err) {

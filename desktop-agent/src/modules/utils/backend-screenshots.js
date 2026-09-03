@@ -103,7 +103,11 @@ function screenshotTileUrl(shot) {
 }
 
 function screenshotPopupUrl(shot) {
-  return shot?.image_url || shot?.file_path || shot?.thumb_url || '';
+  const candidates = [shot?.image_url, shot?.thumb_url, shot?.file_path];
+  for (const candidate of candidates) {
+    if (candidate && /^https?:\/\//i.test(String(candidate))) return String(candidate);
+  }
+  return '';
 }
 
 function escapeHtmlAttr(value) {

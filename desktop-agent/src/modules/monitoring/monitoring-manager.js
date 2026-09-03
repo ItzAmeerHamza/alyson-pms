@@ -65,6 +65,15 @@ class MonitoringManager {
       return;
     }
 
+    const trackingOn = !!(
+      global.isTracking &&
+      (global.trackingManager?.currentTimeLogId != null || global.currentTimeLogId != null)
+    );
+    if (!trackingOn) {
+      console.log('📡 [MONITORING] Capture systems deferred until tracking starts');
+      return;
+    }
+
     console.log('🚀 [MONITORING] Starting all monitoring systems...');
     this.isMonitoring = true;
 
@@ -151,10 +160,14 @@ class MonitoringManager {
       this.registerSystem('activity', this.managers.activityManager);
     }
 
-    // Start live activity updates (PERFORMANCE FIX: increased from 2s to 5s to match app capture interval)
+    // Live activity IPC only while tracking (15s). Was 5s even at the login screen.
+    let liveMs = 15000;
+    try {
+      liveMs = require('../utils/power-profile').IPC.liveActivityMs;
+    } catch (_) { /* default */ }
     this.intervals.liveActivity = setInterval(() => {
       this.sendLiveActivityUpdates();
-    }, 5000);
+    }, liveMs);
 
     console.log('📊 [MONITORING] Activity monitoring started');
   }
@@ -179,6 +192,10 @@ class MonitoringManager {
    * Start screenshot monitoring
    */
   async startScreenshotMonitoring() {
+    if (!global.isTracking) {
+      console.log('📸 [MONITORING] Skipping screenshot capture — not tracking');
+      return;
+    }
     if (this.managers.screenshotManager) {
       // Only start if not already scheduled (avoid duplicate windows)
       try {
@@ -216,6 +233,10 @@ class MonitoringManager {
    * Start idle monitoring
    */
   async startIdleMonitoring() {
+    if (!global.isTracking) {
+      console.log('😴 [MONITORING] Skipping idle monitor — not tracking');
+      return;
+    }
     // Use enhanced idle monitor for idle detection
     if (this.managers.enhancedIdleMonitor && this.managers.enhancedIdleMonitor.startIdleMonitoring) {
       // CRITICAL FIX: Set tracking state to true so idle detection loop runs
@@ -245,13 +266,19 @@ class MonitoringManager {
    */
   async startAppMonitoring() {
     // App monitoring handled by EnhancedAppDetector
+    let appMs = 45000;
+    try {
+      appMs = require('../utils/power-profile').getAppDetectIntervalMs();
+    } catch (_) { /* default */ }
     this.intervals.appCapture = setInterval(() => {
-      // PERFORMANCE FIX: Skip entirely when not tracking (no log spam)
       if (!global.isTracking) return;
+      try {
+        if (require('../utils/power-profile').shouldSkipAppDetection()) return;
+      } catch (_) { /* continue */ }
       this.captureAppActivity();
-    }, 5000);
+    }, appMs);
 
-    console.log('📱 [MONITORING] App monitoring started with 5s interval');
+    console.log(`📱 [MONITORING] App monitoring started with ${Math.round(appMs / 1000)}s interval`);
   }
 
   /**
@@ -309,11 +336,15 @@ class MonitoringManager {
    * Start system monitoring
    */
   async startSystemMonitoring() {
+    let healthMs = 120000;
+    try {
+      healthMs = require('../utils/power-profile').IPC.systemHealthMs;
+    } catch (_) { /* default */ }
     this.intervals.systemMonitor = setInterval(() => {
       this.checkSystemHealth();
-    }, 30000); // Every 30 seconds
+    }, healthMs);
 
-    console.log('⚙️ [MONITORING] System monitoring started');
+    console.log(`⚙️ [MONITORING] System monitoring started (${Math.round(healthMs / 1000)}s)`);
   }
 
   /**
@@ -332,11 +363,8 @@ class MonitoringManager {
    * Start notification monitoring
    */
   async startNotificationMonitoring() {
-    this.intervals.notification = setInterval(() => {
-      this.checkNotifications();
-    }, 60000); // Every minute
-
-    console.log('🔔 [MONITORING] Notification monitoring started');
+    // No notification backend. A 60s timer here was wake + log spam for no product gain.
+    console.log('🔔 [MONITORING] Notification polling skipped (no-op)');
   }
 
   /**
@@ -356,6 +384,7 @@ class MonitoringManager {
    * PERFORMANCE FIX: Skip sending when user is idle to reduce IPC overhead
    */
   sendLiveActivityUpdates() {
+    if (!global.isTracking) return;
     if (!global.mainWindow || global.mainWindow.isDestroyed()) return;
     
     // PERFORMANCE FIX: Throttle updates when idle

@@ -3,11 +3,12 @@
  * Registered early from main.js so the renderer can invoke before DataStatsManager finishes init.
  */
 
-const { isBackendRdsEnabled, getTimeLogsInRange, getTimeAdjustmentsInRange } = require('./backend-rds-reads');
+const { isBackendRdsEnabled, getTimeLogsInRange, getTimeAdjustmentsInRange, getEffectiveStats } = require('./backend-rds-reads');
 const { applyAdjustmentSeconds } = require('./today-time-log-stats');
 const { fetchScreenshotsFromBackend } = require('./backend-screenshots');
 const { listUserProjects } = require('./backend-time-logs');
 const { normalizeTenantUserId } = require('./tenant-user-id');
+const { applyPulseEffectiveByDay, applyTodayEffectiveIfMeasured } = require('./monthly-report-pulse-days');
 const {
   computeEffectiveSeconds,
   resolveScreenshotIntervalSeconds,
@@ -167,21 +168,12 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
     const projectName =
       log.projects?.name || projectNameById[log.project_id] || 'No Project';
     const projectId = log.project_id || 'none';
-    const logIdle = Math.max(0, Math.floor(Number(log.idle_seconds) || 0));
-
     for (let d = 1; d <= daysInMonth; d++) {
       const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
       const sliceStart = Math.max(startMs, dayStartMs);
       const sliceEnd = Math.min(endMs, dayEndMs);
       if (sliceEnd > sliceStart) {
         dayIntervals[d - 1].push({ startMs: sliceStart, endMs: sliceEnd });
-        // Approximate idle share for the day from session idle_seconds.
-        const sec = Math.floor((sliceEnd - sliceStart) / 1000);
-        if (clampedSeconds > 0 && logIdle > 0 && sec > 0) {
-          dailyBreakdown[d - 1].idleSeconds =
-            (dailyBreakdown[d - 1].idleSeconds || 0) +
-            Math.floor((logIdle * sec) / clampedSeconds);
-        }
       }
     }
 
@@ -214,9 +206,11 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   }
   for (let i = 0; i < daysInMonth; i++) {
     const sessionSeconds = mergeIntervalsSeconds(dayIntervals[i]);
+    const adj = adjustmentsByDate[dailyBreakdown[i].date] || {};
     const applied = applyAdjustmentSeconds(
       sessionSeconds,
-      adjustmentsByDate[dailyBreakdown[i].date] || 0,
+      adj.otherSeconds || 0,
+      adj.leaveSeconds || 0,
     );
     dailyBreakdown[i].trackedSessionSeconds = applied.trackedSessionSeconds;
     dailyBreakdown[i].adjustmentSeconds = applied.adjustmentSeconds;
@@ -232,22 +226,42 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
     avgActivityPercent = Math.round(sum / screenshots.length);
   }
 
-  // Low activity: same interval seconds as Today cards (never minute-rounded).
   const intervalSeconds = resolveScreenshotIntervalSeconds(config || global.config);
-  const lowSecondsPerShot = intervalSeconds;
-  for (const shot of screenshots) {
-    const pct = Number(shot.activity_percent);
-    if (!Number.isFinite(pct) || pct >= 10) continue;
-    const capturedAt = shot.captured_at || shot.capturedAt;
-    if (!capturedAt) continue;
-    const shotMs = new Date(capturedAt).getTime();
-    for (let d = 1; d <= daysInMonth; d++) {
-      const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
-      if (shotMs >= dayStartMs && shotMs < dayEndMs) {
-        dailyBreakdown[d - 1].lowSeconds =
-          (dailyBreakdown[d - 1].lowSeconds || 0) + lowSecondsPerShot;
-        break;
-      }
+
+  // Past days must use the same Pulse split as Today. Counting session
+  // idle_seconds plus every quiet screenshot × window interval is what made
+  // Sep 1 jump from ~51m to ~3h overnight on This Month at a Glance.
+  // A Pulse timeout must not wipe a split we already measured this session.
+  const pulseCacheKey = `${userId}:${monthStartIso}:${monthEndExclusive}`;
+  try {
+    const pulse = await getEffectiveStats(
+      userId,
+      {
+        start: monthStartIso,
+        end: monthEndExclusive,
+        tz: workTz,
+        timeoutMs: 20_000,
+      },
+      config || global.config,
+    );
+    applyPulseEffectiveByDay(dailyBreakdown, pulse.daily);
+    if (pulse.daily && Object.keys(pulse.daily).length) {
+      global._lastGoodPulseDaily = global._lastGoodPulseDaily || {};
+      global._lastGoodPulseDaily[pulseCacheKey] = pulse.daily;
+    }
+  } catch (pulseErr) {
+    const cached = global._lastGoodPulseDaily?.[pulseCacheKey];
+    if (cached) {
+      console.warn(
+        '⚠️ [MONTHLY-REPORT] Pulse effective stats failed; holding last measured split:',
+        pulseErr?.message || pulseErr,
+      );
+      applyPulseEffectiveByDay(dailyBreakdown, cached);
+    } else {
+      console.warn(
+        '⚠️ [MONTHLY-REPORT] Pulse effective stats failed; leaving idle/low at 0 rather than a local guess:',
+        pulseErr?.message || pulseErr,
+      );
     }
   }
 
@@ -278,7 +292,8 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
           fromTodayHelper,
           Math.floor(Number(dailyBreakdown[todayIdx].trackedSessionSeconds) || 0),
         ),
-        todayAgg.adjustmentSeconds ?? dailyBreakdown[todayIdx].adjustmentSeconds ?? 0,
+        todayAgg.otherAdjustmentSeconds ?? 0,
+        todayAgg.leaveCreditSeconds ?? 0,
       );
       dailyBreakdown[todayIdx].trackedSessionSeconds = todayApplied.trackedSessionSeconds;
       dailyBreakdown[todayIdx].adjustmentSeconds = todayApplied.adjustmentSeconds;
@@ -291,10 +306,7 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
         config: config || global.config,
         screenshots, // same rows Month already fetched — no second divergent query
       });
-      dailyBreakdown[todayIdx].idleSeconds = todayEff.idleSeconds || 0;
-      dailyBreakdown[todayIdx].lowSeconds = todayEff.lowActivitySeconds || 0;
-      dailyBreakdown[todayIdx].nonEffectiveSeconds = todayEff.nonEffectiveSeconds || 0;
-      dailyBreakdown[todayIdx].effectiveSeconds = todayEff.effectiveSeconds || 0;
+      applyTodayEffectiveIfMeasured(dailyBreakdown[todayIdx], todayEff);
     }
   } catch (todayAlignErr) {
     console.warn(

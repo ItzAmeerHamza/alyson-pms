@@ -31,6 +31,7 @@ async function fetchWorkspaceSettings(userId, config = global.config) {
     'get_workspace_settings',
     { user_id: normalized, workspace_id: config?.organization_id || global.currentOrganizationId },
     config,
+    { timeoutMs: 4000 },
   );
   return result?.settings || null;
 }

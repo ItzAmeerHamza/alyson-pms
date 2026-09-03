@@ -37,4 +37,10 @@ describe('power-profile — energy-safe poll cadence', () => {
   it('session checkpoint is 30s', () => {
     expect(getSessionCheckpointMs()).toBe(30000);
   });
+
+  it('live activity IPC is 15s and system health is 2m', () => {
+    const { IPC } = require('../power-profile');
+    expect(IPC.liveActivityMs).toBe(15000);
+    expect(IPC.systemHealthMs).toBe(120000);
+  });
 });
