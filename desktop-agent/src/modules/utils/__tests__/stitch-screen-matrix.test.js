@@ -51,7 +51,13 @@ describe('stitch screen matrix', () => {
       });
     }
 
-    const buffer = await stitchCaptures(captures);
+    let buffer;
+    try {
+      buffer = await stitchCaptures(captures);
+    } catch (err) {
+      expect(err?.message || '').not.toMatch(/Image to composite must have same dimensions or smaller/i);
+      throw err;
+    }
     expect(buffer.length).toBeGreaterThan(500);
     const meta = await sharp(buffer).metadata();
     expect(meta.width).toBeGreaterThanOrEqual(64);

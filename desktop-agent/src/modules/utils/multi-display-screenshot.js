@@ -50,7 +50,7 @@ async function captureAllDisplaysStitched() {
 
   // Multi-monitor path order:
   // - Windows: PowerShell AllScreens first (desktopCapturer often drops secondary under DPI).
-  // - macOS/others: desktopCapturer first, then native screencapture.
+  // - macOS: desktopCapturer only. Native screencapture / screenshot.all() freeze dual-display Macs.
   if (targetCount >= 2 && process.platform === 'win32') {
     const nativeCaptures = await captureViaWindowsPowerShellAllScreens();
     if (nativeCaptures.length >= 2) {
@@ -81,16 +81,54 @@ async function captureAllDisplaysStitched() {
         );
         return annotateMultiDisplayResult(viaCapturer, targetCount);
       }
+      // macOS: never fall through to screencapture -D / screenshot.all().
+      // Those capture full-resolution panes and Sharp-decode them on the Electron
+      // main thread — that is the dual-display ANR (Hanan / 3440 ultrawide).
+      if (process.platform === 'darwin') {
+        if (viaCapturer?.success && viaCapturer.buffer) {
+          console.warn(
+            `[MULTI-DISPLAY] desktopCapturer returned ${viaCapturer.displayCount || 0} display(s); skipping native macOS fallbacks to avoid main-thread freeze`,
+          );
+          return annotateMultiDisplayResult(viaCapturer, targetCount);
+        }
+        console.warn(
+          '[MULTI-DISPLAY] desktopCapturer incomplete; skipping native macOS fallbacks',
+        );
+        return annotateMultiDisplayResult(
+          {
+            success: false,
+            method: viaCapturer?.method || 'desktopCapturer',
+            error: viaCapturer?.error || 'desktopCapturer returned no image',
+            displayCount: viaCapturer?.displayCount || 0,
+          },
+          targetCount,
+        );
+      }
       console.warn(
         `[MULTI-DISPLAY] desktopCapturer returned ${viaCapturer.displayCount || 0} display(s); trying native paths`
       );
     } catch (err) {
       console.warn('[MULTI-DISPLAY] desktopCapturer path failed:', err.message);
+      if (process.platform === 'darwin') {
+        console.warn(
+          '[MULTI-DISPLAY] skipping native macOS fallbacks after desktopCapturer failure',
+        );
+        return annotateMultiDisplayResult(
+          {
+            success: false,
+            method: 'desktopCapturer',
+            error: err.message,
+            displayCount: 0,
+          },
+          targetCount,
+        );
+      }
     }
   }
 
-  // Platform-native per-display capture (macOS screencapture; Windows already tried above)
-  if (targetCount >= 2 && process.platform !== 'win32') {
+  // Platform-native per-display capture (macOS screencapture; Windows already tried above).
+  // Darwin already returned above — do not run -D here even if that early-return changes.
+  if (targetCount >= 2 && process.platform !== 'win32' && process.platform !== 'darwin') {
     const nativeCaptures = await captureViaPlatformNativeAllScreens(targetCount);
     if (nativeCaptures.length >= 2) {
       try {
@@ -112,8 +150,8 @@ async function captureAllDisplaysStitched() {
     }
   }
 
-  // screenshot-desktop.all() — passes N temp paths to screencapture / Windows API
-  if (targetCount >= 2 && typeof screenshot.all === 'function') {
+  // screenshot-desktop.all() — untimed full-res capture. Never on macOS (ANR).
+  if (targetCount >= 2 && process.platform !== 'darwin' && typeof screenshot.all === 'function') {
     try {
       const buffers = await screenshot.all();
       const unique = uniqueCaptureBuffers(
@@ -139,7 +177,7 @@ async function captureAllDisplaysStitched() {
   // Per-display via listDisplays ids
   // Windows IDs look like \\.\DISPLAY1 — numeric indices alone are unreliable.
   let captures = [];
-  if (listedCount >= 2) {
+  if (listedCount >= 2 && process.platform !== 'darwin') {
     captures = await captureFromListedDisplays(listed);
   } else if (process.platform === 'win32' && listedCount >= 1 && targetCount >= 2) {
     // Even if listDisplays under-counted vs Electron, capture every listed id,
@@ -150,7 +188,7 @@ async function captureAllDisplaysStitched() {
   }
 
   // Numeric screen indices — useful on both macOS and some Windows GPU drivers
-  if (captures.length < 2 && targetCount >= 2) {
+  if (captures.length < 2 && targetCount >= 2 && process.platform !== 'darwin') {
     const byIndex = await captureByScreenIndex(targetCount);
     if (byIndex.length > captures.length) {
       captures = byIndex;
@@ -158,7 +196,7 @@ async function captureAllDisplaysStitched() {
   }
 
   // Final desktopCapturer retry
-  if (captures.length < 2 && targetCount >= 2) {
+  if (captures.length < 2 && targetCount >= 2 && process.platform !== 'darwin') {
     try {
       const viaCapturer = await captureViaDesktopCapturerStitched(getPreferredThumbnailSize());
       if (viaCapturer.success && viaCapturer.displayCount >= 2) {
@@ -533,7 +571,7 @@ async function stitchCaptures(captures) {
   }
 
   try {
-    return await stitchCapturesWithSharp(captures);
+    return await withTimeout(stitchCapturesWithSharp(captures), 8000, 'sharp stitch');
   } catch (sharpErr) {
     console.warn('[MULTI-DISPLAY] sharp stitch failed:', sharpErr?.message || sharpErr);
     if (process.platform === 'win32') {
@@ -566,10 +604,15 @@ async function stitchCapturesWithSharp(captures) {
   }
 
   const electronLayouts = getElectronLayouts();
+  // desktopCapturer gives every screen the same max thumb (Hanan: 3440×1964).
+  // Electron layout is physical per display (3024×1964 + 3440×1440). Compositing
+  // the 3440×1964 PNG onto that shorter canvas is the Sharp error from the logs:
+  // "Image to composite must have same dimensions or smaller".
   const canUseLayout =
     electronLayouts &&
     electronLayouts.length === panes.length &&
-    electronLayouts.every((l) => l.width > 0 && l.height > 0);
+    electronLayouts.every((l) => l.width > 0 && l.height > 0) &&
+    layoutsMatchCaptureSizes(electronLayouts, panes);
 
   try {
     if (canUseLayout) {
@@ -692,27 +735,51 @@ function scaleSlotsToMaxEdge(slots) {
 
 async function compositeFittedPanes(sharp, slots) {
   const fittedSlots = scaleSlotsToMaxEdge(slots);
-  const canvasW = Math.max(...fittedSlots.map((s) => s.left + s.width));
-  const canvasH = Math.max(...fittedSlots.map((s) => s.top + s.height));
-  if (!canvasW || !canvasH) {
-    throw new Error('Invalid stitch canvas dimensions');
-  }
-
   const composites = [];
   for (const slot of fittedSlots) {
-    const fitted = await sharp(slot.pane.buffer)
+    let fitted = await sharp(slot.pane.buffer)
       .resize(slot.width, slot.height, {
         fit: 'fill',
       })
       .png({ compressionLevel: 1 })
       .toBuffer();
+    let meta = await sharp(fitted).metadata();
+    let width = meta.width || 0;
+    let height = meta.height || 0;
+    // Sharp resize can return 1px larger than asked; that is the
+    // "Image to composite must have same dimensions or smaller" throw.
+    if (width > slot.width || height > slot.height) {
+      fitted = await sharp(fitted)
+        .extract({
+          left: 0,
+          top: 0,
+          width: Math.min(width, slot.width),
+          height: Math.min(height, slot.height),
+        })
+        .png({ compressionLevel: 1 })
+        .toBuffer();
+      meta = await sharp(fitted).metadata();
+      width = meta.width || 0;
+      height = meta.height || 0;
+    }
     composites.push({
       input: fitted,
       left: slot.left,
       top: slot.top,
+      width,
+      height,
     });
     slot.pane.buffer = null;
   }
+
+  const canvasW = Math.max(1, ...composites.map((c) => c.left + c.width));
+  const canvasH = Math.max(1, ...composites.map((c) => c.top + c.height));
+
+  const layer = composites.map((c) => ({
+    input: c.input,
+    left: Math.min(c.left, Math.max(0, canvasW - c.width)),
+    top: Math.min(c.top, Math.max(0, canvasH - c.height)),
+  }));
 
   const out = await sharp({
     create: {
@@ -722,7 +789,7 @@ async function compositeFittedPanes(sharp, slots) {
       background: { r: 16, g: 16, b: 16 },
     },
   })
-    .composite(composites)
+    .composite(layer)
     .png({ compressionLevel: 4 })
     .toBuffer();
 
@@ -971,13 +1038,26 @@ async function captureViaDesktopCapturerStitched(thumbnailSize) {
     };
   }
 
-  const buffer = await stitchCaptures(captures);
-  return {
-    success: true,
-    buffer,
-    method: 'desktopCapturer-stitched',
-    displayCount: captures.length,
-  };
+  try {
+    const buffer = await stitchCaptures(captures);
+    return {
+      success: true,
+      buffer,
+      method: 'desktopCapturer-stitched',
+      displayCount: captures.length,
+    };
+  } catch (err) {
+    console.warn(
+      '[MULTI-DISPLAY] desktopCapturer stitch failed, using primary thumb:',
+      err?.message || err,
+    );
+    return {
+      success: true,
+      buffer: captures[0].buffer,
+      method: 'desktopCapturer-primary-fallback',
+      displayCount: 1,
+    };
+  }
 }
 
 function getPreferredThumbnailSize() {
@@ -1011,4 +1091,5 @@ module.exports = {
   annotateMultiDisplayResult,
   getPreferredThumbnailSize,
   getElectronDisplayCount,
+  layoutsMatchCaptureSizes,
 };

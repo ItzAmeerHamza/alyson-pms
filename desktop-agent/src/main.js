@@ -1790,7 +1790,7 @@ async function initializeInputDetectionSystem(options = {}) {
   // PYTHON PROVISIONER: Ensure Python is available before initializing input detection
   try {
     const PythonProvisioner = require('./modules/system/python-provisioner');
-    const provisioner = new PythonProvisioner();
+    const provisioner = global.pythonProvisioner || new PythonProvisioner();
     global.pythonProvisioner = provisioner;
     const provisionResult = await provisioner.ensurePython({
       allowDownload: options.allowDownload === true,

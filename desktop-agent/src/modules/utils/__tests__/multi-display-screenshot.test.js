@@ -112,11 +112,32 @@ describe('multi-display-screenshot', () => {
         .png()
         .toBuffer();
 
-    const { stitchCaptures } = require('../multi-display-screenshot');
-    const buffer = await stitchCaptures([
-      { id: 1, primary: true, buffer: await makePane(3440, 1964, 255, 0, 0) },
-      { id: 2, primary: false, buffer: await makePane(3440, 1964, 0, 0, 255) },
-    ]);
+    const { stitchCaptures, layoutsMatchCaptureSizes } = require('../multi-display-screenshot');
+    // Exact Sharp throw from Hanan 1.0.234 logs: both desktopCapturer thumbs
+    // are 3440×1964, Electron physical slots are 3024×1964 + 3440×1440.
+    expect(
+      layoutsMatchCaptureSizes(
+        [
+          { width: 3024, height: 1964 },
+          { width: 3440, height: 1440 },
+        ],
+        [
+          { width: 3440, height: 1964 },
+          { width: 3440, height: 1964 },
+        ],
+      ),
+    ).toBe(false);
+
+    let buffer;
+    try {
+      buffer = await stitchCaptures([
+        { id: 1, primary: true, buffer: await makePane(3440, 1964, 255, 0, 0) },
+        { id: 2, primary: false, buffer: await makePane(3440, 1964, 0, 0, 255) },
+      ]);
+    } catch (err) {
+      expect(err?.message || '').not.toMatch(/Image to composite must have same dimensions or smaller/i);
+      throw err;
+    }
 
     expect(buffer.length).toBeGreaterThan(1000);
     const meta = await sharp(buffer).metadata();
@@ -157,10 +178,16 @@ describe('multi-display-screenshot', () => {
         .toBuffer();
 
     const { stitchCaptures } = require('../multi-display-screenshot');
-    const buffer = await stitchCaptures([
-      { id: 2, primary: true, buffer: await makePane(3440, 1964, 255, 40, 0) },
-      { id: 1, primary: false, buffer: await makePane(3440, 1964, 0, 40, 255) },
-    ]);
+    let buffer;
+    try {
+      buffer = await stitchCaptures([
+        { id: 2, primary: true, buffer: await makePane(3440, 1964, 255, 40, 0) },
+        { id: 1, primary: false, buffer: await makePane(3440, 1964, 0, 40, 255) },
+      ]);
+    } catch (err) {
+      expect(err?.message || '').not.toMatch(/Image to composite must have same dimensions or smaller/i);
+      throw err;
+    }
 
     const meta = await sharp(buffer).metadata();
     expect(meta.width).toBeGreaterThan(2000);
@@ -186,5 +213,32 @@ describe('multi-display-screenshot', () => {
     expect(meta.width).toBeGreaterThan(2000);
     expect(meta.width).toBeLessThanOrEqual(3840);
     expect(buffer.length).toBeGreaterThan(1000);
+  });
+
+  test('does not run native macOS fallbacks when desktopCapturer returns one of two displays', async () => {
+    const screenshot = require('screenshot-desktop');
+    const { desktopCapturer } = require('electron');
+    const png = await sharp({
+      create: { width: 200, height: 100, channels: 3, background: { r: 12, g: 34, b: 56 } },
+    })
+      .png()
+      .toBuffer();
+
+    desktopCapturer.getSources.mockResolvedValue([
+      {
+        id: 'screen:0:0',
+        display_id: '1',
+        name: 'Built-in',
+        thumbnail: { isEmpty: () => false, toPNG: () => png },
+      },
+    ]);
+
+    const { captureAllDisplaysStitched } = require('../multi-display-screenshot');
+    const result = await captureAllDisplaysStitched();
+
+    expect(result.success).toBe(true);
+    expect(result.displayCount).toBe(1);
+    expect(result.incompleteMultiDisplay).toBe(true);
+    expect(screenshot.all).not.toHaveBeenCalled();
   });
 });

@@ -2782,7 +2782,7 @@
         }
 
         .control-subtitle {
-            color: #64748b;
+            color: var(--text-muted);
             font-size: 13px;
             font-weight: 500;
         }
@@ -2880,25 +2880,6 @@
 
         .updates-page .btn-primary:hover:not(:disabled) {
             box-shadow: 0 10px 22px rgba(14, 165, 233, 0.3);
-        }
-
-        .updates-page .btn-secondary {
-            background: #ffffff;
-            color: #334155;
-            border-color: #cbd5e1;
-            box-shadow: none;
-        }
-
-        .updates-page .btn-secondary:hover:not(:disabled) {
-            background: #f8fafc;
-            color: #0f172a;
-        }
-
-        .updates-page .updates-version-box {
-            background:
-                radial-gradient(120% 80% at 0% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 55%),
-                #f8fafc;
-            border-color: rgba(148, 163, 184, 0.28);
         }
 
         /* === NOTIFICATIONS === */
@@ -3210,9 +3191,79 @@
 
         .updates-page .updates-version-box,
         .updates-page #updatesStatusRow {
-            background: var(--bg-surface-2);
+            background:
+                radial-gradient(120% 80% at 0% 0%, var(--accent-soft) 0%, transparent 55%),
+                var(--bg-surface-2);
             border: 1px solid var(--border);
             border-radius: 12px;
+        }
+
+        .updates-page .updates-version-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 16px;
+        }
+
+        .updates-page .updates-version-label {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .updates-page .updates-version-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .updates-page .updates-status-row {
+            margin-top: 14px;
+            padding: 14px 16px;
+        }
+
+        .updates-page .updates-status-text {
+            color: var(--text-2);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .updates-page .updates-progress-wrap {
+            margin-top: 12px;
+        }
+
+        .updates-page .updates-progress-track {
+            height: 8px;
+            background: var(--border);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .updates-page .updates-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.25s ease;
+        }
+
+        .updates-page .updates-progress-text {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .updates-page .updates-actions {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .updates-page .updates-hint {
+            margin: 14px 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.55;
         }
 
         .monthly-report-refresh-btn {
@@ -5597,10 +5648,17 @@
         html[data-theme="dark"] [style*="background: #f3f4f6"],
         html[data-theme="dark"] [style*="background:#f3f4f6"],
         html[data-theme="dark"] [style*="background: #f1f5f9"],
-        html[data-theme="dark"] [style*="background:#f1f5f9"] {
+        html[data-theme="dark"] [style*="background:#f1f5f9"],
+        html[data-theme="dark"] [style*="background: #f8fafc"],
+        html[data-theme="dark"] [style*="background:#f8fafc"] {
             background: var(--bg-surface-2) !important;
             color: var(--text) !important;
             border-color: var(--border-strong) !important;
+        }
+
+        html[data-theme="dark"] [style*="color: #475569"],
+        html[data-theme="dark"] [style*="color:#475569"] {
+            color: var(--text-2) !important;
         }
 
         html[data-theme="dark"] .mr-project-name,
@@ -6502,32 +6560,32 @@
                     </div>
 
                     <div style="max-width: 720px;">
-                        <div class="updates-version-box" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <div class="updates-version-box">
                             <div>
-                                <div style="font-size: 13px; color: #64748b;">Installed version</div>
-                                <div id="updatesCurrentVersion" style="font-size: 18px; font-weight: 700; color: #0f172a;">—</div>
+                                <div class="updates-version-label">Installed version</div>
+                                <div id="updatesCurrentVersion" class="updates-version-value">—</div>
                             </div>
                             <button type="button" id="updatesCheckBtn" class="btn btn-secondary">Check for updates</button>
                         </div>
 
-                        <div id="updatesStatusRow" style="margin-top: 14px; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                            <div id="updatesStatusText" style="color: #475569; font-size: 14px; line-height: 1.5;">Checking for updates…</div>
+                        <div id="updatesStatusRow" class="updates-status-row">
+                            <div id="updatesStatusText" class="updates-status-text">Checking for updates…</div>
 
-                            <div id="updatesProgressWrap" style="margin-top: 12px;" hidden>
-                                <div style="height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden;">
-                                    <div id="updatesProgressBar" style="height: 100%; width: 0%; background: #2563eb; transition: width 0.25s ease;"></div>
+                            <div id="updatesProgressWrap" class="updates-progress-wrap" hidden>
+                                <div class="updates-progress-track">
+                                    <div id="updatesProgressBar" class="updates-progress-bar"></div>
                                 </div>
-                                <div id="updatesProgressText" style="margin-top: 6px; font-size: 12px; color: #64748b;">0%</div>
+                                <div id="updatesProgressText" class="updates-progress-text">0%</div>
                             </div>
 
-                            <div style="margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px;">
+                            <div class="updates-actions">
                                 <button type="button" id="updatesDownloadBtn" class="btn btn-primary" hidden>Download update</button>
                                 <button type="button" id="updatesInstallBtn" class="btn btn-primary" hidden>Install and restart</button>
                                 <button type="button" id="updatesManualBtn" class="btn btn-secondary" hidden>Download installer</button>
                             </div>
                         </div>
 
-                        <p style="margin: 14px 0 0; font-size: 13px; color: #64748b; line-height: 1.55;">
+                        <p class="updates-hint">
                             Installing restarts the app. Any running timer is stopped and saved first, so no tracked time is lost.
                         </p>
                     </div>

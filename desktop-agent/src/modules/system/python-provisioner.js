@@ -1,12 +1,14 @@
 /**
  * Python Auto-Provisioner
- * 
+ *
  * Ensures Python is available for input detection at runtime.
  * - Windows: Downloads Python embeddable if bundled version is missing
- * - macOS: Verifies system Python3 and PyObjC availability; attempts pip install if missing
+ * - macOS: Verifies bundled/system Python3 and PyObjC. Packaged apps never pip-install.
  * - Linux: Verifies system Python3 availability
- * 
+ *
  * Called during startup BEFORE input detection is initialized.
+ * Startup, session restore, and Start Tracking can race this — one in-flight
+ * ensurePython is shared so overlapping pip/python probes cannot freeze the UI.
  */
 
 const path = require('path');
@@ -14,6 +16,28 @@ const fs = require('fs');
 const { exec, execFile } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+
+/** Shared across instances so `new PythonProvisioner()` cannot overlap work. */
+let _ensureInFlight = null;
+let _lastReadyStatus = null;
+
+/**
+ * pip is only allowed in known unpackaged (dev) Electron.
+ * Unknown / packaged / tests: never pip — 120s PyObjC installs freeze the Mac UI.
+ */
+function shouldAllowPipInstall(isPackaged) {
+  return isPackaged === false;
+}
+
+function readIsPackaged() {
+  try {
+    const { app } = require('electron');
+    if (app && typeof app.isPackaged === 'boolean') return app.isPackaged;
+  } catch (_) {
+    // electron missing (unit tests) — treat as packaged so pip cannot run
+  }
+  return true;
+}
 
 // Windows embeddable Python config
 const PYTHON_VERSION = '3.11.9';
@@ -32,6 +56,25 @@ class PythonProvisioner {
    * Returns { ready: boolean, pythonPath: string|null, message: string, errors: string[] }
    */
   async ensurePython(options = {}) {
+    if (_lastReadyStatus && _lastReadyStatus.ready) {
+      return _lastReadyStatus;
+    }
+    if (_ensureInFlight) {
+      const inFlight = await _ensureInFlight;
+      if (options.allowDownload === true && !(inFlight && inFlight.ready)) {
+        return this._ensurePythonUncached(options);
+      }
+      return inFlight;
+    }
+    _ensureInFlight = this._ensurePythonUncached(options);
+    try {
+      return await _ensureInFlight;
+    } finally {
+      _ensureInFlight = null;
+    }
+  }
+
+  async _ensurePythonUncached(options = {}) {
     console.log(`🐍 [PYTHON-PROVISION] Checking Python availability on ${this.platform}...`);
     this._allowDownload = options.allowDownload === true;
 
@@ -222,7 +265,7 @@ class PythonProvisioner {
 
   async _ensureMacOSPython() {
     const { app } = require('electron');
-    const isPackaged = app && app.isPackaged;
+    const isPackaged = readIsPackaged();
 
     // Determine arch subdirectory: arm64 or x64
     const archDir = process.arch === 'arm64' ? 'arm64' : 'x64';
@@ -306,7 +349,7 @@ class PythonProvisioner {
 
     // Check bundled python-libs
     const { app } = require('electron');
-    const isPackaged = app && app.isPackaged;
+    const isPackaged = readIsPackaged();
     let bundledLibsPath;
 
     if (isPackaged) {
@@ -326,7 +369,14 @@ class PythonProvisioner {
       console.warn(`⚠️ [PYTHON-PROVISION] Bundled PyObjC libs failed import test`);
     }
 
-    // Try pip install as last resort
+    // Packaged apps: never pip-install PyObjC. It takes up to 120s, usually
+    // fails (PEP 668 / no write), and overlapping runs freeze the Electron UI.
+    if (!shouldAllowPipInstall(isPackaged)) {
+      console.warn(`⚠️ [PYTHON-PROVISION] Skipping pip install (packaged Mac) — input monitor may have reduced functionality`);
+      return this._success(pythonExe, 'Python3 available but PyObjC missing (reduced functionality)');
+    }
+
+    // Dev only: try pip install as last resort
     console.log(`📥 [PYTHON-PROVISION] Attempting pip install of PyObjC...`);
     const installed = await this._pipInstallPyObjC(pythonExe);
 
@@ -361,6 +411,10 @@ class PythonProvisioner {
   }
 
   async _pipInstallPyObjC(pythonExe) {
+    if (!shouldAllowPipInstall(readIsPackaged())) {
+      console.warn(`⚠️ [PYTHON-PROVISION] Skipping pip install (packaged or unknown runtime)`);
+      return false;
+    }
     try {
       // Install to user site-packages so no sudo needed
       await execAsync(
@@ -427,6 +481,7 @@ class PythonProvisioner {
     console.log(`✅ [PYTHON-PROVISION] ${message}`);
     this.status = { ready: true, pythonPath, message, errors: this.status.errors };
     this.provisioned = true;
+    _lastReadyStatus = this.status;
 
     // Store in global diagnostics
     global.pythonDiagnostics = global.pythonDiagnostics || {};
@@ -459,5 +514,12 @@ class PythonProvisioner {
     return this.status;
   }
 }
+
+PythonProvisioner.shouldAllowPipInstall = shouldAllowPipInstall;
+PythonProvisioner.readIsPackaged = readIsPackaged;
+PythonProvisioner.resetForTests = () => {
+  _ensureInFlight = null;
+  _lastReadyStatus = null;
+};
 
 module.exports = PythonProvisioner;
