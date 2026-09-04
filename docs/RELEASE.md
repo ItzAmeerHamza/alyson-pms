@@ -11,13 +11,15 @@ Unsigned / self-signed GitHub channel. Full gates: `.cursor/rules/desktop-releas
 | appId | `com.alyson.work-time-agent` |
 | Windows NSIS | `oneClick: true` |
 | Mac update | In-place **ZIP** (not DMG) |
-| Feed | GitHub `revcloud/alyson-td-releases` (public). Source stays on private `revcloud/alyson-pms`. |
+| Feed (1.0.239+) | GitHub `revcloud/alyson-td-releases` (public) |
+| Hop feed (1.0.238) | Public `revcloud/alyson-pms` (releases only, no source) |
+| Source | Private `revcloud/alyson-pms-src` |
 
 A new cert or `appId` forces every Mac user to re-grant Screen Recording and Accessibility.
 
 ## Secrets
 
-Copy the **existing** `MAC_CSC_LINK` + `MAC_CSC_KEY_PASSWORD` onto `revcloud/alyson-pms`. Do not run `desktop-agent/scripts/generate-stable-codesign-cert.sh` unless you intend a permissions reset.
+Copy the **existing** `MAC_CSC_LINK` + `MAC_CSC_KEY_PASSWORD` onto `ItzAmeerHamza/alyson-pms` (CI). Do not run `desktop-agent/scripts/generate-stable-codesign-cert.sh` unless you intend a permissions reset.
 
 CI refuses a different cert root (`513051c01cadd77c6abafa1a9e141de08c1851c0`).
 
@@ -26,11 +28,14 @@ Also set Cognito + `VITE_API_BASE_URL` / `BACKEND_API_URL` / `INTERNAL_API_KEY` 
 ## Ship
 
 ```bash
+# origin must be revcloud/alyson-pms-src (private source). Never push source to public alyson-pms.
+git remote set-url origin https://github.com/revcloud/alyson-pms-src.git
 # version in desktop-agent/package.json
 git push origin main
 git push hamza main   # CI secrets (MAC_CSC_*) live here today
 gh workflow run release.yml -f version=vX.Y.Z --repo ItzAmeerHamza/alyson-pms
-# After CI: copy the 7 assets to revcloud/alyson-td-releases (public auto-update feed)
+# After CI: copy the 7 assets to revcloud/alyson-td-releases
+# Also copy onto public revcloud/alyson-pms until 1.0.238 clients are gone
 ```
 
 Assets (dots, not spaces/hyphens):
@@ -41,15 +46,15 @@ Assets (dots, not spaces/hyphens):
 
 ## First hop after the GitHub org change
 
-Installed apps that still have `ItzAmeerHamza/alyson-pms` baked in will **not** see `revcloud` releases.
+- **1.0.237** looks at public `ItzAmeerHamza/alyson-pms`.
+- **1.0.238** looks at `revcloud/alyson-pms`. That name is now a **public releases-only** repo so 238 can auto-update. Source was renamed to `revcloud/alyson-pms-src`.
+- **1.0.239+** looks at public `revcloud/alyson-td-releases`.
 
-1. Publish that version on **ItzAmeerHamza/alyson-pms** (old feed) with updater URLs pointing at `revcloud`.
-2. After users auto-update, publish only to `revcloud/alyson-pms`.
-
-Same cert on both publishes. Pulse API / backend deploy is **not** required for a desktop-only release.
+Until 238 is gone, publish each desktop release to **all three** public feeds. Pulse API / backend deploy is **not** required for a desktop-only release.
 
 ## After publish
 
-- `gh release view vX.Y.Z --repo revcloud/alyson-pms`
-- Palisade Download page (`GITHUB_REPO = revcloud/alyson-pms`) picks up `latest` after frontend deploy
-- Smoke: one Mac in-app update (permissions stay), one Windows silent update
+- `gh release view vX.Y.Z --repo revcloud/alyson-td-releases`
+- `gh release view vX.Y.Z --repo revcloud/alyson-pms` (238 hop)
+- Palisade Download page (`GITHUB_REPO = revcloud/alyson-td-releases`)
+- Smoke: 1.0.238 **Check for updates** finds the new version; Mac in-app update keeps permissions
