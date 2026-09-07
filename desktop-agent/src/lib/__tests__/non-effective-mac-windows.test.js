@@ -216,7 +216,7 @@ describe('non-effective time — Mac and Windows', () => {
 
     test('Windows Zoom / Teams desktop windows stay effective with no keys', async () => {
       expect(isZoomOrTeamsCallTitle('Zoom Meeting', 'Zoom')).toBe(true);
-      expect(isZoomOrTeamsCallTitle('Daily standup | Microsoft Teams', 'Microsoft Teams')).toBe(true);
+      expect(isZoomOrTeamsCallTitle('Call with Jane | Microsoft Teams', 'Microsoft Teams')).toBe(true);
 
       noteMeetingContext({ appName: 'Zoom', windowTitle: 'Zoom Meeting' });
       await refreshMeetingPresence({
@@ -240,7 +240,7 @@ describe('non-effective time — Mac and Windows', () => {
       expect(result.nonEffectiveSeconds).toBe(0);
     });
 
-    test('Windows inconclusive probe (no tab list) does not turn a call into non-effective', async () => {
+    test('Windows inconclusive probe only keeps a short grace, not leftover hours', async () => {
       noteMeetingContext({
         appName: 'Google Chrome',
         windowTitle: 'Meet - SMS Capacity Sync - Google Chrome',
@@ -249,17 +249,8 @@ describe('non-effective time — Mac and Windows', () => {
         probe: { active: false, conclusive: false, label: null },
       });
 
-      const result = splitAfterPresence({
-        totalSeconds: TWO_HOURS,
-        idleSeconds: TWO_HOURS,
-        lowSeconds: TWO_HOURS,
-        probe: 'win-inconclusive',
-        foreground: WORD,
-      });
-
-      expect(result.inMeeting).toBe(true);
-      expect(result.nonEffectiveSeconds).toBe(0);
-      expect(result.effectiveSeconds).toBe(TWO_HOURS);
+      expect(isInMeetingSession()).toBe(true);
+      expect(isInMeetingSession(Date.now() + 3 * 60 * 1000)).toBe(false);
     });
 
     test('Windows listed tabs and Meet is gone — later idle is non-effective', async () => {

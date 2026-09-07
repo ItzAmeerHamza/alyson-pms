@@ -4,8 +4,11 @@
  */
 
 class ProjectDropdown {
-  constructor(selectEl) {
+  constructor(selectEl, options = {}) {
     this.select = selectEl;
+    this.searchEnabled = options.search !== false;
+    this.skipEmpty = options.skipEmpty !== false;
+    this.placeholder = options.placeholder || 'Choose a project to track time...';
     this.open = false;
     this.root = null;
     this.trigger = null;
@@ -39,17 +42,18 @@ class ProjectDropdown {
 
     wrap.innerHTML = `
       <button type="button" class="project-dd-trigger" aria-haspopup="listbox" aria-expanded="false">
-        <span class="project-dd-trigger-label">Choose a project to track time...</span>
+        <span class="project-dd-trigger-label">${this.placeholder}</span>
         <span class="project-dd-chevron" aria-hidden="true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </span>
       </button>
       <div class="project-dd-menu" role="listbox" hidden>
+        ${this.searchEnabled ? `
         <div class="project-dd-search-wrap">
           <input type="search" class="project-dd-search" placeholder="Search projects..." autocomplete="off" />
-        </div>
+        </div>` : ''}
         <div class="project-dd-options"></div>
-        <div class="project-dd-empty" hidden>No matching projects</div>
+        ${this.searchEnabled ? `<div class="project-dd-empty" hidden>No matching projects</div>` : ''}
       </div>
     `;
 
@@ -71,14 +75,16 @@ class ProjectDropdown {
       this.open ? this.close() : this.show();
     });
 
-    this.searchInput.addEventListener('input', () => this._filter(this.searchInput.value));
-    this.searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const first = this.optionsList.querySelector('.project-dd-option:not([hidden])');
-        first?.focus();
-      }
-    });
+    if (this.searchInput) {
+      this.searchInput.addEventListener('input', () => this._filter(this.searchInput.value));
+      this.searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const first = this.optionsList.querySelector('.project-dd-option:not([hidden])');
+          first?.focus();
+        }
+      });
+    }
 
     this.select.addEventListener('change', () => this.syncFromSelect());
 
@@ -96,7 +102,7 @@ class ProjectDropdown {
     const options = Array.from(this.select.options || []);
 
     options.forEach((opt) => {
-      if (!opt.value) return; // skip placeholder
+      if (this.skipEmpty && !opt.value) return;
       if (opt.disabled) return;
 
       const btn = document.createElement('button');
@@ -156,10 +162,10 @@ class ProjectDropdown {
   syncFromSelect() {
     if (!this.select || !this.triggerLabel) return;
     const selected = this.select.selectedOptions?.[0];
-    const hasValue = !!(this.select.value && selected && !selected.disabled);
+    const hasValue = !!(selected && !selected.disabled && (this.select.value || !this.skipEmpty));
     const label = hasValue
       ? (selected.textContent || '').trim()
-      : 'Choose a project to track time...';
+      : this.placeholder;
 
     this.triggerLabel.textContent = label;
     this.triggerLabel.classList.toggle('is-placeholder', !hasValue);
@@ -187,6 +193,11 @@ class ProjectDropdown {
       this.searchInput.value = '';
       this._filter('');
       requestAnimationFrame(() => this.searchInput.focus());
+    } else {
+      requestAnimationFrame(() => {
+        const selected = this.optionsList?.querySelector('.project-dd-option.is-selected');
+        (selected || this.optionsList?.querySelector('.project-dd-option'))?.focus();
+      });
     }
     document.addEventListener('pointerdown', this._onDocPointer, true);
     document.addEventListener('keydown', this._onKey, true);
@@ -230,6 +241,7 @@ class ProjectDropdown {
 }
 
 let instance = null;
+const screenshotDropdowns = new Map();
 
 function initProjectDropdown() {
   const select = document.getElementById('projectSelect');
@@ -253,9 +265,44 @@ function refreshProjectDropdown() {
   }
 }
 
+function initScreenshotFilterDropdowns() {
+  ['activityFilter', 'limitSelect'].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const existing = screenshotDropdowns.get(id);
+    if (existing?.select === select && existing.root?.isConnected) {
+      existing.rebuildOptions();
+      existing.syncFromSelect();
+      return;
+    }
+    existing?.destroy();
+    const dd = new ProjectDropdown(select, {
+      search: false,
+      skipEmpty: false,
+      placeholder: select.options[select.selectedIndex]?.textContent?.trim() || 'Select…',
+    });
+    dd.mount();
+    if (!select.dataset.screenshotFilterBound) {
+      select.dataset.screenshotFilterBound = '1';
+      select.addEventListener('change', () => {
+        if (typeof window.loadRecentScreenshots === 'function') {
+          window.loadRecentScreenshots({ force: true });
+        }
+      });
+    }
+    screenshotDropdowns.set(id, dd);
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { initProjectDropdown, refreshProjectDropdown, ProjectDropdown };
+  module.exports = {
+    initProjectDropdown,
+    refreshProjectDropdown,
+    initScreenshotFilterDropdowns,
+    ProjectDropdown,
+  };
 }
 
 window.initProjectDropdown = initProjectDropdown;
 window.refreshProjectDropdown = refreshProjectDropdown;
+window.initScreenshotFilterDropdowns = initScreenshotFilterDropdowns;

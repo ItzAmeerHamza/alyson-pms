@@ -23,7 +23,7 @@ try {
   activeWinBroken = true;
 }
 
-const DEBUG = true; // Always enable for troubleshooting
+const DEBUG = !!(process.env.DEBUG_APP || process.env.DEBUG);
 const USE_WINDOW_DETECTION = process.env.USE_LEGACY_APP_DETECTION !== 'true'; // Default to new method
 // FREEZE FIX: Reduced from 15s to 5s. 15s was far too long and caused cascading
 // hangs on low-memory machines. PowerShell spawn should complete in <3s normally.
@@ -36,7 +36,13 @@ const detectionCache = {
   result: null,
   timestamp: 0,
   pending: null, // Track in-flight detection to prevent overlapping calls
-  TTL_MS: 4500,  // INCREASED: Cache for 4.5 seconds (covers 5s interval + jitter)
+  TTL_MS: Number(process.env.APP_DETECT_CACHE_MS) || (() => {
+    try {
+      return require('../../modules/utils/power-profile').getAppDetectCacheMs();
+    } catch (_) {
+      return 60000;
+    }
+  })(),
   // BUG1 FIX: Track last valid external app (non-Electron) to use when self-detected
   lastExternalApp: null,
   lastExternalAppTimestamp: 0,

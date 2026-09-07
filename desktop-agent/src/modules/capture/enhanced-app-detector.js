@@ -540,7 +540,10 @@ class EnhancedAppDetector {
               
               // Increase platform manager cache TTL
               if (global.platformManager?.cache) {
-                global.platformManager.cache.cacheMs = Math.min(global.platformManager.cache.cacheMs * 1.5, 3000);
+                global.platformManager.cache.cacheMs = Math.min(
+                  Math.max(global.platformManager.cache.cacheMs * 1.5, 20000),
+                  45000,
+                );
               }
               
               if (Math.random() < 0.05) {
@@ -553,7 +556,7 @@ class EnhancedAppDetector {
             this.heartbeatSampleRate = process.env.DEBUG_APP ? 1 : 3;
             
             if (global.platformManager?.cache) {
-              global.platformManager.cache.cacheMs = Number(process.env.APP_DETECT_CACHE_MS) || 10000;
+              global.platformManager.cache.cacheMs = Number(process.env.APP_DETECT_CACHE_MS) || require('../utils/power-profile').getAppDetectCacheMs();
             }
             
             if (process.env.DEBUG_APP) {
@@ -566,7 +569,7 @@ class EnhancedAppDetector {
     
     // App detection via AppleScript is CPU-heavy (~300–450ms).
     // Idle/locked ticks no-op (see runDetectionWithJitter).
-    let baseInterval = 45000;
+    let baseInterval = 60000;
     try {
       const { getAppDetectIntervalMs } = require('../utils/power-profile');
       baseInterval = getAppDetectIntervalMs();
@@ -744,51 +747,44 @@ class EnhancedAppDetector {
   // === PERMISSION CHECKING ===
   
   async checkMacOSPermissions() {
+    const now = Date.now();
+    if (this._permCache && now - this._permCache.at < 5 * 60 * 1000) {
+      return this._permCache.result;
+    }
+
     try {
       let accessibility = false;
       let screenRecording = false;
-      
-      // 🔧 FIX: Use osascript-based permission check (more reliable than systemPreferences)
-      // Check accessibility permission using osascript
-      try {
-        const { execSync } = require('child_process');
-        execSync('/usr/bin/osascript -e "tell application \\"System Events\\" to get name of first process"', {
-          encoding: 'utf8',
-          timeout: 2000,
-          stdio: ['pipe', 'pipe', 'pipe']
-        });
-        accessibility = true;
-      } catch (error) {
-        // Check if it's really a permission issue
-        if (error.message && (error.message.includes('not allowed') || error.message.includes('assistive'))) {
-          accessibility = false;
-        } else {
-          // Other errors might not be permission-related, check with Electron API
-          if (global.systemPreferences?.isTrustedAccessibilityClient) {
-            accessibility = global.systemPreferences.isTrustedAccessibilityClient(false);
+
+      if (global.systemPreferences?.isTrustedAccessibilityClient) {
+        accessibility = global.systemPreferences.isTrustedAccessibilityClient(false);
+      } else {
+        try {
+          const { execSync } = require('child_process');
+          execSync('/usr/bin/osascript -e "tell application \\"System Events\\" to get name of first process"', {
+            encoding: 'utf8',
+            timeout: 2000,
+            stdio: ['pipe', 'pipe', 'pipe']
+          });
+          accessibility = true;
+        } catch (error) {
+          if (error.message && (error.message.includes('not allowed') || error.message.includes('assistive'))) {
+            accessibility = false;
           } else {
-            // If we can't verify and it's not clearly a permission error, assume we have permission
-            // This avoids false warnings when AppleScript fails for other reasons
             accessibility = true;
           }
         }
       }
-      
-      // Only use Electron API as additional verification if we think we don't have permission
-      if (!accessibility && global.systemPreferences?.isTrustedAccessibilityClient) {
-        accessibility = global.systemPreferences.isTrustedAccessibilityClient(false);
-      }
-      
-      // Check screen recording permission (if Electron API available)
+
       if (global.systemPreferences?.getMediaAccessStatus) {
         screenRecording = global.systemPreferences.getMediaAccessStatus('screen') === 'granted';
       } else {
-        // For now, assume screen recording is available if we can't check
-        // This prevents blocking app detection when Electron APIs aren't available
         screenRecording = true;
       }
-      
-      return { accessibility, screenRecording };
+
+      const result = { accessibility, screenRecording };
+      this._permCache = { at: now, result };
+      return result;
     } catch (error) {
       console.error('❌ [APP-DETECTOR] Permission check error:', error.message);
       return { accessibility: false, screenRecording: false };

@@ -55,10 +55,7 @@ class ActivityManager {
     console.log('📊 [ACTIVITY] Starting activity monitoring...');
     this.isMonitoring = true;
     
-    // Start live activity updates
-    this.startLiveActivityUpdates();
-    
-    // Start activity sync
+    // Live IPC handled by monitoring-manager + enhanced-sync (avoid duplicate 30s timers)
     this.startActivitySync();
     
     console.log('✅ [ACTIVITY] Activity monitoring started');
@@ -87,10 +84,13 @@ class ActivityManager {
       clearInterval(this.liveActivityInterval);
     }
 
-    // Send activity updates every 2 seconds
+    let liveMs = 30000;
+    try {
+      liveMs = require('../utils/power-profile').IPC.liveActivityMs;
+    } catch (_) { /* default */ }
     this.liveActivityInterval = setInterval(() => {
       this.sendActivityToRenderer();
-    }, 2000);
+    }, liveMs);
   }
 
   /**
@@ -230,7 +230,11 @@ class ActivityManager {
    * Send activity data to renderer
    */
   sendActivityToRenderer() {
-    if (!global.mainWindow || global.mainWindow.isDestroyed()) {
+    const win = global.mainWindow;
+    if (!win || win.isDestroyed()) {
+      return;
+    }
+    if (typeof win.isVisible === 'function' && !win.isVisible()) {
       return;
     }
 

@@ -11,7 +11,7 @@ class PlatformManager {
     this.cache = {
       lastDetection: null,
       lastDetectionTime: 0,
-      cacheMs: Number(process.env.APP_DETECT_CACHE_MS) || 10000, // Align with ~12s app poll
+      cacheMs: Number(process.env.APP_DETECT_CACHE_MS) || require('../modules/utils/power-profile').getAppDetectCacheMs(),
       adaptiveEnabled: process.env.APP_DETECT_ADAPTIVE_CACHE !== 'false',
       stableAppCount: 0,
       lastAppName: null
@@ -67,14 +67,15 @@ class PlatformManager {
       // Check cache first
       const now = Date.now();
       
-      // Adaptive cache TTL based on app stability
+      // Adaptive cache TTL based on app stability. Caps must be ABOVE the base
+      // TTL — Math.min(..., 3000) used to shorten cache for stable apps and
+      // spawn extra AppleScript/PowerShell.
       let currentCacheMs = this.cache.cacheMs;
       if (this.cache.adaptiveEnabled) {
-        // If same app for 5+ detections, increase cache TTL
         if (this.cache.stableAppCount >= 5) {
-          currentCacheMs = Math.min(this.cache.cacheMs * 2, 5000); // Up to 5s for stable apps
+          currentCacheMs = Math.min(this.cache.cacheMs * 2, 45000);
         } else if (this.cache.stableAppCount >= 3) {
-          currentCacheMs = Math.min(this.cache.cacheMs * 1.5, 3000); // Up to 3s for semi-stable
+          currentCacheMs = Math.min(Math.round(this.cache.cacheMs * 1.5), 30000);
         }
       }
       
@@ -121,10 +122,11 @@ class PlatformManager {
         
         // NEW: Linux/Wayland-specific adjustments
         if (this.platform === 'linux' && activeApp.waylandLimited) {
-          // On Wayland, use longer cache for stability (less frequent polls)
-          currentCacheMs = Math.min(currentCacheMs * 1.5, 4000); // Up to 4s on Wayland
+          currentCacheMs = Math.min(currentCacheMs * 1.5, 20000);
           normalized.waylandDegraded = true;
-          console.log('[PLATFORM-MANAGER] Wayland limited mode: extended cache to', currentCacheMs, 'ms');
+          if (process.env.DEBUG_APP) {
+            console.log('[PLATFORM-MANAGER] Wayland limited mode: extended cache to', currentCacheMs, 'ms');
+          }
         }
         
         // Track app stability for adaptive cache
@@ -144,7 +146,14 @@ class PlatformManager {
           if (this.platform === 'linux' && activeApp.waylandLimited) {
             this.degradedState.degradedInterval = 3000; // 3s for Wayland
           }
-        } else if (activeApp.method === 'applescript' || activeApp.method === 'win32api' || activeApp.method === 'xprop' || activeApp.method === 'gdbus-wayland') {
+        } else if (
+          activeApp.method === 'applescript' ||
+          activeApp.method === 'active-win' ||
+          activeApp.method === 'active-win-native' ||
+          activeApp.method === 'win32api' ||
+          activeApp.method === 'xprop' ||
+          activeApp.method === 'gdbus-wayland'
+        ) {
           this.markHealthy();
           this.degradedState.failureCount = 0;
           this.degradedState.backoffMultiplier = 1;

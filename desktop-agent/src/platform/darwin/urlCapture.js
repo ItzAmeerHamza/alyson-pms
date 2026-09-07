@@ -5,6 +5,7 @@
  */
 
 const { exec } = require('child_process');
+const { UrlResultCache, stableUrlCacheTitle } = require('../../lib/url-result-cache');
 
 class DarwinUrlCapture {
   constructor() {
@@ -19,9 +20,13 @@ class DarwinUrlCapture {
     this.lastBrowserChange = 0; // Last browser change timestamp
     this.currentBrowser = null; // Current active browser
     
-    // CRITICAL FIX: URL result caching to reduce AppleScript calls
-    this.urlResultCache = new Map(); // Cache full URL results by browser
-    this.urlCacheTTL = Number(process.env.URL_RESULT_CACHE_TTL_MS) || 10000;
+    // Same tab → reuse last URL on Mac and Windows (shared UrlResultCache).
+    this.urlCache = new UrlResultCache();
+    this.urlCacheTTL = this.urlCache.ttlMs;
+  }
+
+  stableUrlCacheTitle(title) {
+    return stableUrlCacheTitle(title);
   }
 
   /**
@@ -204,12 +209,8 @@ class DarwinUrlCapture {
         return null;
       }
       
-      // CRITICAL FIX: Check URL result cache first (reduces AppleScript calls by 80%)
-      const cacheKey = `${frontApp.name}|${frontApp.title}`;
-      const cachedUrl = this.urlResultCache.get(cacheKey);
-      
-      if (cachedUrl && (Date.now() - cachedUrl.timestamp) < this.urlCacheTTL) {
-        // Return cached URL if still fresh
+      const cachedUrl = this.urlCache.get(frontApp.name, frontApp.title);
+      if (cachedUrl.hit) {
         return cachedUrl.result;
       }
 
@@ -232,6 +233,7 @@ class DarwinUrlCapture {
         if (process.env.DEBUG_URL) {
           console.log('[URL] DEBUG: Not a browser, skipping:', frontApp.name);
         }
+        this.urlCache.set(frontApp.name, frontApp.title, null);
         return null;
       }
 
@@ -247,14 +249,13 @@ class DarwinUrlCapture {
         // Try AX-based address bar reading (async)
         if (browserName === 'Safari') {
           url = await this.getSafariUrlViaAXAsync();
-          console.log('[URL] DEBUG: Safari AX URL:', url);
+          if (process.env.DEBUG_URL) console.log('[URL] DEBUG: Safari AX URL:', url);
         } else if (['Chrome', 'Edge', 'Brave', 'Arc', 'Chromium', 'Opera', 'Vivaldi'].includes(browserName)) {
-          // Standard Chromium browsers (NOT including ChatGPT Atlas - it needs special handling)
           url = await this.getChromiumUrlViaAXAsync(frontApp.name, browserName);
-          console.log('[URL] DEBUG: Chromium-based AX URL:', url);
+          if (process.env.DEBUG_URL) console.log('[URL] DEBUG: Chromium-based AX URL:', url);
         } else if (browserName === 'Firefox') {
           url = await this.getFirefoxUrlViaAXAsync();
-          console.log('[URL] DEBUG: Firefox AX URL:', url);
+          if (process.env.DEBUG_URL) console.log('[URL] DEBUG: Firefox AX URL:', url);
         } else if (browserName === 'ChatGPT Atlas') {
           // CRITICAL FIX: ChatGPT Atlas needs Electron method first, then Chromium fallback
           console.log(`[URL] 🌐 ChatGPT Atlas detected: trying Electron + Chromium methods...`);
@@ -351,11 +352,8 @@ class DarwinUrlCapture {
       if (!url) {
         if (process.env.DEBUG_URL) {
           console.log('[URL] DEBUG: No URL found for', browserName);
-          console.log(`[URL] 🧹 Cleared cache for key: ${cacheKey} due to extraction failure`);
         }
-        // CRITICAL FIX: Clear the cache entry when URL extraction fails completely
-        // This ensures we retry fresh on the next poll instead of returning stale cached data
-        this.urlResultCache.delete(cacheKey);
+        this.urlCache.set(frontApp.name, frontApp.title, null);
         return null;
       }
 
@@ -376,7 +374,10 @@ class DarwinUrlCapture {
 
       for (const pattern of invalidUrlPatterns) {
         if (pattern.test(url)) {
-          console.log('[URL] 🚫 BLOCKED: Invalid/internal URL on macOS:', url);
+          if (process.env.DEBUG_URL) {
+            console.log('[URL] 🚫 BLOCKED: Invalid/internal URL on macOS:', url);
+          }
+          this.urlCache.set(frontApp.name, frontApp.title, null);
           return null;
         }
       }
@@ -416,8 +417,11 @@ class DarwinUrlCapture {
         pattern.test(titleForFilter)
       );
       
-      if (isWebAppInBrowser) {
-        console.log(`[URL] 🚫 BLOCKED: Non-browser web app in title: "${title}" (URL: ${url})`);
+      if (isWebAppInBrowser && !(url && /^https?:\/\//i.test(url))) {
+        if (process.env.DEBUG_URL) {
+          console.log(`[URL] 🚫 BLOCKED: Non-browser web app in title: "${title}"`);
+        }
+        this.urlCache.set(frontApp.name, frontApp.title, null);
         return null;
       }
 
@@ -438,10 +442,7 @@ class DarwinUrlCapture {
       if (!isSyntheticUrl) {
         // Cache the full URL result with app name + title to prevent redundant queries
         // This ensures each browser window/tab is cached separately
-        this.urlResultCache.set(cacheKey, {
-          result,
-          timestamp: Date.now()
-        });
+        this.urlCache.set(frontApp.name, frontApp.title, result);
       } else {
         console.log(`[URL] 🚫 NOT caching synthetic URL for AI browser: ${url}`);
       }
@@ -469,7 +470,9 @@ class DarwinUrlCapture {
             pid: appInfo.pid || process.pid
           };
           
-          console.log('[URL] ✅ Using platformManager app detector:', resultObj.name);
+          if (process.env.DEBUG_URL) {
+            console.log('[URL] ✅ Using platformManager app detector:', resultObj.name);
+          }
           this.lastResult = resultObj;
           this.lastAppCheck = Date.now();
           return resultObj;
@@ -771,7 +774,9 @@ class DarwinUrlCapture {
 
   async getChromiumUrlViaAXAsync(appName, browserName = '') {
     try {
-      console.log(`[URL] 🔍 Trying Chromium method for: ${appName} (browser: ${browserName})`);
+      if (process.env.DEBUG_URL) {
+        console.log(`[URL] 🔍 Trying Chromium method for: ${appName} (browser: ${browserName})`);
+      }
       
       // Check if this is ONLY the Arc browser (made by The Browser Company)
       // ChatGPT Atlas is NOT Arc-based - it's Electron-based and has different UI structure
@@ -893,21 +898,18 @@ class DarwinUrlCapture {
         end tell
       `;
       
-      let url = await this.executeAppleScript(chromeNativeScript, 2000);
-      
-      // Method 2: Fall back to System Events address bar reading if native fails
-      if (!url) {
+      let url = await this.executeAppleScript(chromeNativeScript, 800);
+
+      // Skip System Events AX walk on the same tick — that second osascript
+      // is what turns a quiet poll into a 100+ Energy Impact spike.
+      if (!url && process.env.URL_CHROMIUM_AX_FALLBACK === '1') {
         const script = `
           tell application "System Events"
             tell process "${appName}"
-              -- Default to window 1
               set targetWindow to window 1
-              
-              -- Try to find the main window (AXMain=true)
               try
                 set targetWindow to (first window whose value of attribute "AXMain" is true)
               end try
-              
               try
                 set addressBar to text field 1 of toolbar 1 of targetWindow
                 return value of addressBar
@@ -917,14 +919,13 @@ class DarwinUrlCapture {
             end tell
           end tell
         `;
-
-        url = await this.executeAppleScript(script, 2000);
+        url = await this.executeAppleScript(script, 800);
       }
-      
-      if (url) {
-        console.log(`[URL] ✅ Chromium method SUCCESS for ${appName}:`, url);
-      } else {
-        console.log(`[URL] 🔍 Chromium method returned empty for ${appName}`);
+
+      if (process.env.DEBUG_URL) {
+        console.log(url
+          ? `[URL] ✅ Chromium method SUCCESS for ${appName}: ${url}`
+          : `[URL] 🔍 Chromium method returned empty for ${appName}`);
       }
       return url || null;
     } catch (error) {

@@ -160,8 +160,9 @@ class MonitoringManager {
       this.registerSystem('activity', this.managers.activityManager);
     }
 
-    // Live activity IPC only while tracking (15s). Was 5s even at the login screen.
-    let liveMs = 15000;
+    // Live activity IPC only while tracking. Renderer already receives
+    // activity-update from ActivityManager; keep this as a slow heartbeat.
+    let liveMs = 30000;
     try {
       liveMs = require('../utils/power-profile').IPC.liveActivityMs;
     } catch (_) { /* default */ }
@@ -262,23 +263,11 @@ class MonitoringManager {
   }
 
   /**
-   * Start app monitoring
+   * App monitoring is owned by EnhancedAppDetector (one AppleScript/active-win
+   * poll). A second interval here doubled native process spawns.
    */
   async startAppMonitoring() {
-    // App monitoring handled by EnhancedAppDetector
-    let appMs = 45000;
-    try {
-      appMs = require('../utils/power-profile').getAppDetectIntervalMs();
-    } catch (_) { /* default */ }
-    this.intervals.appCapture = setInterval(() => {
-      if (!global.isTracking) return;
-      try {
-        if (require('../utils/power-profile').shouldSkipAppDetection()) return;
-      } catch (_) { /* continue */ }
-      this.captureAppActivity();
-    }, appMs);
-
-    console.log(`📱 [MONITORING] App monitoring started with ${Math.round(appMs / 1000)}s interval`);
+    console.log('📱 [MONITORING] App monitoring delegated to EnhancedAppDetector (no extra poll)');
   }
 
   /**

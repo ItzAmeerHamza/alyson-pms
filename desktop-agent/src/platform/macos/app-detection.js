@@ -6,6 +6,71 @@
 
 const { exec } = require('child_process');
 
+const BROWSER_NAME_RE = /safari|chrome|firefox|edge|brave|opera|arc|vivaldi|chromium|\bdia\b/i;
+
+let activeWinFn = null;
+let activeWinBroken = false;
+let activeWinFailCount = 0;
+
+function looksLikeBrowserApp(name) {
+  return BROWSER_NAME_RE.test(String(name || ''));
+}
+
+function loadActiveWin() {
+  if (activeWinBroken) return null;
+  if (activeWinFn) return activeWinFn;
+  try {
+    activeWinFn = require('active-win');
+  } catch (_) {
+    activeWinBroken = true;
+    return null;
+  }
+  return activeWinFn;
+}
+
+function normalizeActiveWinResult(result) {
+  if (!result?.owner?.name) return null;
+  const appName = String(result.owner.name).replace(/\.app$/i, '');
+  return {
+    name: appName,
+    bundleId: result.owner.bundleId || '',
+    title: result.title || 'No Window',
+    platform: 'darwin',
+    method: 'active-win',
+    pid: result.owner.processId || null,
+  };
+}
+
+async function tryActiveWin() {
+  const activeWin = loadActiveWin();
+  if (!activeWin) return null;
+  const timeoutMs = 800;
+  try {
+    const result = await Promise.race([
+      activeWin(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('active-win timeout')), timeoutMs)),
+    ]);
+    const normalized = normalizeActiveWinResult(result);
+    if (!normalized) {
+      activeWinFailCount += 1;
+      if (activeWinFailCount >= 3) activeWinBroken = true;
+      return null;
+    }
+    activeWinFailCount = 0;
+    return normalized;
+  } catch (_) {
+    activeWinFailCount += 1;
+    if (activeWinFailCount >= 3) activeWinBroken = true;
+    return null;
+  }
+}
+
+function _resetActiveWinForTests() {
+  activeWinFn = null;
+  activeWinBroken = false;
+  activeWinFailCount = 0;
+}
+
 async function execAsync(command, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
     exec(command, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, stdout) => {
@@ -41,18 +106,31 @@ const fallbackCooldown = {
  */
 async function getMacActiveApplication() {
   try {
-    // Calculate log frequency once for this function call
     const currentMode = global.performanceMode || 'standard';
-    const logFrequency = currentMode === 'ultra_performance' ? 50 : 20;
-    
-    // Check if we should skip due to backoff
+
+    // PRIMARY: native Accessibility via active-win (~10ms). Do this even when
+    // AppleScript is in backoff — the two APIs fail independently.
+    const native = await tryActiveWin();
+    if (native) {
+      appDetectionLogCounter++;
+      if (currentMode !== 'ultra_performance' && appDetectionLogCounter % 100 === 0) {
+        try {
+          const { logger } = require('../../modules/utils/logger');
+          logger && logger.debug({ category: 'APP_DETECTION', step: 'ACTIVE-WIN OK', message: native.name });
+        } catch {}
+      }
+      if (global.captureActiveApp) {
+        setTimeout(() => global.captureActiveApp(), 100);
+      }
+      return native;
+    }
+
     const now = Date.now();
     if (accessibilityBackoff.failureCount > 0 && now < accessibilityBackoff.nextRetryTime) {
-      // Skip primary method and go directly to fallback
       throw new Error('Accessibility backoff active');
     }
 
-    // PRIMARY METHOD: Try AppleScript with System Events (requires Accessibility permission)
+    // FALLBACK: AppleScript with System Events (requires Accessibility permission)
     try {
       // Combined script to get app name, bundle ID, and window title in one call
             // Use JSON.stringify to properly escape the script
@@ -287,14 +365,16 @@ async function detectActiveApp() {
     appName: app.name,
     windowTitle: app.title || 'No Window',
     bundleId: app.bundleId,
-    pid: null, // macOS doesn't easily provide PID via AppleScript
+    pid: app.pid || null,
     platform: 'darwin',
     method: app.method,
-    isBrowser: ['Safari', 'Chrome', 'Firefox', 'Edge', 'Opera', 'Brave'].includes(app.name)
+    isBrowser: looksLikeBrowserApp(app.name),
   };
 }
 
 module.exports = {
   getMacActiveApplication,
-  detectActiveApp
+  detectActiveApp,
+  looksLikeBrowserApp,
+  _resetActiveWinForTests,
 };

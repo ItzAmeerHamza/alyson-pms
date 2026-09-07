@@ -49,8 +49,13 @@ class LiveMonitoringManager {
       case 'high_performance':
         updateInterval = 60000; // 1 minute in high performance mode
         break;
-      default:
-        updateInterval = 10000; // 10 seconds in normal mode
+      default: {
+        updateInterval = 30000;
+        try {
+          updateInterval = require('../utils/power-profile').IPC.liveActivityMs;
+        } catch (_) { /* keep 30s */ }
+        break;
+      }
     }
     
     let logCounter = 0; // Log every 100th update to reduce spam
@@ -150,6 +155,7 @@ class LiveMonitoringManager {
       this.liveActivityInterval = null;
       console.log('🛑 [LIVE-ACTIVITY] Live activity updates stopped');
     }
+    this.stopScreenshotTimerUpdates();
   }
 
   // === SCREENSHOT TIMER UPDATES ===
@@ -159,16 +165,20 @@ class LiveMonitoringManager {
       clearInterval(this.screenshotTimerInterval);
     }
     
+    let uiMs = 30000;
+    try {
+      uiMs = require('../utils/power-profile').IPC.screenshotTimerUiMs;
+    } catch (_) { /* default */ }
     this.screenshotTimerInterval = setInterval(() => {
       if (!this.isTracking || !global.mainWindow || global.mainWindow.isDestroyed()) {
         return;
       }
       
       this.sendNextScreenshotUpdate();
-    }, 1000); // Update every second
+    }, uiMs);
     
     cleanupRegistry.registerInterval(this.screenshotTimerInterval, 'Screenshot Timer Updates');
-    console.log('📸 [SCREENSHOT-TIMER] Timer updates started (1 second interval)');
+    console.log(`📸 [SCREENSHOT-TIMER] Timer updates started (${Math.round(uiMs / 1000)}s interval)`);
   }
 
   stopScreenshotTimerUpdates() {

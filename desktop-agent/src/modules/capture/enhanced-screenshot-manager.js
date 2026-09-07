@@ -11,10 +11,12 @@ const { createFeatureLogger } = require('../utils/logger');
 const { uploadScreenshotBuffer } = require('../utils/screenshot-storage');
 const {
   MEETING_ACTIVITY_FLOOR_PERCENT,
+  osIdleExceedsMeetingShield,
   noteMeetingContext,
   getRecentMeetingLabel,
   isInMeetingSession,
   refreshMeetingPresence,
+  tagWindowTitleForMeeting,
 } = require('../../lib/meeting-context');
 
 const {
@@ -79,8 +81,7 @@ class EnhancedScreenshotManager {
   }
 
   getConfiguredScreenshotIntervalMs() {
-    // Product default: 1 screenshot / minute while tracking (unlocked).
-    // Never change this for "power saving" — use pause-on-lock instead.
+    // Report-math fallback only. Live capture uses random N-in-M windows.
     try {
       const { SCREENSHOT_INTERVAL_MS } = require('../utils/power-profile');
       const minutes =
@@ -107,7 +108,7 @@ class EnhancedScreenshotManager {
       if (Number.isFinite(minutesNum) && minutesNum > 0) {
         return Math.max(60, Math.round(minutesNum * 60)) * 1000;
       }
-      return 60 * 1000;
+      return 5 * 60 * 1000;
     }
   }
 
@@ -277,9 +278,27 @@ class EnhancedScreenshotManager {
     // Start lightweight diagnostics heartbeat for visibility and self-heal
     this.startDiagnosticsHeartbeat();
 
-    // Window scheduler owns the 2/10min quota. No rolling limiter — it can
-    // drop a shot that sits just after a window boundary.
+    // Window scheduler owns the 2/10min quota. No rolling limiter —
+    // it can drop a shot that sits just after a window boundary.
     this._rateLimiter = null;
+  }
+
+  /** Close screenshot preview in renderer so periodic captures never include the lightbox UI. */
+  async _prepareRendererForCapture() {
+    try {
+      const win = this.mainWindow || global.mainWindow;
+      if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+      const script =
+        `(function(){ try { if (typeof window.closeScreenshotLightbox === 'function') window.closeScreenshotLightbox(true); } catch (e) {} return true; })()`;
+      // Cap wait so UI prep never delays capture or tracking paths (time_logs are independent).
+      await Promise.race([
+        win.webContents.executeJavaScript(script, true),
+        new Promise((resolve) => setTimeout(resolve, 100)),
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } catch (_) {
+      /* non-fatal — capture proceeds even if renderer is busy */
+    }
   }
 
   /**
@@ -863,6 +882,10 @@ class EnhancedScreenshotManager {
       }
     }
 
+    if (!isHealthCheck) {
+      await this._prepareRendererForCapture();
+    }
+
     // CRITICAL: For Windows, use dedicated capture module
     if (process.platform === 'win32') {
       try {
@@ -934,7 +957,7 @@ class EnhancedScreenshotManager {
                 }
 
                 const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
-                const { activityPercent, focusPercent } = await this._resolveScreenshotActivity(
+                const { activityPercent, focusPercent, meetingLabel } = await this._resolveScreenshotActivity(
                   activityData,
                   appName,
                   windowTitle,
@@ -952,7 +975,7 @@ class EnhancedScreenshotManager {
                   activityPercent: activityPercent,
                   focusPercent: focusPercent,
                   appName: appName,
-                  windowTitle: windowTitle,
+                  windowTitle: tagWindowTitleForMeeting(windowTitle, meetingLabel),
                   agentVersion: global.agentVersion || null // Add agent version tracking (v1.0.124+)
                 });
 if (uploadResult?.id) {
@@ -1105,7 +1128,7 @@ if (uploadResult?.id) {
                 }
 
                 const { appName, windowTitle, url } = await this._detectActiveAppForScreenshot();
-                const { activityPercent, focusPercent } = await this._resolveScreenshotActivity(
+                const { activityPercent, focusPercent, meetingLabel } = await this._resolveScreenshotActivity(
                   activityData,
                   appName,
                   windowTitle,
@@ -1123,7 +1146,7 @@ if (uploadResult?.id) {
                   activityPercent: activityPercent,
                   focusPercent: focusPercent,
                   appName: appName,
-                  windowTitle: windowTitle,
+                  windowTitle: tagWindowTitleForMeeting(windowTitle, meetingLabel),
                   agentVersion: global.agentVersion || null // Add agent version tracking (v1.0.124+)
                 });
 if (uploadResult?.id) {
@@ -2067,17 +2090,20 @@ if (uploadResult?.id) {
     const context = { appName, windowTitle, url };
     let meetingLabel = noteMeetingContext(context);
 
-    // If foreground isn't the Meet tab (user reading docs during the call),
-    // confirm the Meet tab / Zoom window is still open before flooring.
-    if (!meetingLabel) {
+    const osIdleSeconds = Number(global.unifiedInputManager?.getIdleTime?.() || 0);
+    const leftoverAfk = osIdleExceedsMeetingShield(osIdleSeconds);
+
+    // AFK ≥ 10 min: do not AppleScript every Chrome tab. Leftover Meet is not extra time.
+    if (!meetingLabel && !leftoverAfk) {
       try {
-        meetingLabel = await refreshMeetingPresence();
+        meetingLabel = await refreshMeetingPresence({
+          needBackgroundTabs: isInMeetingSession(),
+        });
       } catch (_) {
         meetingLabel = getRecentMeetingLabel();
       }
     }
-
-    const inMeeting = Boolean(meetingLabel) || isInMeetingSession();
+    const inMeeting = !leftoverAfk && (Boolean(meetingLabel) || isInMeetingSession());
 
     const activityPercent = inMeeting
       ? Math.max(Number(focusPercent) || 0, MEETING_ACTIVITY_FLOOR_PERCENT)
@@ -2089,9 +2115,17 @@ if (uploadResult?.id) {
       );
     } else if (inMeeting) {
       console.log(`📹 [MEETING-ACTIVITY] ${meetingLabel || 'meeting'} — activity ${activityPercent}%`);
+    } else if (leftoverAfk && (meetingLabel || isInMeetingSession())) {
+      console.log(
+        `📹 [MEETING-ACTIVITY] leftover ${meetingLabel || 'meeting'} tab after ${Math.round(osIdleSeconds)}s idle — keeping ${focusPercent}% (not extra meeting time)`
+      );
     }
 
-    return { activityPercent, focusPercent: activityPercent };
+    return {
+      activityPercent,
+      focusPercent: leftoverAfk ? focusPercent : activityPercent,
+      meetingLabel: leftoverAfk ? null : (meetingLabel || (inMeeting ? getRecentMeetingLabel() : null)),
+    };
   }
 
   async _detectActiveAppForScreenshot() {

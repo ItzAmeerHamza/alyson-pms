@@ -4,14 +4,17 @@
  */
 
 const { exec } = require('child_process');
+const { UrlResultCache } = require('../../lib/url-result-cache');
 
 class WindowsUrlCapture {
   constructor() {
     this.lastResult = null;
     this.intervalId = null;
-    // Always enable debug logging for Windows to diagnose issues
-    this.debug = true;
-    console.log('[URL-WIN32] Windows URL capture adapter initialized with debug logging enabled');
+    this.debug = process.env.URL_DEBUG === '1' || process.env.LOG_URL_VERBOSE === 'true';
+    this.urlCache = new UrlResultCache();
+    if (this.debug) {
+      console.log('[URL-WIN32] Windows URL capture adapter initialized');
+    }
   }
 
   start(onEvent) {
@@ -52,6 +55,11 @@ class WindowsUrlCapture {
         }
         return null;
       }
+
+      const cached = this.urlCache.get(frontApp.process, frontApp.title);
+      if (cached.hit) {
+        return cached.result;
+      }
       
       if (this.debug) {
         console.log('[URL-WIN32] Frontmost app:', frontApp.process, 'Title:', frontApp.title?.substring(0, 80));
@@ -66,6 +74,7 @@ class WindowsUrlCapture {
         if (this.debug) {
           console.log('[URL-WIN32] Not a browser:', processName);
         }
+        this.urlCache.set(frontApp.process, frontApp.title, null);
         return null;
       }
       
@@ -102,6 +111,7 @@ class WindowsUrlCapture {
       }
 
       if (!url) {
+        this.urlCache.set(frontApp.process, frontApp.title, null);
         return null;
       }
 
@@ -118,12 +128,15 @@ class WindowsUrlCapture {
       ];
       const titleForFilter = (title || '').trim();
       const isWebAppInBrowser = nonBrowserWebAppPatterns.some(p => p.test(titleForFilter));
-      if (isWebAppInBrowser) {
-        console.log(`[URL] 🚫 BLOCKED: Non-browser web app: "${title}" (${url})`);
+      if (isWebAppInBrowser && !(url && /^https?:\/\//i.test(url))) {
+        if (this.debug) {
+          console.log(`[URL] 🚫 BLOCKED: Non-browser web app: "${title}"`);
+        }
+        this.urlCache.set(frontApp.process, frontApp.title, null);
         return null;
       }
 
-      return {
+      const result = {
         url: url,
         title: title,
         browser: browserName,
@@ -131,6 +144,8 @@ class WindowsUrlCapture {
         windowId: `${frontApp.process}-${frontApp.hwnd}`,
         confidence: url.startsWith('http') ? 'high' : 'low'
       };
+      this.urlCache.set(frontApp.process, frontApp.title, result);
+      return result;
     } catch (error) {
       if (this.debug) {
         console.error('[URL] Windows capture error:', error);
@@ -466,6 +481,10 @@ class WindowsUrlCapture {
   // No export of this helper; kept inline
 
   async getUrlViaUIAutomation(processName, hwnd) {
+    // Same as Windows Fast: UIA PowerShell is the energy spike. Title parse / CDP first.
+    if (process.env.URL_ENABLE_UIA !== '1') {
+      return null;
+    }
     return new Promise((resolve) => {
       try {
         // PowerShell script using UI Automation

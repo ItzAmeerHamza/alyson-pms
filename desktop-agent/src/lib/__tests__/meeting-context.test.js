@@ -13,6 +13,7 @@ const {
   clearMeetingSession,
   _resetMeetingSessionForTests,
   _setPresenceForTests,
+  tagWindowTitleForMeeting,
   MEETING_ACTIVITY_FLOOR_PERCENT,
   MEETING_TAB_SWITCH_GRACE_MS,
 } = require('../meeting-context');
@@ -36,13 +37,26 @@ describe('meeting-context', () => {
   test('detects Google Meet from Chrome tab titles', () => {
     expect(isGoogleMeetContext({ appName: 'Google Chrome', windowTitle: 'Meet - abc-defg-hij' })).toBe(true);
     expect(isGoogleMeetContext({ windowTitle: 'Meet - Sync with Thiru - Google Chrome' })).toBe(true);
+    expect(
+      isVideoMeetingContext({
+        appName: 'Brave Browser',
+        windowTitle: 'Cintara - Microphone recording - Brave - Work',
+      }),
+    ).toBe(true);
   });
 
-  test('detects Zoom / Teams / Webex / Skype desktop apps', () => {
-    expect(isVideoMeetingContext({ appName: 'zoom.us' })).toBe(true);
-    expect(detectVideoMeeting({ appName: 'Microsoft Teams' })).toBe('Microsoft Teams');
-    expect(detectVideoMeeting({ windowTitle: 'Webex Meeting' })).toBe('Webex');
-    expect(detectVideoMeeting({ appName: 'Skype' })).toBe('Skype');
+  test('does not treat Teams or Skype chat as a call', () => {
+    expect(detectVideoMeeting({ appName: 'Microsoft Teams' })).toBeNull();
+    expect(detectVideoMeeting({ windowTitle: 'Chat | Jane | Microsoft Teams' })).toBeNull();
+    expect(detectVideoMeeting({ appName: 'Skype' })).toBeNull();
+    expect(detectVideoMeeting({ windowTitle: 'Call with Jane | Microsoft Teams' })).toBe('Microsoft Teams');
+    expect(detectVideoMeeting({ windowTitle: 'Call with Jane - Skype' })).toBe('Skype');
+  });
+
+  test('does not treat waiting room / Join now as a live call', () => {
+    expect(detectVideoMeeting({ windowTitle: 'Waiting Room - Zoom Meeting' })).toBeNull();
+    expect(detectVideoMeeting({ windowTitle: 'Ask to join - Meet - Daily Sync' })).toBeNull();
+    expect(isGoogleMeetWindowTitle('Ask to join this meeting', 'Google Chrome')).toBe(false);
   });
 
   test('detects Google Meet from URL when title is only the meeting name', () => {
@@ -67,7 +81,7 @@ describe('meeting-context', () => {
     ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
   });
 
-  test('2-hour meeting with Word in front stays effective (browser Meet, probe cannot see the tab)', async () => {
+  test('2-hour Word-in-front only stays a meeting when the probe still sees the call', async () => {
     noteMeetingContext({
       appName: 'Google Chrome',
       windowTitle: 'Meet - Daily Sync - Google Chrome',
@@ -75,19 +89,14 @@ describe('meeting-context', () => {
     await refreshMeetingPresence({
       probe: { active: false, conclusive: false, label: null },
     });
+    expect(isInMeetingSession()).toBe(true);
     const twoHoursLater = Date.now() + 2 * 60 * 60 * 1000;
-    expect(isInMeetingSession(twoHoursLater)).toBe(true);
-    expect(
-      applyMeetingActivityFloor(0, {
-        appName: 'Microsoft Word',
-        windowTitle: 'Notes.docx',
-      }),
-    ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
+    expect(isInMeetingSession(twoHoursLater)).toBe(false);
   });
 
-  test('detects Skype desktop and browser', () => {
-    expect(detectVideoMeeting({ appName: 'Skype' })).toBe('Skype');
-    expect(detectVideoMeeting({ windowTitle: 'Standup | Skype' })).toBe('Skype');
+  test('Webex meeting titles still count as a call', () => {
+    expect(detectVideoMeeting({ windowTitle: 'Webex Meeting' })).toBe('Webex');
+    expect(isVideoMeetingContext({ appName: 'zoom.us' })).toBe(true);
   });
 
   test('floors activity while live presence says meeting is still open (even on docs tab)', () => {
@@ -137,7 +146,7 @@ describe('meeting-context', () => {
     ).toBe('Google Meet');
   });
 
-  test('Windows-inconclusive probe does not wipe an in-progress meeting', async () => {
+  test('Windows-inconclusive probe keeps a 2-minute grace, not leftover hours', async () => {
     noteMeetingContext({
       appName: 'Google Chrome',
       windowTitle: 'Meet - SMS Capacity Sync - Google Chrome',
@@ -148,12 +157,7 @@ describe('meeting-context', () => {
     });
     expect(kept).toBe('Google Meet');
     expect(isInMeetingSession()).toBe(true);
-    expect(
-      applyMeetingActivityFloor(0, {
-        appName: 'Signal',
-        windowTitle: 'Signal (3)',
-      }),
-    ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
+    expect(isInMeetingSession(Date.now() + 3 * 60 * 1000)).toBe(false);
   });
 
   test('conclusive probe miss ends the meeting floor', async () => {
@@ -189,11 +193,30 @@ describe('meeting-context', () => {
     expect(isInMeetingSession()).toBe(false);
   });
 
-  test('raises activity floor on direct meeting context', () => {
+  test('does not floor leftover Meet tabs after 10 minutes of OS idle (sleeping / AFK)', () => {
+    _setPresenceForTests({ active: true, label: 'Google Meet' });
     expect(
-      applyMeetingActivityFloor(0, { windowTitle: 'Google Meet - Daily standup' })
+      applyMeetingActivityFloor(
+        0,
+        { appName: 'Google Chrome', windowTitle: 'Meet - Daily Sync - Google Chrome' },
+        10 * 60,
+      ),
+    ).toBe(0);
+    expect(
+      applyMeetingActivityFloor(
+        0,
+        { appName: 'Google Chrome', windowTitle: 'Meet - Daily Sync - Google Chrome' },
+        60,
+      ),
     ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
-    expect(applyMeetingActivityFloor(0, { appName: 'Mail' })).toBe(0);
+  });
+
+  test('tags a dual-screen focused-app title so meeting screenshots stay effective', () => {
+    expect(tagWindowTitleForMeeting('Notes.docx', 'Google Meet')).toBe('Notes.docx · Google Meet');
+    expect(tagWindowTitleForMeeting('Meet - Daily standup - Google Chrome', 'Google Meet')).toBe(
+      'Meet - Daily standup - Google Chrome',
+    );
+    expect(tagWindowTitleForMeeting(null, 'Google Meet')).toBe('Google Meet');
   });
 });
 
@@ -210,6 +233,9 @@ describe('meeting-presence-probe helpers', () => {
   test('Chrome Meet window titles (Windows probe)', () => {
     expect(
       isGoogleMeetWindowTitle('Meet - SMS Capacity Sync - Google Chrome', 'Google Chrome'),
+    ).toBe(true);
+    expect(
+      isGoogleMeetWindowTitle('Cintara - Microphone recording - Brave - Work', 'Brave Browser'),
     ).toBe(true);
     expect(isGoogleMeetWindowTitle('Signal (3)', 'Signal')).toBe(false);
   });
@@ -252,7 +278,8 @@ describe('meeting-presence-probe helpers', () => {
 
   test('Zoom/Teams call window titles', () => {
     expect(isZoomOrTeamsCallTitle('Zoom Meeting', 'zoom.us')).toBe(true);
-    expect(isZoomOrTeamsCallTitle('Daily standup | Microsoft Teams', 'Microsoft Teams')).toBe(true);
+    expect(isZoomOrTeamsCallTitle('Call with Jane | Microsoft Teams', 'Microsoft Teams')).toBe(true);
+    expect(isZoomOrTeamsCallTitle('Chat | Jane | Microsoft Teams', 'Microsoft Teams')).toBe(false);
     expect(isZoomOrTeamsCallTitle('Inbox', 'Mail')).toBe(false);
   });
 
@@ -266,6 +293,8 @@ describe('meeting-presence-probe helpers', () => {
     expect(isZoomOrTeamsCallTitle('You have left the meeting', 'Zoom')).toBe(false);
     expect(isZoomOrTeamsCallTitle('Call ended | Microsoft Teams', 'Microsoft Teams')).toBe(false);
     expect(isGoogleMeetWindowTitle('You left the meeting - Google Chrome', 'Google Chrome')).toBe(false);
+    expect(isGoogleMeetWindowTitle('Ask to join this meeting', 'Google Chrome')).toBe(false);
     expect(isMeetingBrowserTabTitle('Zoom Meeting')).toBe(true);
+    expect(isMeetingBrowserTabTitle('Waiting Room')).toBe(false);
   });
 });

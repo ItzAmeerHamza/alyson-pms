@@ -23,7 +23,7 @@ class EnhancedSyncManager {
     // Performance configuration
     this.batchConfig = {
       maxBatchSize: Number(process.env.URL_SYNC_BATCH_MAX || 50),
-      flushIntervalMs: Number(process.env.URL_SYNC_FLUSH_MS || 1000),
+      flushIntervalMs: Number(process.env.URL_SYNC_FLUSH_MS || 10000),
       offlineFlushMs: Number(process.env.URL_SYNC_OFFLINE_FLUSH_MS || 2000),
       statementTimeoutMs: Number(process.env.URL_SYNC_STATEMENT_TIMEOUT_MS || 5000),
       queuePressureThreshold: 500, // Force flush if batch queue exceeds this

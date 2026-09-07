@@ -775,11 +775,13 @@ try {
       // FREEZE FIX: Delay URL capture start by 3s to avoid simultaneous PowerShell
       // spawns with app detection on Windows. Both spawn powershell.exe and on
       // low-memory machines this causes resource contention and UI freezing.
-      if (global.urlCaptureManager) {
+      // UrlCaptureManager is started via browserUrlManager wrapper (same instance).
+      // Avoid a second deferred start — duplicate start() calls still wake the poll loop early.
+      if (global.urlCaptureManager && !global.urlCaptureManager.isRunning) {
         try {
           setTimeout(() => {
             try {
-              if (global.isTracking) {
+              if (global.isTracking && !global.urlCaptureManager.isRunning) {
                 global.urlCaptureManager.start();
                 console.log('🌐 [URL] UrlCaptureManager started (staggered 3s after timer start)');
               }
@@ -788,20 +790,11 @@ try {
             }
           }, 3000);
           console.log('🌐 [URL] UrlCaptureManager scheduled to start in 3s (staggered)');
-          
-          // Add probe to confirm first URL event
-          try { 
-            global.urlCaptureManager.once('url', (evt) => { 
-              console.log('🌐 [URL] FIRST_EVENT after timer start', { 
-                url: evt?.url, 
-                source: evt?.source, 
-                ts: evt?.ts 
-              }); 
-            }); 
-          } catch {}
         } catch (e) {
-          console.warn('⚠️ [URL] Failed to start UrlCaptureManager:', e?.message || e);
+          console.warn('⚠️ [URL] Failed to schedule UrlCaptureManager:', e?.message || e);
         }
+      } else if (global.urlCaptureManager?.isRunning) {
+        console.log('🌐 [URL] UrlCaptureManager already running via BrowserUrlManager');
       }
 
       // Ensure activity systems receive tracking state so UI activity updates work

@@ -8,6 +8,7 @@ const { shouldKeepCachedTodayStats } = require('../../src/modules/utils/today-ti
 const {
   escapeHtmlAttr,
   screenshotPopupUrl,
+  screenshotTileUrl,
   screenshotTileImgTag,
 } = require('../../src/modules/utils/backend-screenshots');
 
@@ -389,6 +390,9 @@ class UIManager {
   // ULTRA PERFORMANCE OPTIMIZED: Lightning-fast tab switching with cached elements
   showPage(pageId) {
     try { if (window.RendererLogger) { window.RendererLogger.info({ category: 'SCREEN', screen: this.getPageTitle(pageId), step: 'OPEN' }); } } catch {}
+    if (typeof window.closeScreenshotLightbox === 'function') {
+      window.closeScreenshotLightbox(true);
+    }
     // Initialize cache if not already done - fast validation
     const cache = this.cachedElements || this.initializeUICache();
     
@@ -477,6 +481,21 @@ class UIManager {
 
     if (pageId === 'updates') {
       setTimeout(() => this.initUpdatesPage(), 100);
+    }
+
+    // Screenshots must load on every visit — 5-min cache + 5s debounce left the page stuck on "Loading…"
+    if (pageId === 'screenshots') {
+      setTimeout(() => {
+        this.contentCache.screenshots = null;
+        this.contentCache.lastUpdated.screenshots = null;
+        this.contentLoadingStates.screenshots = false;
+        try { window.initScreenshotFilterDropdowns?.(); } catch (_) {}
+        if (typeof window.loadRecentScreenshots === 'function') {
+          window.loadRecentScreenshots({ force: true });
+        } else if (this.loadRecentScreenshots) {
+          this.loadRecentScreenshots();
+        }
+      }, 50);
     }
 
     // Batch DOM operations for better performance
@@ -590,11 +609,14 @@ class UIManager {
       return;
     }
     
-    // SPECIAL CASE: Always load fresh data for reports
+    // SPECIAL CASE: Always load fresh data for reports and screenshots
     if (pageId === 'reports') {
       console.log('📊 Force loading fresh reports data (no cache)');
       this.contentCache.reports = null;
       this.contentCache.lastUpdated.reports = null;
+    } else if (pageId === 'screenshots') {
+      // Handled in showPage with force:true — skip idle/cached path to avoid double-fetch races
+      return;
     } else {
       // Check if content is cached and fresh (within 5 minutes) for other pages
       const cached = this.contentCache[pageId];
@@ -687,7 +709,7 @@ class UIManager {
     // Call the global loadRecentScreenshots function from the UI system
     if (typeof window.loadRecentScreenshots === 'function') {
       console.log('📸 [UI-MANAGER] Calling global loadRecentScreenshots...');
-      await window.loadRecentScreenshots();
+      await window.loadRecentScreenshots({ force: true });
       try { if (window.RendererLogger) { window.RendererLogger.info({ category: 'SCREEN', screen: 'Screenshots', step: 'DATA LOAD END', ctx: { duration_ms: Date.now() - __t0 } }); } } catch {}
     } else {
       console.error('❌ [UI-MANAGER] loadRecentScreenshots function not found on window');
@@ -696,7 +718,7 @@ class UIManager {
       try {
         if (typeof loadRecentScreenshots === 'function') {
           console.log('📸 [UI-MANAGER] Calling direct loadRecentScreenshots...');
-          await loadRecentScreenshots();
+          await loadRecentScreenshots({ force: true });
           try { if (window.RendererLogger) { window.RendererLogger.info({ category: 'SCREEN', screen: 'Screenshots', step: 'DATA LOAD END', ctx: { duration_ms: Date.now() - __t0 } }); } } catch {}
         } else {
           console.error('❌ [UI-MANAGER] loadRecentScreenshots function not available');
@@ -2356,8 +2378,9 @@ class UIManager {
   }
 
   showScreenshotModal(screenshot) {
-    const popupUrl = screenshotPopupUrl(screenshot);
-    if (typeof window.openScreenshot === 'function' && window.openScreenshot(popupUrl)) {
+    const full = screenshotPopupUrl(screenshot);
+    const thumb = screenshotTileUrl(screenshot) || full;
+    if (typeof window.openScreenshot === 'function' && window.openScreenshot({ thumb, full })) {
       return;
     }
     console.warn('🖼️ [SCREENSHOT] No viewable URL for screenshot', screenshot?.id || '');
@@ -4715,9 +4738,17 @@ class UIManager {
       });
 
       const activityPercent = screenshot.activity_percent || 0;
+      const meetingHay = `${screenshot.app_name || ''} ${screenshot.window_title || ''} ${screenshot.vision_summary || ''}`.toLowerCase();
+      const inMeeting =
+        /google meet|meet\.google\.com|\bmeet\s+-|zoom meeting|zoom\.us|microsoft teams|microphone recording/.test(
+          meetingHay,
+        );
       let activityColor = '#10b981'; // green (high)
       let activityLabel = 'High';
-      if (activityPercent < 10) { activityColor = '#ef4444'; activityLabel = 'Low'; }
+      if (inMeeting) {
+        activityColor = '#10b981';
+        activityLabel = activityPercent < 70 ? 'Medium' : 'High';
+      } else if (activityPercent < 10) { activityColor = '#ef4444'; activityLabel = 'Low'; }
       else if (activityPercent < 70) { activityColor = '#f59e0b'; activityLabel = 'Medium'; }
 
       const clicks = screenshot.mouse_clicks || 0;
@@ -4745,8 +4776,12 @@ class UIManager {
     });
 
     gridEl.innerHTML = html;
-    gridEl.querySelectorAll('.tracker-screenshot-card').forEach((card, index) => {
-      card.addEventListener('click', () => this.showScreenshotModal(screenshots[index]));
+    gridEl.querySelectorAll('.tracker-screenshot-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        if (typeof window.openScreenshotFromCard === 'function') {
+          window.openScreenshotFromCard(card);
+        }
+      });
     });
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -4761,6 +4796,14 @@ class UIManager {
       return { label: 'Unanalyzed', bg: '#cbd5e1' };
     }
     const cat = String(shot?.category || '').toLowerCase();
+    const title = `${shot?.app_name || ''} ${shot?.window_title || ''} ${shot?.vision_summary || ''}`.toLowerCase();
+    const inMeeting =
+      /google meet|meet\.google\.com|\bmeet\s+-|zoom meeting|zoom\.us|microsoft teams|microphone recording/.test(
+        title,
+      );
+    if (inMeeting) {
+      return { label: 'Productive', bg: '#059669' };
+    }
     const work = shot?.is_work_related === true;
     const distraction = Math.max(0, Math.floor(Number(shot?.distraction_score) || 0));
     const confidence = Math.max(0, Math.floor(Number(shot?.confidence_score) || 0));

@@ -89,8 +89,8 @@ class AppLifecycleManager {
         spellcheck: false
       },
       titleBarStyle: 'default',
-      show: true, // PERFORMANCE FIX: Show immediately to reduce perceived startup time
-      backgroundColor: '#667eea' // Match login gradient to prevent white flash
+      show: false,
+      backgroundColor: '#f1f5f9' // Match --bg-app so pre-paint window is never a solid accent flash
     };
 
     // macOS specific adjustments
@@ -105,14 +105,13 @@ class AppLifecycleManager {
 
     this.mainWindow = new BrowserWindow(windowConfig);
 
-    // Window is already visible (show: true), just ensure focus when content is ready
     this.mainWindow.once('ready-to-show', () => {
       console.log('🪟 [APP-LIFECYCLE] Window ready-to-show event fired');
       try {
         const { app } = this.electronModules || {};
         // macOS: ensure Dock is shown
         try { if (process.platform === 'darwin' && app?.dock && app.dock.show) app.dock.show(); } catch {}
-        // Focus the window (already visible due to show: true)
+        if (!this.mainWindow.isVisible()) this.mainWindow.show();
         this.mainWindow.focus();
       } catch (e) {
         console.log('⚠️ [APP-LIFECYCLE] ready-to-show focus failed:', e?.message || e);
@@ -145,7 +144,7 @@ class AppLifecycleManager {
         // DEVTOOLS: Uncomment to debug renderer issues
         // this.mainWindow.webContents.openDevTools({ mode: 'detach' });
         
-        // Window is already visible, just ensure focus after load
+        // Window shows on ready-to-show; ensure focus after load
         try {
           const { app } = this.electronModules || {};
           if (process.platform === 'darwin' && app?.dock && app.dock.show) app.dock.show();
@@ -297,14 +296,6 @@ class AppLifecycleManager {
     // Set up window ready detection
     this.mainWindow.webContents.once('did-finish-load', () => {
       console.log('✅ [APP-LIFECYCLE] Main window finished loading');
-      
-      // Send initial state to renderer
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('app-ready', {
-          timestamp: new Date().toISOString(),
-          config: this.config
-        });
-      }
     });
   }
 

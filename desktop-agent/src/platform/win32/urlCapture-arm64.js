@@ -5,12 +5,14 @@
  */
 
 const { exec } = require('child_process');
+const { UrlResultCache } = require('../../lib/url-result-cache');
 
 class WindowsUrlCaptureARM64 {
   constructor() {
     this.lastResult = null;
     this.intervalId = null;
     this.debug = process.env.LOG_URL_VERBOSE === 'true' || process.env.URL_DEBUG_LOGGING === 'true';
+    this.urlCache = new UrlResultCache();
     console.log('[URL-ARM64] ARM64-optimized URL capture adapter initialized');
   }
 
@@ -33,31 +35,44 @@ class WindowsUrlCaptureARM64 {
       if (this.debug) {
         console.log('[URL-ARM64] Starting URL capture check...');
       }
+
+      let window = null;
+      try {
+        const activeWin = require('active-win');
+        window = await activeWin();
+      } catch (_) {}
+
+      const appName = window?.owner?.name || '';
+      const title = window?.title || '';
+      if (appName) {
+        const cached = this.urlCache.get(appName, title);
+        if (cached.hit) return cached.result;
+      }
       
-      // Try active-win first (fast and has ARM64 support)
-      let result = await this.getUrlViaActiveWin();
+      let result = await this.getUrlViaActiveWin(window);
       
       if (result) {
         if (this.debug) {
           console.log('[URL-ARM64] Got URL via active-win:', result.url?.substring(0, 60));
         }
+        if (appName) this.urlCache.set(appName, title, result);
         return result;
       }
       
-      // Fallback to tasklist method
       result = await this.getUrlViaTasklist();
       
       if (result) {
         if (this.debug) {
           console.log('[URL-ARM64] Got URL via tasklist:', result.url?.substring(0, 60));
         }
+        if (appName) this.urlCache.set(appName, title, result);
         return result;
       }
       
       if (this.debug) {
         console.log('[URL-ARM64] No URL detected');
       }
-      
+      if (appName) this.urlCache.set(appName, title, null);
       return null;
     } catch (error) {
       if (this.debug) {
@@ -70,10 +85,9 @@ class WindowsUrlCaptureARM64 {
   /**
    * Get URL using active-win package (has ARM64 support)
    */
-  async getUrlViaActiveWin() {
+  async getUrlViaActiveWin(existingWindow) {
     try {
-      const activeWin = require('active-win');
-      const window = await activeWin();
+      const window = existingWindow || (await require('active-win')());
       
       if (!window || !window.owner) {
         return null;

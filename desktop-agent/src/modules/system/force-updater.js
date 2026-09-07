@@ -537,6 +537,13 @@ class ForceUpdater {
         currentVersion: this.currentVersion,
         releaseNotes: info.releaseNotes || ''
       });
+
+      // Packaged builds: start download immediately (Mac uses in-place ZIP; Windows uses autoDownload + Node fallback).
+      if (!this.isDevMode && !this.isDownloading && !this.isUpdateDownloaded) {
+        void this.downloadUpdate().catch((err) => {
+          console.warn('⚠️ [FORCE-UPDATER] Auto-download after update-available failed:', err?.message || err);
+        });
+      }
     });
 
     autoUpdater.on('update-not-available', (info) => {
@@ -2002,6 +2009,11 @@ open "$TARGET"
       this.checkForUpdates().then((result) => {
         if (result?.updateAvailable) {
           this.notifyUpdateAvailable(result);
+          if (!result.updateDownloaded && !this.isDownloading) {
+            void this.downloadUpdate().catch((err) => {
+              console.warn('⚠️ [FORCE-UPDATER] Auto-download after startup check failed:', err?.message || err);
+            });
+          }
         }
       }).catch((err) => {
         console.warn('⚠️ [FORCE-UPDATER] Startup update check failed:', err?.message || err);
@@ -2012,9 +2024,18 @@ open "$TARGET"
     runStartupCheck();
     setTimeout(runStartupCheck, 3000);
     
-    // Then check every 6 hours
+    // Then check every 6 hours — download in background when a newer build exists
     setInterval(() => {
-      this.checkForUpdates();
+      this.checkForUpdates().then((result) => {
+        if (result?.updateAvailable && !result.updateDownloaded && !this.isDownloading) {
+          this.notifyUpdateAvailable(result);
+          void this.downloadUpdate().catch((err) => {
+            console.warn('⚠️ [FORCE-UPDATER] Periodic auto-download failed:', err?.message || err);
+          });
+        }
+      }).catch((err) => {
+        console.warn('⚠️ [FORCE-UPDATER] Periodic update check failed:', err?.message || err);
+      });
     }, 6 * 60 * 60 * 1000);
   }
 }

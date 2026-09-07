@@ -475,11 +475,26 @@ describe('EnhancedIdleMonitor', () => {
       global.currentUserId = '1195';
       global.trackingManager = { sessionStartTime: new Date(Date.now() - 60000).toISOString() };
       _setPresenceForTests({ active: true, label: 'Google Meet' });
+      global.unifiedInputManager.getIdleTime.mockReturnValue(120);
 
       const end = Date.now();
       await monitor.logIdlePeriod(end - 398000, end, 398000);
 
       expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
+    });
+
+    test('leftover meeting tab after 10 min of no input is recorded as idle', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() };
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+      global.unifiedInputManager.getIdleTime.mockReturnValue(600);
+
+      const end = Date.now();
+      const duration = 12 * 60 * 1000;
+      await monitor.logIdlePeriod(end - duration, end, duration);
+
+      expect(backendTimeLogs.upsertIdleLog).toHaveBeenCalled();
     });
 
     test('OS idle during a meeting still starts idle and still evaluates the prompt', async () => {
@@ -577,6 +592,7 @@ describe('EnhancedIdleMonitor', () => {
       global.currentUserId = '1195';
       global.trackingManager = { sessionStartTime: new Date(Date.now() - 60000).toISOString() };
       _setPresenceForTests({ active: true, label: 'Zoom' });
+      global.unifiedInputManager.getIdleTime.mockReturnValue(180);
 
       await monitor.logIdlePeriod(Date.now() - 400000, Date.now(), 400000);
 

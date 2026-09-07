@@ -79,6 +79,34 @@ describe('low-activity counting excludes idle periods', () => {
     ).toBe(0);
   });
 
+  it('does not count dual-screen Word shots during a live meeting as low-activity', () => {
+    const screenshots = [
+      {
+        captured_at: '2026-08-17T11:00:00Z',
+        activity_percent: 2,
+        app_name: 'Brave Browser',
+        window_title: 'Cintara - Microphone recording - Brave - Work',
+      },
+      {
+        captured_at: '2026-08-17T11:01:00Z',
+        activity_percent: 1,
+        app_name: 'Microsoft Word',
+        window_title: 'Notes.docx',
+      },
+      {
+        captured_at: '2026-08-17T11:02:00Z',
+        activity_percent: 3,
+        app_name: 'Finder',
+        window_title: 'No Window',
+        vision_summary: 'Presenting, annotating in Google Meet',
+      },
+    ];
+
+    expect(
+      sumLowActivitySecondsFromScreenshots(screenshots, INTERVAL, DAY_START, DAY_END, []),
+    ).toBe(0);
+  });
+
   it('does not turn a 90-second random dip into a 5-minute low block', () => {
     const screenshots = [
       shot('2026-08-17T11:00:00Z', 80),

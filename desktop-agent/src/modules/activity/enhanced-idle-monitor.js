@@ -767,10 +767,18 @@ class EnhancedIdleMonitor {
       }
 
       if (this._isInMeetingSession()) {
+        const osIdle = Number(global.unifiedInputManager?.getIdleTime?.() || 0);
+        const idleSeconds = Math.max(osIdle, duration / 1000);
+        const { meetingShieldsIdle } = require('../../lib/meeting-context');
+        if (meetingShieldsIdle(idleSeconds)) {
+          console.log(
+            `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting`,
+          );
+          return;
+        }
         console.log(
-          `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting`,
+          `📹 [IDLE-LOG] Meeting tab leftover after ${Math.round(idleSeconds)}s with no input — recording idle (not extra meeting time)`,
         );
-        return;
       }
 
       if (startTime < sessionStartMs) {

@@ -6,6 +6,22 @@ const cleanupRegistry = require('./core/cleanup-registry');
 const { logger } = require('./utils/logger');
 const { uploadScreenshotBuffer } = require('./utils/screenshot-storage');
 
+async function prepareRendererForScreenshotCapture() {
+  try {
+    const win = global.mainWindow;
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+    const script =
+      `(function(){ try { if (typeof window.closeScreenshotLightbox === 'function') window.closeScreenshotLightbox(true); } catch (e) {} return true; })()`;
+    await Promise.race([
+      win.webContents.executeJavaScript(script, true),
+      new Promise((resolve) => setTimeout(resolve, 100)),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } catch (_) {
+    /* non-fatal — capture proceeds even if renderer is busy */
+  }
+}
+
 /**
  * Screenshot-triggered Input Analyzer
  * Collects input events between screenshots instead of real-time monitoring
@@ -208,6 +224,7 @@ class ScreenshotManager {
     }
 
     try {
+      await prepareRendererForScreenshotCapture();
       const captureModule = process.platform === 'darwin'
         ? require('../platform/macos/screenshot-capture')
         : require('../platform/windows/screenshot-capture');

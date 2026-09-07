@@ -20,6 +20,71 @@ const LOW_ACTIVITY_PERCENT = 10;
 const MIN_IDLE_REPORT_SECONDS = 5 * 60;
 // Same streak Pulse uses: three consecutive quiet minutes at 1/min capture.
 const SUSTAINED_LOW_MINUTES = 3;
+/** Join meeting-titled shots the same way Pulse does so dual-screen Word/Finder
+ * captures during a call are not billed as low-activity / non-effective. */
+const MEETING_INTERVAL_JOIN_MS = 10 * 60 * 1000;
+
+function isMeetingScreenshotRow(shot = {}) {
+  const titleHay = `${shot.app_name || ''} ${shot.window_title || ''}`.toLowerCase();
+  const ocrHay = `${shot.vision_summary || ''} ${shot.description || ''} ${shot.ocr_excerpt || ''}`.toLowerCase();
+  const uiOcr = /you are presenting|presenting, annotating|leave call|in this call|microphone recording/.test(
+    ocrHay,
+  );
+  if (/you (have )?left|left the (meeting|call)|meeting ended|ask to join|join now|waiting room/.test(`${titleHay} ${ocrHay}`)) {
+    if (!uiOcr) return false;
+  }
+  if (/gmail|google calendar|\bcalendar\b|outlook|inbox -/.test(titleHay) && !/\bmeet\s+-/.test(titleHay)) {
+    return uiOcr;
+  }
+  if (
+    /google meet|meet\.google\.com|\bmeet\s+-|zoom meeting|zoom\.us|microphone recording/.test(titleHay)
+  ) {
+    return true;
+  }
+  if (
+    /microsoft teams|teams\.microsoft\.com|\bskype\b/.test(titleHay) &&
+    /meetup-join|webinar|\bmeeting\b|\bcall\b/.test(titleHay)
+  ) {
+    return true;
+  }
+  return /meet\.google\.com\/[a-z0-9-]+|you are presenting|presenting, annotating|in a google meet|in this call|leave call|microphone recording/.test(
+    ocrHay,
+  );
+}
+
+function mergeMeetingShotIntervals(timesMs, coverageMs, joinMs = MEETING_INTERVAL_JOIN_MS) {
+  const cover = Math.max(10_000, Math.floor(Number(coverageMs) || 60_000));
+  const join = Math.max(0, Math.floor(Number(joinMs) || 0));
+  const times = timesMs.filter((ms) => Number.isFinite(ms)).sort((a, b) => a - b);
+  if (!times.length) return [];
+  const out = [];
+  let start = times[0];
+  let end = times[0] + cover;
+  for (let i = 1; i < times.length; i += 1) {
+    const nextStart = times[i];
+    const nextEnd = times[i] + cover;
+    if (nextStart <= end + join) {
+      end = Math.max(end, nextEnd);
+    } else {
+      out.push({ startMs: start, endMs: end });
+      start = nextStart;
+      end = nextEnd;
+    }
+  }
+  out.push({ startMs: start, endMs: end });
+  return out.map((iv) => ({ startMs: iv.startMs, endMs: iv.endMs + join }));
+}
+
+function meetingIntervalsFromScreenshots(screenshots, intervalSeconds) {
+  const times = [];
+  for (const shot of screenshots || []) {
+    if (!isMeetingScreenshotRow(shot)) continue;
+    const capturedAt = shot.captured_at || shot.capturedAt;
+    const ms = capturedAt ? new Date(capturedAt).getTime() : NaN;
+    if (Number.isFinite(ms)) times.push(ms);
+  }
+  return mergeMeetingShotIntervals(times, Math.max(10, Number(intervalSeconds) || 60) * 1000);
+}
 
 function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
   let idle = 0;
@@ -60,8 +125,11 @@ function sumLowActivitySecondsFromScreenshots(
 ) {
   const capMs = Math.max(10_000, Math.floor(Number(intervalSeconds) || 60) * 1000);
   const minRunSeconds = SUSTAINED_LOW_MINUTES * 60;
+  const meetingIntervals = meetingIntervalsFromScreenshots(screenshots, intervalSeconds);
   const insideIdle = (ms) =>
     idleIntervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
+  const insideMeeting = (ms) =>
+    meetingIntervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
 
   const flags = [];
   for (const shot of screenshots || []) {
@@ -69,9 +137,12 @@ function sumLowActivitySecondsFromScreenshots(
     const ms = capturedAt ? new Date(capturedAt).getTime() : NaN;
     if (Number.isFinite(ms) && !(ms >= dayStartMs && ms < dayEndMs)) continue;
     const pct = Number(shot.activity_percent);
+    const inMeeting =
+      isMeetingScreenshotRow(shot) || (Number.isFinite(ms) && insideMeeting(ms));
     const isLow =
       Number.isFinite(pct) &&
       pct < LOW_ACTIVITY_PERCENT &&
+      !inMeeting &&
       !(Number.isFinite(ms) && insideIdle(ms));
     flags.push({ ms: Number.isFinite(ms) ? ms : 0, isLow, ownedSeconds: 0 });
   }
@@ -290,6 +361,7 @@ module.exports = {
   computeTodayEffectiveStats,
   sumIdleSecondsFromLogs,
   sumLowActivitySecondsFromScreenshots,
+  isMeetingScreenshotRow,
   LOW_ACTIVITY_PERCENT,
   resolveScreenshotIntervalMinutes,
 };

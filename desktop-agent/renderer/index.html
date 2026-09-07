@@ -16,6 +16,50 @@
             }
         })();
     </script>
+    <style id="startup-critical">
+        html, body { margin: 0; height: 100%; background: #f1f5f9; }
+        html[data-theme="dark"], html[data-theme="dark"] body { background: #0f172a; }
+        @keyframes startup-spin { to { transform: rotate(360deg); } }
+        #startupOverlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            background: inherit;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            transition: opacity 0.3s ease-out;
+        }
+        .startup-overlay-inner { text-align: center; }
+        .startup-overlay-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0 0 16px;
+        }
+        html[data-theme="dark"] .startup-overlay-title { color: #f8fafc; }
+        .startup-overlay-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(15, 23, 42, 0.15);
+            border-top-color: #0284c7;
+            border-radius: 50%;
+            animation: startup-spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        html[data-theme="dark"] .startup-overlay-spinner {
+            border-color: rgba(248, 250, 252, 0.15);
+            border-top-color: #38bdf8;
+        }
+        .startup-overlay-status {
+            color: #64748b;
+            font-size: 14px;
+            margin: 0;
+        }
+        html[data-theme="dark"] .startup-overlay-status { color: #cbd5e1; }
+    </style>
     <script defer src="vendor/lucide.min.js"></script>
     <style>
         * {
@@ -3283,6 +3327,129 @@
             margin-bottom: 8px;
         }
 
+        .screenshot-filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .screenshot-filter-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted, #374151);
+            margin-bottom: 6px;
+        }
+
+        .screenshot-filter-label .hint {
+            font-weight: 400;
+            color: #94a3b8;
+        }
+
+        .screenshot-date-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Match Time Tracker inputs — avoid raw OS <select> chrome / orange accent */
+        .screenshot-filter-control,
+        #screenshotsPage .screenshot-filter-control {
+            width: 100%;
+            box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: var(--bg-input, #ffffff);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            border: 1px solid var(--border-strong, #d1d5db);
+            border-radius: 10px;
+            padding: 10px 36px 10px 12px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text, #0f172a);
+            line-height: 1.3;
+            cursor: pointer;
+            outline: none;
+            accent-color: #3b82f6;
+            box-shadow: var(--shadow, 0 1px 2px rgba(15, 23, 42, 0.04));
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        #screenshotsPage input.screenshot-filter-control[type="date"] {
+            background-image: none;
+            padding-right: 12px;
+            cursor: text;
+            flex: 1;
+            min-width: 0;
+            color-scheme: inherit;
+        }
+
+        .screenshot-filter-control:hover {
+            border-color: #94a3b8;
+        }
+
+        .screenshot-filter-control:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+        }
+
+        .screenshot-refresh-btn {
+            width: 100%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .screenshot-refresh-btn:hover {
+            background: #2563eb;
+        }
+
+        .screenshot-refresh-btn i,
+        .screenshot-refresh-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        html[data-theme="dark"] .screenshot-filter-control,
+        html[data-theme="dark"] #screenshotsPage .screenshot-filter-control {
+            background-color: var(--bg-input);
+            color: var(--text);
+            border-color: var(--border-strong);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        html[data-theme="dark"] #screenshotsPage input.screenshot-filter-control[type="date"] {
+            background-image: none;
+        }
+
+        html[data-theme="dark"] .screenshot-filter-label {
+            color: var(--text);
+        }
+
+        #screenshotsPage .project-dd-trigger {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        #screenshotsPage .project-dd-menu {
+            z-index: 60;
+        }
+
         html[data-theme="dark"] .form-input,
         html[data-theme="dark"] .form-input {
             background: var(--bg-input);
@@ -4713,42 +4880,12 @@
     </style>
 </head>
 <body>
-    <!-- STARTUP LOADING OVERLAY - Shows immediately while app initializes -->
-    <div id="startupOverlay" style="
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #f6f7fb;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        transition: opacity 0.3s ease-out;
-    ">
-        <div style="text-align: center;">
-            <h1 style="
-                font-size: 32px;
-                font-weight: 800;
-                color: #0f172a;
-                margin-bottom: 16px;
-                text-shadow: none;
-            ">Alyson Time Doctor</h1>
-            <div style="
-                width: 40px;
-                height: 40px;
-                border: 3px solid rgba(15, 23, 42, 0.15);
-                border-top: 3px solid rgba(59, 130, 246, 0.9);
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin: 0 auto 16px;
-            "></div>
-            <p id="startupStatus" style="
-                color: rgba(15, 23, 42, 0.75);
-                font-size: 14px;
-            ">Starting...</p>
+    <!-- STARTUP LOADING OVERLAY - critical styles in head so first paint is never blank -->
+    <div id="startupOverlay" role="status" aria-live="polite" aria-label="Loading Alyson Time Doctor">
+        <div class="startup-overlay-inner">
+            <h1 class="startup-overlay-title">Alyson Time Doctor</h1>
+            <div class="startup-overlay-spinner" aria-hidden="true"></div>
+            <p id="startupStatus" class="startup-overlay-status">Starting…</p>
         </div>
     </div>
 
@@ -5415,6 +5552,7 @@
             border-color: #0369a1;
         }
 
+        /* Screenshot viewer — instant thumb, one clear exit */
         .screenshot-lightbox {
             position: fixed;
             inset: 0;
@@ -5422,48 +5560,143 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(15, 23, 42, 0.86);
-            cursor: zoom-out;
             padding: 24px;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 160ms ease;
             -webkit-app-region: no-drag;
+        }
+
+        .screenshot-lightbox.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .screenshot-lightbox:not(.is-open):not([hidden]) {
+            pointer-events: none;
         }
 
         .screenshot-lightbox[hidden] {
             display: none !important;
         }
 
-        .screenshot-lightbox img {
-            position: relative;
-            z-index: 0;
-            max-width: min(96vw, 1400px);
-            max-height: 90vh;
-            object-fit: contain;
-            border-radius: 8px;
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+        .screenshot-lightbox-shell {
+            display: flex;
+            flex-direction: column;
+            width: fit-content;
+            max-width: min(94vw, 1440px);
+            max-height: calc(100vh - 48px);
+            border-radius: 16px;
+            overflow: hidden;
             cursor: default;
+            background: var(--bg-surface, #ffffff);
+            border: 1px solid var(--border, #e2e8f0);
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.22);
+            transform: translateY(6px) scale(0.99);
+            opacity: 0;
+            transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+        }
+
+        .screenshot-lightbox.is-open .screenshot-lightbox-shell {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+        }
+
+        .screenshot-lightbox-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-shrink: 0;
+            min-height: 56px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border, #e2e8f0);
+            background: var(--bg-surface, #ffffff);
+        }
+
+        .screenshot-lightbox-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 36px;
+            padding: 0 12px 0 8px;
+            border: 1px solid var(--border-strong, #cbd5e1);
+            border-radius: 10px;
+            background: var(--bg-surface, #ffffff);
+            color: var(--text, #0f172a);
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 140ms ease, border-color 140ms ease;
+        }
+
+        .screenshot-lightbox-back svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            color: var(--text-muted, #64748b);
+        }
+
+        .screenshot-lightbox-back:hover,
+        .screenshot-lightbox-back:focus {
+            outline: none;
+            background: var(--bg-hover, #f1f5f9);
+            border-color: var(--border-strong, #94a3b8);
+        }
+
+        .screenshot-lightbox-meta {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted, #64748b);
+            white-space: nowrap;
+        }
+
+        .screenshot-lightbox-stage {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
             background: #0f172a;
         }
 
-        .screenshot-lightbox-close {
+        .screenshot-lightbox-stage.is-loading:not(.has-preview)::after {
+            content: '';
             position: absolute;
-            top: 16px;
-            right: 20px;
-            z-index: 2;
-            width: 36px;
-            height: 36px;
-            border: none;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.12);
-            color: #f8fafc;
-            font-size: 24px;
-            line-height: 1;
-            cursor: pointer;
-            pointer-events: auto;
-            -webkit-app-region: no-drag;
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(255, 255, 255, 0.15);
+            border-top-color: rgba(255, 255, 255, 0.85);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            pointer-events: none;
         }
 
-        .screenshot-lightbox-close:hover {
-            background: rgba(255, 255, 255, 0.22);
+        .screenshot-lightbox img {
+            display: block;
+            max-width: min(94vw, 1440px);
+            max-height: calc(100vh - 140px);
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            background: #0f172a;
+        }
+
+        html[data-theme="dark"] .screenshot-lightbox-shell,
+        html[data-theme="dark"] .screenshot-lightbox-toolbar {
+            background: var(--bg-surface);
+            border-color: var(--border);
+        }
+
+        html[data-theme="dark"] .screenshot-lightbox-back {
+            background: var(--bg-surface-2);
+            border-color: var(--border-strong);
+            color: var(--text);
         }
 
         .mr-day-bar-wrapper {
@@ -5803,15 +6036,15 @@
             ipcRenderer.on('app-loading', (event, data) => {
                 const status = document.getElementById('startupStatus');
                 if (status) {
-                    status.textContent = data.stage === 'managers' ? 'Loading components...' : 'Starting...';
+                    status.textContent = data.stage === 'managers' ? 'Loading components…' : 'Starting…';
                 }
             });
             
             // Hide overlay when app is ready — keep it if JWT/sign-in is in progress
             ipcRenderer.on('app-ready', hideStartupOverlay);
             
-            // Fallback: hide overlay after 3 seconds if no ready signal
-            setTimeout(hideStartupOverlay, 3000);
+            // Fallback: hide overlay if ready signal never arrives
+            setTimeout(hideStartupOverlay, 15000);
         } else {
             // No Electron context at all - hide overlay immediately
             setTimeout(hideStartupOverlay, 1000);
@@ -6601,23 +6834,22 @@
                     </div>
 
                     <div class="screenshot-filters">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                        <div class="screenshot-filters-grid">
                             <div>
-                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Company work day)</span></label>
-                                <div style="display: flex; align-items: center; gap: 8px;">
+                                <label class="screenshot-filter-label" for="screenshotDate">Date <span class="hint">(Company work day)</span></label>
+                                <div class="screenshot-date-row">
                                     <button id="prevDateBtn" type="button" class="date-nav-btn" title="Previous day">
                                         <i data-lucide="chevron-left"></i>
                                     </button>
-                                    <input type="date" id="screenshotDate" title="Company work day"
-                                           style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                    <input type="date" id="screenshotDate" class="screenshot-filter-control" title="Company work day">
                                     <button id="nextDateBtn" type="button" class="date-nav-btn" title="Next day">
                                         <i data-lucide="chevron-right"></i>
                                     </button>
                                 </div>
                             </div>
                             <div>
-                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Activity Level</label>
-                                <select id="activityFilter" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                <label class="screenshot-filter-label" for="activityFilter">Activity Level</label>
+                                <select id="activityFilter" class="screenshot-filter-control">
                                     <option value="all">All Activity Levels</option>
                                     <option value="high">High Activity (70%+)</option>
                                     <option value="medium">Medium Activity (10-70%)</option>
@@ -6625,8 +6857,8 @@
                                 </select>
                             </div>
                             <div>
-                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Show Count</label>
-                                <select id="limitSelect" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                                <label class="screenshot-filter-label" for="limitSelect">Show Count</label>
+                                <select id="limitSelect" class="screenshot-filter-control">
                                     <option value="20">20 screenshots</option>
                                     <option value="50" selected>50 screenshots</option>
                                     <option value="100">100 screenshots</option>
@@ -6634,16 +6866,16 @@
                                 </select>
                             </div>
                             <div>
-                                <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Quick Actions</label>
-                                <button type="button" onclick="loadRecentScreenshots({ notify: true })" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
-                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px; margin-right: 6px;"></i>
+                                <label class="screenshot-filter-label">Quick Actions</label>
+                                <button type="button" class="screenshot-refresh-btn" onclick="loadRecentScreenshots({ notify: true, force: true })">
+                                    <i data-lucide="refresh-cw"></i>
                                     Refresh
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <div style="text-align: center; padding: 60px 40px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b;">
+                    <div id="screenshotsContent" style="text-align: center; padding: 60px 40px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b;">
                         <i data-lucide="loader" style="width: 24px; height: 24px; animation: spin 2s linear infinite; margin-right: 12px;"></i>
                         Loading screenshots...
                     </div>
@@ -7248,9 +7480,21 @@
         <div id="notificationMessage">Notification message</div>
     </div>
 
-    <div id="screenshotLightbox" class="screenshot-lightbox" hidden>
-        <button type="button" id="screenshotLightboxClose" class="screenshot-lightbox-close" aria-label="Close screenshot" onclick="closeScreenshotLightbox()">&times;</button>
-        <img id="screenshotLightboxImg" alt="Screenshot">
+    <div id="screenshotLightbox" class="screenshot-lightbox" hidden role="dialog" aria-modal="true" aria-label="Screenshot preview">
+        <div class="screenshot-lightbox-shell">
+            <div class="screenshot-lightbox-toolbar">
+                <button type="button" id="screenshotLightboxClose" class="screenshot-lightbox-back" data-lightbox-dismiss="1">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back to screenshots
+                </button>
+                <span id="screenshotLightboxMeta" class="screenshot-lightbox-meta"></span>
+            </div>
+            <div id="screenshotLightboxStage" class="screenshot-lightbox-stage">
+                <img id="screenshotLightboxImg" alt="Screenshot">
+            </div>
+        </div>
     </div>
 
     <script src="modules/project-dropdown.js"></script>
@@ -8139,10 +8383,17 @@
             }
         }
         
-        // Start after 2 seconds, then every 2 seconds
+        // Start after 2 seconds, then only while Feature Status page is open (30s)
+        const FEATURE_STATUS_MS = 30000;
+        function isFeatureStatusVisible() {
+            const page = document.getElementById('featureStatusPage');
+            return !!(page && page.classList.contains('active'));
+        }
         setTimeout(() => {
             update();
-            setInterval(update, 2000);
+            setInterval(() => {
+                if (isFeatureStatusVisible()) update();
+            }, FEATURE_STATUS_MS);
         }, 2000);
         
     })();

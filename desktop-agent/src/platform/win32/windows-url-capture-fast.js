@@ -17,6 +17,7 @@
  */
 
 const http = require('http');
+const { UrlResultCache } = require('../../lib/url-result-cache');
 let activeWin = null;
 
 // Lazy-load active-win to avoid initialization errors
@@ -57,8 +58,10 @@ class WindowsUrlCaptureFast {
     this.windowCache = {
       lastCheck: 0,
       lastResult: null,
-      ttl: 10000 // 10 seconds - PowerShell takes 5-9s, so cache must outlast one round-trip
+      ttl: Number(process.env.APP_DETECT_CACHE_MS) || 20000
     };
+    
+    this.urlCache = new UrlResultCache();
     
     // Lock to prevent concurrent PowerShell calls
     this._psLock = false;
@@ -110,6 +113,13 @@ class WindowsUrlCaptureFast {
         if (this.debug) console.log('═══════════════════════════════════════════════════════════');
         return null;
       }
+
+      const appName = activeWindow.owner?.name || activeWindow.process || '';
+      const title = activeWindow.title || '';
+      const cached = this.urlCache.get(appName, title);
+      if (cached.hit) {
+        return cached.result;
+      }
       
       const windowTime = Date.now() - startTime;
       if (this.debug) console.log(`✓ [URL-ADAPTER-STEP-4] Got window in ${windowTime}ms: ${activeWindow.owner.name}`);
@@ -127,6 +137,7 @@ class WindowsUrlCaptureFast {
       if (!browserInfo.isBrowser) {
         if (this.debug) console.log(`❌ [URL-ADAPTER-STEP-6-FAIL] Not a browser: ${activeWindow.owner.name}`);
         if (this.debug) console.log('═══════════════════════════════════════════════════════════');
+        this.urlCache.set(appName, title, null);
         return null;
       }
       
@@ -136,11 +147,12 @@ class WindowsUrlCaptureFast {
 // Step 2: Parse URL from window title (PRIMARY METHOD - always works)
       // This is now the primary method since CDP requires special browser flags
       const titleResult = this.parseUrlFromTitle(activeWindow, browserInfo);
-if (titleResult) {
+      if (titleResult) {
         const totalTime = Date.now() - startTime;
         if (this.debug) {
           console.log(`[URL-FAST] ✓ Title parsing in ${totalTime}ms: ${titleResult.url?.substring(0, 60)}`);
         }
+        this.urlCache.set(appName, title, titleResult);
         return titleResult;
       }
       
@@ -154,6 +166,7 @@ if (cdpResult) {
           if (this.debug) {
             console.log(`[URL-FAST] ✓ CDP success in ${totalTime}ms: ${cdpResult.url?.substring(0, 60)}`);
           }
+          this.urlCache.set(appName, title, cdpResult);
           return cdpResult;
         }
       } else {
@@ -166,6 +179,7 @@ const totalTime = Date.now() - startTime;
         if (this.debug) {
           console.log(`[URL-FAST] ✓ UI Automation success in ${totalTime}ms: ${uiaResult.url?.substring(0, 60)}`);
         }
+        this.urlCache.set(appName, title, uiaResult);
         return uiaResult;
       }
       
@@ -174,6 +188,7 @@ const totalTime = Date.now() - startTime;
         console.log(`[URL-FAST] No URL extracted in ${totalTime}ms`);
       }
       
+      this.urlCache.set(appName, title, null);
       return null;
     } catch (error) {
       if (this.debug) {

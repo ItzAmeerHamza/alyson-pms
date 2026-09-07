@@ -29,7 +29,7 @@ const INTERVALS = {
   APP_CAPTURE_THROTTLE: 10000, // 10 seconds - PERFORMANCE FIX
   
   // URL capture throttling - minimum time between URL captures  
-  URL_CAPTURE_THROTTLE: 30000, // 30 seconds — AppleScript is the energy hog
+  URL_CAPTURE_THROTTLE: 120000, // 2 minutes — AppleScript is the energy hog
   
   // === SCREENSHOT INTERVALS ===
   

@@ -31,9 +31,9 @@ class UrlCaptureManager extends EventEmitter {
 
       // Performance toggles
       diagRateLimitPerMin: Number(process.env.URL_DIAG_RATE_LIMIT_PER_MIN || 120),
-      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 30000),
+      minPollMsActive: Number(process.env.URL_TRACKING_MIN_POLL_MS_ACTIVE || 120000),
       minPollMsWayland: Number(process.env.URL_TRACKING_MIN_POLL_MS_WAYLAND || 15000),
-      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 60000),
+      pollMsIdle: Number(process.env.URL_TRACKING_POLL_MS_IDLE || 180000),
       workerYieldMs: Number(process.env.URL_WORKER_YIELD_MS || 8),
       maxPerTick: Number(process.env.URL_MAX_PER_TICK || 1),
       redactPipelineConcurrency: Number(process.env.URL_REDACT_PIPELINE_CONCURRENCY || 1)
@@ -56,7 +56,7 @@ class UrlCaptureManager extends EventEmitter {
     this.debounceTimers = new Map();
 
     // Adaptive polling state - matches steady-state after CPU budget backoff
-    this.pollDelay = 30000;
+    this.pollDelay = 60000;
     this.lastResult = null;
 
     // Status tracking
@@ -129,15 +129,12 @@ if (!this.config.enabled) {
         console.log('[URL] Detection: AppleScript → Safari/Chrome/Firefox');
       } else if (platform === 'win32') {
         console.log('[URL] Initializing Windows URL Capture Fast Edition (active-win + CDP)');
-        // Enable debug logging for Windows to help diagnose issues
-        this.config.debugLogging = true;
-        console.log('[URL] Windows URL capture debug logging enabled');
 
         // Use FAST adapter with active-win (native API, ~10ms response time)
         const { WindowsUrlCaptureFast } = require('../../platform/win32/windows-url-capture-fast.js');
         this.adapter = new WindowsUrlCaptureFast();
         console.log('[URL] Windows URL Capture Fast initialized successfully');
-        console.log('[URL] Detection methods: active-win (~10ms) → CDP (Chrome/Edge) → Title Parsing');
+        console.log('[URL] Detection methods: active-win (~10ms) → title parse → CDP (optional)');
 
         // Start the adapter
         try {
@@ -248,7 +245,7 @@ if (!this.config.enabled) {
             }
 
             // Schedule next poll
-            this.pollInterval = setTimeout(adaptivePoll, this.pollDelay);
+            this.pollInterval = setTimeout(adaptivePoll, this.pollDelay + Math.floor(Math.random() * 3000));
           } catch (error) {
             console.error('[URL] Error during adaptive polling:', error);
             this.pollInterval = null; // Stop polling on error
@@ -257,8 +254,13 @@ if (!this.config.enabled) {
         }
       };
 
-      // Start polling
-      this.pollInterval = setTimeout(adaptivePoll, 100); // Start quickly
+      // Start polling — stagger away from app-detect tick to avoid stacked AppleScript
+      let initialDelay = 100;
+      try {
+        const { getUrlPollStaggerMs } = require('../utils/power-profile');
+        initialDelay = getUrlPollStaggerMs();
+      } catch (_) { /* keep 100ms */ }
+      this.pollInterval = setTimeout(adaptivePoll, initialDelay);
 
       if (this.config.debugLogging) {
         console.log(`[URL] UrlCaptureManager started on ${platform}`);
@@ -349,7 +351,7 @@ if (!this.config.enabled) {
     if (process.platform === 'win32' && process.env.LOG_URL_VERBOSE === 'true') {
       console.log('[WIN.URL.POLL] start platform=win32 adapter=' + (this.adapter?.constructor?.name || 'none'));
     }
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' && process.env.DEBUG_URL) {
       console.log('🔧 [MACOS-URL] captureCurrentUrl called, adapter:', this.adapter?.constructor?.name);
     }
 
@@ -357,7 +359,7 @@ if (!this.config.enabled) {
       if (process.platform === 'win32' && process.env.LOG_URL_VERBOSE === 'true') {
         console.log('[WIN.URL.POLL] skipped reason=no_adapter', { adapter: !!this.adapter });
       }
-      if (process.platform === 'darwin') {
+      if (process.platform === 'darwin' && process.env.DEBUG_URL) {
         console.log('🔧 [MACOS-URL] Skipped: adapter=' + !!this.adapter);
       }
       return;
@@ -433,7 +435,7 @@ if (!this.config.enabled) {
       parseInt(process.env.URL_RESOLVER_TIMEOUT_MS) :
       (process.platform === 'win32' ? 5000 :
         process.platform === 'linux' ? 2000 :
-          500); // macOS is faster
+          2000); // macOS: Chrome AppleScript is ~800ms; 500ms used to abort every poll
 
     // Perf: start timer
     let perfTimer = null;
@@ -449,7 +451,7 @@ if (!this.config.enabled) {
       if (process.platform === 'win32' && process.env.LOG_URL_VERBOSE === 'true') {
         console.log('[WIN.URL.ADAPTER.CALL] Calling adapter.getCurrentUrl()...');
       }
-      if (process.platform === 'darwin') {
+      if (process.platform === 'darwin' && process.env.DEBUG_URL) {
         console.log('🔧 [MACOS-URL] Calling adapter.getCurrentUrl()...');
       }
 
@@ -483,7 +485,7 @@ if (!this.config.enabled) {
         // Back on a browser — the visit continues, so cancel any pending close.
         this._loggedEmptyUrl = false;
         this._urlAwaySince = null;
-        if (process.platform === 'darwin') {
+        if (process.platform === 'darwin' && process.env.DEBUG_URL) {
           console.log('🔧 [MACOS-URL] Result:', {
             url: result.url?.substring(0, 60),
             browser: result.browser,

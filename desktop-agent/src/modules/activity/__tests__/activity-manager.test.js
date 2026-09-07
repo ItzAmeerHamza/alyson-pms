@@ -220,6 +220,20 @@ describe('ActivityManager', () => {
         })
       );
     });
+
+    it('should skip IPC when the dashboard window is hidden', () => {
+      global.mainWindow = {
+        isDestroyed: () => false,
+        isVisible: () => false,
+        webContents: {
+          send: jest.fn()
+        }
+      };
+
+      activityManager.sendActivityToRenderer();
+
+      expect(global.mainWindow.webContents.send).not.toHaveBeenCalled();
+    });
   });
 
   describe('resetActivityCounters', () => {

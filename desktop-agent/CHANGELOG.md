@@ -2,6 +2,16 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.241] - 2026-09-07
+
+### Improved
+- **Energy / battery**: Slower URL and app-detection polls (2 min active, 3 min idle), longer URL tab cache, staggered polls, and less renderer IPC — no change to time counting or screenshot cadence (2/10 min).
+- **Startup UX**: Loader on launch instead of blank screen; screenshot viewer closes reliably and no longer appears in captured screenshots.
+- **Auto-update**: Packaged Mac and Windows builds auto-download updates on check (startup, every 6 hours, and when an update is detected). Mac in-place swap preserves code signature and TCC permissions where CI signing is present.
+
+### Fixed
+- Duplicate activity IPC timers and always-on feature-status polling (now only on Feature Status page).
+
 ## [Unreleased]
 
 ### Fixed

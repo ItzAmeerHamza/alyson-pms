@@ -48,7 +48,7 @@ class StartupManager {
       global.appLifecycleManager = new AppLifecycleManager({ app, BrowserWindow, screen, powerMonitor }, global.configManager.config);
       await global.appLifecycleManager.initialize();
       global.mainWindow = global.appLifecycleManager.getMainWindow();
-      console.log('✅ [STARTUP-MANAGER] Window visible - loading remaining systems...');
+      console.log('✅ [STARTUP-MANAGER] Window created — loading remaining systems...');
       
       // Send loading state to renderer
       if (global.mainWindow && !global.mainWindow.isDestroyed()) {

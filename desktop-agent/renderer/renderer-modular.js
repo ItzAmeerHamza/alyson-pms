@@ -3348,20 +3348,28 @@ function isPageSectionActive(pageEl) {
 
 async function loadRecentScreenshots(options = {}) {
     const notify = options.notify === true;
-    const debounceMs = notify ? 300 : 5000;
-    console.log('📸 [DEBUG] loadRecentScreenshots() called', { notify });
+    const force = options.force === true;
+    const debounceMs = notify || force ? 300 : 5000;
+    console.log('📸 [DEBUG] loadRecentScreenshots() called', { notify, force });
     // Debounce rapid calls (e.g. screenshot every 1 min should not spam reloads/toasts)
     window.__lastLoadRecentScreenshots = window.__lastLoadRecentScreenshots || 0;
     const now = Date.now();
-    if (now - window.__lastLoadRecentScreenshots < debounceMs) {
+    if (!force && now - window.__lastLoadRecentScreenshots < debounceMs) {
         console.log('🕒 [DEBUG] loadRecentScreenshots debounced');
         return;
     }
     window.__lastLoadRecentScreenshots = now;
+
+    closeScreenshotLightbox(true);
     
     const screenshotDate = document.getElementById('screenshotDate');
     const activityFilter = document.getElementById('activityFilter');
     const limitSelect = document.getElementById('limitSelect');
+
+    // Initial shell has an empty date input — set company work day before first fetch
+    if (screenshotDate && !screenshotDate.value) {
+        screenshotDate.value = localDateIso();
+    }
     
     console.log('🔍 [DEBUG] Form elements found:', {
         screenshotDate: !!screenshotDate,
@@ -3369,7 +3377,7 @@ async function loadRecentScreenshots(options = {}) {
         limitSelect: !!limitSelect
     });
     
-    const selectedDate = screenshotDate ? screenshotDate.value : localDateIso();
+    const selectedDate = screenshotDate?.value || localDateIso();
     const selectedActivity = activityFilter ? activityFilter.value : 'all';
     const selectedLimit = limitSelect ? parseInt(limitSelect.value) : 50;
     
@@ -3389,6 +3397,17 @@ async function loadRecentScreenshots(options = {}) {
             console.error('❌ [DEBUG] No current user found');
             if (notify) {
                 moduleInstances.notificationManager?.showNotification('Please log in to view screenshots', 'error');
+            }
+            displayEnhancedScreenshots([], []);
+            // Auth can finish a moment after first nav — retry once
+            if (!window.__screenshotAuthRetryScheduled) {
+                window.__screenshotAuthRetryScheduled = true;
+                setTimeout(() => {
+                    window.__screenshotAuthRetryScheduled = false;
+                    if (moduleInstances.authManager?.currentUser) {
+                        loadRecentScreenshots({ force: true });
+                    }
+                }, 800);
             }
             return;
         }
@@ -3482,6 +3501,7 @@ async function loadRecentScreenshots(options = {}) {
 }
 
 function displayEnhancedScreenshots(screenshots, duplicates = []) {
+    closeScreenshotLightbox(true);
     console.log('🔍 [DEBUG] displayEnhancedScreenshots called with:', screenshots?.length || 0, 'screenshots');
     
     // Immediate check for image URLs
@@ -3540,15 +3560,19 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
         return;
     }
 
-    // Preserve currently selected date or use today - make sure we don't lose user's selection
+    // Preserve filter state across full-page re-renders
     const existingDateInput = document.getElementById('screenshotDate');
+    const existingActivity = document.getElementById('activityFilter');
+    const existingLimit = document.getElementById('limitSelect');
     let currentDate = localDateIso();
-    
-    // If user has already selected a date, preserve it
-    if (existingDateInput && existingDateInput.value) {
+    if (existingDateInput?.value) {
         currentDate = existingDateInput.value;
         console.log('📅 Preserving selected date:', currentDate);
     }
+    const currentActivity = existingActivity?.value || 'all';
+    const currentLimit = existingLimit?.value || '50';
+    const activitySelected = (value) => (currentActivity === value ? ' selected' : '');
+    const limitSelected = (value) => (String(currentLimit) === String(value) ? ' selected' : '');
 
     // Build enhanced filter controls and display
     let screenshotHTML = `
@@ -3558,18 +3582,16 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                 <div class="control-subtitle">View your activity screenshots with advanced filters</div>
             </div>
             
-            <!-- Enhanced Filter Controls -->
-            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+            <div class="screenshot-filters" style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <div class="screenshot-filters-grid" style="margin-bottom: 0;">
                     <div>
-                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Date <span style="font-weight: 400; color: #94a3b8;">(Pacific Time)</span></label>
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <label class="screenshot-filter-label" for="screenshotDate">Date <span class="hint">(Company work day)</span></label>
+                        <div class="screenshot-date-row">
                             <button id="prevDateBtn" type="button" class="date-nav-btn" title="Previous day">
                                 <i data-lucide="chevron-left"></i>
                             </button>
-                            <input type="date" id="screenshotDate" value="${currentDate}" 
-                                   title="Work day in Pacific Time"
-                                   style="flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;">
+                            <input type="date" id="screenshotDate" class="screenshot-filter-control" value="${currentDate}"
+                                   title="Company work day">
                             <button id="nextDateBtn" type="button" class="date-nav-btn" title="Next day">
                                 <i data-lucide="chevron-right"></i>
                             </button>
@@ -3577,29 +3599,29 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                     </div>
                     
                     <div>
-                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Activity Level</label>
-                        <select id="activityFilter" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;" onchange="loadRecentScreenshots()">
-                            <option value="all">All Activity Levels</option>
-                            <option value="high">High Activity (70%+)</option>
-                            <option value="medium">Medium Activity (10-70%)</option>
-                            <option value="low">Low Activity (0-10%)</option>
+                        <label class="screenshot-filter-label" for="activityFilter">Activity Level</label>
+                        <select id="activityFilter" class="screenshot-filter-control">
+                            <option value="all"${activitySelected('all')}>All Activity Levels</option>
+                            <option value="high"${activitySelected('high')}>High Activity (70%+)</option>
+                            <option value="medium"${activitySelected('medium')}>Medium Activity (10-70%)</option>
+                            <option value="low"${activitySelected('low')}>Low Activity (0-10%)</option>
                         </select>
                     </div>
                     
                     <div>
-                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Show Count</label>
-                        <select id="limitSelect" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px;" onchange="loadRecentScreenshots()">
-                            <option value="20">20 screenshots</option>
-                            <option value="50" selected>50 screenshots</option>
-                            <option value="100">100 screenshots</option>
-                            <option value="200">200 screenshots</option>
+                        <label class="screenshot-filter-label" for="limitSelect">Show Count</label>
+                        <select id="limitSelect" class="screenshot-filter-control">
+                            <option value="20"${limitSelected('20')}>20 screenshots</option>
+                            <option value="50"${limitSelected('50')}>50 screenshots</option>
+                            <option value="100"${limitSelected('100')}>100 screenshots</option>
+                            <option value="200"${limitSelected('200')}>200 screenshots</option>
                         </select>
                     </div>
                     
                     <div>
-                        <label style="display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px;">Quick Actions</label>
-                        <button onclick="loadRecentScreenshots({ notify: true })" style="width: 100%; background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; font-size: 14px; cursor: pointer;">
-                            <i data-lucide="refresh-cw" style="width: 16px; height: 16px; margin-right: 6px;"></i>
+                        <label class="screenshot-filter-label">Quick Actions</label>
+                        <button type="button" class="screenshot-refresh-btn" onclick="loadRecentScreenshots({ notify: true, force: true })">
+                            <i data-lucide="refresh-cw"></i>
                             Refresh
                         </button>
                     </div>
@@ -3668,7 +3690,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
                 <div class="screenshot-card${isDuplicate ? ' is-duplicate' : ''}"
                      ${isDuplicate ? 'style="border-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7;"' : ''}
                      data-popup="${escapeHtmlAttr(screenshotPopupUrl(screenshot))}"
-                     onclick="openScreenshot(this.dataset.popup)">
+                     onclick="openScreenshotFromCard(this)">
                     
                     ${isDuplicate ? `
                     <div style="background: #fef3c7; color: #92400e; padding: 8px; font-size: 12px; font-weight: 500; text-align: center; border-bottom: 1px solid #fcd34d;">
@@ -3760,7 +3782,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
         
         newDateInput.addEventListener('change', () => {
             console.log('📅 Date input changed:', newDateInput.value);
-            loadRecentScreenshots();
+            loadRecentScreenshots({ force: true });
         });
     }
     
@@ -3768,35 +3790,168 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
     if (typeof lucide !== 'undefined') {
         lucide.createIcons();
     }
+
+    try { window.initScreenshotFilterDropdowns?.(); } catch (_) {}
 }
 
-function closeScreenshotLightbox() {
+function closeScreenshotLightbox(force) {
     const overlay = document.getElementById('screenshotLightbox');
     const img = document.getElementById('screenshotLightboxImg');
-    if (img) img.removeAttribute('src');
-    if (overlay) overlay.hidden = true;
+    const stage = document.getElementById('screenshotLightboxStage');
+    const meta = document.getElementById('screenshotLightboxMeta');
+    if (!overlay || (overlay.hidden && !force)) return;
+
+    if (window.__screenshotLightboxCloseTimer) {
+        clearTimeout(window.__screenshotLightboxCloseTimer);
+        window.__screenshotLightboxCloseTimer = null;
+    }
+
+    overlay.classList.remove('is-open');
+    overlay.setAttribute('aria-hidden', 'true');
+    if (stage) {
+        stage.classList.remove('is-loading', 'has-preview');
+    }
+    window.__screenshotLightboxGen = (window.__screenshotLightboxGen || 0) + 1;
+    const finish = () => {
+        window.__screenshotLightboxCloseTimer = null;
+        if (img) {
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('src');
+        }
+        if (meta) meta.textContent = '';
+        overlay.hidden = true;
+    };
+    if (force) {
+        finish();
+        return;
+    }
+    window.__screenshotLightboxCloseTimer = window.setTimeout(finish, 160);
 }
 
-function openScreenshot(imageUrl) {
-    const url = String(imageUrl || '').trim();
-    if (!url || url === 'null' || url === 'undefined') return false;
+function markScreenshotPreviewReady(stage, img) {
+    if (!stage || !img) return;
+    if (img.complete && img.naturalWidth > 0) {
+        stage.classList.add('has-preview');
+        stage.classList.remove('is-loading');
+    }
+}
+
+function bindScreenshotPreviewLoad(stage, img, generation) {
+    if (!stage || !img) return;
+    img.onload = () => {
+        if (generation !== window.__screenshotLightboxGen) return;
+        stage.classList.add('has-preview');
+        stage.classList.remove('is-loading');
+    };
+    img.onerror = () => {
+        if (generation !== window.__screenshotLightboxGen) return;
+        stage.classList.remove('is-loading');
+    };
+}
+
+function preloadScreenshotFull(url) {
+    const u = String(url || '').trim();
+    if (!u || u === 'null' || u === 'undefined') return;
+    if (!window.__screenshotPreloadCache) window.__screenshotPreloadCache = new Set();
+    if (window.__screenshotPreloadCache.has(u)) return;
+    window.__screenshotPreloadCache.add(u);
+    const img = new Image();
+    img.src = u;
+}
+
+function openScreenshotFromCard(card) {
+    if (!card) return false;
+    const tileImg = card.querySelector('img[data-full], img');
+    const thumb = tileImg?.src || card.dataset.popup || '';
+    const full = tileImg?.dataset?.full || card.dataset.popup || thumb;
+    const timeEl = card.querySelector('.screenshot-card-time, .tracker-screenshot-time');
+    const meta = document.getElementById('screenshotLightboxMeta');
+    if (meta) meta.textContent = timeEl?.textContent?.trim() || '';
+    return openScreenshot({ thumb, full });
+}
+
+/** Open viewer instantly with thumb, upgrade to full when ready. */
+function openScreenshot(source) {
+    let thumb = '';
+    let full = '';
+    if (typeof source === 'string') {
+        full = thumb = source.trim();
+    } else if (source && typeof source === 'object') {
+        thumb = String(source.thumb || source.full || '').trim();
+        full = String(source.full || source.thumb || '').trim();
+    }
+    if (!full && !thumb) return false;
+    if (!thumb) thumb = full;
+    if (!full) full = thumb;
+
     wireScreenshotLightbox();
     const overlay = document.getElementById('screenshotLightbox');
     const img = document.getElementById('screenshotLightboxImg');
-    if (!overlay || !img) return false;
-    img.src = url;
+    const stage = document.getElementById('screenshotLightboxStage');
+    const closeBtn = document.getElementById('screenshotLightboxClose');
+    if (!overlay || !img || !stage) return false;
+
+    const generation = (window.__screenshotLightboxGen || 0) + 1;
+    window.__screenshotLightboxGen = generation;
+
+    stage.classList.remove('has-preview');
+    bindScreenshotPreviewLoad(stage, img, generation);
+    img.src = thumb;
+    markScreenshotPreviewReady(stage, img);
+    if (!stage.classList.contains('has-preview')) {
+        stage.classList.add('is-loading');
+    }
+
     overlay.hidden = false;
+    overlay.setAttribute('aria-hidden', 'false');
+    void overlay.offsetWidth;
+    overlay.classList.add('is-open');
+    requestAnimationFrame(() => closeBtn?.focus());
+
+    const needsUpgrade = full !== thumb;
+    if (!needsUpgrade) return true;
+
+    preloadScreenshotFull(full);
+    const loader = new Image();
+    loader.onload = () => {
+        if (generation !== window.__screenshotLightboxGen) return;
+        if (overlay.hidden || !overlay.classList.contains('is-open')) return;
+        img.src = full;
+        markScreenshotPreviewReady(stage, img);
+    };
+    loader.onerror = () => { /* keep thumb */ };
+    loader.src = full;
     return true;
 }
 
 function wireScreenshotLightbox() {
     if (document.documentElement.dataset.screenshotLightboxWired === '1') return;
     document.documentElement.dataset.screenshotLightboxWired = '1';
+
+    const closeBtn = document.getElementById('screenshotLightboxClose');
+    if (closeBtn && closeBtn.dataset.wired !== '1') {
+        closeBtn.dataset.wired = '1';
+        closeBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            closeScreenshotLightbox();
+        });
+    }
+
+    document.addEventListener('mouseenter', (event) => {
+        const card = event.target.closest?.('.screenshot-card, .tracker-screenshot-card');
+        if (!card) return;
+        const tileImg = card.querySelector('img[data-full]');
+        if (tileImg?.dataset?.full) preloadScreenshotFull(tileImg.dataset.full);
+    }, true);
+
     document.addEventListener('click', (event) => {
         const overlay = document.getElementById('screenshotLightbox');
         if (!overlay || overlay.hidden) return;
-        const closeBtn = event.target.closest?.('#screenshotLightboxClose');
-        if (closeBtn || event.target === overlay) {
+        const dismiss = event.target.closest?.('[data-lightbox-dismiss], #screenshotLightboxClose');
+        const onShell = event.target.closest?.('.screenshot-lightbox-shell');
+        if (dismiss || event.target === overlay || (overlay.contains(event.target) && !onShell)) {
             event.preventDefault();
             closeScreenshotLightbox();
         }
@@ -3810,10 +3965,13 @@ function wireScreenshotLightbox() {
 
 wireScreenshotLightbox();
 window.openScreenshot = openScreenshot;
+window.openScreenshotFromCard = openScreenshotFromCard;
 window.closeScreenshotLightbox = closeScreenshotLightbox;
+window.preloadScreenshotFull = preloadScreenshotFull;
 
 // Date navigation for screenshots
 function navigateDate(direction) {
+    closeScreenshotLightbox(true);
     const screenshotDate = document.getElementById('screenshotDate');
     if (!screenshotDate) {
         console.log('❌ Date navigation failed: screenshotDate element not found');
@@ -3848,7 +4006,7 @@ function navigateDate(direction) {
     console.log(`📅 Setting new date: ${newDateStr}`);
     
     screenshotDate.value = newDateStr;
-    loadRecentScreenshots();
+    loadRecentScreenshots({ force: true });
 }
 
 // Make loadRecentScreenshots available globally for ui-manager
@@ -3866,6 +4024,7 @@ ipcRenderer.on('screenshot-saved', (event, data) => {
 
     screenshotSavedRefreshTimer = setTimeout(() => {
         screenshotSavedRefreshTimer = null;
+        closeScreenshotLightbox(true);
         const refreshDelay = 1500;
 
         const screenshotsPage = document.getElementById('screenshotsPage');
@@ -4386,7 +4545,7 @@ async function confirmDeleteScreenshot() {
     if (result.success) {
       const formatted = formatDeductionTime(result.deductedSeconds);
       showToast(`Screenshot deleted. ${formatted} deducted from your time.`, 'success');
-      loadRecentScreenshots();
+      loadRecentScreenshots({ force: true });
     } else {
       showToast(result.error || 'Failed to delete screenshot', 'error');
     }
