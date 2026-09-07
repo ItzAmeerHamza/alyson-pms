@@ -1296,6 +1296,37 @@ class ForceUpdater {
     return /ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_|ERR_NAME_NOT_RESOLVED|ERR_NETWORK|ERR_TIMED_OUT|ENETUNREACH|EHOSTUNREACH|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|socket hang up|getaddrinfo|Download timed out|Download failed: HTTP 5/i.test(msg);
   }
 
+  isInsufficientDiskError(err) {
+    const msg = String(err?.message || err || '');
+    return /ENOSPC|no space left|not enough (free )?disk|disk.?full|edquot/i.test(msg);
+  }
+
+  getVolumeFreeBytes(dir) {
+    const { execFileSync } = require('child_process');
+    const os = require('os');
+    const out = execFileSync('df', ['-k', dir || os.tmpdir()], { encoding: 'utf8' });
+    const line = out.trim().split('\n').pop() || '';
+    const parts = line.split(/\s+/).filter(Boolean);
+    const availK = Number(parts[3]);
+    return Number.isFinite(availK) ? availK * 1024 : 0;
+  }
+
+  assertEnoughDiskForMacUpdate(workDir) {
+    const needBytes = 500 * 1024 * 1024;
+    let free = 0;
+    try {
+      free = this.getVolumeFreeBytes(workDir);
+    } catch (_) {
+      return;
+    }
+    if (free > 0 && free < needBytes) {
+      const freeMb = Math.max(0, Math.round(free / (1024 * 1024)));
+      throw new Error(
+        `Not enough free disk space to install the update (${freeMb} MB free). Free at least 500 MB, then click Retry Update.`,
+      );
+    }
+  }
+
   friendlyUpdateError(message) {
     const msg = String(message || '');
     if (this.isTransientNetworkUpdateError(msg)) {
@@ -1527,28 +1558,44 @@ class ForceUpdater {
     const extractDir = path.join(workDir, 'extracted');
 
     try {
-      // Verify we can write to the installed bundle location before downloading.
       const bundlePath = this.getInstalledAppBundlePath();
       if (!bundlePath) throw new Error('Could not resolve installed app path');
-      const parentDir = path.dirname(bundlePath);
-      try {
-        fs.accessSync(parentDir, fs.constants.W_OK);
-      } catch {
-        throw new Error(`No write access to ${parentDir} (app likely needs manual install)`);
+      const writableAt = [bundlePath, path.dirname(bundlePath)].find((p) => {
+        try {
+          fs.accessSync(p, fs.constants.W_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      if (!writableAt) {
+        throw new Error(`No write access to ${bundlePath} (move Alyson PM to Applications, then retry)`);
       }
 
       fs.mkdirSync(extractDir, { recursive: true });
+      this.assertEnoughDiskForMacUpdate(workDir);
 
       const url = this.getMacZipUrl(version);
       console.log('📥 [FORCE-UPDATER] macOS in-place download:', url);
 
-      await this.downloadFile(url, zipPath, (percent) => {
-        this.downloadProgress = percent;
-        this.sendToRenderer('update-download-progress', { percent });
-      });
+      let downloadErr = null;
+      for (const family of [4, 0]) {
+        try {
+          await this.downloadFile(url, zipPath, (percent) => {
+            this.downloadProgress = percent;
+            this.sendToRenderer('update-download-progress', { percent });
+          }, { family });
+          downloadErr = null;
+          break;
+        } catch (err) {
+          downloadErr = err;
+          console.warn(`⚠️ [FORCE-UPDATER] Mac ZIP download failed (family=${family}):`, err?.message || err);
+        }
+      }
+      if (downloadErr) throw downloadErr;
 
       console.log('📦 [FORCE-UPDATER] Extracting update ZIP...');
-      execFileSync('ditto', ['-x', '-k', zipPath, extractDir], { timeout: 120000 });
+      execFileSync('ditto', ['-x', '-k', zipPath, extractDir], { timeout: 300000 });
 
       const appName = fs.readdirSync(extractDir).find((n) => n.endsWith('.app'));
       if (!appName) throw new Error('No .app found in update ZIP');
@@ -1582,16 +1629,22 @@ class ForceUpdater {
       this.updateError = error.message;
       try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
 
-      // Fall back to manual DMG install so the user is never stuck.
-      this.manualInstallRequired = true;
+      const disk = this.isInsufficientDiskError(error);
+      // Keep auto-retry as the primary path. Sticky DMG-only trapped users on
+      // "drag to Applications" after a full disk or a flaky GitHub download.
+      this.manualInstallRequired = false;
       this.saveUpdateState();
+      const message = disk
+        ? (error.message || 'Not enough free disk space to install the update. Free at least 500 MB, then click Retry Update.')
+        : 'Automatic update could not finish. Click Retry Update to install in place. Use Download Installer only if Retry keeps failing.';
       return {
         success: false,
-        error: 'in_place_failed',
-        fallbackToDmg: true,
-        manualInstallRequired: true,
+        error: disk ? 'disk_full' : 'in_place_failed',
+        fallbackToDmg: !disk,
+        manualInstallRequired: false,
+        showManualDownloadOption: !disk,
         manualDownloadUrl: this.getManualDownloadUrl(version),
-        message: 'Automatic update could not complete. Use Download Installer to finish updating.',
+        message,
       };
     }
   }

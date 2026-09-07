@@ -2,6 +2,11 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.242] - 2026-09-07
+
+### Fixed
+- **Auto-update**: Mac in-place update no longer jumps to “drag to Applications” after a full disk or a failed ZIP download. Retry stays in-app; low-disk shows a space error instead of a DMG fallback.
+
 ## [1.0.241] - 2026-09-07
 
 ### Improved

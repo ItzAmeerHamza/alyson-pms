@@ -4180,7 +4180,7 @@ class UIManager {
     let message = updateInfo.message;
     if (!message) {
       if (updateInfo.dmgInstallReady) {
-        message = `${versionPrefix}Click Retry Update to install automatically. If that fails, use Download Installer and drag Alyson PM to Applications.`;
+        message = `${versionPrefix}Automatic update could not finish. Click Retry Update to install in place. Use Download Installer only if Retry keeps failing.`;
       } else if (updateInfo.windowsInstaller || updateInfo.showManualDownloadOption || updateInfo.fallbackToWindowsInstaller) {
         message = `${versionPrefix}Click Retry Update — Alyson PM will download and install automatically. Use Download Installer Manually only if Retry keeps failing.`;
       } else {
@@ -4311,14 +4311,18 @@ class UIManager {
         return;
       }
 
-      // macOS in-place download failed — offer DMG installer fallback.
-      if (result.fallbackToDmg || result.error === 'in_place_failed') {
-        console.log('🔧 [UI-MANAGER] In-place update failed, showing DMG fallback');
+      // macOS in-place download failed — keep Retry primary (do not force DMG).
+      if (result.error === 'disk_full' || result.fallbackToDmg || result.error === 'in_place_failed') {
+        console.log('🔧 [UI-MANAGER] In-place update failed:', result.error || result.message);
         this.showManualInstallFallback({
-          dmgInstallReady: true,
+          dmgInstallReady: result.error !== 'disk_full' && !!result.fallbackToDmg,
           newVersion: result.version,
           manualDownloadUrl: result.manualDownloadUrl,
+          message: result.message,
         });
+        if (updateBtn) updateBtn.disabled = false;
+        if (btnText) btnText.textContent = 'Retry Update';
+        if (btnSpinner) btnSpinner.style.display = 'none';
         return;
       }
 
