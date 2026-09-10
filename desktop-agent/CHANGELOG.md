@@ -2,6 +2,12 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.243] - 2026-09-11
+
+### Fixed
+- **Stop / retry queue**: A successful online Stop no longer leaves the session in `offline-time-logs.json`. That leftover queue was retried every 10s (`Internal server error`), reheated the laptop, and made Stop/Start feel automatic. After a live write the row is marked synced so wake will not replay it (no phantom extra hours). Failed closes still retry the same UUID.
+- **Not-tracking reminder**: Idle-prompt overlay flags are always cleared after timeout/sleep, so the Start reminder can surface again (was stuck for hours). Repeat while off is 5 minutes.
+
 ## [1.0.242] - 2026-09-07
 
 ### Fixed

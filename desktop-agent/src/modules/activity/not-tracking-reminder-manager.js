@@ -3,15 +3,16 @@
 /**
  * Not-tracking front-of-screen reminder
  *
- * When the employee is working on the machine but Alyson PM is NOT tracking,
- * bring the main window to the front after a short activity grace, then every
- * 30 minutes while still off. Never runs while tracking is active.
+ * For every logged-in user on macOS and Windows: when the employee is using the
+ * machine but Alyson PM is NOT tracking, bring the main window to the front
+ * after a short activity grace, then every 5 minutes while still off.
+ * Never runs while tracking is active. No per-user / per-org feature flag.
  *
  * Detection uses Electron powerMonitor.getSystemIdleTime() (no Swift/Python).
  */
 
 const GRACE_MS = 3 * 60 * 1000;
-const REPEAT_MS = 30 * 60 * 1000;
+const REPEAT_MS = 5 * 60 * 1000;
 const ACTIVE_IDLE_MAX_SEC = 60;
 const AWAY_IDLE_SEC = 120;
 const POLL_MS = 30 * 1000;
@@ -48,7 +49,7 @@ class NotTrackingReminderManager {
       try { this._intervalId.unref(); } catch (_) { /* ignore */ }
     }
     console.log(
-      '🔔 [NOT-TRACKING-REMINDER] Started (grace 3m, repeat 30m, tracking-off only)',
+      '🔔 [NOT-TRACKING-REMINDER] Started (grace 3m, repeat 5m, tracking-off only)',
     );
     // Evaluate once immediately so a long-running session does not wait a full poll.
     try {
@@ -75,7 +76,7 @@ class NotTrackingReminderManager {
 
   /**
    * Tracking stopped (manual or auto). Reset so Stop → work 3m → focus,
-   * then every 30m while still off. Re-arm the poller if Stop cleanup killed it.
+   * then every 5m while still off. Re-arm the poller if Stop cleanup killed it.
    */
   onTrackingStopped() {
     this._clearState();
@@ -130,10 +131,31 @@ class NotTrackingReminderManager {
 
   _idlePromptVisible() {
     try {
-      // IdlePromptManager sets _onTop while the idle overlay owns the window.
+      // Prefer the idle monitor's live flag. IdlePromptManager used to leave
+      // stale `_onTop` / `_responseCallback` after timeout/sleep, which blocked
+      // this reminder for hours (Fawad Sep 10). Heal stale flags when inactive.
+      const monitor = global.enhancedIdleMonitor;
+      if (monitor && monitor._idlePromptActive === true) return true;
+
       const idle = global.idlePromptManager;
-      if (idle && idle._onTop) return true;
-      if (idle && idle._responseCallback) return true;
+      if (!idle) return false;
+
+      const managerShows =
+        (typeof idle.isShowing === 'function' && idle.isShowing()) ||
+        !!(idle._onTop || idle._responseCallback);
+
+      if (!managerShows) return false;
+
+      // Monitor says prompt is not active (or missing) but manager flags linger
+      // → clear and allow the Start reminder to fire.
+      if (!monitor || monitor._idlePromptActive !== true) {
+        try {
+          if (typeof idle.hide === 'function') idle.hide();
+          else if (typeof idle.clear === 'function') idle.clear();
+        } catch (_) { /* ignore */ }
+        return false;
+      }
+      return true;
     } catch (_) { /* ignore */ }
     return false;
   }
@@ -200,7 +222,8 @@ class NotTrackingReminderManager {
 
   /**
    * Bring the existing tracking window to the front (idle-prompt style).
-   * Brief always-on-top so we surface over fullscreen apps, then clear.
+   * Runs for every logged-in user on macOS and Windows — no platform/user gate.
+   * Brief always-on-top so we surface over other apps, then clear.
    */
   focusMainWindow() {
     if (this._isTracking()) return false;
@@ -213,8 +236,16 @@ class NotTrackingReminderManager {
 
     try {
       if (win.isMinimized()) win.restore();
+      try {
+        if (typeof win.setSkipTaskbar === 'function') win.setSkipTaskbar(false);
+      } catch (_) { /* ignore */ }
       win.show();
       win.focus();
+      try {
+        if (typeof win.moveTop === 'function') win.moveTop();
+      } catch (_) { /* ignore */ }
+
+      // Always-on-top briefly so the Start UI surfaces on both macOS and Windows.
       try {
         win.setAlwaysOnTop(true, 'screen-saver');
       } catch (_) {
@@ -226,10 +257,26 @@ class NotTrackingReminderManager {
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       } catch (_) { /* ignore */ }
 
-      if (process.platform === 'darwin') {
-        try {
-          const { app } = require('electron');
+      try {
+        const { app } = require('electron');
+        if (process.platform === 'darwin') {
           app.focus({ steal: true });
+        } else if (typeof app.focus === 'function') {
+          app.focus();
+        }
+      } catch (_) { /* ignore */ }
+
+      // Windows: flash taskbar if another app still holds foreground.
+      if (process.platform === 'win32') {
+        try {
+          if (typeof win.flashFrame === 'function') win.flashFrame(true);
+          setTimeout(() => {
+            try {
+              if (!win.isDestroyed() && typeof win.flashFrame === 'function') {
+                win.flashFrame(false);
+              }
+            } catch (_) { /* ignore */ }
+          }, 2000);
         } catch (_) { /* ignore */ }
       }
 

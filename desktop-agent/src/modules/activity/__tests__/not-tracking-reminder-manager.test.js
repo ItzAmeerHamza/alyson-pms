@@ -45,6 +45,7 @@ describe('NotTrackingReminderManager', () => {
     global.trackingManager = { isTracking: false };
     global.isScreenLocked = false;
     global.idlePromptManager = null;
+    global.enhancedIdleMonitor = null;
     powerMonitor.getSystemIdleTime.mockReturnValue(0);
     mgr = new NotTrackingReminderManager();
   });
@@ -104,12 +105,41 @@ describe('NotTrackingReminderManager', () => {
     expect(win.show).toHaveBeenCalledTimes(1);
   });
 
-  test('repeats every 30 minutes while still off and working', () => {
+  test('repeats every 5 minutes while still off and working', () => {
     mgr.start();
     jest.advanceTimersByTime(GRACE_MS + 30_000);
     expect(win.show).toHaveBeenCalledTimes(1);
     win.show.mockClear();
     jest.advanceTimersByTime(REPEAT_MS);
     expect(win.show).toHaveBeenCalledTimes(1);
+  });
+
+  test('skips focus while idle prompt is actively showing', () => {
+    global.enhancedIdleMonitor = { _idlePromptActive: true };
+    global.idlePromptManager = { _onTop: true, _responseCallback: () => {} };
+    mgr.start();
+    jest.advanceTimersByTime(GRACE_MS + 60_000);
+    expect(win.show).not.toHaveBeenCalled();
+  });
+
+  test('heals stale idle-prompt flags and still reminds after timeout leftover', () => {
+    // Fawad Sep 10: monitor inactive but manager still had _responseCallback.
+    const hide = jest.fn(function hide() {
+      this._onTop = false;
+      this._responseCallback = null;
+    });
+    global.enhancedIdleMonitor = { _idlePromptActive: false };
+    global.idlePromptManager = {
+      _onTop: true,
+      _responseCallback: () => {},
+      hide,
+      isShowing() {
+        return !!(this._onTop || this._responseCallback);
+      },
+    };
+    mgr.start();
+    jest.advanceTimersByTime(GRACE_MS + 60_000);
+    expect(hide).toHaveBeenCalled();
+    expect(win.show).toHaveBeenCalled();
   });
 });

@@ -3,7 +3,6 @@
 /**
  * Idle-confirmation prompt.
  *
- * Idle-confirmation prompt.
  * When the user has had no keyboard/mouse input for a while, the main tracking
  * window is brought forward with a countdown and two choices:
  *   - "I'm working"                 -> keep tracking (resolves 'working')
@@ -14,6 +13,10 @@
  * This renders inside the existing tracking window (no separate window). The
  * main process owns the authoritative countdown; this manager only surfaces the
  * window/overlay and relays the user's choice back through the response callback.
+ *
+ * IMPORTANT: hide()/clear() must always wipe `_onTop` and `_responseCallback`,
+ * even when the BrowserWindow is gone (sleep/quit). Otherwise NotTrackingReminder
+ * sees a stale "idle prompt visible" and never focuses the Start UI.
  */
 class IdlePromptManager {
   constructor() {
@@ -40,9 +43,21 @@ class IdlePromptManager {
     this._ipcBound = true;
   }
 
+  /** True only while a live prompt is waiting for a response. */
+  isShowing() {
+    return !!(this._onTop || this._responseCallback);
+  }
+
+  /** Wipe overlay ownership flags even if the window is already gone. */
+  clear() {
+    this._responseCallback = null;
+    this._onTop = false;
+  }
+
   _deliver(choice) {
     const cb = this._responseCallback;
-    this._responseCallback = null;
+    // Clear before invoke so re-entrant hide/show cannot see a stale callback.
+    this.clear();
     this.hide();
     if (cb) {
       try {
@@ -58,10 +73,13 @@ class IdlePromptManager {
    */
   show(countdownSeconds, onResponse) {
     this._bindIpc();
+    // Drop any leftover ownership from a previous prompt (timeout/sleep race).
+    this.clear();
     this._responseCallback = onResponse;
 
     const win = this._getMainWindow();
     if (!win) {
+      this.clear();
       throw new Error('Main window unavailable for idle prompt');
     }
 
@@ -96,16 +114,16 @@ class IdlePromptManager {
         win.webContents.send('hide-idle-prompt');
       } catch (_) {}
       // Restore normal window layering.
-      if (this._onTop) {
-        try {
-          win.setAlwaysOnTop(false);
-        } catch (_) {}
-        try {
-          win.setVisibleOnAllWorkspaces(false);
-        } catch (_) {}
-        this._onTop = false;
-      }
+      try {
+        win.setAlwaysOnTop(false);
+      } catch (_) {}
+      try {
+        win.setVisibleOnAllWorkspaces(false);
+      } catch (_) {}
     }
+    // Always clear — window may be null after sleep/quit, and the timeout path
+    // used to leave `_responseCallback` set, blocking not-tracking reminders.
+    this.clear();
   }
 }
 

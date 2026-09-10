@@ -281,6 +281,9 @@ class EnhancedIdleMonitor {
     try {
       this._idlePromptManager?.hide();
     } catch (_) {}
+    try {
+      this._idlePromptManager?.clear?.();
+    } catch (_) {}
 
     // Clear pending markSessionAsIdle timeout
     if (this._idleSessionTimeout) {
@@ -617,8 +620,13 @@ class EnhancedIdleMonitor {
       clearTimeout(this._idlePromptTimeout);
       this._idlePromptTimeout = null;
     }
+    // Always dismiss overlay ownership so NotTrackingReminder can fire after
+    // idle_timeout / break (hide must clear _responseCallback even with no window).
     try {
       this._idlePromptManager?.hide();
+    } catch (_) {}
+    try {
+      this._idlePromptManager?.clear?.();
     } catch (_) {}
 
     if (choice === 'working') {

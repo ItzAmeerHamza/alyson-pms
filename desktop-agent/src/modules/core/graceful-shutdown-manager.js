@@ -442,23 +442,26 @@ class GracefulShutdownManager {
               }
             } catch (_) { /* ignore */ }
           }
-          global.trackingManager._queueOfflineTimeLogUpdate({
-            id: timeLogId,
-            user_id: meta.user_id || global.currentUserId || global.config?.user_id,
-            project_id: meta.project_id || null,
-            device_id: meta.device_id || null,
-            start_time: startTime,
-            end_time: endTime,
-            status: 'completed',
-            // The agent was demonstrably alive until endTime — it was running when
-            // it wrote it. Without this the server's liveness ceiling would clamp a
-            // late offline flush back to the last heartbeat it received before the
-            // network died, silently eating genuine offline work.
-            last_alive_at: endTime,
-            client_last_seen_at: endTime,
-            idle_seconds: idleSeconds,
-            ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
-          });
+          global.trackingManager._queueOfflineTimeLogUpdate(
+            {
+              id: timeLogId,
+              user_id: meta.user_id || global.currentUserId || global.config?.user_id,
+              project_id: meta.project_id || null,
+              device_id: meta.device_id || null,
+              start_time: startTime,
+              end_time: endTime,
+              status: 'completed',
+              // The agent was demonstrably alive until endTime — it was running when
+              // it wrote it. Without this the server's liveness ceiling would clamp a
+              // late offline flush back to the last heartbeat it received before the
+              // network died, silently eating genuine offline work.
+              last_alive_at: endTime,
+              client_last_seen_at: endTime,
+              idle_seconds: idleSeconds,
+              ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
+            },
+            { flush: false },
+          );
           queuedOffline = true;
         }
       } catch (_) { /* ignore */ }
@@ -530,6 +533,19 @@ class GracefulShutdownManager {
       // Clear pending close since we succeeded
       this._clearPendingClose(timeLogId);
       try {
+        global.trackingManager?._markTimeLogSynced?.({
+          id: timeLogId,
+          start_time:
+            (this._capturedSessionMeta || {}).start_time ||
+            global.sessionStartTime ||
+            global.trackingManager?.sessionStartTime ||
+            null,
+          end_time: endTime,
+          status: 'completed',
+          event: 'synced_update',
+        });
+      } catch (_) { /* ignore */ }
+      try {
         global.trackingManager?._clearSessionCheckpoint?.();
       } catch (_) { /* ignore */ }
 
@@ -569,6 +585,9 @@ class GracefulShutdownManager {
         `⚠️ [GRACEFUL-SHUTDOWN] DB unreachable — close saved locally, will sync: ${error?.message || error}`,
       );
       this._lastStopSynced = false;
+      try {
+        global.trackingManager?.startOfflineSync?.();
+      } catch (_) { /* ignore */ }
       return recovered;
     }
   }

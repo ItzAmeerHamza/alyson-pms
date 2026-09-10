@@ -2311,20 +2311,24 @@ try {
     
     // Durable local copy FIRST — connection loss must not erase hours.
     this._storePendingSessionClose(timeLogId, endTime, userId);
-    this._queueOfflineTimeLogUpdate({
-      id: timeLogId,
-      user_id: userId,
-      start_time: startTime,
-      end_time: endTime,
-      status: 'completed',
-      project_id: this.currentProjectId || this.currentSession?.project_id || null,
-      ...(idleCutSeconds ? { authorized_idle_cut: true, time_cut_seconds: idleCutSeconds } : {}),
-    });
+    this._queueOfflineTimeLogUpdate(
+      {
+        id: timeLogId,
+        user_id: userId,
+        start_time: startTime,
+        end_time: endTime,
+        status: 'completed',
+        project_id: this.currentProjectId || this.currentSession?.project_id || null,
+        ...(idleCutSeconds ? { authorized_idle_cut: true, time_cut_seconds: idleCutSeconds } : {}),
+      },
+      { flush: false },
+    );
 
     const useBackendTimeLogs = backendTimeLogs.isBackendTimeLogsEnabled(this.config);
 
     if (!useBackendTimeLogs) {
       console.error('❌ [TRACKING-MANAGER] Backend API not configured — hours kept in offline-time-logs.json');
+      this.startOfflineSync();
       return { success: true, reason: 'offline_queued', offline: true };
     }
 
@@ -2365,6 +2369,13 @@ try {
             },
             this.config,
           );
+          this._markTimeLogSynced({
+            id: timeLogId,
+            start_time: startTime,
+            end_time: endTime,
+            status: 'completed',
+            event: 'synced_update',
+          });
           this._clearSessionCheckpoint();
           return { success: true, offline: false };
         } catch (createErr) {
@@ -2385,6 +2396,13 @@ try {
           },
           this.config,
         );
+        this._markTimeLogSynced({
+          id: timeLogId,
+          start_time: startTime,
+          end_time: endTime,
+          status: 'completed',
+          event: 'synced_update',
+        });
         this._clearPendingSessionClose?.(timeLogId);
         this._clearSessionCheckpoint();
         console.log(`✅ [TRACKING-MANAGER] Closed time log ${timeLogId}`);
@@ -2394,10 +2412,12 @@ try {
           '⚠️ [TRACKING-MANAGER] DB close failed — hours retained in offline queue:',
           updateErr?.message || updateErr,
         );
+        this.startOfflineSync();
         return { success: true, reason: 'offline_queued', offline: true };
       }
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] End time log error — hours retained offline:', error);
+      this.startOfflineSync();
       return { success: true, reason: 'offline_queued', offline: true, error: error.message };
     }
   }
@@ -2852,7 +2872,7 @@ try {
   /**
    * Queue a completed/update time log so stop-during-outage never loses hours
    */
-  _queueOfflineTimeLogUpdate(payload) {
+  _queueOfflineTimeLogUpdate(payload, { flush = true } = {}) {
     const offlineQueue = this.getOfflineQueue();
     const id = payload?.id ? String(payload.id) : null;
     // Prefer a single pending update per id (latest end_time wins) so retries stay idempotent.
@@ -2883,7 +2903,51 @@ try {
       end_time: payload?.end_time || null,
       status: payload?.status || 'completed',
     });
-    this.startOfflineSync();
+    // Stop/shutdown write this for crash safety, then try the API. Flushing
+    // before that write returns is what started the 10s Internal-server-error
+    // hammer on hours that had already saved.
+    if (flush) this.startOfflineSync();
+  }
+
+  /**
+   * Drop queued create/update rows for a time log that already reached RDS.
+   * Successful live writes used to leave those rows in the retry file + ledger,
+   * so every wake rehydrated them and the 10s flusher hammered Internal server
+   * error forever (Mohita 9 Sep).
+   */
+  _removeOfflineTimeLogItems(id) {
+    const sid = id != null ? String(id) : '';
+    if (!sid) return;
+    const queue = this.getOfflineQueue();
+    const next = queue.filter((item) => String(item?.data?.id || '') !== sid);
+    if (next.length === queue.length) return;
+    this._persistOfflineQueueOrThrow(next);
+    if (next.length === 0 && this.offlineSyncTimer) {
+      clearInterval(this.offlineSyncTimer);
+      this.offlineSyncTimer = null;
+    }
+  }
+
+  /**
+   * Record that this id is on the server so ledger rehydrate will not resurrect it.
+   */
+  _markTimeLogSynced({
+    id,
+    start_time = null,
+    end_time = null,
+    status = null,
+    event = 'synced_update',
+  } = {}) {
+    // Ledger first: if we crash after this line, rehydrate will see synced and
+    // will not put the hours back into the retry file (no double-bill replay).
+    this._appendTimeLedger({
+      event,
+      id: id || null,
+      start_time: start_time || null,
+      end_time: end_time || null,
+      status: status || null,
+    });
+    if (id) this._removeOfflineTimeLogItems(id);
   }
 
   /**
@@ -2952,6 +3016,7 @@ try {
       fs.closeSync(fd);
     }
     fs.renameSync(tmp, queuePath);
+    this._offlineQueueWriteGen = (this._offlineQueueWriteGen || 0) + 1;
     // Best-effort fsync of directory entry on POSIX
     try {
       const dirFd = fs.openSync(dir, 'r');
@@ -2963,6 +3028,53 @@ try {
       (Array.isArray(queue) ? queue : []).length,
       'items',
     );
+  }
+
+  /**
+   * Write flush results without clobbering a concurrent Stop/sleep queue write.
+   * Overwriting the file with only this flush's leftovers was able to:
+   *   - put a just-synced id back (retry could extend billed end = phantom time)
+   *   - drop an id queued while we were flushing (lost hours)
+   */
+  _commitProcessedOfflineQueue(originalQueue, remainingItems, genAtStart) {
+    const idOf = (item) => String(item?.data?.id || '');
+    const remainingById = new Map();
+    for (const item of remainingItems) {
+      const id = idOf(item);
+      if (id) remainingById.set(id, item);
+    }
+    const originalIds = new Set(originalQueue.map(idOf).filter(Boolean));
+    const remainingIds = new Set(remainingById.keys());
+    const syncedThisRun = new Set(
+      [...originalIds].filter((id) => !remainingIds.has(id)),
+    );
+
+    const genNow = this._offlineQueueWriteGen || 0;
+    if (genNow === genAtStart) {
+      this._persistOfflineQueueOrThrow(remainingItems);
+      return;
+    }
+
+    const diskNow = this.getOfflineQueue();
+    const merged = [];
+    const seen = new Set();
+    for (const item of diskNow) {
+      const id = idOf(item);
+      if (id && syncedThisRun.has(id)) continue; // live write already saved these
+      if (id && remainingById.has(id)) {
+        merged.push(remainingById.get(id));
+      } else {
+        merged.push(item); // queued while we flushed — keep, never drop hours
+      }
+      if (id) seen.add(id);
+    }
+    for (const item of remainingItems) {
+      const id = idOf(item);
+      if (id && seen.has(id)) continue;
+      if (id && syncedThisRun.has(id)) continue;
+      merged.push(item);
+    }
+    this._persistOfflineQueueOrThrow(merged);
   }
 
   _getTimeLedgerPath() {
@@ -3016,7 +3128,25 @@ try {
       }
 
       let added = 0;
+      let stripped = 0;
+      const syncedEvents = new Set([
+        'synced_create',
+        'synced_update',
+        'synced_update_as_create',
+      ]);
       for (const [id, row] of lastById.entries()) {
+        if (syncedEvents.has(row.event)) {
+          // Already on the server — never replay (that is how phantom time
+          // got billed: a successful Stop was retried and could extend the row).
+          for (let i = queue.length - 1; i >= 0; i -= 1) {
+            if (String(queue[i]?.data?.id || '') === id) {
+              queue.splice(i, 1);
+              queuedIds.delete(id);
+              stripped += 1;
+            }
+          }
+          continue;
+        }
         if (row.event !== 'queue_create' && row.event !== 'queue_update') continue;
 
         // If queue already has this id, MERGE later end_time into create/update —
@@ -3087,10 +3217,11 @@ try {
         }
       }
 
-      if (added > 0) {
+      if (added > 0 || stripped > 0) {
         this._persistOfflineQueueOrThrow(queue);
         console.log(
-          `💾 [TRACKING-MANAGER] Rehydrated ${added} time-log item(s) from local ledger`,
+          `💾 [TRACKING-MANAGER] Rehydrated ${added} time-log item(s) from local ledger` +
+            (stripped ? `, stripped ${stripped} already-synced` : ''),
         );
       }
     } catch (err) {
@@ -3205,6 +3336,7 @@ try {
 
     try {
       const queue = this.getOfflineQueue();
+      const flushGen = this._offlineQueueWriteGen || 0;
       if (queue.length === 0) {
         if (this.offlineSyncTimer) {
           clearInterval(this.offlineSyncTimer);
@@ -3372,6 +3504,9 @@ try {
                 });
               } catch (updErr) {
                 // Row missing (create still pending / lost) → upsert as completed create.
+                // Same UUID — ON CONFLICT updates that row. Never invent a second session.
+                // Do NOT treat Internal server error as missing: that can insert a new
+                // overlapping row when the update failed for another reason.
                 const msg = String(updErr?.message || updErr || '').toLowerCase();
                 const canCreate =
                   updates.end_time &&
@@ -3445,13 +3580,18 @@ try {
 
       const hadItems = queue.length > 0;
       const syncedCount = queue.length - remainingItems.length;
-      this._persistOfflineQueueOrThrow(remainingItems);
+      this._commitProcessedOfflineQueue(
+        queue,
+        remainingItems,
+        flushGen,
+      );
 
-      if (remainingItems.length === 0 && this.offlineSyncTimer) {
+      const stillQueued = this.getOfflineQueue();
+      if (stillQueued.length === 0 && this.offlineSyncTimer) {
         clearInterval(this.offlineSyncTimer);
         this.offlineSyncTimer = null;
         console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
-      } else if (remainingItems.length > 0) {
+      } else if (stillQueued.length > 0) {
         // Keep hammering until empty — never leave payroll stranded without a timer.
         this.startOfflineSync();
       }
