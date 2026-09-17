@@ -331,7 +331,7 @@ class UIManager {
     };
     
     // Cache all page sections
-    const pageIds = ['dashboard', 'timetracker', 'screenshots', 'faq', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
+    const pageIds = ['dashboard', 'timetracker', 'assistant', 'screenshots', 'faq', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
     pageIds.forEach(pageId => {
       const pageElement = document.getElementById(pageId + 'Page');
       if (pageElement) {
@@ -483,6 +483,10 @@ class UIManager {
       setTimeout(() => this.initUpdatesPage(), 100);
     }
 
+    if (pageId === 'assistant') {
+      setTimeout(() => this.initAssistantPage(), 50);
+    }
+
     // Screenshots must load on every visit — 5-min cache + 5s debounce left the page stuck on "Loading…"
     if (pageId === 'screenshots') {
       setTimeout(() => {
@@ -582,16 +586,25 @@ class UIManager {
     }
   }
 
-  updatePageTitle(pageId) {
-    const pageTitle = document.getElementById('pageTitle');
-    if (!pageTitle) return;
-    
+  initAssistantPage() {
+    try {
+      if (!this.assistantCoachInstance) {
+        const AssistantCoach = require('./assistant-coach');
+        this.assistantCoachInstance = new AssistantCoach(this.ipcRenderer);
+      }
+      this.assistantCoachInstance.open();
+    } catch (err) {
+      console.error('❌ [UI-MANAGER] Failed to open Alyson Coach:', err?.message || err);
+    }
+  }
+
+  getPageTitle(pageId) {
     const pageTitles = {
       'dashboard': 'Dashboard',
-      'timetracker': 'Time Tracker', 
+      'timetracker': 'Time Tracker',
+      'assistant': 'Alyson Coach',
       'screenshots': 'Screenshots',
       'reports': 'Live Report',
-      // Added missing titles so the header reflects the active page
       'url-activity': 'URL History',
       'app-activity': 'App Detection',
       'activity-between-screenshots': 'Activity Monitor',
@@ -599,8 +612,13 @@ class UIManager {
       'faq': 'FAQ',
       'updates': 'App Updates'
     };
-    
-    pageTitle.textContent = pageTitles[pageId] || 'Dashboard';
+    return pageTitles[pageId] || 'Dashboard';
+  }
+
+  updatePageTitle(pageId) {
+    const pageTitle = document.getElementById('pageTitle');
+    if (!pageTitle) return;
+    pageTitle.textContent = this.getPageTitle(pageId);
   }
 
   lazyLoadContent(pageId) {
@@ -2612,6 +2630,22 @@ class UIManager {
     if (appContainer) {
       appContainer.style.display = 'none';
     }
+
+      try {
+        const loginForm = document.getElementById('loginForm');
+        const newPasswordForm = document.getElementById('newPasswordForm');
+        const forgotModal = document.getElementById('forgotPasswordModal');
+        if (newPasswordForm) {
+          newPasswordForm.hidden = true;
+          newPasswordForm.style.display = 'none';
+        }
+        if (forgotModal) {
+          forgotModal.hidden = true;
+          forgotModal.classList.remove('visible');
+          document.body?.classList?.remove('password-modal-open');
+        }
+        if (loginForm) loginForm.style.display = 'block';
+      } catch (_) {}
     
     // Also hide the startup overlay so the login form is visible
     try {

@@ -48,6 +48,8 @@ class TrackingManager extends EventEmitter {
     this._localSessionArmed = false;
     this._offlineResumeHooksBound = false;
     this._wasOfflineForSync = false;
+    this.offlineSyncTimer = null;
+    this._offlineRetryTimeout = null;
     
     console.log('✅ TrackingManager initialized');
   }
@@ -63,17 +65,25 @@ class TrackingManager extends EventEmitter {
     this.mainWindow = deps.mainWindow;
     this.enhancedAppDetector = deps.enhancedAppDetector;  // 🔧 CRITICAL FIX: Store app detector reference
 
-    // Resume syncing any hours queued while the device was offline
+    // Resume syncing any hours queued while the device was offline.
+    // Disk (queue + ledger) is the source of truth — a thrown flush must not
+    // forget those rows.
     try {
       this._rehydrateOfflineQueueFromLedger();
-      // Always bind reconnect hooks so restores flush immediately.
-      this.startOfflineSync();
       const pending = this.getOfflineQueue();
       if (pending.length > 0) {
-        console.log(`📶 [TRACKING-MANAGER] Found ${pending.length} offline time log(s) — syncing`);
-        void this.processOfflineQueue();
+        console.log(`📶 [TRACKING-MANAGER] Found ${pending.length} offline time log(s) — will sync on event / backoff`);
       }
-    } catch (_) {}
+      this.startOfflineSync();
+    } catch (err) {
+      console.warn(
+        '⚠️ [TRACKING-MANAGER] Offline resume failed — hours remain on disk:',
+        err?.message || err,
+      );
+      try {
+        this.startOfflineSync();
+      } catch (_) { /* next Start/Stop/wake/online still flushes */ }
+    }
     
     console.log('🔧 TrackingManager dependencies initialized', {
       hasEnhancedAppDetector: !!this.enhancedAppDetector
@@ -247,19 +257,39 @@ try {
       }
 
       if (this.isTracking && !this.isPaused) {
-        debugLogger.guard('tracking', 'Tracking already active - early exit', {
-          isTracking: this.isTracking,
-          isPaused: this.isPaused,
-          timeLogId: this.currentTimeLogId
-        });
-        console.log('⚠️ [TRACKING-MANAGER] Tracking already active');
-        return {
-          success: true,
-          timeLogId: this.currentTimeLogId,
-          projectId: this.currentProjectId,
-          startTime: this.sessionStartTime,
-          isTracking: true
-        };
+        const liveId = this.currentTimeLogId || global.currentTimeLogId || null;
+        if (!liveId) {
+          console.warn('⚠️ [TRACKING-MANAGER] isTracking but no session — treating as stopped');
+          this.isTracking = false;
+          global.isTracking = false;
+        } else {
+          debugLogger.guard('tracking', 'Tracking already active - re-arm display', {
+            isTracking: this.isTracking,
+            isPaused: this.isPaused,
+            timeLogId: liveId,
+          });
+          console.log('⚠️ [TRACKING-MANAGER] Tracking already active — re-arming clock, not a second session');
+          try {
+            if (global.trayManager?.startTrayTimer) {
+              global.trayManager.startTrayTimer();
+            }
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+              this.mainWindow.webContents.send('tracking-started', this.currentSession || {
+                id: liveId,
+                time_log_id: liveId,
+                start_time: this.sessionStartTime,
+              });
+            }
+          } catch (_) { /* display re-arm is best-effort */ }
+          return {
+            success: true,
+            alreadyTracking: true,
+            timeLogId: liveId,
+            projectId: this.currentProjectId,
+            startTime: this.sessionStartTime,
+            isTracking: true
+          };
+        }
       }
 
       // If paused, resume instead
@@ -576,6 +606,7 @@ try {
         ...(timeLog._offline ? { _offline: true } : {})
       };
       this._localSessionArmed = true;
+      this._sessionGeneration = (this._sessionGeneration || 0) + 1;
 
       try {
         require('../utils/session-audit').sessionCreated({
@@ -622,19 +653,8 @@ try {
         const projectName = this.currentSession?.projectName || null;
         // PAYROLL CRITICAL: never block Start on today-stats network fetch.
         // Use last-known local floor immediately; refresh base in background.
-        const { closedBaseAfterSleep } = require('../utils/sleep-aware-elapsed');
-        let completedTodayBeforeSessionSeconds = startAfterSleep
-          ? closedBaseAfterSleep(
-              global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
-            )
-          : Math.max(
-              0,
-              Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
-              Math.floor(Number(global._rendererTodayFloorSeconds) || 0),
-              Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
-              Math.floor(Number(global._lastGoodTodayStats?.totalTime) || 0),
-              Math.floor(Number(global._lastTodayTotalAtStop) || 0),
-            );
+        const completedTodayBeforeSessionSeconds =
+          this._resolveStartClosedBaseSeconds(startAfterSleep);
         if (startAfterSleep) {
           global._trayTodayHighWaterSeconds = completedTodayBeforeSessionSeconds;
         }
@@ -643,6 +663,7 @@ try {
           projectId: this.currentProjectId,
           startTime: this.sessionStartTime,
           completedTodayBeforeSessionSeconds,
+          replaceCumulativeBase: true,
         });
         console.log('✅ [TRAY] Icon updated immediately after state set');
         // Background reconcile — must not affect isTracking / Start success.
@@ -1090,6 +1111,13 @@ try {
    */
   async stopTracking(reason = 'manual', message = null) {
     const stopStartTime = Date.now();
+    const stopTargetId = this.currentTimeLogId || global.currentTimeLogId || null;
+    const generationAtEntry = this._sessionGeneration || 0;
+    const liveSessionWon = () =>
+      (this._sessionGeneration || 0) > generationAtEntry &&
+      !!(this.isTracking || global.isTracking) &&
+      !!(this.currentTimeLogId || global.currentTimeLogId) &&
+      String(this.currentTimeLogId || global.currentTimeLogId) !== String(stopTargetId || '');
     try {
       // Lid-close / sleep is a full stop. Do not auto-start on wake.
       const isAutoSleepStop = reason === 'system_sleep';
@@ -1267,6 +1295,19 @@ try {
         });
       }
 
+      // A Start that landed during this Stop owns the live session now.
+      // Do not tear it down or send another tracking-stopped (Aditya #2).
+      if (liveSessionWon()) {
+        console.warn(
+          `⚠️ [TRACKING-MANAGER] Stale Stop ${stopTargetId} — keeping live ${this.currentTimeLogId}`,
+        );
+        if (stopTargetId) {
+          void this._endCurrentTimeLogBackground(stopTargetId);
+        }
+        global.isStopping = false;
+        return { success: true, ignoredStaleStop: true, timeLogId: this.currentTimeLogId };
+      }
+
       // ============================================================
       // PHASE 3: SET ALL MANAGER STATES (synchronous, ~50ms)
       // ============================================================
@@ -1336,6 +1377,17 @@ try {
       
       // Close any open app/URL sessions for this user (session model)
       try {
+        if (liveSessionWon()) {
+          console.warn(
+            `⚠️ [TRACKING-MANAGER] Stale Stop after Start — keeping live ${this.currentTimeLogId}`,
+          );
+          if (stopTargetId) {
+            void this._endCurrentTimeLogBackground(stopTargetId);
+          }
+          global.isStopping = false;
+          global._stopEndTimeOverride = null;
+          return { success: true, ignoredStaleStop: true, timeLogId: this.currentTimeLogId };
+        }
         const userId = global.currentUserId;
         const endedAt = new Date().toISOString();
         const {
@@ -1366,6 +1418,14 @@ try {
       }
 
       try {
+        if (liveSessionWon()) {
+          if (stopTargetId) {
+            void this._endCurrentTimeLogBackground(stopTargetId);
+          }
+          global.isStopping = false;
+          global._stopEndTimeOverride = null;
+          return { success: true, ignoredStaleStop: true, timeLogId: this.currentTimeLogId };
+        }
         const dbResult = await this._runBackgroundStopOperations(timeLogIdForBackground, reason, message);
         if (!dbResult?.success) {
           console.warn('⚠️ [TRACKING-MANAGER] Database update may have failed:', dbResult?.reason || 'unknown');
@@ -1373,9 +1433,13 @@ try {
       } catch (e) {
         console.error('❌ [TRACKING-MANAGER] Stop operations failed:', e);
       } finally {
-        // Clear stopping flag when done
+        // Clear stopping flag when done — never force isTracking off if Start won.
         global.isStopping = false;
         global._stopEndTimeOverride = null;
+      }
+
+      if (liveSessionWon()) {
+        return { success: true, ignoredStaleStop: true, timeLogId: this.currentTimeLogId };
       }
 
       // Emit event for other modules
@@ -1472,6 +1536,7 @@ try {
     this._captureStopTodayTotalSnapshot();
 
     const timeLogIdForBackground = this.currentTimeLogId;
+    const generationAtEntry = this._sessionGeneration || 0;
     this.isTracking = false;
     this.isPaused = false;
     
@@ -1499,7 +1564,10 @@ try {
     // PHASE 2: BACKGROUND CLEANUP (fire-and-forget)
     // Run all cleanup operations asynchronously without blocking return
     setImmediate(() => {
-      this._runBackgroundCleanup(reason, message).catch(error => {
+      this._runBackgroundCleanup(reason, message, {
+        generationAtEntry,
+        stopTargetId: timeLogIdForBackground,
+      }).catch(error => {
         console.error('❌ [TRACKING-MANAGER] Background cleanup error:', error);
       });
     });
@@ -1512,10 +1580,26 @@ try {
    * Run all cleanup operations in background
    * Called by stopTrackingAsync after immediate state changes
    */
-  async _runBackgroundCleanup(reason = 'manual', message = null) {
+  async _runBackgroundCleanup(reason = 'manual', message = null, opts = {}) {
     console.log('🧹 [TRACKING-MANAGER] Phase 2: Background cleanup starting...');
-    
+    const generationAtEntry = opts.generationAtEntry ?? this._sessionGeneration ?? 0;
+    const liveSessionWon = () =>
+      (this._sessionGeneration || 0) > generationAtEntry &&
+      !!(this.isTracking || this._localSessionArmed || global.isTracking);
+
+    const abortIfLiveWon = () => {
+      if (!liveSessionWon()) return false;
+      console.warn(
+        `⚠️ [TRACKING-MANAGER] Skipping leftover Stop cleanup — live session ${this.currentTimeLogId}`,
+      );
+      global.isStopping = false;
+      return true;
+    };
+
+    if (abortIfLiveWon()) return;
+
     try {
+      if (abortIfLiveWon()) return;
       // Stop URL capture manager
       try {
         if (global.urlCaptureManager) {
@@ -1550,23 +1634,29 @@ try {
           console.error('❌ Consolidated cleanup error:', error);
         }
       }
+
+      if (abortIfLiveWon()) return;
       
       // Mark systems for re-initialization
       if (global.consolidatedSystemsInitialized !== undefined) {
         global.consolidatedSystemsInitialized = false;
       }
       
+      if (abortIfLiveWon()) return;
       // Stop monitoring systems
       await this._stopMonitoringSystems();
+      if (abortIfLiveWon()) return;
       console.log('✅ [TRACKING-MANAGER] Background cleanup completed successfully');
       
     } catch (error) {
       console.error('❌ [TRACKING-MANAGER] Background cleanup error:', error);
     } finally {
-      // CRITICAL FIX: Always clear stopping flag in finally block
-      // This ensures the flag is cleared whether cleanup succeeds or fails
       global.isStopping = false;
-      global.isTracking = false;  // Ensure tracking stays false
+      // A newer Start owns recording now — never force the live session off
+      // (Aditya: Start for 2–3s then leftover Stop cleanup killed tracking).
+      if (!liveSessionWon()) {
+        global.isTracking = false;
+      }
       console.log('✅ [TRACKING-MANAGER] Stopping flag cleared');
     }
   }
@@ -1847,6 +1937,29 @@ try {
   }
 
   /**
+   * Closed-today seconds to seed the next Start. Never last-good totalTime or
+   * leftover tray high-water — those include a prior live session and jam the clock.
+   */
+  _resolveStartClosedBaseSeconds(startAfterSleep = false) {
+    const { closedBaseAfterSleep } = require('../utils/sleep-aware-elapsed');
+    if (startAfterSleep) {
+      return closedBaseAfterSleep(
+        global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
+      );
+    }
+    let closed = Math.max(
+      0,
+      Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
+      Math.floor(Number(global._lastTodayTotalAtStop) || 0),
+    );
+    const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
+    if (trayHw > 0 && closed > 0 && trayHw <= closed + 5) {
+      closed = Math.max(closed, trayHw);
+    }
+    return closed;
+  }
+
+  /**
    * SYNCHRONOUS durable arm for sleep/suspend BEFORE async stop.
    * OS may freeze the process mid-stopTracking — disk must already hold end_time.
    */
@@ -2090,6 +2203,15 @@ try {
       projectId: this.currentProjectId || global.currentProjectId,
     });
 
+    // RDS "too many connections" — do not open two more API calls every 30s.
+    if (
+      (typeof backendTimeLogs.isLikelyOffline === 'function' &&
+        backendTimeLogs.isLikelyOffline()) ||
+      (this._dbBackoffUntil && Date.now() < this._dbBackoffUntil)
+    ) {
+      return;
+    }
+
     if (String(timeLogId).startsWith('temp-')) {
       try {
         const queue = this.getOfflineQueue();
@@ -2129,7 +2251,12 @@ try {
         );
       } catch (err) {
         console.warn('⚠️ [TRACKING-MANAGER] Heartbeat failed:', err?.message || err);
+        this._noteDbBackoff(err);
       }
+    }
+
+    if (this._dbBackoffUntil && Date.now() < this._dbBackoffUntil) {
+      return;
     }
 
     try {
@@ -2140,9 +2267,17 @@ try {
         { status: 'active', last_alive_at: nowIso, client_last_seen_at: nowIso },
         this.config,
       );
+      this._dbBackoffAttempt = 0;
     } catch (err) {
       console.warn('⚠️ [TRACKING-MANAGER] Time log checkpoint failed:', err?.message || err);
+      this._noteDbBackoff(err);
     }
+  }
+
+  _noteDbBackoff(err) {
+    if (!this._isTransientOfflineSyncError(err?.message || err)) return;
+    this._dbBackoffAttempt = (this._dbBackoffAttempt || 0) + 1;
+    this._dbBackoffUntil = Date.now() + this._offlineRetryDelayMs(this._dbBackoffAttempt);
   }
 
   _getSessionCheckpointPath() {
@@ -2922,9 +3057,10 @@ try {
     const next = queue.filter((item) => String(item?.data?.id || '') !== sid);
     if (next.length === queue.length) return;
     this._persistOfflineQueueOrThrow(next);
-    if (next.length === 0 && this.offlineSyncTimer) {
-      clearInterval(this.offlineSyncTimer);
-      this.offlineSyncTimer = null;
+    if (next.length === 0) {
+      this._clearOfflineRetryTimer();
+    } else {
+      this._scheduleNextOfflineRetry();
     }
   }
 
@@ -3229,102 +3365,185 @@ try {
     }
   }
 
-  /**
-   * Start offline sync timer
-   */
-  startOfflineSync() {
-    // If already running, don't start another
-    if (this.offlineSyncTimer) {
-      // Still kick an immediate flush when caller asks again (wake / online).
-      void this._flushOfflineQueueIfOnline();
-      return;
-    }
-    
-    console.log('🔄 [TRACKING-MANAGER] Starting offline sync timer');
-    
-    // Aggressive retry while queue has payroll items (was 30s).
-    this.offlineSyncTimer = setInterval(() => {
-      this._flushOfflineQueueIfOnline();
-    }, 10_000);
-    if (typeof this.offlineSyncTimer.unref === 'function') {
-      this.offlineSyncTimer.unref();
-    }
-    
-    // Immediate attempt + staggered retries (reconnect often needs a beat)
-    setTimeout(() => this._flushOfflineQueueIfOnline(), 0);
-    setTimeout(() => this._flushOfflineQueueIfOnline(), 1500);
-    setTimeout(() => this._flushOfflineQueueIfOnline(), 5000);
-    setTimeout(() => this._flushOfflineQueueIfOnline(), 15000);
+  _isTransientOfflineSyncError(syncMsg) {
+    const { isTransientDbOrNetworkError } = require('../utils/sync-backoff');
+    return isTransientDbOrNetworkError(syncMsg);
+  }
 
-    // When the machine wakes / network returns, flush queued hours ASAP.
-    if (!this._offlineResumeHooksBound) {
-      this._offlineResumeHooksBound = true;
-      try {
-        const { powerMonitor, net } = require('electron');
-        if (powerMonitor?.on) {
-          const flushOnWake = (label) => {
-            console.log(`🔄 [TRACKING-MANAGER] ${label} — flushing offline time logs`);
-            try {
-              this._rehydrateOfflineQueueFromLedger?.();
-            } catch (_) { /* ignore */ }
-            this.startOfflineSync();
-            void this.processOfflineQueue();
-            // Extra passes — first attempt often races DNS/VPN after wake.
-            setTimeout(() => void this.processOfflineQueue(), 2000);
-            setTimeout(() => void this.processOfflineQueue(), 8000);
-          };
-          powerMonitor.on('resume', () => flushOnWake('System resume'));
-          powerMonitor.on('unlock-screen', () => flushOnWake('Screen unlock'));
-        }
-        // Edge-detect Chromium online status (low → good internet).
-        if (net && typeof net.isOnline === 'function') {
-          this._wasOfflineForSync = !net.isOnline();
-          if (!this._onlinePollTimer) {
-            this._onlinePollTimer = setInterval(() => {
-              try {
-                const online = net.isOnline();
-                if (online && this._wasOfflineForSync) {
-                  console.log('🌐 [TRACKING-MANAGER] Network restored — flushing offline time logs');
-                  try {
-                    this._rehydrateOfflineQueueFromLedger?.();
-                  } catch (_) { /* ignore */ }
-                  this.startOfflineSync();
-                  void this.processOfflineQueue();
-                  setTimeout(() => void this.processOfflineQueue(), 3000);
-                }
-                this._wasOfflineForSync = !online;
-              } catch (_) { /* ignore */ }
-            }, 3000);
-            if (typeof this._onlinePollTimer.unref === 'function') {
-              this._onlinePollTimer.unref();
-            }
-          }
-        }
-      } catch (_) { /* ignore */ }
-      try {
-        const { app } = require('electron');
-        if (app && typeof app.on === 'function') {
-          app.on('browser-window-focus', () => {
-            const q = this.getOfflineQueue();
-            if (q.length > 0) {
-              this.startOfflineSync();
-              void this._flushOfflineQueueIfOnline();
-            }
-          });
-        }
-      } catch (_) { /* ignore */ }
+  _offlineRetryDelayMs(retryCount) {
+    const { jitteredBackoffMs } = require('../utils/sync-backoff');
+    return jitteredBackoffMs(retryCount);
+  }
+
+  _scheduleOfflineItemRetry(item, syncMsg) {
+    if (!item.data) item.data = {};
+    const retryCount = (item.data._retryCount || 0) + 1;
+    item.data._retryCount = retryCount;
+    const delay = this._offlineRetryDelayMs(retryCount);
+    item.data._nextRetryAt = Date.now() + delay;
+    const transient = this._isTransientOfflineSyncError(syncMsg);
+    if (retryCount === 1 || retryCount === 3 || retryCount % 6 === 0) {
+      const label = transient ? 'will retry' : 'will retry (kept)';
+      console.warn(
+        `⚠️ [TRACKING-MANAGER] Offline item still queued (${label}):`,
+        syncMsg,
+        `attempt=${retryCount} next=${Math.round(delay / 1000)}s`,
+      );
     }
   }
 
+  /**
+   * Event-driven offline sync. POST only when:
+   *   - a row is queued (Start/Stop already wrote locally), or
+   *   - lid/unlock (network may be back), or
+   *   - a single backoff timeout fires.
+   * No 10s/15s interval. Hours stay queued until the same UUID syncs.
+   */
+  startOfflineSync() {
+    this._bindOfflineResumeHooks();
+    this._requestOfflineFlush();
+    try {
+      const { getOfflineScreenshotQueue } = require('../utils/offline-screenshot-queue');
+      getOfflineScreenshotQueue().start();
+    } catch (_) { /* screenshot sync is background-only */ }
+  }
+
+  _bindOfflineResumeHooks() {
+    if (this._offlineResumeHooksBound) return;
+    this._offlineResumeHooksBound = true;
+    const onReconnect = (label) => {
+      if (this._reconnectFlushTimer) return;
+      const { reconnectSpreadMs } = require('../utils/sync-backoff');
+      const delay = reconnectSpreadMs();
+      console.log(`🔄 [TRACKING-MANAGER] ${label} — offline flush in ${delay}ms (spread)`);
+      this._reconnectFlushTimer = setTimeout(() => {
+        this._reconnectFlushTimer = null;
+        try {
+          this._rehydrateOfflineQueueFromLedger?.();
+        } catch (_) { /* ignore */ }
+        this._requestOfflineFlush({ ignoreBackoff: true });
+        try {
+          const { getOfflineScreenshotQueue } = require('../utils/offline-screenshot-queue');
+          getOfflineScreenshotQueue().requestFlush({ ignoreBackoff: true });
+        } catch (_) { /* ignore */ }
+      }, delay);
+    };
+    try {
+      const { powerMonitor, ipcMain } = require('electron');
+      if (powerMonitor?.on) {
+        powerMonitor.on('resume', () => onReconnect('System resume'));
+        powerMonitor.on('unlock-screen', () => onReconnect('Screen unlock'));
+      }
+      // Wifi back without lid/sleep — renderer `online` event, not a poll.
+      if (ipcMain?.on) {
+        ipcMain.on('network-online', () => onReconnect('Network online'));
+      }
+    } catch (_) { /* ignore */ }
+  }
+
+  _clearOfflineRetryTimer() {
+    if (this._offlineRetryTimeout) {
+      clearTimeout(this._offlineRetryTimeout);
+      this._offlineRetryTimeout = null;
+    }
+    if (this.offlineSyncTimer) {
+      clearInterval(this.offlineSyncTimer);
+      this.offlineSyncTimer = null;
+    }
+  }
+
+  _earliestOfflineRetryAt(now = Date.now()) {
+    const queue = this.getOfflineQueue();
+    if (!queue.length) return null;
+    let next = null;
+    for (const item of queue) {
+      const at = Number(item?.data?._nextRetryAt);
+      if (!Number.isFinite(at)) return now;
+      if (next == null || at < next) next = at;
+    }
+    return next;
+  }
+
+  _releaseOfflineBackoff() {
+    const queue = this.getOfflineQueue();
+    let changed = false;
+    for (const item of queue) {
+      if (item?.data && item.data._nextRetryAt != null) {
+        delete item.data._nextRetryAt;
+        changed = true;
+      }
+    }
+    if (changed) {
+      try {
+        this._persistOfflineQueueOrThrow(queue);
+      } catch (_) { /* keep going */ }
+    }
+  }
+
+  _scheduleNextOfflineRetry({ disconnected = false } = {}) {
+    this._clearOfflineRetryTimer();
+    if (!this.getOfflineQueue().length) return;
+    const now = Date.now();
+    const when = this._earliestOfflineRetryAt(now);
+    if (when == null) return;
+    let delay = Math.max(0, when - now);
+    if (disconnected) delay = Math.max(delay, 60 * 1000);
+    delay = Math.min(5 * 60 * 1000, Math.max(delay, 250));
+    // Do not unref — payroll retries must fire while the app is running.
+    this._offlineRetryTimeout = setTimeout(() => {
+      this._offlineRetryTimeout = null;
+      this._requestOfflineFlush();
+    }, delay);
+  }
+
+  _armOfflineRetryTimer({ disconnected = false } = {}) {
+    try {
+      if (this.getOfflineQueue().length > 0) {
+        this._scheduleNextOfflineRetry({ disconnected });
+      } else {
+        this._clearOfflineRetryTimer();
+      }
+    } catch (err) {
+      console.warn(
+        '⚠️ [TRACKING-MANAGER] Could not arm offline retry — hours remain on disk:',
+        err?.message || err,
+      );
+    }
+  }
+
+  _requestOfflineFlush({ ignoreBackoff = false } = {}) {
+    if (ignoreBackoff) this._releaseOfflineBackoff();
+    const disconnected = this._flushOfflineQueueIfOnline();
+    if (!this._processingOfflineQueue) {
+      this._armOfflineRetryTimer({ disconnected });
+    }
+  }
+
+  _hasDueOfflineItems(now = Date.now()) {
+    const queue = this.getOfflineQueue();
+    if (!queue.length) return false;
+    return queue.some((item) => !(Number(item?.data?._nextRetryAt) > now));
+  }
+
   _flushOfflineQueueIfOnline() {
+    let disconnected = false;
     try {
       const { net } = require('electron');
       if (net && typeof net.isOnline === 'function' && !net.isOnline()) {
         this._wasOfflineForSync = true;
-        return;
+        disconnected = true;
+      } else {
+        this._wasOfflineForSync = false;
       }
     } catch (_) { /* proceed and let fetch fail */ }
+    if (disconnected) {
+      return true;
+    }
+    if (!this._hasDueOfflineItems()) {
+      return false;
+    }
     void this.processOfflineQueue();
+    return false;
   }
 
   /**
@@ -3338,25 +3557,49 @@ try {
       const queue = this.getOfflineQueue();
       const flushGen = this._offlineQueueWriteGen || 0;
       if (queue.length === 0) {
-        if (this.offlineSyncTimer) {
-          clearInterval(this.offlineSyncTimer);
-          this.offlineSyncTimer = null;
-        }
+        this._clearOfflineRetryTimer();
         return;
       }
-
-      console.log('📶 [TRACKING-MANAGER] Processing offline time-log queue with', queue.length, 'items');
 
       this._clampOverlappingQueuedSessions(queue);
 
       const remainingItems = [];
+      const now = Date.now();
+      const dueCount = queue.filter(
+        (item) => !(Number(item?.data?._nextRetryAt) > now),
+      ).length;
+      if (dueCount === 0) {
+        this._scheduleNextOfflineRetry();
+        return;
+      }
 
+      if (typeof backendTimeLogs.isLikelyOffline === 'function' && backendTimeLogs.isLikelyOffline()) {
+        this._scheduleNextOfflineRetry({ disconnected: true });
+        return;
+      }
+
+      console.log('📶 [TRACKING-MANAGER] Processing offline time-log queue with', dueCount, 'items');
+
+      let attempted = 0;
+      let dbDown = false;
+      const MAX_FLUSH_PER_TICK = 2;
       for (const item of queue) {
+        if (Number(item?.data?._nextRetryAt) > now) {
+          remainingItems.push(item);
+          continue;
+        }
+        if (dbDown || attempted >= MAX_FLUSH_PER_TICK) {
+          this._scheduleOfflineItemRetry(item, dbDown ? 'database backoff' : 'flush batch cap');
+          remainingItems.push(item);
+          continue;
+        }
+        attempted += 1;
         try {
           if (item.type === 'create_time_log') {
             const timeLogData = { ...item.data };
             delete timeLogData._offline;
             delete timeLogData._retryCount;
+            delete timeLogData._nextRetryAt;
             delete timeLogData._queued_at;
             delete timeLogData._rehydrated_from_ledger;
             // PAYROLL CRITICAL: keep stable UUID across retries (idempotent after RDS timeout).
@@ -3449,6 +3692,7 @@ try {
             delete updates.id;
             delete updates._offline;
             delete updates._retryCount;
+            delete updates._nextRetryAt;
             delete updates._queued_at;
             delete updates._rehydrated_from_ledger;
             delete updates.action;
@@ -3564,36 +3808,36 @@ try {
           }
         } catch (error) {
           const syncMsg = error?.message || String(error);
-          const transient = /timeout|fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|offline/i.test(syncMsg);
-          if (transient) {
-            console.warn('⚠️ [TRACKING-MANAGER] Offline item still queued (network):', syncMsg);
-          } else {
-            console.error('❌ [TRACKING-MANAGER] Failed to sync offline item (will retry forever):', syncMsg);
+          if (this._isTransientOfflineSyncError(syncMsg)) {
+            dbDown = true;
+            this._noteDbBackoff(error);
           }
-          if (item.data) {
-            item.data._retryCount = (item.data._retryCount || 0) + 1;
-          }
-          // PAYROLL CRITICAL: never drop time-log items — keep retrying indefinitely
+          this._scheduleOfflineItemRetry(item, syncMsg);
+          // PAYROLL CRITICAL: never drop time-log items — keep retrying with backoff
           remainingItems.push(item);
         }
       }
 
       const hadItems = queue.length > 0;
       const syncedCount = queue.length - remainingItems.length;
-      this._commitProcessedOfflineQueue(
-        queue,
-        remainingItems,
-        flushGen,
-      );
+      try {
+        this._commitProcessedOfflineQueue(
+          queue,
+          remainingItems,
+          flushGen,
+        );
+      } catch (commitErr) {
+        // Disk write failed — the previous queue file and ledger still have
+        // every hour. Do not throw; arm another retry.
+        console.warn(
+          '⚠️ [TRACKING-MANAGER] Flush commit failed — hours remain on disk:',
+          commitErr?.message || commitErr,
+        );
+      }
 
       const stillQueued = this.getOfflineQueue();
-      if (stillQueued.length === 0 && this.offlineSyncTimer) {
-        clearInterval(this.offlineSyncTimer);
-        this.offlineSyncTimer = null;
+      if (stillQueued.length === 0) {
         console.log('✅ [TRACKING-MANAGER] Offline time-log queue processed successfully');
-      } else if (stillQueued.length > 0) {
-        // Keep hammering until empty — never leave payroll stranded without a timer.
-        this.startOfflineSync();
       }
 
       // After any successful sync, refresh UI totals — but NEVER clear last-good.
@@ -3615,6 +3859,9 @@ try {
       }
     } finally {
       this._processingOfflineQueue = false;
+      // Always re-arm. A thrown commit used to leave hours on disk with no
+      // timeout until the next Start/Stop/wake.
+      this._armOfflineRetryTimer();
     }
   }
 
@@ -3629,10 +3876,10 @@ try {
         this.stopTracking('shutdown');
       }
       
-      // Clear offline sync timer
-      if (this.offlineSyncTimer) {
-        clearInterval(this.offlineSyncTimer);
-        this.offlineSyncTimer = null;
+      this._clearOfflineRetryTimer();
+      if (this._onlinePollTimer) {
+        clearInterval(this._onlinePollTimer);
+        this._onlinePollTimer = null;
       }
       
       this.removeAllListeners();

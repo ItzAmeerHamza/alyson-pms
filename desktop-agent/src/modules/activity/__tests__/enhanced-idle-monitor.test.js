@@ -641,6 +641,33 @@ describe('EnhancedIdleMonitor', () => {
       expect(result.effective).toBe(5);
     });
 
+    test('leftover OS idle at Start does not fire the still-working prompt', () => {
+      monitor = new EnhancedIdleMonitor({ ...mockConfig, idle_threshold_minutes: 10 });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      monitor._idleArmedAt = Date.now();
+      global.trackingManager = { sessionStartTime: new Date().toISOString() };
+      monitor._showIdlePrompt = jest.fn();
+
+      monitor._evaluateIdlePrompt(3600, 3600);
+
+      expect(monitor._showIdlePrompt).not.toHaveBeenCalled();
+    });
+
+    test('10 min of idle during this session still fires the prompt', () => {
+      monitor = new EnhancedIdleMonitor({ ...mockConfig, idle_threshold_minutes: 10 });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      const start = Date.now() - 11 * 60 * 1000;
+      monitor._idleArmedAt = start;
+      global.trackingManager = { sessionStartTime: new Date(start).toISOString() };
+      monitor._showIdlePrompt = jest.fn();
+
+      monitor._evaluateIdlePrompt(11 * 60, 11 * 60);
+
+      expect(monitor._showIdlePrompt).toHaveBeenCalled();
+    });
+
     test('resetIdleState clears checkpoint tracking', () => {
       monitor = new EnhancedIdleMonitor(mockConfig);
       monitor.currentIdleStartTime = Date.now();

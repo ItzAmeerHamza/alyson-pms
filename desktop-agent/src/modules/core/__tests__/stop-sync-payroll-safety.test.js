@@ -15,10 +15,21 @@ jest.mock('../../utils/device-id', () => ({
   getDeviceId: () => 'test-device',
 }));
 
-jest.mock('electron', () => ({
-  net: { isOnline: () => true },
-  app: { getPath: () => '/tmp' },
+jest.mock('../../utils/offline-screenshot-queue', () => ({
+  getOfflineScreenshotQueue: () => ({
+    start: jest.fn(),
+    requestFlush: jest.fn(),
+  }),
 }));
+
+jest.mock(
+  'electron',
+  () => ({
+    net: { isOnline: () => true },
+    app: { getPath: () => '/tmp' },
+  }),
+  { virtual: true },
+);
 
 const TrackingManager = require('../tracking-manager');
 const backendTimeLogs = require('../../utils/backend-time-logs');
@@ -64,6 +75,11 @@ function makeTm() {
     tm.ledger.push(entry);
   };
   tm.startOfflineSync = jest.fn();
+  tm._offlineRetryTimeout = null;
+  tm._clearOfflineRetryTimer = TrackingManager.prototype._clearOfflineRetryTimer;
+  tm._scheduleNextOfflineRetry = TrackingManager.prototype._scheduleNextOfflineRetry;
+  tm._earliestOfflineRetryAt = TrackingManager.prototype._earliestOfflineRetryAt;
+  tm._armOfflineRetryTimer = TrackingManager.prototype._armOfflineRetryTimer;
   tm._storePendingSessionClose = jest.fn();
   tm._clearPendingSessionClose = jest.fn();
   tm._clearSessionCheckpoint = jest.fn();
@@ -156,6 +172,7 @@ describe('online Stop — no secret stop, no lost hours, no phantom hours', () =
     expect(tm.isTracking).toBe(true);
     expect(backendTimeLogs.createTimeLog).not.toHaveBeenCalled();
     expect(tm.queue).toHaveLength(0);
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
   });
 
   it('a missing row upserts the same UUID — billed time is one 4h span, not two', async () => {
@@ -183,6 +200,7 @@ describe('online Stop — no secret stop, no lost hours, no phantom hours', () =
     expect(tm.queue).toHaveLength(0);
     const saved = backendTimeLogs.createTimeLog.mock.calls[0][0];
     expect(billedSeconds([saved, saved])).toBe(FOUR_HOURS);
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
   });
 
   it('Internal server error does not create a second overlapping session', async () => {
@@ -207,6 +225,7 @@ describe('online Stop — no secret stop, no lost hours, no phantom hours', () =
     expect(tm.queue).toHaveLength(1);
     expect(tm.queue[0].data.id).toBe(SESSION_ID);
     expect(billedSeconds([tm.queue[0].data])).toBe(FOUR_HOURS);
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
   });
 
   it('replaying a synced close does not add a second billed interval', () => {

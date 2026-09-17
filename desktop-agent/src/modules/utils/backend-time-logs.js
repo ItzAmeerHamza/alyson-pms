@@ -49,17 +49,31 @@ function resolveSyncUrl(config = global.config) {
  */
 let _lastNetworkFailureAt = 0;
 let _lastNetworkSuccessAt = 0;
+let _offlineHintMs = 20_000;
 const OFFLINE_HINT_MS = 20_000;
+const DB_UNAVAILABLE_HINT_MS = 60_000;
 
 function isLikelyOffline() {
   if (!_lastNetworkFailureAt) return false;
   if (_lastNetworkSuccessAt > _lastNetworkFailureAt) return false;
-  return Date.now() - _lastNetworkFailureAt < OFFLINE_HINT_MS;
+  return Date.now() - _lastNetworkFailureAt < (_offlineHintMs || OFFLINE_HINT_MS);
 }
 
-function noteNetworkResult(ok) {
-  if (ok) _lastNetworkSuccessAt = Date.now();
-  else _lastNetworkFailureAt = Date.now();
+function noteNetworkResult(ok, detail) {
+  if (ok) {
+    _lastNetworkSuccessAt = Date.now();
+    _offlineHintMs = OFFLINE_HINT_MS;
+    return;
+  }
+  _lastNetworkFailureAt = Date.now();
+  const status = Number(detail?.status) || 0;
+  const msg = String(detail?.message || '');
+  const { isTransientDbOrNetworkError } = require('./sync-backoff');
+  if (status === 503 || status === 429 || isTransientDbOrNetworkError(msg) || status >= 500) {
+    _offlineHintMs = DB_UNAVAILABLE_HINT_MS;
+  } else {
+    _offlineHintMs = OFFLINE_HINT_MS;
+  }
 }
 
 async function callDesktopAction(action, data, config = global.config, options = {}) {
@@ -103,7 +117,6 @@ async function callDesktopAction(action, data, config = global.config, options =
   } finally {
     clearTimeout(timer);
   }
-  noteNetworkResult(true);
 
   let body = {};
   try {
@@ -113,9 +126,12 @@ async function callDesktopAction(action, data, config = global.config, options =
   }
 
   if (!response.ok) {
-    throw new Error(body?.message || body?.error || `Backend sync failed (${response.status})`);
+    const message = body?.message || body?.error || `Backend sync failed (${response.status})`;
+    noteNetworkResult(false, { status: response.status, message });
+    throw new Error(message);
   }
 
+  noteNetworkResult(true);
   return body;
 }
 
@@ -422,6 +438,7 @@ module.exports = {
   resolveBackendCredentials,
   isBackendTimeLogsEnabled,
   isLikelyOffline,
+  noteNetworkResult,
   callDesktopAction,
   createTimeLog,
   updateTimeLog,

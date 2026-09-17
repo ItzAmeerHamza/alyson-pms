@@ -36,8 +36,8 @@ class EnhancedSyncManager {
       isActive: false,
       retryCount: 0,
       maxRetries: 5,
-      baseDelayMs: 1000,
-      maxDelayMs: 15000,
+      baseDelayMs: 15 * 1000,
+      maxDelayMs: 5 * 60 * 1000,
       nextRetryAt: 0
     };
     
@@ -371,6 +371,8 @@ class EnhancedSyncManager {
   async processUrlQueue() {
     let urlLogs = [];
     try {
+      const { isLikelyOffline } = require('../utils/backend-time-logs');
+      if (isLikelyOffline()) return;
       if (!global.offlineQueue?.urlLogs?.length) {
         // console.log('🌐 [URL-SYNC] Queue empty, nothing to process');
         return;
@@ -384,7 +386,7 @@ class EnhancedSyncManager {
       global.offlineQueue.urlLogs = [];
       
       // Process in batches with per-batch error handling
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 8;
       let hadFailures = false;
       let successfulBatches = 0;
       
@@ -399,11 +401,12 @@ class EnhancedSyncManager {
         } catch (error) {
           hadFailures = true;
           const message = (error && error.message) ? error.message : String(error);
-          // Transient network errors are common; downgrade to warning and requeue only this batch
           console.warn(`⚠️ [URL-SYNC] Batch ${Math.floor(i/BATCH_SIZE) + 1} failed, will retry later:`, message);
+          this.activateDbBackoff(/timeout|too many|503|unavailable/i.test(message));
           if (global.offlineQueue) {
-            global.offlineQueue.urlLogs.unshift(...batch);
+            global.offlineQueue.urlLogs.unshift(...urlLogs.slice(i));
           }
+          break;
         }
       }
       
@@ -448,10 +451,11 @@ class EnhancedSyncManager {
     this.dbBackoff.retryCount++;
     
     // Exponential backoff: baseDelay * 2^retryCount, capped at maxDelay
-    const backoffDelay = Math.min(
-      this.dbBackoff.baseDelayMs * Math.pow(2, this.dbBackoff.retryCount - 1),
-      this.dbBackoff.maxDelayMs
-    );
+    const { jitteredBackoffMs } = require('../utils/sync-backoff');
+    const backoffDelay = jitteredBackoffMs(this.dbBackoff.retryCount, {
+      baseMs: this.dbBackoff.baseDelayMs || 15 * 1000,
+      maxMs: this.dbBackoff.maxDelayMs || 5 * 60 * 1000,
+    });
     
     this.dbBackoff.nextRetryAt = Date.now() + backoffDelay;
     

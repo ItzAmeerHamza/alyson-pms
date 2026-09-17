@@ -10,7 +10,11 @@
  * click, base 8983s on the next Start.
  */
 
-jest.mock('electron', () => ({ nativeImage: { createFromPath: () => ({ isEmpty: () => true }) } }));
+jest.mock(
+  'electron',
+  () => ({ nativeImage: { createFromPath: () => ({ isEmpty: () => true }) } }),
+  { virtual: true },
+);
 
 const TrayManager = require('../tray-manager');
 
@@ -93,5 +97,48 @@ describe('tray high-water must freeze at the Stop click', () => {
     tickSeconds(1);
 
     expect(global._trayTodayHighWaterSeconds).toBe(8984);
+  });
+
+  it('new Start replaces leftover jam base instead of stacking it', () => {
+    const leftover = Object.create(TrayManager.prototype);
+    leftover.isTracking = false;
+    leftover.isPaused = false;
+    leftover._cumulativeBaseSeconds = 14158;
+    leftover._maybeRolloverLocalDay = () => {};
+    leftover.startTrayTimer = jest.fn();
+    leftover.stopTrayTimer = jest.fn();
+    leftover.updateMenu = jest.fn();
+    leftover.showNotification = jest.fn();
+
+    leftover.updateState(true, false, {
+      startTime: new Date(),
+      completedTodayBeforeSessionSeconds: 400,
+      replaceCumulativeBase: true,
+    });
+
+    expect(leftover._cumulativeBaseSeconds).toBe(400);
+    expect(leftover.startTrayTimer).toHaveBeenCalled();
+  });
+
+  it('restarts the tray timer on a new Start even if isTracking was leftover true', () => {
+    const leftover = Object.create(TrayManager.prototype);
+    leftover.isTracking = true;
+    leftover.isPaused = false;
+    leftover._timerInterval = null;
+    leftover._cumulativeBaseSeconds = 14158;
+    leftover._maybeRolloverLocalDay = () => {};
+    leftover.startTrayTimer = jest.fn();
+    leftover.stopTrayTimer = jest.fn();
+    leftover.updateMenu = jest.fn();
+    leftover.showNotification = jest.fn();
+
+    leftover.updateState(true, false, {
+      startTime: new Date(),
+      completedTodayBeforeSessionSeconds: 400,
+      replaceCumulativeBase: true,
+    });
+
+    expect(leftover._cumulativeBaseSeconds).toBe(400);
+    expect(leftover.startTrayTimer).toHaveBeenCalled();
   });
 });

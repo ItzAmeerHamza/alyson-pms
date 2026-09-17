@@ -164,14 +164,10 @@ class AppLifecycleManager {
       }
     }, 100);
 
-    // Handle window CLOSE (before it actually closes)
-    // FIX v1.0.136: On Windows, pressing X should quit the app (not hide to tray)
+    // X hides to tray on every platform. Tracking continues until Stop / Quit / lid.
     this.mainWindow.on('close', (event) => {
       const gracefulShutdownManager = require('./graceful-shutdown-manager');
-      const { app } = require('electron');
-
       if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, {
-        app,
         showTrayNotification: (title, body) => {
           if (global.trayManager?.showNotification) {
             global.trayManager.showNotification(title, body);
@@ -181,31 +177,9 @@ class AppLifecycleManager {
         return;
       }
 
-      // If app is quitting (from tray menu, dock quit, etc.), allow the close
       if (global.isQuitting) {
         console.log('🛑 [APP-LIFECYCLE] App is quitting - allowing window close');
-        return; // Don't prevent, let it close
       }
-      
-      // FIX v1.0.136: On Windows/Linux, pressing X should quit the app entirely
-      // On macOS, hide to tray (standard macOS behavior)
-      if (process.platform !== 'darwin') {
-        console.log('🛑 [APP-LIFECYCLE] Window X pressed on Windows - triggering app quit');
-        global.isQuitting = true;
-        app.quit();
-        return;
-      }
-      
-      // macOS: hide to tray instead of quitting
-      event.preventDefault();
-      this.mainWindow.hide();
-      
-      // Show notification that app is still running
-      if (global.trayManager && global.trayManager.showNotification) {
-        global.trayManager.showNotification('Alyson PM', 'App continues running in background. Click the tray icon to restore.');
-      }
-      
-      console.log('📱 [APP-LIFECYCLE] Window hidden to tray - use tray or dock icon to restore');
     });
     
     // Handle window CLOSED (after destroyed) - cleanup reference

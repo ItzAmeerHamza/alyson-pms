@@ -35,6 +35,8 @@ class AuthManager {
     this.authConfig = null;
     this._initialized = false;
     this._initPromise = null;
+    this._pendingNewPassword = null;
+    this._passwordReset = { email: '', stayLoggedIn: false, delivery: null };
     // Initialization deferred until renderer completes mandatory update check
   }
 
@@ -537,10 +539,419 @@ class AuthManager {
     }
   }
 
+  showNewPasswordChallenge(email) {
+    const loginForm = document.getElementById('loginForm');
+    const newPasswordForm = document.getElementById('newPasswordForm');
+    const hint = document.getElementById('newPasswordHint');
+    const errorDiv = document.getElementById('newPasswordError');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmInput = document.getElementById('confirmNewPassword');
+    if (loginForm) loginForm.style.display = 'none';
+    if (newPasswordForm) {
+      newPasswordForm.hidden = false;
+      newPasswordForm.style.display = 'block';
+    }
+    if (hint) {
+      const who = email ? ` for ${email}` : '';
+      hint.textContent = `Create a new password to finish signing in${who}.`;
+    }
+    if (errorDiv) {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
+    }
+    if (newPasswordInput) newPasswordInput.value = '';
+    if (confirmInput) confirmInput.value = '';
+    if (newPasswordInput) newPasswordInput.focus();
+  }
+
+  hideNewPasswordChallenge() {
+    const newPasswordForm = document.getElementById('newPasswordForm');
+    const errorDiv = document.getElementById('newPasswordError');
+    if (newPasswordForm) {
+      newPasswordForm.hidden = true;
+      newPasswordForm.style.display = 'none';
+    }
+    if (errorDiv) {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
+    }
+    this._pendingNewPassword = null;
+  }
+
+  cancelNewPasswordChallenge() {
+    this.hideNewPasswordChallenge();
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) loginForm.style.display = 'block';
+  }
+
+  openChangePasswordModal() {
+    const modal = document.getElementById('changePasswordModal');
+    const form = document.getElementById('changePasswordForm');
+    const errorDiv = document.getElementById('changePasswordError');
+    if (form) form.reset();
+    if (errorDiv) {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
+    }
+    if (modal) {
+      modal.hidden = false;
+      modal.classList.add('visible');
+    }
+    this._syncPasswordModalLayer();
+    const current = document.getElementById('currentPassword');
+    if (current) current.focus();
+  }
+
+  closeChangePasswordModal() {
+    const modal = document.getElementById('changePasswordModal');
+    const form = document.getElementById('changePasswordForm');
+    const errorDiv = document.getElementById('changePasswordError');
+    if (form) form.reset();
+    if (errorDiv) {
+      errorDiv.textContent = '';
+      errorDiv.style.display = 'none';
+    }
+    if (modal) {
+      modal.hidden = true;
+      modal.classList.remove('visible');
+    }
+    this._syncPasswordModalLayer();
+  }
+
+  openForgotPasswordModal({ email = '', stayLoggedIn = false, autoSend = false } = {}) {
+    const loginEmail = document.getElementById('loginEmail')?.value || '';
+    const knownEmail = email || this.currentUser?.email || loginEmail;
+    this._passwordReset = {
+      email: String(knownEmail || '').trim().toLowerCase(),
+      stayLoggedIn: Boolean(stayLoggedIn && this.currentUser),
+      delivery: null,
+    };
+    const modal = document.getElementById('forgotPasswordModal');
+    const requestForm = document.getElementById('forgotRequestForm');
+    const confirmForm = document.getElementById('forgotConfirmForm');
+    const emailInput = document.getElementById('forgotEmail');
+    const requestError = document.getElementById('forgotRequestError');
+    const confirmError = document.getElementById('forgotConfirmError');
+    if (requestForm) requestForm.reset();
+    if (confirmForm) confirmForm.reset();
+    if (emailInput) {
+      emailInput.value = this._passwordReset.email;
+      emailInput.readOnly = Boolean(this._passwordReset.stayLoggedIn && this._passwordReset.email);
+    }
+    if (requestError) {
+      requestError.textContent = '';
+      requestError.style.display = 'none';
+    }
+    if (confirmError) {
+      confirmError.textContent = '';
+      confirmError.style.display = 'none';
+    }
+    this._showForgotStep('request');
+    if (modal) {
+      modal.hidden = false;
+      modal.classList.add('visible');
+    }
+    this._syncPasswordModalLayer();
+    if (autoSend && this._passwordReset.email) {
+      void this.handleSendResetCode();
+      return;
+    }
+    if (emailInput) emailInput.focus();
+  }
+
+  closeForgotPasswordModal() {
+    const modal = document.getElementById('forgotPasswordModal');
+    const requestForm = document.getElementById('forgotRequestForm');
+    const confirmForm = document.getElementById('forgotConfirmForm');
+    if (requestForm) requestForm.reset();
+    if (confirmForm) confirmForm.reset();
+    if (modal) {
+      modal.hidden = true;
+      modal.classList.remove('visible');
+    }
+    this._passwordReset = { email: '', stayLoggedIn: false, delivery: null };
+    this._syncPasswordModalLayer();
+  }
+
+  _syncPasswordModalLayer() {
+    const changeOpen = document.getElementById('changePasswordModal')?.classList.contains('visible');
+    const forgotOpen = document.getElementById('forgotPasswordModal')?.classList.contains('visible');
+    document.body?.classList?.toggle('password-modal-open', Boolean(changeOpen || forgotOpen));
+  }
+
+  _showForgotStep(step) {
+    const requestForm = document.getElementById('forgotRequestForm');
+    const confirmForm = document.getElementById('forgotConfirmForm');
+    const hint = document.getElementById('forgotConfirmHint');
+    if (requestForm) {
+      requestForm.hidden = step !== 'request';
+      requestForm.style.display = step === 'request' ? 'block' : 'none';
+    }
+    if (confirmForm) {
+      confirmForm.hidden = step !== 'confirm';
+      confirmForm.style.display = step === 'confirm' ? 'block' : 'none';
+    }
+    if (hint && step === 'confirm') {
+      const dest = this._passwordReset.delivery?.Destination || this._passwordReset.email;
+      const who = dest ? ` ${dest}` : ' your email';
+      hint.textContent = `Enter the code we sent to${who}, then choose a new password. If you never got a code, sign in with the temporary password from your invite email first.`;
+    }
+  }
+
+  _setForgotError(id, message) {
+    const errorDiv = document.getElementById(id);
+    if (errorDiv) {
+      errorDiv.textContent = message || '';
+      errorDiv.style.display = message ? 'block' : 'none';
+    }
+  }
+
+  async handleSendResetCode(e) {
+    if (e?.preventDefault) e.preventDefault();
+    const emailInput = document.getElementById('forgotEmail');
+    const email = (emailInput?.value || this._passwordReset.email || '').trim();
+    const btn = document.getElementById('forgotSendCodeBtn');
+    this._setForgotError('forgotRequestError', '');
+    if (!cognitoAuth.isValidEmail(email)) {
+      this._setForgotError('forgotRequestError', 'Enter a valid email address.');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      await this.ensureAuthConfig();
+      const sent = await cognitoAuth.forgotPassword(email, this.authConfig, this.ipcRenderer);
+      this._passwordReset.email = sent?.email || email.toLowerCase();
+      this._passwordReset.delivery = sent?.delivery || null;
+      this._showForgotStep('confirm');
+      const codeInput = document.getElementById('forgotResetCode');
+      if (codeInput) codeInput.focus();
+      this.notificationManager?.showNotification?.(
+        'If an account exists for this email, we sent a reset code.',
+        'success',
+      );
+    } catch (error) {
+      this._setForgotError(
+        'forgotRequestError',
+        error?.message || 'Could not send a reset code. Please try again.',
+      );
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async handleResendResetCode() {
+    const email = this._passwordReset.email || document.getElementById('forgotEmail')?.value || '';
+    this._setForgotError('forgotConfirmError', '');
+    if (!cognitoAuth.isValidEmail(email)) {
+      this._setForgotError('forgotConfirmError', 'Enter a valid email address.');
+      this._showForgotStep('request');
+      return;
+    }
+    try {
+      await this.ensureAuthConfig();
+      const sent = await cognitoAuth.forgotPassword(email, this.authConfig, this.ipcRenderer);
+      this._passwordReset.email = sent?.email || String(email).toLowerCase();
+      this._passwordReset.delivery = sent?.delivery || null;
+      this._showForgotStep('confirm');
+      this.notificationManager?.showNotification?.(
+        'If an account exists for this email, we sent a reset code.',
+        'success',
+      );
+    } catch (error) {
+      this._setForgotError(
+        'forgotConfirmError',
+        error?.message || 'Could not resend the code. Please try again.',
+      );
+    }
+  }
+
+  async handleConfirmResetPassword(e) {
+    if (e?.preventDefault) e.preventDefault();
+    const code = document.getElementById('forgotResetCode')?.value || '';
+    const newPassword = document.getElementById('forgotNewPassword')?.value || '';
+    const confirmPassword = document.getElementById('forgotConfirmPassword')?.value || '';
+    const btn = document.getElementById('forgotResetSaveBtn');
+    this._setForgotError('forgotConfirmError', '');
+    if (newPassword !== confirmPassword) {
+      this._setForgotError('forgotConfirmError', 'Passwords do not match.');
+      return;
+    }
+    if (!cognitoAuth.isStrongPassword(newPassword)) {
+      this._setForgotError('forgotConfirmError', cognitoAuth.PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      await this.ensureAuthConfig();
+      const email = this._passwordReset.email;
+      await cognitoAuth.confirmForgotPassword(
+        email,
+        code,
+        newPassword,
+        this.authConfig,
+        this.ipcRenderer,
+      );
+      if (this.credentialManager && email) {
+        await this.credentialManager.saveCredentials(email, newPassword);
+      }
+      const stayLoggedIn = this._passwordReset.stayLoggedIn;
+      this.closeForgotPasswordModal();
+      this.closeChangePasswordModal();
+      if (stayLoggedIn) {
+        this.notificationManager?.showNotification?.('Password reset successfully.', 'success');
+        return;
+      }
+      const loginEmail = document.getElementById('loginEmail');
+      const loginPassword = document.getElementById('loginPassword');
+      if (loginEmail) loginEmail.value = email;
+      if (loginPassword) loginPassword.value = '';
+      this.notificationManager?.showNotification?.(
+        'Password reset. Sign in with your new password.',
+        'success',
+      );
+    } catch (error) {
+      this._setForgotError(
+        'forgotConfirmError',
+        error?.message || 'Could not reset password. Please try again.',
+      );
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async handleCognitoLogin(email, password, company, rememberMe) {
     this.showAuthLoading('Signing in…');
     await this.ensureAuthConfig();
     const stored = await cognitoAuth.signInWithEmailPassword(email, password, this.authConfig);
+    if (cognitoAuth.isNewPasswordChallenge(stored)) {
+      this._pendingNewPassword = {
+        cognitoUser: stored.cognitoUser,
+        email,
+        company,
+        rememberMe,
+        userAttributes: stored.userAttributes || {},
+      };
+      this.hideAuthLoading();
+      this.showNewPasswordChallenge(email);
+      return { challengeName: 'NEW_PASSWORD_REQUIRED' };
+    }
+    await this._finishCognitoLogin(stored, email, password, company, rememberMe);
+    return stored;
+  }
+
+  async handleCompleteNewPassword(e) {
+    if (e?.preventDefault) e.preventDefault();
+    const newPassword = document.getElementById('newPassword')?.value || '';
+    const confirmPassword = document.getElementById('confirmNewPassword')?.value || '';
+    const errorDiv = document.getElementById('newPasswordError');
+    const btn = document.getElementById('newPasswordBtn');
+    const btnText = document.getElementById('newPasswordBtnText');
+    const loader = document.getElementById('newPasswordLoader');
+    const showError = (message) => {
+      if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+      }
+      this.notificationManager?.showNotification?.(message, 'error');
+    };
+
+    if (!this._pendingNewPassword?.cognitoUser) {
+      showError('Sign in again with your temporary password to set a new one.');
+      this.hideNewPasswordChallenge();
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showError('Passwords do not match.');
+      return;
+    }
+    if (!cognitoAuth.isStrongPassword(newPassword)) {
+      showError(cognitoAuth.PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Saving…';
+    if (loader) loader.classList.remove('hidden');
+    if (errorDiv) errorDiv.style.display = 'none';
+    this.showAuthLoading('Saving your password…');
+
+    try {
+      const pending = this._pendingNewPassword;
+      const stored = await cognitoAuth.completeNewPasswordChallenge(
+        pending.cognitoUser,
+        newPassword,
+        pending.userAttributes,
+      );
+      this._pendingNewPassword = null;
+      await this._finishCognitoLogin(
+        stored,
+        pending.email,
+        newPassword,
+        pending.company,
+        pending.rememberMe,
+      );
+      this.hideNewPasswordChallenge();
+    } catch (error) {
+      const message = error?.message || 'Could not set password. Please try again.';
+      showError(message);
+      this.hideAuthLoading();
+    } finally {
+      if (btn) btn.disabled = false;
+      if (btnText) btnText.textContent = 'Set Password & Sign In';
+      if (loader) loader.classList.add('hidden');
+    }
+  }
+
+  async handleChangePassword(e) {
+    if (e?.preventDefault) e.preventDefault();
+    const oldPassword = document.getElementById('currentPassword')?.value || '';
+    const newPassword = document.getElementById('changeNewPassword')?.value || '';
+    const confirmPassword = document.getElementById('changeConfirmPassword')?.value || '';
+    const errorDiv = document.getElementById('changePasswordError');
+    const btn = document.getElementById('changePasswordSaveBtn');
+    const showError = (message) => {
+      if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+      }
+    };
+
+    if (!this.currentUser) {
+      showError('Please sign in again to change your password.');
+      return;
+    }
+    if (!oldPassword) {
+      showError('Enter your current password.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showError('Passwords do not match.');
+      return;
+    }
+    if (!cognitoAuth.isStrongPassword(newPassword)) {
+      showError(cognitoAuth.PASSWORD_POLICY_MESSAGE);
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (errorDiv) errorDiv.style.display = 'none';
+
+    try {
+      await this.ensureAuthConfig();
+      await cognitoAuth.changePassword(oldPassword, newPassword, this.authConfig);
+      if (this.credentialManager && this.currentUser.email) {
+        await this.credentialManager.saveCredentials(this.currentUser.email, newPassword);
+      }
+      this.closeChangePasswordModal();
+      this.notificationManager?.showNotification?.('Password changed successfully.', 'success');
+    } catch (error) {
+      showError(error?.message || 'Could not change password. Please try again.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async _finishCognitoLogin(stored, email, password, company, rememberMe) {
     this.showAuthLoading('Verifying your account…');
     const profile = await fetchAuthMe(stored.idToken, this.authConfig, this.ipcRenderer);
     const details = profile.user;
@@ -787,9 +1198,9 @@ class AuthManager {
       console.log('🚪 Logging out user...');
       
       cognitoAuth.signOutCognito(this.authConfig);
-      
-      // Clear stored credentials securely (optional - user can choose to keep them)
-      // We don't automatically delete credentials on logout, only on explicit "forget me" action
+      this.hideNewPasswordChallenge();
+      this.closeChangePasswordModal();
+      this.closeForgotPasswordModal();
       
       // Clear user data
       this.currentUser = null;

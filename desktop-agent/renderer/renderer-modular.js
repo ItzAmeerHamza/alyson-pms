@@ -1040,23 +1040,16 @@ function beginLocalTrackingClock(startTime) {
   }
   if (Number.isFinite(cap)) closedKnown = Math.min(closedKnown, cap);
   window.__completedTodayBaseSeconds = closedKnown;
-  const hw = Math.max(0, Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0));
-  // A closed base of 0 means the DB total has not arrived yet — not that the day
-  // is empty. Treating "unknown" as "zero" discarded a correct high-water on
-  // every Start, painting 00:00:00 until the tray restored the real figure a
-  // second later. Only an authoritative comparison can call a high-water corrupt.
-  const baseHydrated = !!window.__todayBaseHydratedOnce;
-  const corrupt = baseHydrated && isInflatedWorkDayCapHighWater(hw, closedKnown);
-  if (hw > 0 && corrupt) {
-    // Drop corrupt HW so the first live paint is base + wall-clock elapsed.
-    discardInflatedHighWater(
-      closedKnown + getTodayElapsedSeconds(startTime),
-      'begin-live-clock',
-    );
-    window.__completedTodayBaseSeconds = closedKnown;
-  }
+  // High-water is display memory from before this Start. It must not freeze
+  // the live tick (3:55 leftover → Start disabled, seconds not adding).
+  const liveStart = closedKnown + getTodayElapsedSeconds(startTime);
+  window.__todayTrackedHighWaterSeconds = liveStart;
+  persistTrackedHighWater(liveStart, { force: true });
+  window.__completedTodayBaseSeconds = closedKnown;
+  setTrackerDisplaySeconds(liveStart, { allowDecrease: true });
   window.__lastWatchdogShownSeconds = readTrackerDisplaySeconds();
   window.__lastWatchdogShownAt = Date.now();
+  window.__lastMainTrackingHeartbeatAt = Date.now();
   ensureTrackingDisplayWatchdog();
   updateRendererTrackingClock();
 }
@@ -1099,10 +1092,73 @@ function updateRendererTrackingClock() {
   // Stop was clicked — the total is already frozen at that instant. Painting
   // again here would add the wind-down time to the visible clock.
   if (window.__stopInProgress) return;
-  // Monotonic: the tick may correct the clock upward, never backward. An
-  // inflated paint is still released by the work-day cap inside
-  // setTrackerDisplaySeconds, which is the only thing that should move it down.
+  // High-water is released at Start (beginLocalTrackingClock). Live ticks stay
+  // forward-only so a noisy base refresh cannot rewind 2h30 to 2h20.
   setTrackerDisplaySeconds(cumulativeSec);
+}
+
+function unlockZombieRenderer(reason) {
+  console.warn(`🔓 [WATCHDOG] Unlocking stuck Start (${reason})`);
+  try {
+    window.__isTracking = false;
+    window.__localTrackingClockActive = false;
+    window.__lastTrackingStartTime = null;
+  } catch (_) { /* ignore */ }
+  try {
+    const ipc = typeof moduleInstances !== 'undefined' ? moduleInstances?.ipcManager : null;
+    if (ipc) {
+      ipc.isTracking = false;
+      ipc.trackingStatus = 'stopped';
+      ipc.optimisticMode = false;
+      ipc.stopSessionTimer?.();
+      if (ipc.uiManager) {
+        ipc.uiManager.setTrackingStatus('stopped');
+        ipc.uiManager.updateTrackingButtons();
+      }
+      ipc.updateTimerState?.(false, false);
+      ipc.emit?.('tracking-state-changed', {
+        isTracking: false,
+        status: 'stopped',
+        reason,
+      });
+    }
+  } catch (_) { /* ignore */ }
+  stopLiveTrackingClock(reason);
+}
+
+function probeMainTrackingHeartbeat() {
+  if (window.__zombieUnlockInFlight) return;
+  window.__zombieUnlockInFlight = true;
+  Promise.resolve()
+    .then(() => moduleInstances?.ipcManager?.getTrackingState?.())
+    .then((mainState) => {
+      if (mainState && typeof mainState.isTracking === 'boolean') {
+        window.__lastMainTrackingHeartbeatAt = Date.now();
+        if (!mainState.isTracking && isRendererActivelyTracking()) {
+          unlockZombieRenderer('main-not-tracking');
+        }
+        return;
+      }
+      const lastOk = Math.max(
+        Number(window.__lastMainTrackingHeartbeatAt) || 0,
+        Number(window.__lastTrayTimerTickAt) || 0,
+      );
+      if (lastOk > 0 && Date.now() - lastOk >= 20000) {
+        unlockZombieRenderer('main-process-dead');
+      }
+    })
+    .catch(() => {
+      const lastOk = Math.max(
+        Number(window.__lastMainTrackingHeartbeatAt) || 0,
+        Number(window.__lastTrayTimerTickAt) || 0,
+      );
+      if (lastOk > 0 && Date.now() - lastOk >= 20000) {
+        unlockZombieRenderer('main-process-dead');
+      }
+    })
+    .finally(() => {
+      window.__zombieUnlockInFlight = false;
+    });
 }
 
 function ensureTrackingDisplayWatchdog() {
@@ -1113,6 +1169,14 @@ function ensureTrackingDisplayWatchdog() {
     if (!isRendererActivelyTracking()) {
       stopLiveTrackingClock('watchdog-not-tracking');
       return;
+    }
+    const lastBeat = Math.max(
+      Number(window.__lastMainTrackingHeartbeatAt) || 0,
+      Number(window.__lastTrayTimerTickAt) || 0,
+      Number(window.__lastWatchdogShownAt) || 0,
+    );
+    if (lastBeat > 0 && Date.now() - lastBeat >= 20000) {
+      probeMainTrackingHeartbeat();
     }
     // Recover start time if main is tracking but renderer lost it (clock would freeze).
     if (!window.__lastTrackingStartTime) {
@@ -1886,7 +1950,6 @@ function setupModuleCommunication() {
       // A tray tick still in flight when Stop was clicked must not extend the
       // clock past the click.
       if (window.__stopInProgress) return;
-      // Monotonic — a tray payload arriving after a sync must not rewind the clock.
       setTrackerDisplaySeconds(cumulativeSec);
     }
   });
@@ -1908,6 +1971,23 @@ function setupModuleCommunication() {
   });
 
   ipcRenderer.on('tracking-stopped', (_event, data) => {
+    const stoppedId = data?.timeLogId || data?.currentTimeLogId || null;
+    const liveId =
+      moduleInstances?.ipcManager?.currentTimeLogId ||
+      window.__currentTimeLogId ||
+      null;
+    if (
+      stoppedId &&
+      liveId &&
+      String(stoppedId) !== String(liveId)
+    ) {
+      console.warn('⚠️ [TRACKER] Ignoring stale tracking-stopped for', stoppedId, 'live', liveId);
+      return;
+    }
+    if (moduleInstances?.ipcManager?.startInProgress || moduleInstances?.ipcManager?.optimisticMode) {
+      console.warn('⚠️ [TRACKER] Ignoring tracking-stopped during Start');
+      return;
+    }
     stopLiveTrackingClock('tracking-stopped');
     window.__hwAdvanceAnchor = null;
     window.__clearedSecondaryForTray = false;
@@ -2124,6 +2204,19 @@ function setupModuleCommunication() {
           // Store globally so IPC manager can clear it
           window.timerUpdateInterval = timerUpdateInterval;
         } else {
+          if (ipcManager.optimisticMode || ipcManager.startInProgress) {
+            console.warn('⚠️ [TIMER] Verification says stopped during Start — keeping clock');
+            return;
+          }
+          if (ipcManager.isTracking && ipcManager.currentTimeLogId) {
+            console.warn('⚠️ [TIMER] Verification says stopped but live session exists — keeping clock');
+            if (typeof beginLocalTrackingClock === 'function') {
+              beginLocalTrackingClock(
+                ipcManager.sessionStartTime || window.__lastTrackingStartTime || new Date(),
+              );
+            }
+            return;
+          }
           // FIX-1: If the tray timer is actively sending ticks, it is the
           // authoritative timer source. Do NOT reset the display — the tray
           // timer will correct any stale state within 1 second.
@@ -3094,6 +3187,111 @@ function setupLegacyEventListeners() {
     loginForm.removeEventListener('submit', handleLogin); // Remove any existing listeners
     loginForm.addEventListener('submit', handleLogin);
   }
+
+  const newPasswordForm = document.getElementById('newPasswordForm');
+  if (newPasswordForm) {
+    newPasswordForm.addEventListener('submit', (e) => {
+      moduleInstances.authManager?.handleCompleteNewPassword?.(e);
+    });
+  }
+  const newPasswordBackBtn = document.getElementById('newPasswordBackBtn');
+  if (newPasswordBackBtn) {
+    newPasswordBackBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.cancelNewPasswordChallenge?.();
+    });
+  }
+
+  const changePasswordBtn = document.getElementById('changePasswordBtn');
+  if (changePasswordBtn) {
+    changePasswordBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.openChangePasswordModal?.();
+    });
+  }
+  const changePasswordForm = document.getElementById('changePasswordForm');
+  if (changePasswordForm) {
+    changePasswordForm.addEventListener('submit', (e) => {
+      moduleInstances.authManager?.handleChangePassword?.(e);
+    });
+  }
+  const changePasswordCancelBtn = document.getElementById('changePasswordCancelBtn');
+  if (changePasswordCancelBtn) {
+    changePasswordCancelBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.closeChangePasswordModal?.();
+    });
+  }
+  const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+  if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener('click', () => {
+      moduleInstances.authManager?.openForgotPasswordModal?.({ stayLoggedIn: false });
+    });
+  }
+  const forgotFromChangeBtn = document.getElementById('forgotFromChangeBtn');
+  if (forgotFromChangeBtn) {
+    forgotFromChangeBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.closeChangePasswordModal?.();
+      moduleInstances.authManager?.openForgotPasswordModal?.({
+        stayLoggedIn: true,
+        autoSend: true,
+      });
+    });
+  }
+  const forgotRequestForm = document.getElementById('forgotRequestForm');
+  if (forgotRequestForm) {
+    forgotRequestForm.addEventListener('submit', (e) => {
+      moduleInstances.authManager?.handleSendResetCode?.(e);
+    });
+  }
+  const forgotConfirmForm = document.getElementById('forgotConfirmForm');
+  if (forgotConfirmForm) {
+    forgotConfirmForm.addEventListener('submit', (e) => {
+      moduleInstances.authManager?.handleConfirmResetPassword?.(e);
+    });
+  }
+  const forgotRequestCancelBtn = document.getElementById('forgotRequestCancelBtn');
+  if (forgotRequestCancelBtn) {
+    forgotRequestCancelBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.closeForgotPasswordModal?.();
+    });
+  }
+  const forgotConfirmBackBtn = document.getElementById('forgotConfirmBackBtn');
+  if (forgotConfirmBackBtn) {
+    forgotConfirmBackBtn.addEventListener('click', () => {
+      moduleInstances.authManager?._showForgotStep?.('request');
+    });
+  }
+  const forgotResendCodeBtn = document.getElementById('forgotResendCodeBtn');
+  if (forgotResendCodeBtn) {
+    forgotResendCodeBtn.addEventListener('click', () => {
+      moduleInstances.authManager?.handleResendResetCode?.();
+    });
+  }
+  const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+  if (forgotPasswordModal) {
+    forgotPasswordModal.addEventListener('click', (e) => {
+      if (e.target === forgotPasswordModal) {
+        moduleInstances.authManager?.closeForgotPasswordModal?.();
+      }
+    });
+  }
+  const changePasswordModal = document.getElementById('changePasswordModal');
+  if (changePasswordModal) {
+    changePasswordModal.addEventListener('click', (e) => {
+      if (e.target === changePasswordModal) {
+        moduleInstances.authManager?.closeChangePasswordModal?.();
+      }
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const changeModal = document.getElementById('changePasswordModal');
+    const forgotModal = document.getElementById('forgotPasswordModal');
+    if (changeModal && changeModal.classList.contains('visible')) {
+      moduleInstances.authManager?.closeChangePasswordModal?.();
+    }
+    if (forgotModal && forgotModal.classList.contains('visible')) {
+      moduleInstances.authManager?.closeForgotPasswordModal?.();
+    }
+  });
   
   // Copy Logs button
   const copyLogsBtn = document.getElementById('copyLogsBtn');
@@ -4719,4 +4917,76 @@ function showToast(message, type = 'info') {
 
   ipcRenderer.on('display-idle-prompt', (_e, data) => show(data && data.countdownSeconds));
   ipcRenderer.on('hide-idle-prompt', () => hide());
+})();
+
+(function setupStartReminderOverlay() {
+  let overlay = null;
+
+  function ensureOverlay() {
+    if (overlay) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #start-reminder-overlay {
+        position: fixed; inset: 0; z-index: 2147482990;
+        display: none; align-items: center; justify-content: center;
+        background: rgba(30, 27, 75, 0.45); backdrop-filter: blur(4px);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-user-select: none; user-select: none;
+      }
+      #start-reminder-overlay .start-card {
+        position: relative; width: 380px; max-width: 88vw; background: #ffffff; color: #1e293b;
+        border: 1px solid #e9ecf5; border-radius: 18px; padding: 30px 26px 22px;
+        text-align: center; box-shadow: 0 24px 60px rgba(102, 126, 234, 0.28);
+        overflow: hidden;
+      }
+      #start-reminder-overlay .start-card::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+      }
+      #start-reminder-overlay .start-title { font-size: 19px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+      #start-reminder-overlay .start-sub { font-size: 13px; line-height: 1.45; color: #64748b; margin-bottom: 22px; }
+      #start-reminder-overlay .start-buttons { display: flex; flex-direction: column; gap: 10px; }
+      #start-reminder-overlay button { width: 100%; border: none; border-radius: 12px; padding: 13px 16px; font-size: 15px; font-weight: 600; cursor: pointer; }
+      #start-reminder-overlay .start-go { background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32); }
+      #start-reminder-overlay .start-later { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+    `;
+    document.head.appendChild(style);
+    overlay = document.createElement('div');
+    overlay.id = 'start-reminder-overlay';
+    overlay.innerHTML = `
+      <div class="start-card">
+        <div class="start-title">You are not tracking time</div>
+        <div class="start-sub">Alyson PM is running, but the timer is stopped. Start tracking so this time is recorded.</div>
+        <div class="start-buttons">
+          <button class="start-go" id="start-reminder-go">Start tracking</button>
+          <button class="start-later" id="start-reminder-later">Not now</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#start-reminder-go').addEventListener('click', () => {
+      hide();
+      const startBtn = document.getElementById('startBtn');
+      if (startBtn && !startBtn.disabled) {
+        startBtn.click();
+        return;
+      }
+      try {
+        moduleInstances?.ipcManager?.startTracking?.();
+      } catch (_) { /* ignore */ }
+    });
+    overlay.querySelector('#start-reminder-later').addEventListener('click', hide);
+  }
+
+  function hide() {
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  function show() {
+    ensureOverlay();
+    overlay.style.display = 'flex';
+  }
+
+  ipcRenderer.on('display-start-reminder', () => show());
+  ipcRenderer.on('hide-start-reminder', () => hide());
 })();

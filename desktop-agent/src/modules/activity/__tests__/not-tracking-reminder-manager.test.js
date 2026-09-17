@@ -1,7 +1,8 @@
 'use strict';
 
 /**
- * Unit tests for NotTrackingReminderManager (grace / repeat / tracking-off gate).
+ * After Stop: popup at 10 minutes, then every 10 minutes while still off.
+ * No OS-idle / "actively typing" gate.
  */
 
 jest.mock('../../core/cleanup-registry', () => ({
@@ -11,14 +12,18 @@ jest.mock('../../core/cleanup-registry', () => ({
   clearTimeout: jest.fn((id) => clearTimeout(id)),
 }));
 
-jest.mock('electron', () => ({
-  powerMonitor: {
-    getSystemIdleTime: jest.fn(() => 0),
-  },
-  app: {
-    focus: jest.fn(),
-  },
-}));
+jest.mock(
+  'electron',
+  () => ({
+    powerMonitor: {
+      getSystemIdleTime: jest.fn(() => 0),
+    },
+    app: {
+      focus: jest.fn(),
+    },
+  }),
+  { virtual: true },
+);
 
 const { powerMonitor } = require('electron');
 const NotTrackingReminderManager = require('../not-tracking-reminder-manager');
@@ -38,12 +43,14 @@ describe('NotTrackingReminderManager', () => {
       focus: jest.fn(),
       setAlwaysOnTop: jest.fn(),
       setVisibleOnAllWorkspaces: jest.fn(),
+      webContents: { send: jest.fn() },
     };
     global.mainWindow = win;
     global.currentUserId = '1195';
     global.isTracking = false;
     global.trackingManager = { isTracking: false };
     global.isScreenLocked = false;
+    global.isQuitting = false;
     global.idlePromptManager = null;
     global.enhancedIdleMonitor = null;
     powerMonitor.getSystemIdleTime.mockReturnValue(0);
@@ -54,92 +61,84 @@ describe('NotTrackingReminderManager', () => {
     mgr.stop();
     jest.useRealTimers();
     jest.clearAllMocks();
+    delete global.isQuitting;
   });
 
-  test('does not focus while tracking is active', () => {
+  test('does not show while tracking is active', () => {
     mgr.start();
     global.isTracking = true;
     jest.advanceTimersByTime(GRACE_MS + 60_000);
-    expect(win.show).not.toHaveBeenCalled();
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('focuses after grace when working and not tracking', () => {
+  test('shows popup 10 minutes after Stop', () => {
     mgr.start();
-    // First tick sets activeWorkSince
-    jest.advanceTimersByTime(30_000);
-    expect(win.show).not.toHaveBeenCalled();
-    // Past grace
-    jest.advanceTimersByTime(GRACE_MS);
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(GRACE_MS - 5_000);
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
+    jest.advanceTimersByTime(10_000);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
     expect(win.show).toHaveBeenCalled();
     expect(win.focus).toHaveBeenCalled();
   });
 
-  test('does not focus when OS idle is away', () => {
-    mgr.start();
+  test('still shows when OS idle is high (desk idle after Stop)', () => {
     powerMonitor.getSystemIdleTime.mockReturnValue(200);
-    jest.advanceTimersByTime(GRACE_MS + 60_000);
-    expect(win.show).not.toHaveBeenCalled();
+    mgr.start();
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('onTrackingStarted suppresses further focus', () => {
+  test('onTrackingStarted suppresses further popups', () => {
     mgr.start();
+    mgr.onTrackingStopped();
     jest.advanceTimersByTime(GRACE_MS + 30_000);
-    expect(win.show).toHaveBeenCalledTimes(1);
-    win.show.mockClear();
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+    win.webContents.send.mockClear();
     global.isTracking = true;
     mgr.onTrackingStarted();
     jest.advanceTimersByTime(REPEAT_MS + 60_000);
-    expect(win.show).not.toHaveBeenCalled();
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('onTrackingStopped resets grace then reminds again', () => {
+  test('onTrackingStopped resets the 10m clock', () => {
     mgr.start();
-    jest.advanceTimersByTime(GRACE_MS + 30_000);
-    expect(win.show).toHaveBeenCalledTimes(1);
-    win.show.mockClear();
     mgr.onTrackingStopped();
-    // Immediately after stop — grace not elapsed
-    jest.advanceTimersByTime(30_000);
-    expect(win.show).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(GRACE_MS);
-    expect(win.show).toHaveBeenCalledTimes(1);
-  });
-
-  test('repeats every 5 minutes while still off and working', () => {
-    mgr.start();
     jest.advanceTimersByTime(GRACE_MS + 30_000);
-    expect(win.show).toHaveBeenCalledTimes(1);
-    win.show.mockClear();
-    jest.advanceTimersByTime(REPEAT_MS);
-    expect(win.show).toHaveBeenCalledTimes(1);
+    expect(win.webContents.send).toHaveBeenCalledTimes(1);
+    win.webContents.send.mockClear();
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(30_000);
+    expect(win.webContents.send).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(GRACE_MS);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('skips focus while idle prompt is actively showing', () => {
+  test('repeats every 10 minutes while still off', () => {
+    mgr.start();
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+    win.webContents.send.mockClear();
+    jest.advanceTimersByTime(REPEAT_MS);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+  });
+
+  test('skips while idle prompt is actively showing', () => {
     global.enhancedIdleMonitor = { _idlePromptActive: true };
     global.idlePromptManager = { _onTop: true, _responseCallback: () => {} };
     mgr.start();
+    mgr.onTrackingStopped();
     jest.advanceTimersByTime(GRACE_MS + 60_000);
-    expect(win.show).not.toHaveBeenCalled();
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('heals stale idle-prompt flags and still reminds after timeout leftover', () => {
-    // Fawad Sep 10: monitor inactive but manager still had _responseCallback.
-    const hide = jest.fn(function hide() {
-      this._onTop = false;
-      this._responseCallback = null;
-    });
-    global.enhancedIdleMonitor = { _idlePromptActive: false };
-    global.idlePromptManager = {
-      _onTop: true,
-      _responseCallback: () => {},
-      hide,
-      isShowing() {
-        return !!(this._onTop || this._responseCallback);
-      },
-    };
+  test('does not show while the screen is locked', () => {
+    global.isScreenLocked = true;
     mgr.start();
+    mgr.onTrackingStopped();
     jest.advanceTimersByTime(GRACE_MS + 60_000);
-    expect(hide).toHaveBeenCalled();
-    expect(win.show).toHaveBeenCalled();
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
   });
 });

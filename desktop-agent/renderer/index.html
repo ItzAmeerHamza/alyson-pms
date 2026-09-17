@@ -338,7 +338,7 @@
             border: 2px solid #e2e8f0;
             border-radius: 12px;
             font-size: 16px;
-            transition: all 0.2s;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
             background: #f8fafc;
         }
 
@@ -376,6 +376,19 @@
         .password-toggle svg {
             width: 18px;
             height: 18px;
+            display: block;
+            pointer-events: none;
+        }
+
+        .password-toggle .pw-eye-off {
+            display: none;
+        }
+
+        .password-toggle.is-showing .pw-eye {
+            display: none;
+        }
+
+        .password-toggle.is-showing .pw-eye-off {
             display: block;
         }
 
@@ -476,6 +489,120 @@
             font-size: 14px;
             margin-top: 16px;
             display: none;
+        }
+
+        .login-link-btn {
+            display: block;
+            width: 100%;
+            margin: 0 0 8px;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            color: #0369a1;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .login-link-btn:hover {
+            text-decoration: underline;
+        }
+
+        html[data-theme="dark"] .login-link-btn {
+            color: var(--accent-text);
+        }
+
+        #newPasswordForm {
+            display: none;
+        }
+
+        #newPasswordForm:not([hidden]) {
+            display: block;
+        }
+
+        #forgotConfirmForm[hidden] {
+            display: none !important;
+        }
+
+        #forgotEmail[readonly] {
+            opacity: 0.85;
+        }
+
+        .login-form-hint {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.5;
+            margin: 0 0 16px;
+            text-align: left;
+        }
+
+        .password-policy-hint {
+            font-size: 12px;
+            color: #64748b;
+            line-height: 1.4;
+            margin: -4px 0 16px;
+            text-align: left;
+        }
+
+        .password-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 11000;
+        }
+
+        .password-modal-overlay.visible {
+            display: flex;
+        }
+
+        body.password-modal-open #loginContainer,
+        body.password-modal-open #appContainer {
+            visibility: hidden;
+        }
+
+        .password-modal {
+            background: var(--bg-surface);
+            color: var(--text);
+            border-radius: 16px;
+            padding: 28px 24px;
+            width: 420px;
+            max-width: 92%;
+            box-shadow: var(--shadow);
+            text-align: left;
+            transform: translateZ(0);
+        }
+
+        .password-modal h2 {
+            margin: 0 0 8px;
+            font-size: 20px;
+        }
+
+        .password-modal-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .password-modal-actions .login-btn {
+            margin-bottom: 0;
+        }
+
+        .password-modal-cancel {
+            width: 100%;
+            padding: 16px;
+            background: var(--bg-surface-2, #f8fafc);
+            color: var(--text-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
         }
 
         /* === MAIN APPLICATION === */
@@ -1998,6 +2125,7 @@
         }
 
         .copy-logs-btn,
+        .change-password-btn,
         .logout-btn {
             width: 100%;
             padding: 9px 12px;
@@ -2032,7 +2160,21 @@
             color: #166534;
         }
 
+        .change-password-btn {
+            margin-bottom: 8px;
+            background: var(--bg-surface);
+            color: var(--accent-text);
+            border-color: var(--accent-border);
+        }
+
+        .change-password-btn:hover {
+            background: var(--accent-soft);
+            color: var(--accent-text);
+            border-color: var(--accent);
+        }
+
         .copy-logs-btn .nav-icon,
+        .change-password-btn .nav-icon,
         .logout-btn .nav-icon {
             width: 15px;
             height: 15px;
@@ -3323,6 +3465,593 @@
             border-color: var(--border);
         }
 
+        #assistantPage .control-section {
+            padding: 16px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 88px);
+        }
+
+        .assistant-page {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 880px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .assistant-page.is-busy .assistant-refresh-btn i,
+        .assistant-page.is-busy .assistant-refresh-btn svg {
+            animation: assistant-spin 0.9s linear infinite;
+        }
+
+        @keyframes assistant-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .assistant-hero {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px 18px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background:
+                radial-gradient(120% 90% at 0% 0%, var(--accent-soft) 0%, transparent 58%),
+                var(--bg-surface);
+            box-shadow: var(--shadow);
+        }
+
+        .assistant-hero-top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .assistant-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(160deg, #38bdf8 0%, #0369a1 100%);
+            color: #f8fafc;
+            box-shadow: 0 10px 22px rgba(2, 132, 199, 0.28);
+            flex-shrink: 0;
+        }
+
+        .assistant-name {
+            font-size: 17px;
+            font-weight: 750;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+
+        .assistant-role {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        .assistant-date-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .assistant-date-row .assistant-refresh-btn {
+            margin-left: auto;
+        }
+
+        .assistant-date-label {
+            font-size: 13px;
+            font-weight: 650;
+            color: var(--text);
+            min-width: 148px;
+            text-align: center;
+            padding: 6px 8px;
+            border-radius: 10px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+        }
+
+        .assistant-refresh-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 34px;
+            padding: 6px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border-strong);
+            background: var(--bg-surface);
+            color: var(--text-2);
+            font-size: 12px;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .assistant-refresh-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--accent-text);
+        }
+
+        .assistant-refresh-btn:disabled {
+            opacity: 0.65;
+            cursor: default;
+        }
+
+        .assistant-refresh-btn i,
+        .assistant-refresh-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .assistant-status {
+            display: block;
+            min-height: 36px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.4;
+            color: var(--text-2);
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .assistant-status[hidden] {
+            display: none;
+        }
+
+        .assistant-status.is-error {
+            color: #9f1239;
+            background: #fff1f2;
+            border-color: #fecdd3;
+        }
+
+        .assistant-status.is-busy {
+            color: var(--accent-text);
+            background: var(--accent-soft);
+            border-color: var(--accent-border);
+        }
+
+        html[data-theme="dark"] .assistant-status.is-error {
+            color: #fecdd3;
+            background: rgba(244, 63, 94, 0.16);
+            border-color: rgba(244, 63, 94, 0.35);
+        }
+
+        .assistant-metrics {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+            gap: 12px;
+        }
+
+        .assistant-metric-group {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--bg-surface);
+        }
+
+        .assistant-metric-group h3 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .assistant-chips {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .assistant-chip {
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px 10px;
+        }
+
+        .assistant-chip span {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .assistant-chip strong {
+            display: block;
+            margin-top: 3px;
+            font-size: 14px;
+            font-weight: 750;
+            color: var(--text);
+        }
+
+        .assistant-chip.is-effective {
+            background: #ecfdf5;
+            border-color: #a7f3d0;
+        }
+
+        .assistant-chip.is-watch {
+            background: #fff7ed;
+            border-color: #fed7aa;
+        }
+
+        html[data-theme="dark"] .assistant-chip.is-effective {
+            background: rgba(16, 185, 129, 0.14);
+            border-color: rgba(52, 211, 153, 0.35);
+        }
+
+        html[data-theme="dark"] .assistant-chip.is-watch {
+            background: rgba(245, 158, 11, 0.14);
+            border-color: rgba(251, 191, 36, 0.35);
+        }
+
+        .assistant-pace {
+            display: grid;
+            gap: 8px;
+        }
+
+        .assistant-pace-card {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+        }
+
+        .assistant-pace-card span {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .assistant-pace-card strong {
+            font-size: 14px;
+            font-weight: 750;
+            color: var(--text);
+        }
+
+        .assistant-pace-card small {
+            font-weight: 550;
+            color: var(--text-muted);
+        }
+
+        .assistant-page.is-busy .assistant-metrics,
+        .assistant-page.is-busy .assistant-details {
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .assistant-chat-shell {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-height: 340px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--bg-surface);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .assistant-chat-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: var(--bg-surface);
+        }
+
+        .assistant-chat-log {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 14px 14px 10px;
+        }
+
+        .assistant-chat-log::before {
+            content: "";
+            flex: 1 1 auto;
+        }
+
+        .assistant-chat-empty {
+            align-self: center;
+            margin-top: auto;
+            margin-bottom: 4px;
+            max-width: 280px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+            line-height: 1.45;
+            pointer-events: none;
+        }
+
+        .assistant-chat-empty[hidden] {
+            display: none;
+        }
+
+        .assistant-msg {
+            max-width: 78%;
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .assistant-msg-user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .assistant-msg-avatar {
+            width: 26px;
+            height: 26px;
+            border-radius: 9px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(160deg, #38bdf8 0%, #0369a1 100%);
+            color: #f8fafc;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .assistant-msg-user .assistant-msg-avatar {
+            display: none;
+        }
+
+        .assistant-msg-body {
+            border-radius: 18px 18px 18px 6px;
+            padding: 10px 13px;
+            font-size: 14px;
+            line-height: 1.5;
+            background: var(--bg-surface-2);
+            color: var(--text);
+        }
+
+        .assistant-msg-user .assistant-msg-body {
+            border-radius: 18px 18px 6px 18px;
+            background: var(--accent);
+            color: #fff;
+        }
+
+        html[data-theme="dark"] .assistant-msg-user .assistant-msg-body {
+            color: #0b1220;
+        }
+
+        .assistant-msg.is-typing .assistant-msg-body {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            min-height: 18px;
+            min-width: 52px;
+        }
+
+        .assistant-typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: assistant-bounce 1s infinite ease-in-out;
+        }
+
+        .assistant-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .assistant-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes assistant-bounce {
+            0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+            40% { opacity: 1; transform: translateY(-3px); }
+        }
+
+        .assistant-composer {
+            padding: 0 12px 12px;
+            background: var(--bg-surface);
+        }
+
+        .assistant-prompts {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 0 2px 8px;
+            scrollbar-width: none;
+        }
+
+        .assistant-prompts::-webkit-scrollbar {
+            display: none;
+        }
+
+        .assistant-prompt {
+            flex: 0 0 auto;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            color: var(--text-2);
+            border-radius: 999px;
+            padding: 5px 11px;
+            font-size: 12px;
+            font-weight: 650;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .assistant-prompt:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--accent-text);
+            background: var(--accent-soft);
+        }
+
+        .assistant-prompt:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+
+        .assistant-chat-form {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            padding: 6px 6px 6px 14px;
+            border: 1px solid var(--border-strong);
+            border-radius: 22px;
+            background: var(--bg-input);
+        }
+
+        .assistant-chat-form:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .assistant-chat-form textarea {
+            flex: 1;
+            min-height: 38px;
+            max-height: 96px;
+            resize: none;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            padding: 8px 0;
+            font: inherit;
+            box-shadow: none;
+        }
+
+        .assistant-chat-form textarea:focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+        .assistant-send-btn {
+            flex: 0 0 auto;
+            width: 36px;
+            height: 36px;
+            border: 0;
+            border-radius: 50%;
+            background: #16a34a;
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .assistant-send-btn:hover:not(:disabled) {
+            background: #15803d;
+        }
+
+        .assistant-send-btn:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+
+        .assistant-send-btn i,
+        .assistant-send-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .assistant-details {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--bg-surface);
+            padding: 4px 14px 12px;
+        }
+
+        .assistant-details > summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 2px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .assistant-details > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .assistant-details > summary::after {
+            content: "Show";
+            font-weight: 600;
+            color: var(--accent-text);
+            font-size: 12px;
+        }
+
+        .assistant-details[open] > summary::after {
+            content: "Hide";
+        }
+
+        .assistant-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .assistant-card {
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 14px;
+        }
+
+        .assistant-card h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--accent-text);
+        }
+
+        .assistant-card p,
+        .assistant-card li {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-2);
+        }
+
+        .assistant-card ul {
+            margin: 8px 0 0;
+            padding-left: 1.1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .assistant-card-wide {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 820px) {
+            .assistant-metrics,
+            .assistant-cards {
+                grid-template-columns: 1fr;
+            }
+            .assistant-chips {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .assistant-hero-top {
+                flex-wrap: wrap;
+            }
+        }
+
         .screenshot-filters {
             margin-bottom: 8px;
         }
@@ -3463,6 +4192,8 @@
         html[data-theme="dark"] .login-logo,
         html[data-theme="dark"] .login-subtitle,
         html[data-theme="dark"] .login-subtitle,
+        html[data-theme="dark"] .login-form-hint,
+        html[data-theme="dark"] .password-policy-hint,
         html[data-theme="dark"] .monthly-report-title,
         html[data-theme="dark"] .monthly-report-title,
         html[data-theme="dark"] .mr-stat-value,
@@ -3472,6 +4203,15 @@
         html[data-theme="dark"] .auth-loading-title,
         html[data-theme="dark"] .auth-loading-title {
             color: var(--text);
+        }
+
+        html[data-theme="dark"] .password-toggle {
+            color: #94a3b8;
+        }
+
+        html[data-theme="dark"] .password-toggle:hover {
+            background: rgba(148, 163, 184, 0.16);
+            color: #e2e8f0;
         }
 
         html[data-theme="dark"] .mr-card,
@@ -6082,8 +6822,8 @@
                     <div class="password-input-wrap">
                         <input type="password" id="loginPassword" class="form-input" placeholder="Enter your password" required>
                         <button type="button" class="password-toggle" id="toggleLoginPassword" aria-label="Show password">
-                            <i data-lucide="eye" class="pw-eye"></i>
-                            <i data-lucide="eye-off" class="pw-eye-off" style="display:none"></i>
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
                         </button>
                     </div>
                 </div>
@@ -6100,8 +6840,40 @@
                     <span id="loginBtnText">Sign In</span>
                     <span id="loginLoader" class="loading hidden"></span>
                 </button>
+                <button type="button" id="forgotPasswordLink" class="login-link-btn">Forgot password?</button>
 
                 <div id="loginError" class="error-message"></div>
+            </form>
+
+            <form id="newPasswordForm" hidden>
+                <p id="newPasswordHint" class="login-form-hint">Create a new password to finish signing in.</p>
+                <div class="form-group password-field">
+                    <label class="form-label" for="newPassword">New Password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="newPassword" class="form-input" placeholder="Create a new password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="newPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group password-field">
+                    <label class="form-label" for="confirmNewPassword">Confirm Password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="confirmNewPassword" class="form-input" placeholder="Confirm your new password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="confirmNewPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <p class="password-policy-hint">Use 8 or more characters with a mix of uppercase, lowercase, numbers, and a symbol.</p>
+                <button type="submit" id="newPasswordBtn" class="login-btn">
+                    <span id="newPasswordBtnText">Set Password &amp; Sign In</span>
+                    <span id="newPasswordLoader" class="loading hidden"></span>
+                </button>
+                <button type="button" id="newPasswordBackBtn" class="login-link-btn">Back to Sign In</button>
+                <div id="newPasswordError" class="error-message"></div>
             </form>
         </div>
 
@@ -6174,6 +6946,103 @@
         </div>
     </div>
 
+    <div id="changePasswordModal" class="password-modal-overlay" hidden>
+        <div class="password-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
+            <h2 id="changePasswordTitle">Change password</h2>
+            <p class="password-policy-hint">Use 8 or more characters with a mix of uppercase, lowercase, numbers, and a symbol.</p>
+            <form id="changePasswordForm">
+                <div class="form-group password-field">
+                    <label class="form-label" for="currentPassword">Current password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="currentPassword" class="form-input" placeholder="Current password" autocomplete="current-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="currentPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group password-field">
+                    <label class="form-label" for="changeNewPassword">New password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="changeNewPassword" class="form-input" placeholder="New password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="changeNewPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group password-field">
+                    <label class="form-label" for="changeConfirmPassword">Confirm new password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="changeConfirmPassword" class="form-input" placeholder="Confirm new password" autocomplete="new-password" required>
+                        <button type="button" class="password-toggle" data-password-toggle="changeConfirmPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="changePasswordError" class="error-message"></div>
+                <button type="button" id="forgotFromChangeBtn" class="login-link-btn">Forgot password?</button>
+                <div class="password-modal-actions">
+                    <button type="button" id="changePasswordCancelBtn" class="password-modal-cancel">Cancel</button>
+                    <button type="submit" id="changePasswordSaveBtn" class="login-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="forgotPasswordModal" class="password-modal-overlay" hidden>
+        <div class="password-modal" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle">
+            <h2 id="forgotPasswordTitle">Reset password</h2>
+            <form id="forgotRequestForm">
+                <p class="login-form-hint">Enter your work email. We will send a 6-digit code if an account exists. If you just received a Pulse invite, sign in with that temporary password instead of resetting.</p>
+                <div class="form-group">
+                    <label class="form-label" for="forgotEmail">Email address</label>
+                    <input type="email" id="forgotEmail" class="form-input" placeholder="name@email.com" autocomplete="username" required>
+                </div>
+                <div id="forgotRequestError" class="error-message"></div>
+                <div class="password-modal-actions">
+                    <button type="button" id="forgotRequestCancelBtn" class="password-modal-cancel">Cancel</button>
+                    <button type="submit" id="forgotSendCodeBtn" class="login-btn">Send code</button>
+                </div>
+            </form>
+            <form id="forgotConfirmForm" hidden>
+                <p id="forgotConfirmHint" class="login-form-hint">Enter the code from your email, then choose a new password.</p>
+                <div class="form-group">
+                    <label class="form-label" for="forgotResetCode">Reset code</label>
+                    <input type="text" id="forgotResetCode" class="form-input" placeholder="6-digit code" inputmode="numeric" autocomplete="one-time-code" required>
+                </div>
+                <div class="form-group password-field">
+                    <label class="form-label" for="forgotNewPassword">New password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="forgotNewPassword" class="form-input" placeholder="New password" autocomplete="new-password" spellcheck="false" autocapitalize="off" required>
+                        <button type="button" class="password-toggle" data-password-toggle="forgotNewPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group password-field">
+                    <label class="form-label" for="forgotConfirmPassword">Confirm new password</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="forgotConfirmPassword" class="form-input" placeholder="Confirm new password" autocomplete="new-password" spellcheck="false" autocapitalize="off" required>
+                        <button type="button" class="password-toggle" data-password-toggle="forgotConfirmPassword" aria-label="Show password">
+                            <svg class="pw-eye" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg class="pw-eye-off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <p class="password-policy-hint">Use 8 or more characters with a mix of uppercase, lowercase, numbers, and a symbol.</p>
+                <div id="forgotConfirmError" class="error-message"></div>
+                <div class="password-modal-actions">
+                    <button type="button" id="forgotConfirmBackBtn" class="password-modal-cancel">Back</button>
+                    <button type="submit" id="forgotResetSaveBtn" class="login-btn">Set new password</button>
+                </div>
+                <button type="button" id="forgotResendCodeBtn" class="login-link-btn">Resend code</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MAIN APPLICATION -->
     <div id="appContainer" class="app-container">
         <!-- HEADER -->
@@ -6209,6 +7078,11 @@
                     <div class="nav-item active" data-page="timetracker">
                         <i data-lucide="play-circle" class="nav-icon"></i>
                         <span>Time Tracker</span>
+                    </div>
+
+                    <div class="nav-item" data-page="assistant">
+                        <i data-lucide="sparkles" class="nav-icon"></i>
+                        <span>Alyson Coach</span>
                     </div>
 
                     <div class="nav-item nav-item-external" data-page="dashboard" data-external-url="https://app.alyson.ai">
@@ -6288,6 +7162,10 @@
                 <button id="copyLogsBtn" class="copy-logs-btn" title="Copy diagnostic logs to clipboard for IT support">
                     <i data-lucide="clipboard-copy" class="nav-icon"></i>
                     <span>Copy Logs</span>
+                </button>
+                <button id="changePasswordBtn" class="change-password-btn" title="Change your account password">
+                    <i data-lucide="lock" class="nav-icon"></i>
+                    <span>Change Password</span>
                 </button>
                 <button id="logoutBtn" class="logout-btn">
                     <i data-lucide="log-out" class="nav-icon"></i>
@@ -6727,6 +7605,10 @@
                     </div>
                     <div class="faq-list">
                         <details>
+                            <summary>How do I change my password?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">If you were invited with a temporary password, sign in here and the app will ask you to set a new one. If you forgot your password, use <strong style="color: #0f172a;">Forgot password?</strong> on the sign-in screen or in Change Password. We email a reset code to your work address. After you are signed in, you can also change it if you still know the current password. The same password works for this desktop app and app.alyson.ai.</p>
+                        </details>
+                        <details>
                             <summary>How does the app track my time?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">When you start the timer, the agent records your active work session. Time is counted while tracking is on, along with optional signals your organization enables (idle detection, focused app, and URLs where supported). Stop the timer or log out to end the session.</p>
                         </details>
@@ -6766,6 +7648,10 @@
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">In the web portal, administrators may run AI-assisted reporting (for example AI Insights) on data that was already collected—such as summarizing patterns from screenshots and activity. It analyzes existing records; it is not a separate hidden recorder. Ask your admin for the official policy that applies to your organization.</p>
                         </details>
                         <details>
+                            <summary>What is Alyson Coach?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">Alyson Coach is a personal assistant in this app. When you open it, it loads your recorded hours and starts with a month-to-date summary. You can then ask about today, effective vs non-effective time, screenshots, or how to catch up. It cannot see other employees. The numbers come from Pulse after your sessions sync.</p>
+                        </details>
+                        <details>
                             <summary>macOS blocked Alyson Time Doctor (not from an identified developer)</summary>
                             <div style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">
                                 <p style="margin: 0 0 10px;">The app may not be notarized yet. You can allow it manually.</p>
@@ -6778,6 +7664,116 @@
                                     <li style="margin-bottom: 6px;">In the General tab, you should see a message saying &quot;Alyson Time Doctor was blocked from use because it is not from an identified developer&quot; with an option to Open Anyway.</li>
                                     <li>Click Open Anyway, then enter your password if prompted.</li>
                                 </ol>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ALYSON COACH — personal time briefing from Pulse + screenshot vision -->
+            <div id="assistantPage" class="page-section">
+                <div class="control-section">
+                    <div class="assistant-page">
+                        <header class="assistant-hero">
+                            <div class="assistant-hero-top">
+                                <div class="assistant-avatar" aria-hidden="true">
+                                    <i data-lucide="sparkles" style="width: 22px; height: 22px;"></i>
+                                </div>
+                                <div>
+                                    <div class="assistant-name">Alyson</div>
+                                    <div class="assistant-role" id="assistantTimezone">Work coach · your recorded time</div>
+                                </div>
+                            </div>
+                            <div class="assistant-date-row">
+                                <button type="button" id="assistantPrevDay" class="date-nav-btn" title="Previous day">
+                                    <i data-lucide="chevron-left"></i>
+                                </button>
+                                <div class="assistant-date-label" id="assistantDateLabel">Today</div>
+                                <button type="button" id="assistantNextDay" class="date-nav-btn" title="Next day">
+                                    <i data-lucide="chevron-right"></i>
+                                </button>
+                                <button type="button" id="assistantRefresh" class="assistant-refresh-btn">
+                                    <i data-lucide="refresh-cw"></i>
+                                    Refresh
+                                </button>
+                            </div>
+                        </header>
+
+                        <div class="assistant-status" id="assistantStatus">Open this page to load your month so far.</div>
+
+                        <div class="assistant-metrics">
+                            <section class="assistant-metric-group">
+                                <h3>Today</h3>
+                                <div class="assistant-chips">
+                                    <div class="assistant-chip"><span>Hours worked</span><strong id="assistantTracked">—</strong></div>
+                                    <div class="assistant-chip is-effective"><span>Effective</span><strong id="assistantEffective">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Non-effective</span><strong id="assistantNonEffective">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Idle</span><strong id="assistantIdle">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Low activity</span><strong id="assistantLow">—</strong></div>
+                                    <div class="assistant-chip"><span>Screenshots</span><strong id="assistantShots">—</strong></div>
+                                </div>
+                            </section>
+                            <section class="assistant-metric-group">
+                                <h3>Pace</h3>
+                                <div class="assistant-pace">
+                                    <div class="assistant-pace-card">
+                                        <span>This week</span>
+                                        <strong><span id="assistantWeekEffective">—</span> <small>of</small> <span id="assistantWeekExpected">—</span></strong>
+                                    </div>
+                                    <div class="assistant-pace-card">
+                                        <span>This month</span>
+                                        <strong><span id="assistantMonthEffective">—</span> <small>of</small> <span id="assistantMonthExpected">—</span></strong>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <section class="assistant-chat-shell" aria-label="Ask Alyson">
+                            <div class="assistant-chat-stage">
+                                <div class="assistant-chat-log" id="assistantChatLog" aria-live="polite"></div>
+                                <div class="assistant-chat-empty" id="assistantChatEmpty">Month summary will appear here as the first message.</div>
+                            </div>
+                            <div class="assistant-composer">
+                                <div class="assistant-prompts">
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Give me a precise summary of my recorded time today.">Summarize my day</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Break down my effective vs non-effective time, including idle and low activity.">Effective breakdown</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="What did screenshot vision analysis see, and was I on task?">Screenshot analysis</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Give me specific suggestions to improve effective time today.">Suggestions</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="If my non-effective time is high, is it mostly idle or low activity, and what should I do?">Reduce non-effective</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How is my month going versus 7 hours a weekday?">Month so far</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How am I doing this week versus 7 hours a weekday and 35 hours?">Week pacing</button>
+                                </div>
+                                <form class="assistant-chat-form" id="assistantChatForm">
+                                    <textarea id="assistantChatInput" maxlength="500" rows="1" placeholder="Message Alyson…"></textarea>
+                                    <button type="submit" class="assistant-send-btn" id="assistantSend" aria-label="Send">
+                                        <i data-lucide="send"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </section>
+
+                        <details class="assistant-details">
+                            <summary>Hours briefing</summary>
+                            <div class="assistant-cards">
+                                <article class="assistant-card">
+                                    <h3>Recorded time</h3>
+                                    <p id="assistantSummary">Your month-to-date summary will appear here.</p>
+                                </article>
+                                <article class="assistant-card">
+                                    <h3>Effective / non-effective</h3>
+                                    <p id="assistantEffectiveCopy">Idle and low-activity breakdown will appear here.</p>
+                                </article>
+                                <article class="assistant-card">
+                                    <h3>Screenshot vision</h3>
+                                    <p id="assistantScreenshotCopy">Vision analysis of your captures will appear here.</p>
+                                </article>
+                                <article class="assistant-card assistant-card-wide">
+                                    <h3>Coaching</h3>
+                                    <p id="assistantCoachingHeadline">Coaching will appear here after your hours load.</p>
+                                    <ul id="assistantSuggestions">
+                                        <li>Ask Alyson about today after you have tracked some time.</li>
+                                    </ul>
+                                </article>
                             </div>
                         </details>
                     </div>
@@ -8400,30 +9396,10 @@
     </script>
 
     <script>
-        // Password visibility toggle (login)
         document.addEventListener('DOMContentLoaded', () => {
             try {
-                const input = document.getElementById('loginPassword');
-                const btn = document.getElementById('toggleLoginPassword');
-                if (!input || !btn) return;
-
-                const eye = btn.querySelector('.pw-eye');
-                const eyeOff = btn.querySelector('.pw-eye-off');
-
-                const setState = (show) => {
-                    input.type = show ? 'text' : 'password';
-                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-                    if (eye) eye.style.display = show ? 'none' : 'block';
-                    if (eyeOff) eyeOff.style.display = show ? 'block' : 'none';
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
-                };
-
-                let showing = false;
-                setState(showing);
-                btn.addEventListener('click', () => {
-                    showing = !showing;
-                    setState(showing);
-                });
+                const { wirePasswordToggles } = require('./modules/password-toggle.js');
+                wirePasswordToggles(document);
             } catch (e) {
                 console.warn('⚠️ Failed to wire password toggle:', e?.message || e);
             }

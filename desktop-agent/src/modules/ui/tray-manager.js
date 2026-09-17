@@ -925,11 +925,15 @@ class TrayManager {
     if (extra.completedTodayBeforeSessionSeconds !== undefined) {
       const n = Number(extra.completedTodayBeforeSessionSeconds);
       const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-      // Forward-only on the same company day only (rollover already zeroed base).
-      this._cumulativeBaseSeconds = Math.max(
-        Math.floor(Number(this._cumulativeBaseSeconds) || 0),
-        next,
-      );
+      // A new Start replaces leftover jam. Same live session stays forward-only.
+      if (extra.replaceCumulativeBase === true || !wasTracking) {
+        this._cumulativeBaseSeconds = next;
+      } else {
+        this._cumulativeBaseSeconds = Math.max(
+          Math.floor(Number(this._cumulativeBaseSeconds) || 0),
+          next,
+        );
+      }
     }
     if (extra.projectList !== undefined) this._projectList = extra.projectList;
 
@@ -939,15 +943,16 @@ class TrayManager {
       if (match) this._currentProjectName = match.name;
     }
 
-    // Start or stop the live timer
-    if (isTracking && !wasTracking) {
+    // Start or stop the live timer. A leftover isTracking=true (zombie / jam)
+    // used to skip startTrayTimer — Start disabled, clock frozen (Aditya #1).
+    if (isTracking && (extra.replaceCumulativeBase === true || !wasTracking || !this._timerInterval)) {
       this.startTrayTimer();
-      const projLabel = this._currentProjectName || 'your project';
-      this.showNotification('Tracking Started', `Now tracking time for ${projLabel}.`);
-    } else if (isTracking && wasTracking && !this._timerInterval) {
-      // Recover if interval was lost while still tracking (sleep, tray recreate, etc.).
-      console.log('⏱️ [TRAY] Tracking active but timer missing — restarting tray timer');
-      this.startTrayTimer();
+      if (!wasTracking) {
+        const projLabel = this._currentProjectName || 'your project';
+        this.showNotification('Tracking Started', `Now tracking time for ${projLabel}.`);
+      } else if (!this._timerInterval) {
+        console.log('⏱️ [TRAY] Tracking active but timer missing — restarting tray timer');
+      }
     } else if (!isTracking && wasTracking) {
       this.stopTrayTimer();
       this._trackingStartTime = null;

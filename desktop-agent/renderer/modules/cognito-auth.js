@@ -13,7 +13,17 @@ const {
   CognitoUser,
   CognitoUserPool,
   CognitoRefreshToken,
+  CognitoIdToken,
+  CognitoAccessToken,
+  CognitoUserSession,
 } = require('amazon-cognito-identity-js');
+const {
+  PASSWORD_POLICY_MESSAGE,
+  isStrongPassword,
+  isValidEmail,
+  requestForgotPassword,
+  confirmForgotPasswordRequest,
+} = require('../../src/modules/utils/cognito-idp-password');
 
 const STORAGE_KEY = 'alyson.cognito.session';
 
@@ -23,6 +33,37 @@ const STORAGE_KEY = 'alyson.cognito.session';
  * Default: 365 days (1 year). Real logout happens when Cognito rejects refresh.
  */
 const REFRESH_TOKEN_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
+function isNewPasswordChallenge(result) {
+  return Boolean(result && result.challengeName === 'NEW_PASSWORD_REQUIRED' && result.cognitoUser);
+}
+
+function attributesForNewPassword(userAttributes) {
+  const attrs = { ...(userAttributes || {}) };
+  delete attrs.email;
+  delete attrs.email_verified;
+  delete attrs.phone_number_verified;
+  return attrs;
+}
+
+function mapCognitoPasswordError(err) {
+  const code = err?.code || err?.name || '';
+  const msg = String(err?.message || err || '');
+  if (code === 'InvalidPasswordException' || /password.*policy|Password did not conform/i.test(msg)) {
+    return PASSWORD_POLICY_MESSAGE;
+  }
+  if (code === 'NotAuthorizedException' || /incorrect.*password|Invalid login/i.test(msg)) {
+    return 'Current password is incorrect.';
+  }
+  if (code === 'LimitExceededException' || /too many/i.test(msg)) {
+    return 'Too many attempts. Please wait a minute and try again.';
+  }
+  return msg || 'Could not update password. Please try again.';
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
 
 function saveCognitoSession(session) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
@@ -137,13 +178,95 @@ function signInWithEmailPassword(email, password, authConfig) {
       onFailure: (err) => {
         reject(new Error(err.message || 'Invalid credentials'));
       },
-      newPasswordRequired: () => {
-        reject(
-          new Error(
-            'Password change required. Complete it in the AWS Cognito console or web portal, then try again.',
-          ),
-        );
+      newPasswordRequired: (userAttributes) => {
+        resolve({
+          challengeName: 'NEW_PASSWORD_REQUIRED',
+          cognitoUser,
+          email: normalizedEmail,
+          userAttributes: userAttributes || {},
+        });
       },
+    });
+  });
+}
+
+/**
+ * Finish a Pulse invite / FORCE_CHANGE_PASSWORD challenge and return a stored session.
+ */
+function completeNewPasswordChallenge(cognitoUser, newPassword, userAttributes) {
+  if (!cognitoUser || typeof cognitoUser.completeNewPasswordChallenge !== 'function') {
+    return Promise.reject(new Error('Password change required. Sign in again with your temporary password.'));
+  }
+  if (!isStrongPassword(newPassword)) {
+    return Promise.reject(new Error(PASSWORD_POLICY_MESSAGE));
+  }
+  const attrs = attributesForNewPassword(userAttributes);
+  return new Promise((resolve, reject) => {
+    cognitoUser.completeNewPasswordChallenge(newPassword, attrs, {
+      onSuccess: (session) => {
+        const email =
+          session?.getIdToken?.()?.payload?.email?.toLowerCase?.() ||
+          cognitoUser.getUsername?.() ||
+          '';
+        const stored = sessionFromCognitoSession(session, email);
+        saveCognitoSession(stored);
+        resolve(stored);
+      },
+      onFailure: (err) => {
+        reject(new Error(mapCognitoPasswordError(err)));
+      },
+    });
+  });
+}
+
+function cognitoUserFromStoredSession(authConfig, stored) {
+  const pool = createPool(authConfig);
+  const email = String(stored?.email || '')
+    .trim()
+    .toLowerCase();
+  if (!email || !stored?.idToken) {
+    throw new Error('Please sign in again to change your password.');
+  }
+  const cognitoUser = new CognitoUser({
+    Username: email,
+    Pool: pool,
+  });
+  const session = new CognitoUserSession({
+    IdToken: new CognitoIdToken({ IdToken: stored.idToken }),
+    AccessToken: new CognitoAccessToken({
+      AccessToken: stored.accessToken || stored.idToken,
+    }),
+    RefreshToken: new CognitoRefreshToken({ RefreshToken: stored.refreshToken || '' }),
+  });
+  cognitoUser.setSignInUserSession(session);
+  return cognitoUser;
+}
+
+/**
+ * Change password for the currently signed-in Cognito user.
+ */
+async function changePassword(oldPassword, newPassword, authConfig) {
+  if (!oldPassword) {
+    throw new Error('Enter your current password.');
+  }
+  if (!isStrongPassword(newPassword)) {
+    throw new Error(PASSWORD_POLICY_MESSAGE);
+  }
+  if (oldPassword === newPassword) {
+    throw new Error('New password must be different from your current password.');
+  }
+  const stored = await getCurrentCognitoSession(authConfig);
+  if (!stored?.idToken) {
+    throw new Error('Please sign in again to change your password.');
+  }
+  const cognitoUser = cognitoUserFromStoredSession(authConfig, stored);
+  return new Promise((resolve, reject) => {
+    cognitoUser.changePassword(oldPassword, newPassword, (err, result) => {
+      if (err) {
+        reject(new Error(mapCognitoPasswordError(err)));
+        return;
+      }
+      resolve(result || 'SUCCESS');
     });
   });
 }
@@ -240,6 +363,50 @@ async function getCurrentCognitoSession(authConfig) {
   });
 }
 
+async function invokePasswordIpc(ipcRenderer, channel, payload, fallbackMessage) {
+  const result = await ipcRenderer.invoke(channel, payload);
+  if (!result || result.ok === false) {
+    throw new Error(result?.error || fallbackMessage);
+  }
+  return result;
+}
+
+/**
+ * Start Cognito forgot-password from the main process (renderer file:// is CORS-blocked).
+ * Unknown emails resolve as success so the UI does not reveal whether the account exists.
+ */
+async function forgotPassword(email, authConfig, ipcRenderer) {
+  if (ipcRenderer && typeof ipcRenderer.invoke === 'function') {
+    const result = await invokePasswordIpc(
+      ipcRenderer,
+      'auth:forgot-password',
+      { email },
+      'Could not send a reset code. Please try again.',
+    );
+    return {
+      email: result.email || normalizeEmail(email),
+      delivery: result.delivery || null,
+    };
+  }
+  return requestForgotPassword(email, authConfig);
+}
+
+/**
+ * Confirm the email reset code and set a new permanent password.
+ */
+async function confirmForgotPassword(email, code, newPassword, authConfig, ipcRenderer) {
+  if (ipcRenderer && typeof ipcRenderer.invoke === 'function') {
+    const result = await invokePasswordIpc(
+      ipcRenderer,
+      'auth:confirm-forgot-password',
+      { email, code, newPassword },
+      'Could not reset password. Please try again.',
+    );
+    return { email: result.email || normalizeEmail(email) };
+  }
+  return confirmForgotPasswordRequest(email, code, newPassword, authConfig);
+}
+
 function signOutCognito(authConfig) {
   clearCognitoSession();
   try {
@@ -253,6 +420,14 @@ function signOutCognito(authConfig) {
 
 module.exports = {
   signInWithEmailPassword,
+  completeNewPasswordChallenge,
+  changePassword,
+  forgotPassword,
+  confirmForgotPassword,
+  isNewPasswordChallenge,
+  isStrongPassword,
+  isValidEmail,
+  PASSWORD_POLICY_MESSAGE,
   getCurrentCognitoSession,
   refreshCognitoSession,
   hydrateCognitoSessionFromDisk,

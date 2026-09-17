@@ -3,7 +3,7 @@
  * 
  * Single centralized handler for ALL stop/exit scenarios:
  * - Stop button click
- * - X button (close window)
+ * - X button (close window → hide to tray, keep tracking)
  * - Quit from menu/tray
  * - Auto-idle stop
  * - System suspend/sleep
@@ -84,17 +84,18 @@ class GracefulShutdownManager {
   }
 
   /**
-   * Persist the active session using the moment captured at close/quit click time.
+   * Persist the active session using the moment captured at quit time.
+   * Window close (the X) is not a Stop — see handleWindowCloseEvent.
    */
-  async saveActiveSessionOnClose(reason = 'window_close', message = null) {
+  async saveActiveSessionOnClose(reason = 'quit', message = null) {
     this.captureStopMoment();
     if (typeof global.stopTracking !== 'function') {
       return { success: false, message: 'stopTracking unavailable' };
     }
     const defaultMessage =
-      reason === 'window_close'
-        ? 'Window closed — session saved'
-        : 'Application closed — session saved';
+      reason === 'quit' || reason === 'shutdown'
+        ? 'Application closed — session saved'
+        : 'Session saved';
     return global.stopTracking(reason, message || defaultMessage);
   }
 
@@ -170,17 +171,15 @@ class GracefulShutdownManager {
   }
 
   /**
-   * BrowserWindow close handler — saves active session at close instant, then hides or quits.
-   * @returns {boolean} true if close was intercepted for async save
+   * BrowserWindow X / close: hide to tray. Do not Stop.
+   * Tracking keeps recording until the employee clicks Stop (or lid/idle/quit).
+   * Real Quit (tray / Cmd+Q / before-quit) still closes the session.
+   * @returns {boolean} true if close was intercepted
    */
   handleWindowCloseEvent(event, mainWindow, options = {}) {
-    const { app, showTrayNotification } = options;
+    const { showTrayNotification } = options;
 
     if (global.isQuitting) {
-      return false;
-    }
-
-    if (!this.hasActiveSessionToClose() || global._windowCloseHandled) {
       return false;
     }
 
@@ -188,44 +187,25 @@ class GracefulShutdownManager {
       event.preventDefault();
     }
 
-    if (global._windowCloseSaveInProgress) {
-      return true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
     }
 
-    global._windowCloseSaveInProgress = true;
-    void (async () => {
-      try {
-        await this.saveActiveSessionOnClose('window_close');
-        global._windowCloseHandled = true;
-      } catch (err) {
-        console.error('❌ [GRACEFUL-SHUTDOWN] Window close save failed:', err?.message || err);
-      } finally {
-        global._windowCloseSaveInProgress = false;
-      }
-
-      if (process.platform !== 'darwin') {
-        global.isQuitting = true;
-        if (app?.quit) {
-          app.quit();
-        } else {
-          const { app: electronApp } = require('electron');
-          electronApp.quit();
-        }
-        return;
-      }
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
-        const notify =
-          showTrayNotification ||
-          ((title, body) => global.trayManager?.showNotification?.(title, body));
-        notify(
-          'Alyson PM',
-          'App continues running in background. Click the tray icon to restore.',
-        );
-      }
-    })();
-
+    const notify =
+      showTrayNotification ||
+      ((title, body) => global.trayManager?.showNotification?.(title, body));
+    const tracking = this.hasActiveSessionToClose();
+    notify(
+      'Alyson PM',
+      tracking
+        ? 'Still tracking. Click the tray icon to restore.'
+        : 'App continues running in the background. Click the tray icon to restore.',
+    );
+    console.log(
+      tracking
+        ? '📱 [APP-LIFECYCLE] Window hidden to tray — tracking continues'
+        : '📱 [APP-LIFECYCLE] Window hidden to tray - use tray or dock icon to restore',
+    );
     return true;
   }
 

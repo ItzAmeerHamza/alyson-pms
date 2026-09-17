@@ -2,6 +2,19 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.244] - 2026-09-17
+
+### Added
+- **Password in the app**: Invited users can set a password on first login. Forgot password (email code) and Change Password work in the sidebar — same password as app.alyson.ai.
+- **Alyson Coach**: New sidebar page with a daily hours briefing and chat.
+- Closing the window (X) hides to the tray and **keeps tracking**. Only Stop, Quit, or lid/idle close the session.
+
+### Fixed
+- A leftover Stop no longer kills a newer Start (clock going dead after 2–3 seconds).
+- Tray “today” time no longer jumps up from phantom high-water after sleep.
+- Offline time logs and screenshots stay on disk and retry with jittered backoff instead of a 10s stampede.
+- Screenshot upload no longer blocks Start/Stop.
+
 ## [1.0.243] - 2026-09-11
 
 ### Fixed

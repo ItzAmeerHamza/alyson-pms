@@ -3389,6 +3389,56 @@ if (isElectronContext && ipcMain) {
     return fetchAuthMeFromApi(idToken, authConfig);
   });
 
+  const cognitoPasswordAuthConfig = () => ({
+    cognito_region: config?.cognito_region || process.env.VITE_COGNITO_REGION || 'us-west-2',
+    cognito_user_pool_id: config?.cognito_user_pool_id || process.env.VITE_COGNITO_USER_POOL_ID || '',
+    cognito_client_id: config?.cognito_client_id || process.env.VITE_COGNITO_CLIENT_ID || '',
+  });
+  try { ipcMain.removeHandler('auth:forgot-password'); } catch {}
+  try { ipcMain.removeHandler('auth:confirm-forgot-password'); } catch {}
+  ipcMain.handle('auth:forgot-password', async (_event, payload) => {
+    const { requestForgotPassword } = require('./modules/utils/cognito-idp-password');
+    try {
+      const data = await requestForgotPassword(payload?.email, cognitoPasswordAuthConfig());
+      return { ok: true, ...data };
+    } catch (err) {
+      console.warn('⚠️ [AUTH] Forgot-password request failed');
+      return { ok: false, error: err?.message || 'Could not send a reset code. Please try again.' };
+    }
+  });
+  ipcMain.handle('auth:confirm-forgot-password', async (_event, payload) => {
+    const { confirmForgotPasswordRequest } = require('./modules/utils/cognito-idp-password');
+    try {
+      const data = await confirmForgotPasswordRequest(
+        payload?.email,
+        payload?.code,
+        payload?.newPassword,
+        cognitoPasswordAuthConfig(),
+      );
+      return { ok: true, ...data };
+    } catch (err) {
+      console.warn('⚠️ [AUTH] Forgot-password confirm failed');
+      return { ok: false, error: err?.message || 'Could not reset password. Please try again.' };
+    }
+  });
+
+  try { ipcMain.removeHandler('assistant:briefing'); } catch {}
+  try { ipcMain.removeHandler('assistant:chat'); } catch {}
+  const assistantAuthConfig = () => ({
+    api_base_url: config?.api_base_url || process.env.VITE_API_BASE_URL,
+    backend_api_url: config?.backend_api_url || process.env.BACKEND_API_URL,
+    cognito_region: config?.cognito_region || process.env.VITE_COGNITO_REGION || 'us-west-2',
+    cognito_client_id: config?.cognito_client_id || process.env.VITE_COGNITO_CLIENT_ID || '',
+  });
+  ipcMain.handle('assistant:briefing', async (_event, payload) => {
+    const { fetchAssistantBriefing } = require('./modules/utils/backend-assistant');
+    return fetchAssistantBriefing(assistantAuthConfig(), payload);
+  });
+  ipcMain.handle('assistant:chat', async (_event, payload) => {
+    const { fetchAssistantChat } = require('./modules/utils/backend-assistant');
+    return fetchAssistantChat(assistantAuthConfig(), payload);
+  });
+
   registerDeveloperConsoleHandlers();
 
   // Note: start-timer and start-tracking handlers are now managed by the dedicated IPCHandlers module
@@ -5538,29 +5588,33 @@ if (isElectronContext && ipcMain) {
       Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
 
-    // Live tray high-water (wall-clock) — DB/network lag must never pull the
-    // reported total below what the employee already saw on the menu bar.
-    // Exception: orphan-cap inflation (~elapsed since work-timezone midnight) must
-    // never override a much lower authoritative DB total.
+    let liveElapsed = 0;
+    if (isTracking) {
+      const start =
+        global.trackingManager?.sessionStartTime || global.sessionStartTime;
+      const ms = start ? new Date(start).getTime() : NaN;
+      if (Number.isFinite(ms)) {
+        liveElapsed = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+      }
+    }
+
+    // Tray high-water may only hold a floor that is explainable as
+    // closed-today + live session elapsed. Anything above that is phantom
+    // (orphan-cap / sleep tail) and must not raise billed or displayed time.
     try {
       const trayHwDate = global._trayTodayHighWaterDate;
       const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
-      // Prefer company work-day key; accept legacy toDateString() for same machine day.
       const trayHwMatchesToday =
         trayHwDate === workDate || trayHwDate === new Date().toDateString();
       if (trayHw > 0 && trayHwMatchesToday) {
-        const dayElapsed =
-          cap != null ? Math.max(0, (cap - 120)) : null;
-        const nearMidnight =
-          dayElapsed != null && trayHw >= Math.max(0, dayElapsed - 300);
-        const aboveDb = trayHw > total + 180;
-        if (nearMidnight && aboveDb) {
+        const honestMax = closed + liveElapsed + 5;
+        if (trayHw > honestMax && trayHw > total + 5) {
           console.warn(
-            `⚠️ [TODAY-TIME-STATS] Ignoring orphan-cap tray high-water ${trayHw}s (db ${total}s)`,
+            `⚠️ [TODAY-TIME-STATS] Ignoring inflated tray high-water ${trayHw}s (honest ≤ ${honestMax}s, db ${total}s)`,
           );
-          global._trayTodayHighWaterSeconds = total;
+          global._trayTodayHighWaterSeconds = Math.max(total, Math.min(trayHw, honestMax));
         } else {
-          total = Math.max(total, trayHw);
+          total = Math.max(total, Math.min(trayHw, honestMax));
         }
       }
     } catch (_) { /* ignore */ }
@@ -5614,6 +5668,15 @@ if (isElectronContext && ipcMain) {
     if (cap != null) {
       if (lastTotal - lastAdj > cap) lastTotal = Math.max(0, cap + lastAdj);
       if (lastClosed > cap) lastClosed = cap;
+    }
+    // Stale jam / leftover session in last-good must not keep billing.
+    {
+      const lastSessionPiece = Math.max(0, lastTotal - lastClosed);
+      if (isTracking && lastSessionPiece > liveElapsed + 60 && lastTotal > total) {
+        lastTotal = Math.max(total, lastClosed + liveElapsed);
+      } else if (!isTracking && lastTotal > Math.max(total, lastClosed, closed) + 60) {
+        lastTotal = Math.max(total, lastClosed, closed);
+      }
     }
     const cutPending = !!global._idlePromptTimeCutAppliedPending;
     const cutSec = Math.max(0, Math.floor(Number(global._idlePromptTimeCutSecondsForFloor) || 0));

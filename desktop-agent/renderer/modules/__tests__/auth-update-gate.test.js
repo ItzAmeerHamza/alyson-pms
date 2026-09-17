@@ -20,6 +20,17 @@ jest.mock('../cognito-auth', () => ({
   refreshCognitoSession: jest.fn().mockResolvedValue(null),
   hydrateCognitoSessionFromDisk: jest.fn(),
   clearCognitoSession: jest.fn(),
+  completeNewPasswordChallenge: jest.fn(),
+  changePassword: jest.fn(),
+  forgotPassword: jest.fn(),
+  confirmForgotPassword: jest.fn(),
+  isNewPasswordChallenge: (result) =>
+    Boolean(result && result.challengeName === 'NEW_PASSWORD_REQUIRED' && result.cognitoUser),
+  isStrongPassword: (value) =>
+    /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9])(?!.*\s).{8,256}$/.test(String(value || '')),
+  isValidEmail: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim().toLowerCase()),
+  PASSWORD_POLICY_MESSAGE:
+    'Use 8 or more characters with a mix of uppercase, lowercase, numbers, and a symbol.',
 }));
 
 jest.mock('../auth-api', () => ({

@@ -208,7 +208,6 @@ async function uploadScreenshotBuffer(args) {
     appName = null,
     windowTitle = null,
     agentVersion = null,
-    _retried = false,
   } = args || {};
   const screenshotId = args?.screenshotId || crypto.randomUUID();
   try {
@@ -256,22 +255,8 @@ async function uploadScreenshotBuffer(args) {
     }
 
     const capturedIso = capturedAt || new Date().toISOString();
-    const s3Config = resolveDesktopSyncConfig();
-    // S3 via the backend presigned URL is the only upload path — a missing config
-    // must surface as an error so the caller retries instead of losing the capture.
-    if (!s3Config) {
-      const message = 'S3 not configured (BACKEND_API_URL + INTERNAL_API_KEY)';
-      log.error({ step: 'S3_NOT_CONFIGURED', message });
-      console.error(`❌ [SCREENSHOT-UPLOAD] ${message}`);
-      return { error: message };
-    }
-
-    log.info({ step: 'S3_PATH', message: 'Uploading via backend presigned URL' });
-    const uploadArgs = {
+    const persistMeta = {
       userId,
-      uploadBuffer,
-      contentType,
-      ext,
       capturedAt: capturedIso,
       timeLogId,
       activityPercent,
@@ -283,32 +268,31 @@ async function uploadScreenshotBuffer(args) {
       windowTitle,
       agentVersion,
       perceptualHash,
-      screenshotId,
     };
-    let s3Result = await uploadScreenshotViaS3Api(uploadArgs);
-    if (s3Result.error && isTransientUploadError(s3Result.error)) {
-      log.warn({ step: 'S3_UPLOAD_RETRY', message: s3Result.error });
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      s3Result = await uploadScreenshotViaS3Api(uploadArgs);
-    }
-    if (s3Result.error) {
-      log.error({ step: 'S3_UPLOAD_FAILED', message: s3Result.error });
-      console.error(`❌ [SCREENSHOT-UPLOAD] S3 upload failed: ${s3Result.error}`);
-      return s3Result;
-    }
 
-    log.info({ step: 'S3_UPLOAD_OK', ctx: { id: s3Result.id, s3_key: s3Result.s3_key } });
-    return s3Result;
+    // PAYROLL / TRACKING: persist locally and return. S3 is background-only.
+    // Awaiting PUT here is what froze the app on bad wifi (45s × 2).
+    const { getOfflineScreenshotQueue } = require('./offline-screenshot-queue');
+    const queue = getOfflineScreenshotQueue();
+    queue.enqueuePrepared({
+      id: screenshotId,
+      buffer: uploadBuffer,
+      ext,
+      contentType,
+      meta: persistMeta,
+    });
+    setImmediate(() => {
+      try {
+        queue.requestFlush();
+      } catch (_) { /* never throw into the event loop */ }
+    });
+    log.info({ step: 'QUEUED_LOCAL', ctx: { id: screenshotId } });
+    return { id: screenshotId, queued: true };
   } catch (error) {
     const msg =
       error?.name === 'AbortError'
-        ? 'Screenshot upload timed out'
+        ? 'Screenshot encode/persist timed out'
         : error.message;
-    if (isTransientUploadError(msg) && !_retried) {
-      log.warn({ step: 'S3_UPLOAD_RETRY', message: msg });
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      return uploadScreenshotBuffer({ ...args, _retried: true, screenshotId });
-    }
     log.error({ step: 'EXCEPTION', message: msg });
     console.error(`❌ [SCREENSHOT-UPLOAD] Exception:`, msg);
     return { error: msg };

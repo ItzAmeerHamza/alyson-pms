@@ -70,6 +70,7 @@ class EnhancedIdleMonitor {
     // not mistaken for sleep, tight enough that real sleep is always caught.
     this.SUSPEND_GAP_MS = this.IDLE_CHECK_INTERVAL * 3;
     this._lastEvaluationAt = null;
+    this._idleArmedAt = null;
     this.IDLE_THRESHOLD = detectionSeconds;
     this.LOW_ACTIVITY_PERCENT =
       this.config?.idle_low_activity_percent ??
@@ -234,7 +235,9 @@ class EnhancedIdleMonitor {
     console.log(
       `🧍 [IDLE-MONITOR] Idle logging: OS idle only, starts after ${this.IDLE_THRESHOLD}s (${Math.round(this.IDLE_THRESHOLD / 60)} min), check every ${this.IDLE_CHECK_INTERVAL / 1000}s`,
     );
-    console.log(`🧍 [IDLE-MONITOR] Auto-stop prompt: ${this.config.idle_threshold_minutes} min OS idle, ${Math.floor(this.PHANTOM_IDLE_THRESHOLD_MS / 60000)} min phantom idle`);
+    console.log(
+      `🧍 [IDLE-MONITOR] Config: still-working prompt after ${this.config.idle_threshold_minutes} min of idle during this session`,
+    );
     
     this._lastSeenKeystrokes = global.unifiedInputManager?.stats?.keystrokes || 0;
     this._lastSeenClicks = global.unifiedInputManager?.stats?.mouseClicks || 0;
@@ -246,6 +249,7 @@ class EnhancedIdleMonitor {
     // A new Start must not inherit the previous session's last check.
     // Ameer 31 Aug: 1776s leftover gap looked like sleep 1 min after Start.
     this._lastEvaluationAt = null;
+    this._idleArmedAt = now;
     this._lastInputActivityAt = now;
     this._lastHighActivityAt = now;
     this.currentIdleStartTime = null;
@@ -559,8 +563,19 @@ class EnhancedIdleMonitor {
     // NOT use the keystroke/click-only idle here: that ignores mouse movement and
     // would falsely flag someone reviewing screenshots or reading as idle.
     const noInputSeconds = Number(osIdleSeconds) || 0;
-    if (noInputSeconds * 1000 >= this.IDLE_PROMPT_THRESHOLD_MS) {
-      this._showIdlePrompt(noInputSeconds);
+    // Leftover OS idle from before this Start must not fire the prompt.
+    // Idle for the prompt is only time with no input *during this session*.
+    const resolvedStart = this._resolveSessionStartMs();
+    const armedAt = this._idleArmedAt;
+    const sessionStartMs = [resolvedStart, armedAt]
+      .filter((ms) => Number.isFinite(ms))
+      .reduce((latest, ms) => (latest == null ? ms : Math.max(latest, ms)), null);
+    const sessionAgeSec = sessionStartMs
+      ? Math.max(0, (Date.now() - sessionStartMs) / 1000)
+      : 0;
+    const promptIdleSeconds = Math.min(noInputSeconds, sessionAgeSec);
+    if (promptIdleSeconds * 1000 >= this.IDLE_PROMPT_THRESHOLD_MS) {
+      this._showIdlePrompt(promptIdleSeconds);
     }
   }
 

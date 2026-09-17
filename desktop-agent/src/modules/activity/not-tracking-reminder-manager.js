@@ -1,20 +1,15 @@
 'use strict';
 
 /**
- * Not-tracking front-of-screen reminder
+ * Not-tracking start reminder
  *
- * For every logged-in user on macOS and Windows: when the employee is using the
- * machine but Alyson PM is NOT tracking, bring the main window to the front
- * after a short activity grace, then every 5 minutes while still off.
- * Never runs while tracking is active. No per-user / per-org feature flag.
- *
- * Detection uses Electron powerMonitor.getSystemIdleTime() (no Swift/Python).
+ * After Stop (app still running, not recording): wait 10 minutes, then show
+ * a popup so the employee can Start. Repeat every 10 minutes until they
+ * Start, Quit, lock, or the machine sleeps.
  */
 
-const GRACE_MS = 3 * 60 * 1000;
-const REPEAT_MS = 5 * 60 * 1000;
-const ACTIVE_IDLE_MAX_SEC = 60;
-const AWAY_IDLE_SEC = 120;
+const GRACE_MS = 10 * 60 * 1000;
+const REPEAT_MS = 10 * 60 * 1000;
 const POLL_MS = 30 * 1000;
 const ALWAYS_ON_TOP_MS = 2000;
 
@@ -22,17 +17,24 @@ class NotTrackingReminderManager {
   constructor() {
     this._intervalId = null;
     this._armed = false;
-    this._activeWorkSinceMs = null;
+    this._offSinceMs = null;
     this._lastReminderAtMs = null;
     this._alwaysOnTopTimer = null;
+    this._promptVisible = false;
   }
 
   start() {
     if (this._intervalId) {
       this._armed = true;
+      if (this._offSinceMs == null && !this._isTracking()) {
+        this._offSinceMs = Date.now();
+      }
       return;
     }
     this._armed = true;
+    if (this._offSinceMs == null && !this._isTracking()) {
+      this._offSinceMs = Date.now();
+    }
     this._intervalId = setInterval(() => {
       try {
         this._tick();
@@ -43,15 +45,12 @@ class NotTrackingReminderManager {
         );
       }
     }, POLL_MS);
-    // Do NOT register with cleanupRegistry — graceful Stop runs cleanupAll()
-    // and was killing this interval, so the post-Stop reminder never fired.
     if (typeof this._intervalId.unref === 'function') {
       try { this._intervalId.unref(); } catch (_) { /* ignore */ }
     }
     console.log(
-      '🔔 [NOT-TRACKING-REMINDER] Started (grace 3m, repeat 5m, tracking-off only)',
+      '🔔 [NOT-TRACKING-REMINDER] Started (10m after Stop, repeat 10m, tracking-off only)',
     );
-    // Evaluate once immediately so a long-running session does not wait a full poll.
     try {
       this._tick();
     } catch (_) { /* ignore */ }
@@ -65,33 +64,32 @@ class NotTrackingReminderManager {
       this._intervalId = null;
     }
     this._clearAlwaysOnTop();
+    this._hidePrompt();
     console.log('🔔 [NOT-TRACKING-REMINDER] Stopped');
   }
 
-  /** Tracking became active — no purpose for reminders. */
   onTrackingStarted() {
     this._clearState();
+    this._hidePrompt();
     console.log('🔔 [NOT-TRACKING-REMINDER] Tracking started — reminders suppressed');
   }
 
-  /**
-   * Tracking stopped (manual or auto). Reset so Stop → work 3m → focus,
-   * then every 5m while still off. Re-arm the poller if Stop cleanup killed it.
-   */
   onTrackingStopped() {
-    this._clearState();
-    // GSM cleanupAll() used to wipe our interval — ensure we keep watching.
+    this._offSinceMs = Date.now();
+    this._lastReminderAtMs = null;
+    this._promptVisible = false;
     if (!this._intervalId) {
       this.start();
     } else {
       this._armed = true;
     }
-    console.log('🔔 [NOT-TRACKING-REMINDER] Tracking stopped — grace timer reset');
+    console.log('🔔 [NOT-TRACKING-REMINDER] Tracking stopped — 10m popup timer started');
   }
 
   _clearState() {
-    this._activeWorkSinceMs = null;
+    this._offSinceMs = null;
     this._lastReminderAtMs = null;
+    this._promptVisible = false;
   }
 
   _isTracking() {
@@ -103,6 +101,7 @@ class NotTrackingReminderManager {
   }
 
   _isLockedOrSleeping() {
+    if (global.isQuitting) return true;
     if (global.isScreenLocked) return true;
     if (global.trayManager?._systemSleeping) return true;
     try {
@@ -112,28 +111,8 @@ class NotTrackingReminderManager {
     return false;
   }
 
-  _getOsIdleSeconds() {
-    try {
-      const { powerMonitor } = require('electron');
-      if (powerMonitor && typeof powerMonitor.getSystemIdleTime === 'function') {
-        const secs = Number(powerMonitor.getSystemIdleTime());
-        if (Number.isFinite(secs) && secs >= 0) return secs;
-      }
-    } catch (_) { /* ignore */ }
-    try {
-      if (typeof global.getSystemIdleTime === 'function') {
-        const secs = Number(global.getSystemIdleTime());
-        if (Number.isFinite(secs) && secs >= 0) return secs;
-      }
-    } catch (_) { /* ignore */ }
-    return Number.POSITIVE_INFINITY;
-  }
-
   _idlePromptVisible() {
     try {
-      // Prefer the idle monitor's live flag. IdlePromptManager used to leave
-      // stale `_onTop` / `_responseCallback` after timeout/sleep, which blocked
-      // this reminder for hours (Fawad Sep 10). Heal stale flags when inactive.
       const monitor = global.enhancedIdleMonitor;
       if (monitor && monitor._idlePromptActive === true) return true;
 
@@ -146,8 +125,6 @@ class NotTrackingReminderManager {
 
       if (!managerShows) return false;
 
-      // Monitor says prompt is not active (or missing) but manager flags linger
-      // → clear and allow the Start reminder to fire.
       if (!monitor || monitor._idlePromptActive !== true) {
         try {
           if (typeof idle.hide === 'function') idle.hide();
@@ -164,37 +141,24 @@ class NotTrackingReminderManager {
     if (!this._armed) return;
 
     if (this._isTracking()) {
-      // Hard gate: never advance timers or focus while tracking.
-      if (this._activeWorkSinceMs != null || this._lastReminderAtMs != null) {
+      if (this._offSinceMs != null || this._lastReminderAtMs != null) {
         this._clearState();
+        this._hidePrompt();
       }
       return;
     }
 
     if (!this._isLoggedIn() || this._isLockedOrSleeping()) {
-      this._activeWorkSinceMs = null;
-      return;
-    }
-
-    const idleSec = this._getOsIdleSeconds();
-    if (idleSec >= AWAY_IDLE_SEC) {
-      this._activeWorkSinceMs = null;
-      return;
-    }
-
-    if (idleSec >= ACTIVE_IDLE_MAX_SEC) {
-      // Ambiguous band (60–120s): do not start/continue grace.
       return;
     }
 
     const now = Date.now();
-    if (this._activeWorkSinceMs == null) {
-      this._activeWorkSinceMs = now;
+    if (this._offSinceMs == null) {
+      this._offSinceMs = now;
       return;
     }
 
-    const activeFor = now - this._activeWorkSinceMs;
-    if (activeFor < GRACE_MS) return;
+    if (now - this._offSinceMs < GRACE_MS) return;
 
     const neverReminded = this._lastReminderAtMs == null;
     const dueForRepeat =
@@ -202,7 +166,6 @@ class NotTrackingReminderManager {
 
     if (!neverReminded && !dueForRepeat) return;
 
-    // Re-check tracking immediately before focus steal.
     if (this._isTracking()) {
       this._clearState();
       return;
@@ -213,18 +176,39 @@ class NotTrackingReminderManager {
     }
 
     const kind = neverReminded ? 'grace' : 'repeat';
-    this.focusMainWindow();
+    this.showStartReminder();
     this._lastReminderAtMs = now;
-    console.log(
-      `🔔 [NOT-TRACKING-REMINDER] Focusing main window (${kind})`,
-    );
+    console.log(`🔔 [NOT-TRACKING-REMINDER] Showing start popup (${kind})`);
   }
 
-  /**
-   * Bring the existing tracking window to the front (idle-prompt style).
-   * Runs for every logged-in user on macOS and Windows — no platform/user gate.
-   * Brief always-on-top so we surface over other apps, then clear.
-   */
+  showStartReminder() {
+    if (this._isTracking()) return false;
+    this.focusMainWindow();
+    this._promptVisible = true;
+    try {
+      const win = global.mainWindow;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('display-start-reminder');
+      }
+    } catch (err) {
+      console.warn(
+        '⚠️ [NOT-TRACKING-REMINDER] display-start-reminder failed:',
+        err?.message || err,
+      );
+    }
+    return true;
+  }
+
+  _hidePrompt() {
+    this._promptVisible = false;
+    try {
+      const win = global.mainWindow;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('hide-start-reminder');
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   focusMainWindow() {
     if (this._isTracking()) return false;
 
@@ -245,7 +229,6 @@ class NotTrackingReminderManager {
         if (typeof win.moveTop === 'function') win.moveTop();
       } catch (_) { /* ignore */ }
 
-      // Always-on-top briefly so the Start UI surfaces on both macOS and Windows.
       try {
         win.setAlwaysOnTop(true, 'screen-saver');
       } catch (_) {
@@ -266,7 +249,6 @@ class NotTrackingReminderManager {
         }
       } catch (_) { /* ignore */ }
 
-      // Windows: flash taskbar if another app still holds foreground.
       if (process.platform === 'win32') {
         try {
           if (typeof win.flashFrame === 'function') win.flashFrame(true);
@@ -316,6 +298,4 @@ class NotTrackingReminderManager {
 module.exports = NotTrackingReminderManager;
 module.exports.GRACE_MS = GRACE_MS;
 module.exports.REPEAT_MS = REPEAT_MS;
-module.exports.ACTIVE_IDLE_MAX_SEC = ACTIVE_IDLE_MAX_SEC;
-module.exports.AWAY_IDLE_SEC = AWAY_IDLE_SEC;
 module.exports.POLL_MS = POLL_MS;

@@ -14,6 +14,12 @@ class SyncManager {
     console.log(`🔧 [SYNC-MANAGER] Sync API URL: ${this.desktopSyncApiUrl}`);
     this.isOnline = true;
     this.syncInterval = null;
+    this._syncTimeout = null;
+    this._syncing = false;
+    this._syncHooksBound = false;
+    this._backoffUntil = 0;
+    this._retryCount = 0;
+    this._reconnectFlushTimer = null;
     // Use user data directory instead of app.asar path
     const os = require('os');
     const userDataDir = process.env.APPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'));
@@ -142,7 +148,13 @@ class SyncManager {
     const body = await response.json();
 
     if (!response.ok) {
-      const errorMsg = body?.error || `Edge function returned ${response.status}`;
+      const errorMsg = body?.message || body?.error || `Edge function returned ${response.status}`;
+      try {
+        require('../utils/backend-time-logs').noteNetworkResult(false, {
+          status: response.status,
+          message: errorMsg,
+        });
+      } catch (_) { /* hint is best-effort */ }
       throw new Error(errorMsg);
     }
 
@@ -234,6 +246,7 @@ class SyncManager {
     this.queue.appLogs.push(logData);
     this.saveQueue();
     logger.debug({ category: 'SYNC', step: 'QUEUE', message: 'app_logs', ctx: { pending: this.queue.appLogs.length } });
+    this.requestFlush();
   }
 
   async uploadAppLogs(logData) {
@@ -241,9 +254,11 @@ class SyncManager {
       logger.debug({ category: 'SYNC', step: 'UPLOAD VIA EDGE FN' });
       db.saveStart('app_logs');
       
-      await this._callEdgeFunction('insert_app_logs', { logs: logData.logs });
-
-      db.saveSuccess('app_logs', Array.isArray(logData.logs) ? logData.logs.length : 1);
+      const logs = Array.isArray(logData.logs) ? logData.logs : [];
+      const batch = logs.slice(0, 8);
+      await this._callEdgeFunction('insert_app_logs', { logs: batch });
+      logData.logs = logs.slice(8);
+      db.saveSuccess('app_logs', batch.length);
     } catch (networkError) {
       console.error('❌ Network error during app logs upload:', networkError);
       db.saveError('app_logs', networkError);
@@ -289,49 +304,26 @@ class SyncManager {
     this.queue.urlLogs.push(logData);
     this.saveQueue();
     logger.debug({ category: 'SYNC', step: 'QUEUE', message: 'url_logs', ctx: { pending: this.queue.urlLogs.length } });
+    this.requestFlush();
   }
 
   async uploadUrlLogs(logData) {
-    const BATCH = Number(process.env.URL_BATCH_SIZE || 200);
+    const BATCH = 8;
     const chunks = [];
     for (let i = 0; i < logData.logs.length; i += BATCH) {
       chunks.push(logData.logs.slice(i, i + BATCH));
     }
     for (const chunk of chunks) {
-      await this._insertUrlChunkWithRetry(chunk);
+      db.saveStart('url_logs', { batch_size: chunk.length });
+      await this._callEdgeFunction('insert_url_logs', {
+        logs: chunk.map(row => ({
+          ...row,
+          url: row.url || row.site_url,
+          site_url: row.site_url || row.url,
+        })),
+      });
+      db.saveSuccess('url_logs', chunk.length);
     }
-  }
-
-  async _insertUrlChunkWithRetry(chunk) {
-    const maxRetries = 5;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        db.saveStart('url_logs', { batch_size: chunk.length });
-        await this._callEdgeFunction('insert_url_logs', {
-          logs: chunk.map(row => ({
-            ...row,
-            url: row.url || row.site_url,
-            site_url: row.site_url || row.url,
-          }))
-        });
-        db.saveSuccess('url_logs', chunk.length);
-        return;
-      } catch (err) {
-        const msg = (err && err.message) || String(err);
-        const is4xx = /(^|\s)(401|403|404|409|422)/.test(msg) || msg.toLowerCase().includes('policy') || msg.toLowerCase().includes('permission');
-        const isRate = msg.includes('429') || msg.toLowerCase().includes('rate');
-        if (is4xx) {
-          console.error('🚫 [URL-LOGS] Non-retryable error:', msg);
-          db.saveError('url_logs', err, { batch_size: chunk.length });
-          throw err;
-        }
-        const base = isRate ? 1500 : 500;
-        const backoff = Math.min(10000, base * 2 ** attempt) + Math.floor(Math.random() * 300);
-        console.warn(`🔁 [URL-LOGS] Retry ${attempt + 1}/${maxRetries} in ${backoff}ms:`, msg);
-        await new Promise(r => setTimeout(r, backoff));
-      }
-    }
-    throw new Error('URL logs insert failed after retries');
   }
 
   // === IDLE LOGS HANDLING ===
@@ -350,6 +342,7 @@ class SyncManager {
     this.queue.idleLogs.push(logData);
     this.saveQueue();
     logger.debug({ category: 'SYNC', step: 'QUEUE', message: 'idle_log', ctx: { pending: this.queue.idleLogs.length } });
+    this.requestFlush();
   }
 
   async uploadIdleLog(logData) {
@@ -426,84 +419,148 @@ class SyncManager {
 
   // === SYNC PROCESS ===
   startSyncProcess() {
-    if (this.syncInterval) return; // idempotent guard
-    // Sync every 10 seconds for faster app detection updates
-    this.syncInterval = setInterval(() => {
-      this.syncQueue();
-    }, 10000);
+    this._bindReconnectHooks();
+    this.requestFlush();
+  }
 
-    // Initial sync after 3 seconds
-    setTimeout(() => this.syncQueue(), 3000);
+  requestFlush() {
+    if (this._syncTimeout) return;
+    const now = Date.now();
+    let delay = 250 + Math.floor(Math.random() * 500);
+    if (this._backoffUntil > now) delay = this._backoffUntil - now;
+    this._syncTimeout = setTimeout(() => {
+      this._syncTimeout = null;
+      void this.syncQueue();
+    }, delay);
+  }
+
+  _noteFlushFailure(error) {
+    const { jitteredBackoffMs, isTransientDbOrNetworkError } = require('../utils/sync-backoff');
+    this._retryCount = (this._retryCount || 0) + 1;
+    this._backoffUntil = Date.now() + jitteredBackoffMs(this._retryCount);
+    this._flushAborted = true;
+    const msg = error?.message || String(error || '');
+    if (isTransientDbOrNetworkError(msg)) {
+      try {
+        require('../utils/backend-time-logs').noteNetworkResult?.(false, { message: msg });
+      } catch (_) { /* optional */ }
+    }
+    console.warn(
+      `⚠️ [SYNC] Flush paused ${Math.round((this._backoffUntil - Date.now()) / 1000)}s:`,
+      msg,
+    );
+  }
+
+  _noteFlushSuccess() {
+    this._retryCount = 0;
+    this._backoffUntil = 0;
+    this._flushAborted = false;
   }
 
   async syncQueue() {
+    if (this._syncing) return;
     if (!this.isOnline) return;
+    if (this._backoffUntil && Date.now() < this._backoffUntil) {
+      this.requestFlush();
+      return;
+    }
 
     const totalItems = Object.values(this.queue).reduce((sum, arr) => sum + arr.length, 0);
     if (totalItems === 0) return;
 
+    this._syncing = true;
+    this._flushAborted = false;
     logger.info({ category: 'SYNC', step: 'SYNC START', ctx: { totalItems } });
 
-    // CRITICAL FIX: Sync time logs FIRST so other tables can reference them
-    // Track if time log sync succeeded - if not, dependent tables may fail with FK errors
-    let timeLogSyncSuccess = true;
     try {
-      await this.syncTimeLogs();
-    } catch (error) {
-      timeLogSyncSuccess = false;
-      logger.error({ category: 'SYNC', step: 'TIME LOG SYNC FAILED', message: error.message });
-      console.error('❌ [SYNC] Time log sync failed - dependent tables may fail with FK errors');
-    }
-    
-    // Then sync items that depend on time_log_id
-    // Only proceed if time log sync succeeded OR if there are no time logs pending
-    // This prevents FK constraint errors when time_log_id references don't exist
-    const hasTimeLogsToSync = this.queue.timeLogs?.length > 0;
-    
-    if (timeLogSyncSuccess || !hasTimeLogsToSync) {
-      await this.syncAppLogs();
-      await this.syncUrlLogs();
-      await this.syncIdleLogs();
-    } else {
-      logger.warn({ 
-        category: 'SYNC', 
-        step: 'DEPENDENT SYNC DEFERRED', 
-        message: 'Skipping app/url/idle logs sync until time logs succeed',
-        ctx: { 
-          appLogs: this.queue.appLogs?.length || 0,
-          urlLogs: this.queue.urlLogs?.length || 0,
-          idleLogs: this.queue.idleLogs?.length || 0
-        }
-      });
-    }
-    
-    // Screenshots and fraud alerts don't depend on time_log_id FK
-    await this.syncScreenshots();
-    await this.syncFraudAlerts();
+      try {
+        await this.syncTimeLogs();
+      } catch (error) {
+        this._noteFlushFailure(error);
+        logger.error({ category: 'SYNC', step: 'TIME LOG SYNC FAILED', message: error.message });
+      }
 
-    this.saveQueue();
+      const hasTimeLogsToSync = this.queue.timeLogs?.length > 0;
+      if (!this._flushAborted && !hasTimeLogsToSync) {
+        await this.syncAppLogs();
+        if (!this._flushAborted) await this.syncUrlLogs();
+        if (!this._flushAborted) await this.syncIdleLogs();
+      } else if (hasTimeLogsToSync) {
+        logger.warn({
+          category: 'SYNC',
+          step: 'DEPENDENT SYNC DEFERRED',
+          message: 'Skipping app/url/idle logs sync until time logs succeed',
+        });
+      }
+
+      if (!this._flushAborted) await this.syncScreenshots();
+      if (!this._flushAborted) await this.syncFraudAlerts();
+      if (!this._flushAborted) this._noteFlushSuccess();
+      this.saveQueue();
+    } finally {
+      this._syncing = false;
+      if (Object.values(this.queue).some((arr) => arr.length > 0)) {
+        this.requestFlush();
+      }
+    }
   }
 
   async syncScreenshots() {
     const screenshots = [...this.queue.screenshots];
-    
-    for (let i = screenshots.length - 1; i >= 0; i--) {
-      const screenshot = screenshots[i];
-      
-      try {
-        await this.uploadScreenshot(screenshot);
-        this.queue.screenshots.splice(i, 1);
-        logger.info({ category: 'SYNC', step: 'SCREENSHOT SYNCED' });
-      } catch (error) {
-        screenshot.retries++;
-        logger.warn({ category: 'SYNC', step: 'SCREENSHOT RETRY', message: error.message, ctx: { retry: screenshot.retries } });
-        
-        // Remove after 5 failed attempts
-        if (screenshot.retries >= 5) {
-          this.queue.screenshots.splice(i, 1);
-          logger.warn({ category: 'SYNC', step: 'SCREENSHOT DROPPED', message: 'Removed after 5 retries' });
-        }
+    if (!screenshots.length) return;
+
+    // Move leftover base64 JSON rows onto the file queue. Never drop after 5
+    // retries — that was silent screenshot loss. Drain is event + backoff.
+    try {
+      const { getOfflineScreenshotQueue } = require('../utils/offline-screenshot-queue');
+      const q = getOfflineScreenshotQueue();
+      for (const screenshot of screenshots) {
+        const b64 =
+          screenshot.imageBuffer ||
+          screenshot.file_data ||
+          screenshot.data?.file_data ||
+          '';
+        if (!b64) continue;
+        const id =
+          screenshot.id ||
+          screenshot.screenshot_id ||
+          `migrated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const meta = screenshot.metadata || screenshot;
+        q.enqueuePrepared({
+          id: String(id),
+          buffer: Buffer.from(String(b64), 'base64'),
+          ext: 'jpg',
+          contentType: 'image/jpeg',
+          meta: {
+            userId: meta.user_id || meta.userId || this.config?.user_id,
+            capturedAt: meta.captured_at || screenshot.timestamp,
+            timeLogId: meta.time_log_id || meta.timeLogId || null,
+            activityPercent: meta.activity_percent || 0,
+            focusPercent: meta.focus_percent || 0,
+            clicks: meta.mouse_clicks || 0,
+            keys: meta.keystrokes || 0,
+            moves: meta.mouse_movements || 0,
+            appName: meta.app_name || null,
+            windowTitle: meta.window_title || null,
+            agentVersion: meta.agent_version || null,
+          },
+        });
       }
+      this.queue.screenshots = [];
+      await this.saveQueue();
+      q.requestFlush();
+      logger.info({
+        category: 'SYNC',
+        step: 'SCREENSHOTS MIGRATED',
+        ctx: { count: screenshots.length },
+      });
+    } catch (error) {
+      logger.warn({
+        category: 'SYNC',
+        step: 'SCREENSHOT MIGRATE FAILED',
+        message: error?.message || String(error),
+        ctx: { kept: this.queue.screenshots.length },
+      });
     }
   }
 
@@ -515,30 +572,15 @@ class SyncManager {
       
       try {
         await this.uploadAppLogs(logData);
-        this.queue.appLogs.splice(i, 1);
+        if (!Array.isArray(logData.logs) || logData.logs.length === 0) {
+          this.queue.appLogs.splice(i, 1);
+        }
         logger.info({ category: 'SYNC', step: 'APP LOGS SYNCED' });
       } catch (error) {
-        logData.retries++;
-        
-        // CRITICAL FIX: Handle foreign key constraint errors specifically
-        const isFkError = error.message.includes('violates foreign key constraint') && error.message.includes('time_log_id_fkey');
-        if (isFkError) {
-          logger.warn({ category: 'SYNC', step: 'APP LOGS FK WAIT', message: 'time_log_id not yet synced - will retry', ctx: { retry: logData.retries } });
-        } else {
-          logger.warn({ category: 'SYNC', step: 'APP LOGS RETRY', message: error.message, ctx: { retry: logData.retries } });
-        }
-        
-        if (logData.retries >= 5) {
-          this.queue.appLogs.splice(i, 1);
-          const logCount = Array.isArray(logData.logs) ? logData.logs.length : 1;
-          console.error(`❌ [SYNC] Dropped ${logCount} app log(s) after 5 retries. Reason: ${isFkError ? 'FK constraint (time_log_id)' : error.message}`);
-          logger.error({ 
-            category: 'SYNC', 
-            step: 'APP LOGS DROPPED', 
-            message: `Dropped ${logCount} app log(s) after 5 retries`,
-            ctx: { reason: isFkError ? 'FK constraint' : 'Other error', logCount }
-          });
-        }
+        logData.retries = (logData.retries || 0) + 1;
+        logger.warn({ category: 'SYNC', step: 'APP LOGS RETRY', message: error.message, ctx: { retry: logData.retries } });
+        this._noteFlushFailure(error);
+        return;
       }
     }
   }
@@ -554,27 +596,10 @@ class SyncManager {
         this.queue.urlLogs.splice(i, 1);
         logger.info({ category: 'SYNC', step: 'URL LOGS SYNCED' });
       } catch (error) {
-        logData.retries++;
-        
-        // CRITICAL FIX: Handle foreign key constraint errors specifically
-        const isFkError = error.message.includes('violates foreign key constraint') && error.message.includes('time_log_id_fkey');
-        if (isFkError) {
-          logger.warn({ category: 'SYNC', step: 'URL LOGS FK WAIT', message: 'time_log_id not yet synced - will retry', ctx: { retry: logData.retries } });
-        } else {
-          logger.warn({ category: 'SYNC', step: 'URL LOGS RETRY', message: error.message, ctx: { retry: logData.retries } });
-        }
-        
-        if (logData.retries >= 5) {
-          this.queue.urlLogs.splice(i, 1);
-          const logCount = Array.isArray(logData.logs) ? logData.logs.length : 1;
-          console.error(`❌ [SYNC] Dropped ${logCount} URL log(s) after 5 retries. Reason: ${isFkError ? 'FK constraint (time_log_id)' : error.message}`);
-          logger.error({ 
-            category: 'SYNC', 
-            step: 'URL LOGS DROPPED', 
-            message: `Dropped ${logCount} URL log(s) after 5 retries`,
-            ctx: { reason: isFkError ? 'FK constraint' : 'Other error', logCount }
-          });
-        }
+        logData.retries = (logData.retries || 0) + 1;
+        logger.warn({ category: 'SYNC', step: 'URL LOGS RETRY', message: error.message, ctx: { retry: logData.retries } });
+        this._noteFlushFailure(error);
+        return;
       }
     }
   }
@@ -590,13 +615,10 @@ class SyncManager {
         this.queue.idleLogs.splice(i, 1);
         logger.info({ category: 'SYNC', step: 'IDLE LOG SYNCED' });
       } catch (error) {
-        logData.retries++;
+        logData.retries = (logData.retries || 0) + 1;
         logger.warn({ category: 'SYNC', step: 'IDLE LOG RETRY', message: error.message, ctx: { retry: logData.retries } });
-        
-        if (logData.retries >= 5) {
-          this.queue.idleLogs.splice(i, 1);
-          logger.warn({ category: 'SYNC', step: 'IDLE LOG DROPPED', message: 'Removed after 5 retries' });
-        }
+        this._noteFlushFailure(error);
+        return;
       }
     }
   }
@@ -613,13 +635,14 @@ class SyncManager {
         logger.info({ category: 'SYNC', step: 'TIME LOG SYNCED' });
       } catch (error) {
         logData.retries = (logData.retries || 0) + 1;
-        // PAYROLL CRITICAL: never drop time logs — retry forever (same as offline-time-logs.json).
         logger.warn({
           category: 'SYNC',
           step: 'TIME LOG RETRY',
           message: error.message,
           ctx: { retry: logData.retries },
         });
+        this._noteFlushFailure(error);
+        return;
       }
     }
   }
@@ -653,48 +676,45 @@ class SyncManager {
   }
 
   // === CONNECTION MONITORING ===
+  // OS connectivity only. Never ping /health (that opens an RDS connection
+  // from every laptop and is a common "too many connections" cause).
   monitorConnection() {
-    setInterval(async () => {
-      try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection test timeout')), 20000),
-        );
+    this._bindReconnectHooks();
+  }
 
-        const { isBackendRdsEnabled } = require('../utils/backend-rds-reads');
-        const { checkBackendHealth } = require('../utils/backend-health');
-
-        let online = false;
-        if (isBackendRdsEnabled(this.config)) {
-          const health = await Promise.race([checkBackendHealth(this.config), timeoutPromise]);
-          online = Boolean(health?.ok);
-        }
-
-        const wasOnline = this.isOnline;
-        this.isOnline = online;
-
-        if (!wasOnline && this.isOnline) {
-          logger.info({ category: 'SYNC', step: 'ONLINE', message: 'Connection restored - starting sync' });
-          // Wait a bit before syncing to ensure stable connection
-          setTimeout(() => this.syncQueue(), 2000);
-        } else if (wasOnline && !this.isOnline) {
-          // Reduce log spam - only log once when going offline
-          if (process.env.DEBUG_SYNC !== 'true') {
-            console.log('📴 [SYNC] Offline mode - data will be queued');
-          } else {
-            logger.warn({ category: 'SYNC', step: 'OFFLINE', message: 'Connection lost - offline mode' });
-          }
-        }
-
-      } catch (error) {
-        const wasOnline = this.isOnline;
-        this.isOnline = false;
-        
-        if (wasOnline) {
-          logger.warn({ category: 'SYNC', step: 'OFFLINE', message: 'Connection lost - offline mode' });
-          logger.debug({ category: 'SYNC', step: 'CONNECTION ERROR', message: error.message.split('\n')[0] });
-        }
+  _bindReconnectHooks() {
+    if (this._syncHooksBound) return;
+    this._syncHooksBound = true;
+    const onOnline = (label) => {
+      this.isOnline = true;
+      if (this._reconnectFlushTimer) return;
+      const { reconnectSpreadMs } = require('../utils/sync-backoff');
+      const delay = reconnectSpreadMs();
+      logger.info({
+        category: 'SYNC',
+        step: 'ONLINE',
+        message: `${label} — flush in ${delay}ms`,
+      });
+      this._reconnectFlushTimer = setTimeout(() => {
+        this._reconnectFlushTimer = null;
+        this.requestFlush();
+      }, delay);
+    };
+    try {
+      const { powerMonitor, ipcMain, net } = require('electron');
+      if (net && typeof net.isOnline === 'function') {
+        this.isOnline = net.isOnline();
       }
-    }, 45000); // Check every 45 seconds for better performance
+      if (powerMonitor?.on) {
+        powerMonitor.on('resume', () => onOnline('System resume'));
+        powerMonitor.on('unlock-screen', () => onOnline('Screen unlock'));
+      }
+      if (ipcMain?.on) {
+        ipcMain.on('network-online', () => onOnline('Network online'));
+      }
+    } catch (_) {
+      this.isOnline = true;
+    }
   }
 
   // === UTILITY METHODS ===

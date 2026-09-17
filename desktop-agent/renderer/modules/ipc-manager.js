@@ -33,6 +33,15 @@ class IPCManager {
 
   setupIpcListeners() {
     console.log('🔧 Setting up IPC listeners...');
+
+    // Wifi / VPN back — main flushes queued hours once. Not a poll.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('online', () => {
+        try {
+          this.ipcRenderer.send('network-online');
+        } catch (_) { /* ignore */ }
+      });
+    }
     
     // Listen for user authentication events
     this.ipcRenderer.on('user-authenticated', (event, userData) => {
@@ -185,14 +194,14 @@ class IPCManager {
           }
         }
         this.optimisticMode = false;
-        // Re-arm display clock if a late tracking-stopped cleared intervals mid-start.
-        if (
-          typeof window.beginLocalTrackingClock === 'function' &&
-          !window.__trackingDisplayWatchdog &&
-          (this.sessionStartTime || data.start_time || data.startTime)
-        ) {
-          const t = this.sessionStartTime || new Date(data.start_time || data.startTime);
-          console.warn('⚠️ [IPC-MANAGER] Re-arming timer clock after start race');
+        // Always re-arm: leftover high-water / a late tracking-stopped can leave
+        // Start disabled with a frozen clock even when the watchdog is alive.
+        if (typeof window.beginLocalTrackingClock === 'function') {
+          const t =
+            this.sessionStartTime ||
+            (data.start_time || data.startTime
+              ? new Date(data.start_time || data.startTime)
+              : new Date());
           window.beginLocalTrackingClock(t);
           this.startSessionTimer();
         }
@@ -919,8 +928,30 @@ class IPCManager {
         return { success: true, alreadyStarting: true, timeLogId: this.currentTimeLogId || null };
       }
       if (this.isTracking && this.trackingStatus === 'active' && this.currentTimeLogId) {
-        console.log('⏭️ [IPC-MANAGER] Already tracking — ignoring start click');
-        return { success: true, alreadyTracking: true, timeLogId: this.currentTimeLogId };
+        let mainState = null;
+        try {
+          mainState = await this.getTrackingState();
+        } catch (_) { /* treat as unknown */ }
+        if (mainState && mainState.isTracking) {
+          if (typeof window.beginLocalTrackingClock === 'function') {
+            const t =
+              mainState.sessionStartTime ||
+              this.sessionStartTime ||
+              new Date();
+            window.beginLocalTrackingClock(t);
+          }
+          this.startSessionTimer();
+          console.log('⏭️ [IPC-MANAGER] Already tracking — re-armed clock, not a second session');
+          return { success: true, alreadyTracking: true, timeLogId: this.currentTimeLogId };
+        }
+        console.warn('⚠️ [IPC-MANAGER] UI said tracking but main is not — unlocking Start');
+        this.isTracking = false;
+        this.trackingStatus = 'stopped';
+        this.optimisticMode = false;
+        this.currentTimeLogId = null;
+        if (typeof window.unlockZombieRenderer === 'function') {
+          window.unlockZombieRenderer('start-while-main-stopped');
+        }
       }
       if (!projectId) {
         const msg = 'Please select a project before starting the timer';
@@ -987,12 +1018,12 @@ class IPCManager {
             })
           : Promise.resolve();
       
-      // Seed main/tray with renderer durable floor (survives reboot via localStorage).
+      // Closed-today only. High-water is display memory and must never become
+      // the Start base (that froze the clock at a leftover 3:55).
       const todayFloorSeconds = Math.max(
         0,
-        Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
         Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
-        Math.floor(Number(window.__todayTrackedSeconds) || 0),
+        Math.floor(Number(window.__todayBaseAtLastStop) || 0),
       );
 
       // T1: Before IPC invoke
@@ -1187,9 +1218,8 @@ class IPCManager {
       // This prevents desync where UI shows stopped but main process continues tracking
       if (!result || result.success === false) {
         console.error('❌ Stop tracking failed:', result?.message || 'Unknown error');
-        console.log('🔒 [IPC-DESYNC-FIX] Preserving isTracking=true due to failed stop');
         this.notificationManager.showNotification(result?.message || 'Failed to stop tracking', 'error');
-        // Don't update local state - keep it in sync with actual main process state
+        await this._unlockIfMainStoppedAfterFailedStop();
         return result;
       }
       console.log('✅ [IPC-DESYNC-FIX] Stop successful, updating UI state to stopped');
@@ -1235,6 +1265,7 @@ class IPCManager {
     } catch (error) {
       console.error('❌ Failed to stop tracking:', error);
       this.notificationManager.showNotification('Failed to stop tracking', 'error');
+      await this._unlockIfMainStoppedAfterFailedStop();
       throw error;
     } finally {
       // Released once tracking flags are down, so no in-flight tray tick can
@@ -1265,6 +1296,46 @@ class IPCManager {
       this.notificationManager.showNotification('Failed to resume tracking', 'error');
       throw error;
     }
+  }
+
+  /**
+   * Failed Stop used to leave Start disabled forever when main already stopped
+   * or the IPC bridge is dead. Re-query after a beat; unlock only when main
+   * is not tracking. If main is still tracking, keep Start locked.
+   */
+  async _unlockIfMainStoppedAfterFailedStop() {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    await wait(2500);
+    let mainState = null;
+    try {
+      mainState = await this.getTrackingState();
+    } catch (_) {
+      mainState = null;
+    }
+    if (mainState && mainState.isTracking === true) {
+      console.log('🔒 [IPC] Stop failed and main is still tracking — Start stays locked');
+      return;
+    }
+    console.warn('🔓 [IPC] Stop IPC failed but main is not tracking — unlocking Start');
+    this.isTracking = false;
+    this.trackingStatus = 'stopped';
+    this.stopSessionTimer();
+    this.sessionStartTime = null;
+    this.optimisticMode = false;
+    try {
+      window.__localTrackingClockActive = false;
+      window.__isTracking = false;
+    } catch (_) { /* ignore */ }
+    if (this.uiManager) {
+      this.uiManager.setTrackingStatus('stopped');
+      this.uiManager.updateTrackingButtons();
+    }
+    this.emit('tracking-state-changed', {
+      isTracking: false,
+      status: 'stopped',
+      reason: 'failed-stop-unlock',
+    });
+    this.updateTimerState(false, false);
   }
 
   async getTrackingState() {

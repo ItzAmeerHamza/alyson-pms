@@ -111,39 +111,19 @@ class WindowManager extends EventEmitter {
 
     this.mainWindow.on('close', (event) => {
       const gracefulShutdownManager = require('../core/graceful-shutdown-manager');
-      const { app } = require('electron');
 
       if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, {
-        app,
         showTrayNotification: this.showTrayNotification
           ? (title, body) => this.showTrayNotification(body || title)
           : undefined,
       })) {
+        this.emit('window-hidden', this.isTracking ? 'tracking-active' : 'tracking-inactive');
         return;
       }
 
-      // If app is already quitting, allow the close
       if (global.isQuitting) {
         console.log('🛑 [WINDOW-MANAGER] App is quitting - allowing window close');
-        return;
       }
-      
-      // FIX v1.0.136: On Windows/Linux, pressing X should quit the app entirely
-      if (process.platform !== 'darwin') {
-        console.log('🛑 [WINDOW-MANAGER] Window X pressed on Windows - triggering app quit');
-        global.isQuitting = true;
-        app.quit();
-        return;
-      }
-      
-      // macOS: hide to tray instead of quitting (standard behavior)
-      event.preventDefault();
-      this.mainWindow.hide();
-      if (this.showTrayNotification) {
-        this.showTrayNotification('Alyson PM continues running in background');
-      }
-      console.log('📱 [WINDOW-MANAGER] Window hidden - use tray or dock icon to restore');
-      this.emit('window-hidden', this.isTracking ? 'tracking-active' : 'tracking-inactive');
     });
 
     // Make globally available

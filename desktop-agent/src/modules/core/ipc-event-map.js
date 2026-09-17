@@ -70,15 +70,11 @@ class IPCEventMap {
         };
       }
 
-      // Renderer localStorage high-water survives reboot; main in-memory floors do not.
+      // Closed-today floor from renderer. Do not copy into tray high-water —
+      // that value is display-only and must never pause or seed recording.
       const floor = Math.max(0, Math.floor(Number(options?.todayFloorSeconds) || 0));
       if (floor > 0) {
         global._rendererTodayFloorSeconds = floor;
-        global._trayTodayHighWaterSeconds = Math.max(
-          Math.floor(Number(global._trayTodayHighWaterSeconds) || 0),
-          floor,
-        );
-        global._trayTodayHighWaterDate = new Date().toDateString();
       }
       
       const result = global.trackingManager?.startTracking

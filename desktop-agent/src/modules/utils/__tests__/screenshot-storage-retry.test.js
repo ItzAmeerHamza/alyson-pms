@@ -9,10 +9,11 @@ describe('screenshot upload retry', () => {
     expect(isTransientUploadError('S3 not configured (BACKEND_API_URL + INTERNAL_API_KEY)')).toBe(false);
   });
 
-  it('mints one screenshot id and reuses it on retry (same row, not a second low-activity shot)', () => {
+  it('mints one screenshot id for the local queue (same row when background sync runs)', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'screenshot-storage.js'), 'utf8');
     expect(src).toMatch(/const screenshotId = args\?\.screenshotId \|\| crypto\.randomUUID\(\)/);
-    expect(src).toMatch(/screenshot_id: screenshotId/);
-    expect(src).toMatch(/return uploadScreenshotBuffer\(\{ \.\.\.args, _retried: true, screenshotId \}\)/);
+    expect(src).toMatch(/enqueuePrepared\(\{/);
+    expect(src).toMatch(/return \{ id: screenshotId, queued: true \}/);
+    expect(src).not.toMatch(/await uploadScreenshotViaS3Api/);
   });
 });

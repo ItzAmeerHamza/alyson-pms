@@ -206,29 +206,10 @@ class WindowUIManager {
   setupWindowListeners() {
     if (!this.mainWindow) return;
     
-    // Handle window close - quit on Windows, hide on macOS
+    // X hides to tray on every platform. Tracking continues until Stop / Quit / lid.
     this.mainWindow.on('close', (event) => {
       const gracefulShutdownManager = require('../core/graceful-shutdown-manager');
-      const { app } = require('electron');
-
-      if (gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow, { app })) {
-        return;
-      }
-
-      if (global.isQuitting) {
-        return; // Allow close
-      }
-      
-      // FIX v1.0.136: On Windows/Linux, pressing X should quit the app entirely
-      if (process.platform !== 'darwin') {
-        global.isQuitting = true;
-        app.quit();
-        return;
-      }
-      
-      // macOS: hide to tray
-      event.preventDefault();
-      this.mainWindow.hide();
+      gracefulShutdownManager.handleWindowCloseEvent(event, this.mainWindow);
     });
     
     // Handle window state changes

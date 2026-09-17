@@ -7,6 +7,7 @@
 
 jest.mock('../../utils/backend-time-logs', () => ({
   isBackendTimeLogsEnabled: jest.fn(() => true),
+  isLikelyOffline: jest.fn(() => false),
   createTimeLog: jest.fn(async (row) => ({ id: row.id, ...row })),
   updateTimeLog: jest.fn(),
 }));
@@ -15,10 +16,21 @@ jest.mock('../../utils/device-id', () => ({
   getDeviceId: () => 'test-device',
 }));
 
-jest.mock('electron', () => ({
-  net: { isOnline: () => true },
-  app: { getPath: () => '/tmp' },
+jest.mock('../../utils/offline-screenshot-queue', () => ({
+  getOfflineScreenshotQueue: () => ({
+    start: jest.fn(),
+    requestFlush: jest.fn(),
+  }),
 }));
+
+jest.mock(
+  'electron',
+  () => ({
+    net: { isOnline: () => true },
+    app: { getPath: () => '/tmp' },
+  }),
+  { virtual: true },
+);
 
 const fs = require('fs');
 const TrackingManager = require('../tracking-manager');
@@ -41,6 +53,12 @@ function makeTm() {
     tm.ledger.push(entry);
   };
   tm.startOfflineSync = jest.fn();
+  tm._offlineRetryTimeout = null;
+  tm.offlineSyncTimer = null;
+  tm._clearOfflineRetryTimer = TrackingManager.prototype._clearOfflineRetryTimer;
+  tm._scheduleNextOfflineRetry = TrackingManager.prototype._scheduleNextOfflineRetry;
+  tm._earliestOfflineRetryAt = TrackingManager.prototype._earliestOfflineRetryAt;
+  tm._armOfflineRetryTimer = TrackingManager.prototype._armOfflineRetryTimer;
   tm._getTimeLedgerPath = () => '/tmp/time-ledger-test.jsonl';
   tm._readSessionCheckpoint = () => null;
   return tm;
@@ -200,6 +218,136 @@ describe('offline queue after a successful live write', () => {
     expect(backendTimeLogs.createTimeLog).not.toHaveBeenCalled();
     expect(tm.queue).toHaveLength(1);
     expect(tm.queue[0].data.id).toBe(id);
+    expect(tm.queue[0].data._retryCount).toBe(1);
+    expect(Number(tm.queue[0].data._nextRetryAt)).toBeGreaterThan(Date.now());
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
+  });
+
+  it('does not re-POST an Internal server error item until backoff expires', async () => {
+    const tm = makeTm();
+    tm.queue = [
+      {
+        type: 'update_time_log',
+        data: {
+          id: 'ise-backoff',
+          user_id: 1196,
+          start_time: '2026-09-09T15:05:17.000Z',
+          end_time: '2026-09-09T15:27:24.000Z',
+          status: 'completed',
+        },
+      },
+    ];
+    backendTimeLogs.updateTimeLog.mockRejectedValue(new Error('Internal server error'));
+
+    await TrackingManager.prototype.processOfflineQueue.call(tm);
+    backendTimeLogs.updateTimeLog.mockClear();
+
+    await TrackingManager.prototype.processOfflineQueue.call(tm);
+
+    expect(backendTimeLogs.updateTimeLog).not.toHaveBeenCalled();
+    expect(tm.queue).toHaveLength(1);
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
+  });
+
+  it('startOfflineSync does not install a polling interval', () => {
+    const tm = Object.create(TrackingManager.prototype);
+    tm.offlineSyncTimer = null;
+    tm._offlineRetryTimeout = null;
+    tm._offlineResumeHooksBound = true;
+    tm._processingOfflineQueue = false;
+    tm.getOfflineQueue = () => [];
+    tm._flushOfflineQueueIfOnline = jest.fn();
+    tm._scheduleNextOfflineRetry = jest.fn();
+
+    TrackingManager.prototype.startOfflineSync.call(tm);
+
+    expect(tm.offlineSyncTimer).toBeNull();
+    expect(tm._flushOfflineQueueIfOnline).toHaveBeenCalledTimes(1);
+  });
+
+  it('schedules one backoff timeout after Internal server error, not an interval', async () => {
+    const tm = makeTm();
+    tm.startOfflineSync = TrackingManager.prototype.startOfflineSync;
+    tm._bindOfflineResumeHooks = () => {};
+    tm._requestOfflineFlush = TrackingManager.prototype._requestOfflineFlush;
+    tm._flushOfflineQueueIfOnline = TrackingManager.prototype._flushOfflineQueueIfOnline;
+    tm._hasDueOfflineItems = TrackingManager.prototype._hasDueOfflineItems;
+    tm._scheduleOfflineItemRetry = TrackingManager.prototype._scheduleOfflineItemRetry;
+    tm._offlineRetryDelayMs = TrackingManager.prototype._offlineRetryDelayMs;
+    tm._isTransientOfflineSyncError = TrackingManager.prototype._isTransientOfflineSyncError;
+    tm._clampOverlappingQueuedSessions = () => {};
+    tm._commitProcessedOfflineQueue = (original, remaining) => {
+      tm.queue = remaining.slice();
+    };
+    tm.queue = [
+      {
+        type: 'update_time_log',
+        data: {
+          id: 'one-timeout',
+          user_id: 1196,
+          start_time: '2026-09-09T15:05:17.000Z',
+          end_time: '2026-09-09T15:27:24.000Z',
+          status: 'completed',
+        },
+      },
+    ];
+    backendTimeLogs.updateTimeLog.mockRejectedValue(new Error('Internal server error'));
+
+    await TrackingManager.prototype.processOfflineQueue.call(tm);
+
+    expect(tm.offlineSyncTimer).toBeNull();
+    expect(tm._offlineRetryTimeout).toBeTruthy();
+    clearTimeout(tm._offlineRetryTimeout);
+  });
+
+  it('does not open HTTP while every queued item is still in backoff', () => {
+    const tm = makeTm();
+    tm.queue = [
+      {
+        type: 'update_time_log',
+        data: {
+          id: 'backoff-skip',
+          _nextRetryAt: Date.now() + 60_000,
+        },
+      },
+    ];
+    const flush = TrackingManager.prototype._flushOfflineQueueIfOnline;
+    tm.processOfflineQueue = jest.fn();
+    tm.getOfflineQueue = () => tm.queue.slice();
+
+    flush.call(tm);
+
+    expect(tm.processOfflineQueue).not.toHaveBeenCalled();
+  });
+
+  it('stops the flush after the first DB failure so one agent does not open N connections', async () => {
+    const tm = makeTm();
+    tm.startOfflineSync = TrackingManager.prototype.startOfflineSync;
+    tm._bindOfflineResumeHooks = () => {};
+    tm._requestOfflineFlush = TrackingManager.prototype._requestOfflineFlush;
+    tm._flushOfflineQueueIfOnline = TrackingManager.prototype._flushOfflineQueueIfOnline;
+    tm._hasDueOfflineItems = TrackingManager.prototype._hasDueOfflineItems;
+    tm._scheduleOfflineItemRetry = TrackingManager.prototype._scheduleOfflineItemRetry;
+    tm._offlineRetryDelayMs = TrackingManager.prototype._offlineRetryDelayMs;
+    tm._isTransientOfflineSyncError = TrackingManager.prototype._isTransientOfflineSyncError;
+    tm._noteDbBackoff = TrackingManager.prototype._noteDbBackoff;
+    tm._clampOverlappingQueuedSessions = () => {};
+    tm._commitProcessedOfflineQueue = (original, remaining) => {
+      tm.queue = remaining.slice();
+    };
+    tm.queue = [
+      { type: 'update_time_log', data: { id: 'a', user_id: 1, start_time: 't', end_time: 't2', status: 'completed' } },
+      { type: 'update_time_log', data: { id: 'b', user_id: 1, start_time: 't', end_time: 't2', status: 'completed' } },
+      { type: 'update_time_log', data: { id: 'c', user_id: 1, start_time: 't', end_time: 't2', status: 'completed' } },
+    ];
+    backendTimeLogs.updateTimeLog.mockClear();
+    backendTimeLogs.updateTimeLog.mockRejectedValue(new Error('too many connections'));
+
+    await TrackingManager.prototype.processOfflineQueue.call(tm);
+
+    expect(backendTimeLogs.updateTimeLog).toHaveBeenCalledTimes(1);
+    expect(tm.queue).toHaveLength(3);
+    if (tm._offlineRetryTimeout) clearTimeout(tm._offlineRetryTimeout);
   });
 
   it('keeps hours queued during a flush and does not put a live-synced id back', () => {
@@ -228,5 +376,62 @@ describe('offline queue after a successful live write', () => {
 
     const ids = tm.queue.map((item) => item.data.id).sort();
     expect(ids).toEqual(['B', 'D']);
+  });
+
+  it('keeps hours on disk and re-arms a timeout if the flush commit throws', async () => {
+    const tm = makeTm();
+    tm._clampOverlappingQueuedSessions = () => {};
+    tm._commitProcessedOfflineQueue = () => {
+      throw new Error('disk busy');
+    };
+    tm.queue = [
+      {
+        type: 'update_time_log',
+        data: {
+          id: 'keep-hours',
+          user_id: 1196,
+          start_time: '2026-09-09T15:05:17.000Z',
+          end_time: '2026-09-09T15:27:24.000Z',
+          status: 'completed',
+        },
+      },
+    ];
+    backendTimeLogs.updateTimeLog.mockRejectedValueOnce(new Error('Internal server error'));
+
+    await TrackingManager.prototype.processOfflineQueue.call(tm);
+
+    expect(tm.queue).toHaveLength(1);
+    expect(tm.queue[0].data.id).toBe('keep-hours');
+    expect(tm.queue[0].data.start_time).toBe('2026-09-09T15:05:17.000Z');
+    expect(tm.queue[0].data.end_time).toBe('2026-09-09T15:27:24.000Z');
+    expect(tm._offlineRetryTimeout).toBeTruthy();
+    clearTimeout(tm._offlineRetryTimeout);
+  });
+
+  it('rehydrates unsynced hours after a restart so they are not lost with the timeout', () => {
+    const fs = require('fs');
+    const tm = makeTm();
+    const id = 'restart-keep-hours';
+    const ledgerPath = '/tmp/time-ledger-restart-keep.jsonl';
+    tm._getTimeLedgerPath = () => ledgerPath;
+    tm.queue = [];
+    fs.writeFileSync(
+      ledgerPath,
+      JSON.stringify({
+        event: 'queue_update',
+        id,
+        user_id: 1196,
+        start_time: '2026-09-09T15:05:17.000Z',
+        end_time: '2026-09-09T19:05:17.000Z',
+        status: 'completed',
+      }) + '\n',
+    );
+
+    TrackingManager.prototype._rehydrateOfflineQueueFromLedger.call(tm);
+
+    expect(tm.queue).toHaveLength(1);
+    expect(tm.queue[0].data.id).toBe(id);
+    expect(tm.queue[0].data.end_time).toBe('2026-09-09T19:05:17.000Z');
+    fs.unlinkSync(ledgerPath);
   });
 });
