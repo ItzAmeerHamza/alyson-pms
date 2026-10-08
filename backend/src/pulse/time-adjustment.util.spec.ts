@@ -1,8 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dayHoursWithLeaveTopUp,
+  leaveTopUpHours,
   nextDayTotalHours,
   resolveAdjustmentDeltaSeconds,
 } from './time-adjustment.util';
+
+describe('holiday leave top-up', () => {
+  it('fills up to the 7h holiday floor when they work less', () => {
+    expect(leaveTopUpHours(2, 7)).toBe(5);
+    expect(dayHoursWithLeaveTopUp({ trackedHours: 2, leaveCreditHours: 7 })).toBe(7);
+  });
+
+  it('keeps extra tracked hours above the holiday floor', () => {
+    expect(leaveTopUpHours(9, 7)).toBe(0);
+    expect(dayHoursWithLeaveTopUp({ trackedHours: 9, leaveCreditHours: 7 })).toBe(9);
+  });
+
+  it('still applies non-leave adjustments on top of the floor', () => {
+    expect(
+      dayHoursWithLeaveTopUp({
+        trackedHours: 9,
+        leaveCreditHours: 7,
+        otherAdjustmentHours: 1,
+      }),
+    ).toBe(10);
+  });
+});
 
 describe('resolveAdjustmentDeltaSeconds', () => {
   it('prefers deltaSeconds', () => {

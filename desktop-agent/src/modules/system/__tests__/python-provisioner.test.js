@@ -7,7 +7,7 @@
 jest.mock('electron', () => ({
   app: {
     isPackaged: true,
-    getAppPath: () => '/Applications/Alyson PM.app/Contents/Resources/app.asar',
+    getAppPath: () => '/Applications/Tavilo Time.app/Contents/Resources/app.asar',
     getPath: () => '/tmp',
   },
 }));

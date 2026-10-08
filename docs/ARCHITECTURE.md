@@ -421,7 +421,7 @@ Overnight open sessions: only the portion after Pacific midnight counts toward â
 | Anti-cheat | Pattern/deep/process/USB intervals from power-profile |
 | Performance monitor | CPU samples to disk (default every 5m as of 1.0.224); DB samples opt-in `PERF_CPU_DB=1` |
 
-Power profile defaults were lengthened in v1.0.224 to reduce energy impact (URL/app/IPC/anti-cheat).
+Power profile defaults were lengthened again after dropping 1/min screenshots (URL/app 60s, live IPC 30s, shared native app detect).
 
 ---
 

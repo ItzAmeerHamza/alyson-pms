@@ -1,4 +1,14 @@
-const { escapeHtml, hoursLabel, shiftDateKey } = require('../assistant-coach');
+const {
+  escapeHtml,
+  hoursLabel,
+  shiftDateKey,
+  resetCoachAuthCacheForTests,
+} = require('../assistant-coach');
+const AssistantCoach = require('../assistant-coach');
+
+afterEach(() => {
+  resetCoachAuthCacheForTests();
+});
 
 describe('assistant coach helpers', () => {
   it('escapes HTML from model text', () => {
@@ -60,5 +70,46 @@ describe('assistant coach helpers', () => {
       }),
     );
     global.localStorage = previous;
+  });
+
+  it('reuses a fresh Cognito token instead of signing in again', async () => {
+    const { resolveCoachIdToken } = require('../assistant-coach');
+    const ipcRenderer = {
+      invoke: jest.fn(async (channel) => {
+        if (channel === 'get-config') return { cognito_client_id: 'client' };
+        if (channel === 'load-user-session') return { refresh_token: 'refresh', id: '42' };
+        return null;
+      }),
+    };
+    const cognitoAuth = {
+      hydrateCognitoSessionFromDisk: jest.fn(),
+      getCurrentCognitoSession: jest.fn().mockResolvedValue({
+        idToken: 'fresh-id',
+        refreshToken: 'refresh',
+        expiresAt: Date.now() + 3600_000,
+      }),
+    };
+    const previous = global.localStorage;
+    global.localStorage = { getItem: () => JSON.stringify({ id: '42', organization_id: '10' }) };
+    await resolveCoachIdToken(ipcRenderer, cognitoAuth);
+    await resolveCoachIdToken(ipcRenderer, cognitoAuth);
+    expect(cognitoAuth.getCurrentCognitoSession).toHaveBeenCalledTimes(1);
+    global.localStorage = previous;
+  });
+
+  it('does not reload the opening chat when Coach is opened again', async () => {
+    const ipcRenderer = { invoke: jest.fn() };
+    const coach = new AssistantCoach(ipcRenderer);
+    coach.dateKey = '2026-10-08';
+    coach.history = [{ role: 'assistant', content: 'This month…' }];
+    coach._lastPayload = { date: '2026-10-08', opening: 'This month…' };
+    coach.refresh = jest.fn();
+    coach.setBusy = jest.fn();
+    coach.bindOnce = jest.fn();
+    coach.hasPaintedBriefing = () => true;
+
+    coach.open();
+    expect(coach.refresh).toHaveBeenCalledWith({ silent: true });
+    expect(ipcRenderer.invoke).not.toHaveBeenCalledWith('assistant:briefing', expect.anything());
   });
 });

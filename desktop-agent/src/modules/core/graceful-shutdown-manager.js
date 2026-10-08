@@ -108,6 +108,17 @@ class GracefulShutdownManager {
    * @returns {Promise<{success: boolean, reason?: string}>}
    */
   async gracefulStop(reason = 'manual', options = {}) {
+    const { isAllowedLiveClockStopReason } = require('../utils/live-clock-policy');
+    const live =
+      !!(global.isTracking || global.trackingManager?.isTracking) &&
+      !!(global.currentTimeLogId || global.trackingManager?.currentTimeLogId);
+    if (live && !isAllowedLiveClockStopReason(reason)) {
+      console.warn(
+        `⏱️ [LIVE-CLOCK] Refusing gracefulStop (${reason || 'unknown'}) — clock keeps running; queue will resync`,
+      );
+      return { success: false, refused: true, reason: 'live_clock_protected' };
+    }
+
     // Prevent concurrent shutdown attempts
     if (this.isShuttingDown) {
       console.log(`⚠️ [GRACEFUL-SHUTDOWN] Already shutting down (reason: ${this.shutdownReason}), skipping duplicate call`);
@@ -196,7 +207,7 @@ class GracefulShutdownManager {
       ((title, body) => global.trayManager?.showNotification?.(title, body));
     const tracking = this.hasActiveSessionToClose();
     notify(
-      'Alyson PM',
+      'Tavilo Time',
       tracking
         ? 'Still tracking. Click the tray icon to restore.'
         : 'App continues running in the background. Click the tray icon to restore.',
@@ -350,8 +361,13 @@ class GracefulShutdownManager {
 
       if (!useBackend) {
         console.error('❌ [GRACEFUL-SHUTDOWN] Backend API not configured — close kept on disk');
-        this._storePendingClose(timeLogId, reason, global._stopEndTimeOverride || new Date().toISOString());
-        return false;
+        const stored = this._storePendingClose(
+          timeLogId,
+          reason,
+          global._stopEndTimeOverride || new Date().toISOString(),
+        );
+        this._lastStopDurablyRecorded = stored;
+        return stored;
       }
 
       // ONLY authorized idle-alert cut (shown prompt timed out) may use now − 10m.
@@ -386,6 +402,11 @@ class GracefulShutdownManager {
         endTime = new Date(usableFrozen ? frozenMs : nowMs).toISOString();
       }
       const idleCutFlag = authorizedIdleCut;
+      const endMs = new Date(endTime).getTime();
+      if (Number.isFinite(endMs)) {
+        global._lastStopEndAtMs = endMs;
+        global._lastExplicitStopEndIso = endTime;
+      }
       global._stopEndTimeOverride = null;
       global._stopAuthorizedIdleCut = false;
       global._idlePromptTimeCutSeconds = 0;
@@ -438,6 +459,7 @@ class GracefulShutdownManager {
               last_alive_at: endTime,
               client_last_seen_at: endTime,
               idle_seconds: idleSeconds,
+              frozen_end: true,
               ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
             },
             { flush: false },
@@ -451,6 +473,66 @@ class GracefulShutdownManager {
       const durablyRecorded = storedPending || queuedOffline;
       this._lastStopDurablyRecorded = durablyRecorded;
 
+      const closePayload = {
+        timeLogId,
+        endTime,
+        idleSeconds,
+        idleCutFlag,
+        reason,
+        useBackend,
+      };
+
+      // Stop is local. Quit/shutdown must wait because the process is dying.
+      // Button / idle / lid: write the frozen end in the background so the
+      // employee is never stuck on a dead VPN or a hung API.
+      if (durablyRecorded && !this._mustAwaitStopSync(reason)) {
+        void this._syncClosedSession(closePayload);
+        return true;
+      }
+
+      await this._syncClosedSession(closePayload);
+      return this._lastStopSynced === true || durablyRecorded;
+
+    } catch (error) {
+      // Offline / timeout / API down. The end time is already on disk and in the
+      // offline queue, so the session IS stopped — it just is not synced yet.
+      // Reporting this as a failure kept the UI tracking and the clock running.
+      const recovered = this._lastStopDurablyRecorded === true;
+      console.warn(
+        `⚠️ [GRACEFUL-SHUTDOWN] DB unreachable — close saved locally, will sync: ${error?.message || error}`,
+      );
+      this._lastStopSynced = false;
+      try {
+        global.trackingManager?.startOfflineSync?.();
+      } catch (_) { /* ignore */ }
+      return recovered;
+    }
+  }
+
+  _mustAwaitStopSync(reason) {
+    return (
+      reason === 'quit' ||
+      reason === 'emergency' ||
+      reason === 'shutdown' ||
+      reason === 'system_shutdown' ||
+      !!global.isQuitting
+    );
+  }
+
+  /**
+   * Write the frozen close to the API. Safe to call after Stop already
+   * succeeded locally — retries keep the same end_time.
+   */
+  async _syncClosedSession({
+    timeLogId,
+    endTime,
+    idleSeconds = 0,
+    idleCutFlag = false,
+    reason = 'manual',
+    useBackend = true,
+  } = {}) {
+    const backendTimeLogs = require('../utils/backend-time-logs');
+    try {
       await backendTimeLogs.updateTimeLog(
         timeLogId,
         {
@@ -459,11 +541,10 @@ class GracefulShutdownManager {
           last_alive_at: endTime,
           client_last_seen_at: endTime,
           idle_seconds: idleSeconds,
+          frozen_end: true,
           ...(idleCutFlag ? { authorized_idle_cut: true } : {}),
         },
         undefined,
-        // Known-offline: fail fast. Stop must feel instant; the close is
-        // already durable and the queue will sync it.
         { timeoutMs: backendTimeLogs.isLikelyOffline() ? 2000 : 8000 },
       );
 
@@ -475,22 +556,13 @@ class GracefulShutdownManager {
           timeLogId,
           startTime: global.sessionStartTime || global.trackingManager?.sessionStartTime || null,
           requestedEnd: endTime,
-          // The server may clamp this to proof-of-life; recording what we asked
-          // for makes a rejected or adjusted write visible, which the database
-          // trigger alone cannot show.
-          endSource: authorizedIdleCut ? 'authorized_idle_cut' : 'stop_click',
+          endSource: idleCutFlag ? 'authorized_idle_cut' : 'stop_click',
           reason,
           idleSeconds,
           synced: true,
         });
       } catch (_) { /* audit is best-effort */ }
 
-      // Close app/url rows still open at the stop moment. Without this they stay
-      // open until the NEXT app switch and get stamped with an ended_at long
-      // after tracking ended (observed bleeding 13–22 minutes past session end,
-      // and as far as wake time across a sleep). That inflates app-usage reports
-      // and — because ended_at feeds the liveness ceiling — silently raised the
-      // ceiling above the real end of work.
       if (useBackend) {
         try {
           const userId =
@@ -510,7 +582,6 @@ class GracefulShutdownManager {
         }
       }
 
-      // Clear pending close since we succeeded
       this._clearPendingClose(timeLogId);
       try {
         global.trackingManager?._markTimeLogSynced?.({
@@ -529,8 +600,6 @@ class GracefulShutdownManager {
         global.trackingManager?._clearSessionCheckpoint?.();
       } catch (_) { /* ignore */ }
 
-      // Belt-and-suspenders: close any other still-open rows on this device
-      // (duplicate orphans) using the same end time.
       if (useBackend && reason !== 'system_sleep' && reason !== 'suspend') {
         try {
           const { normalizeTenantUserId } = require('../utils/tenant-user-id');
@@ -553,22 +622,17 @@ class GracefulShutdownManager {
           );
         }
       }
-      
-      return true;
 
+      return true;
     } catch (error) {
-      // Offline / timeout / API down. The end time is already on disk and in the
-      // offline queue, so the session IS stopped — it just is not synced yet.
-      // Reporting this as a failure kept the UI tracking and the clock running.
-      const recovered = this._lastStopDurablyRecorded === true;
-      console.warn(
-        `⚠️ [GRACEFUL-SHUTDOWN] DB unreachable — close saved locally, will sync: ${error?.message || error}`,
-      );
       this._lastStopSynced = false;
+      console.warn(
+        `⚠️ [GRACEFUL-SHUTDOWN] Close sync failed — frozen end stays queued: ${error?.message || error}`,
+      );
       try {
         global.trackingManager?.startOfflineSync?.();
       } catch (_) { /* ignore */ }
-      return recovered;
+      return false;
     }
   }
 
@@ -645,11 +709,13 @@ class GracefulShutdownManager {
       }
 
       // Not-tracking reminder must keep running after Stop (employee still working).
-      // cleanupAll previously wiped it because it was registered in the registry.
+      // Do not call onTrackingStopped here — that restarts the 10m clock.
       try {
         const reminder = global.notTrackingReminderManager;
-        if (reminder && typeof reminder.onTrackingStopped === 'function') {
-          reminder.onTrackingStopped();
+        if (reminder && typeof reminder.ensureRunning === 'function') {
+          reminder.ensureRunning();
+        } else {
+          reminder?.start?.();
         }
       } catch (_) { /* ignore */ }
       
@@ -833,10 +899,16 @@ class GracefulShutdownManager {
           global._idlePromptTimeCutAppliedPending = false;
           global._idlePromptTimeCutSecondsForFloor = 0;
         }
+        const stopEndIso =
+          global._stopEndTimeOverride ||
+          (timeCutSeconds > 0
+            ? new Date(Date.now() - timeCutSeconds * 1000).toISOString()
+            : new Date().toISOString());
         global.mainWindow.webContents.send('tracking-stopped', {
           reason: reason || 'manual',
           message: 'Time tracking stopped',
           timestamp: new Date().toISOString(),
+          endTime: stopEndIso,
           forceStop: true,
           frozenTotalSeconds,
           timeCutSeconds: reason === 'idle_timeout' && timeCutSeconds > 0 ? timeCutSeconds : 0,
@@ -994,19 +1066,29 @@ class GracefulShutdownManager {
           }
           
           const liveId = liveTimeLogId();
-          if (liveId && String(data.timeLogId) === String(liveId)) {
+          const pendingIsLive =
+            liveId &&
+            String(data.timeLogId) === String(liveId) &&
+            !!(global.isTracking || global.trackingManager?.isTracking);
+          if (pendingIsLive) {
+            // A recovered live row that still has a pending close is the
+            // Hamza 21 Sep path. Never delete the frozen end — write it.
             console.warn(
-              `⚠️ [GRACEFUL-SHUTDOWN] Skipping pending close of live session ${liveId}`,
+              `⚠️ [GRACEFUL-SHUTDOWN] Pending close still applies to ${liveId} — writing frozen end ${data.endTime}`,
             );
-            try { fs.unlinkSync(filePath); } catch (_) {}
-            continue;
           }
 
           console.log(`🔄 [GRACEFUL-SHUTDOWN] Closing pending session: ${data.timeLogId} at ${data.endTime}`);
           
           await backendTimeLogs.updateTimeLog(
             data.timeLogId,
-            { end_time: data.endTime, status: 'completed' },
+            {
+              end_time: data.endTime,
+              status: 'completed',
+              last_alive_at: data.endTime,
+              client_last_seen_at: data.endTime,
+              frozen_end: true,
+            },
           );
 
           console.log(`✅ [GRACEFUL-SHUTDOWN] Closed pending session: ${data.timeLogId}`);
@@ -1014,6 +1096,26 @@ class GracefulShutdownManager {
           
         } catch (e) {
           console.error('❌ [GRACEFUL-SHUTDOWN] Error processing pending file:', e.message);
+          try {
+            const raw = fs.readFileSync(path.join(pendingDir, file), 'utf8');
+            const queued = JSON.parse(raw);
+            global.trackingManager?._queueOfflineTimeLogUpdate?.(
+              {
+                id: queued.timeLogId,
+                user_id: queued.userId,
+                start_time: queued.startTime || null,
+                end_time: queued.endTime,
+                status: 'completed',
+                project_id: queued.projectId || null,
+                device_id: queued.deviceId || null,
+                last_alive_at: queued.endTime,
+                client_last_seen_at: queued.endTime,
+                frozen_end: true,
+              },
+              { flush: false },
+            );
+            global.trackingManager?.startOfflineSync?.();
+          } catch (_) { /* file stays on disk for the next restore */ }
         }
       }
       }

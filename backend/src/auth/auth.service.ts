@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { DatabaseService } from '../database/database.service';
 import {
+  applyPulseWorkspaceContext,
   parseTenantUserId,
   USER_PROFILE_SELECT,
   WORKSPACE_AS_ORG_SELECT,
@@ -22,6 +23,7 @@ export interface User {
   cognito_sub?: string | null;
   created_at: string;
   updated_at: string;
+  signed_in_at?: string | null;
 }
 
 export interface OrganizationSummary {
@@ -80,14 +82,31 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async getAuthProfile(token: string): Promise<AuthProfileResponse> {
+  async getAuthProfile(
+    token: string,
+    workspaceHeader?: string,
+  ): Promise<AuthProfileResponse> {
     if (!this.databaseService.isEnabled()) {
       throw new UnauthorizedException('Database not configured');
     }
     if (!this.cognitoService.isEnabled()) {
       throw new UnauthorizedException('Cognito not configured');
     }
-    return this.getProfileFromCognitoToken(token);
+    const profile = await this.getProfileFromCognitoToken(token);
+    return this.applySuperAdminWorkspace(profile, workspaceHeader);
+  }
+
+  private async applySuperAdminWorkspace(
+    profile: AuthProfileResponse,
+    workspaceHeader?: string,
+  ): Promise<AuthProfileResponse> {
+    if (!profile.user.is_super_admin) return profile;
+    const user = applyPulseWorkspaceContext(profile.user, workspaceHeader);
+    if (!user.organization_id) {
+      return { user, organization: null };
+    }
+    const organization = await this.getOrganizationById(user.organization_id);
+    return { user, organization };
   }
 
   async getProfileFromCognitoToken(token: string): Promise<AuthProfileResponse> {
@@ -112,6 +131,10 @@ export class AuthService {
       throw new UnauthorizedException(
         'Account not found. Ask your admin to add you in Alyson Pulse.',
       );
+    }
+
+    if (!user.signed_in_at) {
+      await this.markSignedIn(user.id);
     }
 
     const organization = user.organization_id
@@ -212,6 +235,9 @@ export class AuthService {
     const user = await this.getUserById(String(rawId));
     if (!user) {
       throw new UnauthorizedException('Account not found');
+    }
+    if (!user.signed_in_at) {
+      await this.markSignedIn(user.id);
     }
     return user;
   }
@@ -325,6 +351,25 @@ export class AuthService {
     );
     const user = result.rows[0];
     return user ? requiredRoles.includes(user.role) : false;
+  }
+
+  /** First successful auth flips Invited → Active. Never fail login if the stamp errors. */
+  private async markSignedIn(userId: string): Promise<void> {
+    try {
+      const uid = parseTenantUserId(userId);
+      await this.databaseService.query(
+        `UPDATE time_doctor.user_extensions
+         SET signed_in_at = COALESCE(signed_in_at, NOW()),
+             updated_at = NOW()
+         WHERE user_id = $1
+           AND signed_in_at IS NULL`,
+        [uid],
+      );
+    } catch (error) {
+      this.logger.warn(
+        `signed_in_at stamp skipped: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   extractTokenFromHeader(authHeader: string): string {

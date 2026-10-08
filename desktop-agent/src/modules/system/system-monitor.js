@@ -4,6 +4,12 @@
  * All components should use this instead of implementing their own monitoring
  */
 
+// Periodic probes must stay cheap. 2-min permission polls + 5-min full
+// health checks were waking System Events / screenshot-desktop for hours
+// (zaman@cintara.ai Mac felt hung after ~10h of tracking).
+const PERMISSION_MONITOR_INTERVAL_MS = 15 * 60 * 1000;
+const PERIODIC_HEALTH_INTERVAL_MS = 15 * 60 * 1000;
+
 class SystemMonitor {
   constructor() {
     this.debugWindow = null;
@@ -242,7 +248,8 @@ class SystemMonitor {
   }
   
   // === INDIVIDUAL CHECK METHODS ===
-  async checkPermissions() {
+  async checkPermissions(options = {}) {
+    const allowScreenProbe = options.allowScreenProbe !== false && options.cheap !== true;
     try {
       // Use our cross-platform permission system
       const { getScreenStatus, getAccessibilityAuthorized } = require('../../system/permissions-check');
@@ -256,8 +263,9 @@ class SystemMonitor {
       
       // Fallback probe for macOS false negatives:
       // If API says denied but an actual screenshot succeeds, treat Screen Recording as granted.
+      // Periodic monitors must not run this — screenshot-desktop can beachball a long session.
       let screenProbeSucceeded = false;
-      if (platform === 'darwin' && !screenRecordingGranted) {
+      if (allowScreenProbe && platform === 'darwin' && !screenRecordingGranted) {
         try {
           const screenshot = require('screenshot-desktop');
           const probe = await Promise.race([
@@ -871,12 +879,21 @@ class SystemMonitor {
   }
   
   // === PERIODIC HEALTH MONITORING ===
-  startPeriodicHealthCheck(intervalMs = 300000) { // 5 minutes default
+  startPeriodicHealthCheck(intervalMs = PERIODIC_HEALTH_INTERVAL_MS) {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
     }
     
     this.healthCheckInterval = setInterval(async () => {
+      if (global.isTracking) {
+        const permissions = await this.checkPermissions({ cheap: true });
+        this.emit('health-check-completed', {
+          overall: permissions.status === 'fail' ? 'degraded' : 'healthy',
+          cheap: true,
+          checks: { permissions },
+        });
+        return;
+      }
       const health = await this.performComprehensiveHealthCheck();
       this.emit('health-check-completed', health);
     }, intervalMs);
@@ -895,41 +912,36 @@ class SystemMonitor {
   // === PERMISSION MONITORING DURING ACTIVE TRACKING ===
   
   /**
-   * Start continuous permission monitoring during active tracking
-   * Checks every 2 minutes for permission revocation
+   * Start continuous permission monitoring during active tracking.
+   * Cheap Electron APIs only — no osascript / screenshot-desktop.
    */
   startPermissionMonitoring() {
     if (this.permissionMonitorInterval) {
       console.log('🔒 [PERMISSION-MONITOR] Already running, skipping duplicate start');
       return;
     }
-    
-    const PERMISSION_CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
-    
-    console.log('🔒 [PERMISSION-MONITOR] Starting permission monitoring (checking every 2 minutes)');
+
+    console.log(`🔒 [PERMISSION-MONITOR] Starting permission monitoring (checking every ${PERMISSION_MONITOR_INTERVAL_MS / 60000} minutes)`);
     
     this.permissionMonitorInterval = setInterval(async () => {
       // Only check if tracking is active
       if (!global.isTracking) {
-        console.log('🔒 [PERMISSION-MONITOR] Tracking not active, skipping check');
         return;
       }
       
       try {
-        const permissions = await this.checkPermissions();
+        const permissions = await this.checkPermissions({ cheap: true });
         
         if (permissions.status === 'fail') {
           console.warn('🚨 [PERMISSION-MONITOR] Permissions revoked during active tracking!', permissions.details);
           
           // Pause tracking due to permission revocation
           await this.handlePermissionRevocation(permissions);
-        } else {
-          console.log('✅ [PERMISSION-MONITOR] Permissions still valid');
         }
       } catch (error) {
         console.error('❌ [PERMISSION-MONITOR] Error during permission check:', error);
       }
-    }, PERMISSION_CHECK_INTERVAL);
+    }, PERMISSION_MONITOR_INTERVAL_MS);
     
     // Register with cleanup if available
     if (global.cleanupRegistry) {
@@ -1000,4 +1012,6 @@ class SystemMonitor {
 
 // Export singleton instance
 const systemMonitor = new SystemMonitor();
+systemMonitor.PERMISSION_MONITOR_INTERVAL_MS = PERMISSION_MONITOR_INTERVAL_MS;
+systemMonitor.PERIODIC_HEALTH_INTERVAL_MS = PERIODIC_HEALTH_INTERVAL_MS;
 module.exports = systemMonitor; 

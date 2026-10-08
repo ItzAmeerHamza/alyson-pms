@@ -18,7 +18,10 @@ import {
   canManagePulseUsers,
   canViewPulseTeam,
   isPulseOrgAdmin,
+  isPulsePlatformAdmin,
+  pulseTenantForbiddenMessage,
 } from '../database/time-doctor-sql';
+import { BulkSetCountryDto } from './dto/bulk-country.dto';
 import { CreateTimeAdjustmentDto } from './dto/time-adjustment.dto';
 import {
   CreateWorkspaceDto,
@@ -28,42 +31,80 @@ import { PulseService } from './pulse.service';
 import { PacingService } from './pacing.service';
 import { AwsCostsService } from './aws-costs.service';
 import { WorkspaceAdminService } from './workspace-admin.service';
+import { BILLING_FEATURES } from '../billing/billing.catalog';
+import { BillingFeatureGuard, RequireBillingFeature } from '../billing/billing-feature.guard';
+import { BillingService } from '../billing/billing.service';
 
 @Controller('pulse')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, BillingFeatureGuard)
 export class PulseController {
   constructor(
     private readonly pulse: PulseService,
     private readonly pacing: PacingService,
     private readonly awsCosts: AwsCostsService,
     private readonly workspaceAdmin: WorkspaceAdminService,
+    private readonly billing: BillingService,
   ) {}
 
-  private ensureOrgAdmin(user: { role?: string; is_super_admin?: boolean }) {
+  private ensurePlatformAdmin(user: { role?: string; is_super_admin?: boolean }) {
+    if (!isPulsePlatformAdmin(user)) {
+      throw new ForbiddenException('Platform admin required');
+    }
+  }
+
+  private ensureTenantContext(user: { is_super_admin?: boolean; organization_id?: string | null }) {
+    const message = pulseTenantForbiddenMessage(user);
+    if (message) {
+      throw new ForbiddenException(message);
+    }
+  }
+
+  private ensureOrgAdmin(user: {
+    role?: string;
+    is_super_admin?: boolean;
+    organization_id?: string | null;
+  }) {
+    this.ensureTenantContext(user);
     if (!isPulseOrgAdmin(user)) {
       throw new ForbiddenException('Admin role required');
     }
   }
 
   private async ensureTeamReports(user: any) {
+    this.ensureTenantContext(user);
     if (canAccessPulseTeamReports(user)) return;
     if (await this.pulse.hasDelegatedAccess(user)) return;
     throw new ForbiddenException('Insufficient permissions for team reports');
   }
 
-  private ensureCanManageUsers(user: { role?: string; is_super_admin?: boolean }) {
+  private ensureCanManageUsers(user: {
+    role?: string;
+    is_super_admin?: boolean;
+    organization_id?: string | null;
+  }) {
+    this.ensureTenantContext(user);
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Admin or manager role required');
     }
   }
 
-  private ensureCanAdjustTime(user: { role?: string; is_super_admin?: boolean }) {
+  private ensureCanAdjustTime(user: {
+    role?: string;
+    is_super_admin?: boolean;
+    organization_id?: string | null;
+  }) {
+    this.ensureTenantContext(user);
     if (!canAdjustPulseTime(user)) {
       throw new ForbiddenException('Admin role required to adjust time');
     }
   }
 
-  private ensureCanViewTeam(user: { role?: string; is_super_admin?: boolean }) {
+  private ensureCanViewTeam(user: {
+    role?: string;
+    is_super_admin?: boolean;
+    organization_id?: string | null;
+  }) {
+    this.ensureTenantContext(user);
     if (!canViewPulseTeam(user)) {
       throw new ForbiddenException('Insufficient permissions to view team');
     }
@@ -71,6 +112,7 @@ export class PulseController {
 
   /** Dashboard snapshot: hours, active users, activity %, daily breakdown. */
   @Get('dashboard')
+  @RequireBillingFeature(BILLING_FEATURES.teamReports)
   async dashboard(
     @Req() req: { user: any },
     @Query('days') days?: string,
@@ -94,13 +136,18 @@ export class PulseController {
     const canSeeTeam =
       canAccessPulseTeamReports(req.user) ||
       (await this.pulse.hasDelegatedAccess(req.user));
+    this.ensureTenantContext(req.user);
     if (userId) {
       if (!canSeeTeam && String(userId) !== String(req.user.id)) {
         throw new ForbiddenException('Insufficient permissions for this user');
       }
+      if (String(userId) !== String(req.user.id)) {
+        await this.billing.assertFeature(req.user, BILLING_FEATURES.teamReports);
+      }
       return this.pulse.getDailyHours(req.user, start, end, userId);
     }
     if (canSeeTeam) {
+      await this.billing.assertFeature(req.user, BILLING_FEATURES.teamReports);
       return this.pulse.getDailyHours(req.user, start, end);
     }
     return this.pulse.getDailyHours(req.user, start, end, req.user.id);
@@ -120,13 +167,18 @@ export class PulseController {
     const canSeeTeam =
       canAccessPulseTeamReports(req.user) ||
       (await this.pulse.hasDelegatedAccess(req.user));
+    this.ensureTenantContext(req.user);
     if (userId) {
       if (!canSeeTeam && String(userId) !== String(req.user.id)) {
         throw new ForbiddenException('Insufficient permissions for this user');
       }
+      if (String(userId) !== String(req.user.id)) {
+        await this.billing.assertFeature(req.user, BILLING_FEATURES.teamReports);
+      }
       return this.pulse.getProjectHours(req.user, start, end, userId);
     }
     if (canSeeTeam) {
+      await this.billing.assertFeature(req.user, BILLING_FEATURES.teamReports);
       return this.pulse.getProjectHours(req.user, start, end);
     }
     return this.pulse.getProjectHours(req.user, start, end, req.user.id);
@@ -134,6 +186,7 @@ export class PulseController {
 
   /** Activity levels ranked by engagement (no AI — input events ÷ tracked time). */
   @Get('activity-levels')
+  @RequireBillingFeature(BILLING_FEATURES.teamReports)
   async activityLevels(
     @Req() req: { user: any },
     @Query('start') start: string,
@@ -148,6 +201,7 @@ export class PulseController {
 
   /** Per-employee screenshot and input activity totals. */
   @Get('activity-summary')
+  @RequireBillingFeature(BILLING_FEATURES.teamReports)
   async activitySummary(
     @Req() req: { user: any },
     @Query('start') start: string,
@@ -162,6 +216,7 @@ export class PulseController {
 
   /** Per-employee AI descriptions and activity classification from screenshots. */
   @Get('ai-insights')
+  @RequireBillingFeature(BILLING_FEATURES.screenshotAi)
   async aiInsights(
     @Req() req: { user: any },
     @Query('start') start: string,
@@ -209,6 +264,15 @@ export class PulseController {
   }
 
   /**
+   * List Pulse-enabled companies. Platform operators only.
+   */
+  @Get('workspaces')
+  async listWorkspaces(@Req() req: { user: any }) {
+    this.ensurePlatformAdmin(req.user);
+    return this.workspaceAdmin.listPulseWorkspaces();
+  }
+
+  /**
    * Create a Pulse company (tenant.workspace + settings + default project + first admin)
    * or enable Pulse on an existing Palisade workspace.
    */
@@ -217,7 +281,7 @@ export class PulseController {
     @Req() req: { user: any },
     @Body() body: CreateWorkspaceDto,
   ) {
-    this.ensureOrgAdmin(req.user);
+    this.ensurePlatformAdmin(req.user);
     return this.workspaceAdmin.createWorkspace(req.user, body);
   }
 
@@ -227,6 +291,7 @@ export class PulseController {
    * period=week: single Mon–Fri week. period=day: one day.
    */
   @Get('low-hours')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async lowHours(
     @Req() req: { user: any },
     @Query('date') date?: string,
@@ -265,6 +330,7 @@ export class PulseController {
 
   /** Allowlisted SES From addresses for Email Reporting. */
   @Get('low-hours/senders')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async lowHoursSenders(@Req() req: { user: any }) {
     this.ensureOrgAdmin(req.user);
     return this.pulse.getEmailSenders();
@@ -272,6 +338,7 @@ export class PulseController {
 
   /** Send low-hours / pace notification emails. */
   @Post('low-hours/send')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async sendLowHours(
     @Req() req: { user: any },
     @Body()
@@ -281,11 +348,14 @@ export class PulseController {
       month?: string;
       week_index?: number;
       period?: string;
+      period_start?: string;
+      period_end?: string;
       employee_ids?: string[];
       notify_manager?: boolean;
       hours_threshold?: number;
       pace_percent?: number;
       from?: string;
+      employees?: unknown;
     },
   ) {
     this.ensureOrgAdmin(req.user);
@@ -308,6 +378,7 @@ export class PulseController {
 
   /** Sent low-hours email history. */
   @Get('low-hours/history')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async lowHoursHistory(
     @Req() req: { user: any },
     @Query('limit') limit?: string,
@@ -317,6 +388,16 @@ export class PulseController {
       req.user,
       limit ? Number(limit) : 50,
     );
+  }
+
+  /** Set country on several employees so public holidays can credit them. */
+  @Post('users/bulk-country')
+  async bulkSetCountry(
+    @Req() req: { user: any },
+    @Body() body: BulkSetCountryDto,
+  ) {
+    this.ensureCanManageUsers(req.user);
+    return this.pulse.bulkSetCountry(req.user, body);
   }
 
   /** Update employee fields for Team Management (admin/manager). */
@@ -330,6 +411,7 @@ export class PulseController {
       role?: string;
       department?: string | null;
       location?: string | null;
+      country?: string | null;
       manager_id?: string | null;
       is_active?: boolean;
       /** First work day expected to track (YYYY-MM-DD). Pre-start days are not paced. */
@@ -346,6 +428,7 @@ export class PulseController {
    * Admin only: list manual time adjustments for one employee × work day.
    */
   @Get('time-adjustments')
+  @RequireBillingFeature(BILLING_FEATURES.teamReports)
   async listTimeAdjustments(
     @Req() req: { user: any },
     @Query('userId') userId: string,
@@ -363,6 +446,7 @@ export class PulseController {
    * Append-only audit row; day total = tracked + net adjustments (never below 0).
    */
   @Post('time-adjustments')
+  @RequireBillingFeature(BILLING_FEATURES.teamReports)
   async createTimeAdjustment(
     @Req() req: { user: any },
     @Body() body: CreateTimeAdjustmentDto,
@@ -376,6 +460,7 @@ export class PulseController {
    * Query: day=YYYY-MM-DD (optional anchor).
    */
   @Get('pacing/weekly')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async pacingWeekly(@Req() req: { user: any }, @Query('day') day?: string) {
     this.ensureCanAdjustTime(req.user);
     return this.pacing.getWeeklyReport(req.user, day);
@@ -387,6 +472,7 @@ export class PulseController {
    * Query: month=YYYY-MM OR start=&end=YYYY-MM-DD
    */
   @Get('pacing/monthly')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async pacingMonthly(
     @Req() req: { user: any },
     @Query('month') month?: string,
@@ -403,6 +489,7 @@ export class PulseController {
    * Body: { mode: 'weekly'|'monthly', day?, month?, employee_ids: string[], to?, from? }
    */
   @Post('pacing/send')
+  @RequireBillingFeature(BILLING_FEATURES.pacing)
   async pacingSend(
     @Req() req: { user: any },
     @Body()
@@ -426,7 +513,7 @@ export class PulseController {
     @Query('start') start?: string,
     @Query('end') end?: string,
   ) {
-    this.ensureOrgAdmin(req.user);
+    this.ensurePlatformAdmin(req.user);
     return this.awsCosts.getAlysonPmCosts({ start, end });
   }
 }

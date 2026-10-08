@@ -3,66 +3,40 @@
 /**
  * Not-tracking start reminder
  *
- * After Stop (app still running, not recording): wait 10 minutes, then show
- * a popup so the employee can Start. Repeat every 10 minutes until they
- * Start, Quit, lock, or the machine sleeps.
+ * App running + tracking off: show a Start popup on a fixed 10-minute
+ * stopwatch. Stop / launch-while-off starts the clock. After each show
+ * (or Not now) wait exactly 10 minutes again. Lock / sleep does not
+ * dump a popup the moment the machine wakes.
  */
 
-const GRACE_MS = 10 * 60 * 1000;
-const REPEAT_MS = 10 * 60 * 1000;
-const POLL_MS = 30 * 1000;
+const INTERVAL_MS = 10 * 60 * 1000;
+const BLOCKED_RETRY_MS = 5 * 1000;
+const SLEEP_CATCHUP_MS = 2 * 60 * 1000;
 const ALWAYS_ON_TOP_MS = 2000;
 
 class NotTrackingReminderManager {
   constructor() {
-    this._intervalId = null;
+    this._timeoutId = null;
     this._armed = false;
-    this._offSinceMs = null;
-    this._lastReminderAtMs = null;
+    this._nextDueAtMs = null;
+    this._deferAfterBlock = false;
     this._alwaysOnTopTimer = null;
     this._promptVisible = false;
   }
 
   start() {
-    if (this._intervalId) {
-      this._armed = true;
-      if (this._offSinceMs == null && !this._isTracking()) {
-        this._offSinceMs = Date.now();
-      }
-      return;
-    }
     this._armed = true;
-    if (this._offSinceMs == null && !this._isTracking()) {
-      this._offSinceMs = Date.now();
-    }
-    this._intervalId = setInterval(() => {
-      try {
-        this._tick();
-      } catch (err) {
-        console.warn(
-          '⚠️ [NOT-TRACKING-REMINDER] Tick failed:',
-          err?.message || err,
-        );
-      }
-    }, POLL_MS);
-    if (typeof this._intervalId.unref === 'function') {
-      try { this._intervalId.unref(); } catch (_) { /* ignore */ }
-    }
+    if (this._isTracking()) return;
+    if (this._timeoutId && this._nextDueAtMs != null) return;
+    this._scheduleFromNow(INTERVAL_MS);
     console.log(
       '🔔 [NOT-TRACKING-REMINDER] Started (10m after Stop, repeat 10m, tracking-off only)',
     );
-    try {
-      this._tick();
-    } catch (_) { /* ignore */ }
   }
 
   stop() {
     this._armed = false;
     this._clearState();
-    if (this._intervalId) {
-      clearInterval(this._intervalId);
-      this._intervalId = null;
-    }
     this._clearAlwaysOnTop();
     this._hidePrompt();
     console.log('🔔 [NOT-TRACKING-REMINDER] Stopped');
@@ -75,21 +49,68 @@ class NotTrackingReminderManager {
   }
 
   onTrackingStopped() {
-    this._offSinceMs = Date.now();
-    this._lastReminderAtMs = null;
-    this._promptVisible = false;
-    if (!this._intervalId) {
-      this.start();
-    } else {
-      this._armed = true;
-    }
+    this._deferAfterBlock = false;
+    this._scheduleFromNow(INTERVAL_MS);
     console.log('🔔 [NOT-TRACKING-REMINDER] Tracking stopped — 10m popup timer started');
   }
 
+  /**
+   * Stop cleanup must not restart the 10-minute clock.
+   */
+  ensureRunning() {
+    this._armed = true;
+    if (this._isTracking()) return;
+    if (this._timeoutId && this._nextDueAtMs != null) return;
+    this._scheduleFromNow(INTERVAL_MS);
+  }
+
+  /**
+   * "Not now" — full 10 minutes from dismiss, not from the previous show.
+   */
+  onSnoozed() {
+    this._hidePrompt();
+    if (this._isTracking()) return;
+    this._deferAfterBlock = false;
+    this._scheduleFromNow(INTERVAL_MS);
+    console.log('🔔 [NOT-TRACKING-REMINDER] Snoozed — next popup in 10m');
+  }
+
   _clearState() {
-    this._offSinceMs = null;
-    this._lastReminderAtMs = null;
+    this._clearTimer();
+    this._nextDueAtMs = null;
+    this._deferAfterBlock = false;
     this._promptVisible = false;
+  }
+
+  _clearTimer() {
+    if (this._timeoutId) {
+      clearTimeout(this._timeoutId);
+      this._timeoutId = null;
+    }
+  }
+
+  _scheduleFromNow(ms) {
+    this._armed = true;
+    const delay = Math.max(0, Math.floor(Number(ms) || 0));
+    this._nextDueAtMs = Date.now() + delay;
+    this._armTimeout();
+  }
+
+  _armTimeout() {
+    this._clearTimer();
+    if (!this._armed || this._nextDueAtMs == null) return;
+    const delay = Math.max(0, this._nextDueAtMs - Date.now());
+    this._timeoutId = setTimeout(() => {
+      this._timeoutId = null;
+      try {
+        this._onDue();
+      } catch (err) {
+        console.warn(
+          '⚠️ [NOT-TRACKING-REMINDER] Tick failed:',
+          err?.message || err,
+        );
+      }
+    }, delay);
   }
 
   _isTracking() {
@@ -137,47 +158,52 @@ class NotTrackingReminderManager {
     return false;
   }
 
-  _tick() {
+  _onDue() {
     if (!this._armed) return;
 
     if (this._isTracking()) {
-      if (this._offSinceMs != null || this._lastReminderAtMs != null) {
-        this._clearState();
-        this._hidePrompt();
-      }
-      return;
-    }
-
-    if (!this._isLoggedIn() || this._isLockedOrSleeping()) {
-      return;
-    }
-
-    const now = Date.now();
-    if (this._offSinceMs == null) {
-      this._offSinceMs = now;
-      return;
-    }
-
-    if (now - this._offSinceMs < GRACE_MS) return;
-
-    const neverReminded = this._lastReminderAtMs == null;
-    const dueForRepeat =
-      this._lastReminderAtMs != null && now - this._lastReminderAtMs >= REPEAT_MS;
-
-    if (!neverReminded && !dueForRepeat) return;
-
-    if (this._isTracking()) {
       this._clearState();
+      this._hidePrompt();
       return;
     }
+
+    if (!this._isLoggedIn()) {
+      this._scheduleFromNow(INTERVAL_MS);
+      return;
+    }
+
+    if (this._isLockedOrSleeping()) {
+      this._deferAfterBlock = true;
+      this._nextDueAtMs = Date.now() + BLOCKED_RETRY_MS;
+      this._armTimeout();
+      return;
+    }
+
+    if (this._deferAfterBlock) {
+      this._deferAfterBlock = false;
+      this._scheduleFromNow(INTERVAL_MS);
+      console.log('🔔 [NOT-TRACKING-REMINDER] Unlock/wake — next popup in 10m');
+      return;
+    }
+
+    const scheduledAt = this._nextDueAtMs;
+    const overdue = scheduledAt == null ? 0 : Date.now() - scheduledAt;
+    if (overdue > SLEEP_CATCHUP_MS) {
+      this._scheduleFromNow(INTERVAL_MS);
+      console.log('🔔 [NOT-TRACKING-REMINDER] Timer jumped (sleep) — next popup in 10m');
+      return;
+    }
+
     if (this._idlePromptVisible()) {
       console.log('🔔 [NOT-TRACKING-REMINDER] Skipping — idle prompt visible');
+      this._nextDueAtMs = Date.now() + BLOCKED_RETRY_MS;
+      this._armTimeout();
       return;
     }
 
-    const kind = neverReminded ? 'grace' : 'repeat';
+    const kind = this._promptVisible ? 'repeat' : 'grace';
     this.showStartReminder();
-    this._lastReminderAtMs = now;
+    this._scheduleFromNow(INTERVAL_MS);
     console.log(`🔔 [NOT-TRACKING-REMINDER] Showing start popup (${kind})`);
   }
 
@@ -296,6 +322,8 @@ class NotTrackingReminderManager {
 }
 
 module.exports = NotTrackingReminderManager;
-module.exports.GRACE_MS = GRACE_MS;
-module.exports.REPEAT_MS = REPEAT_MS;
-module.exports.POLL_MS = POLL_MS;
+module.exports.INTERVAL_MS = INTERVAL_MS;
+module.exports.GRACE_MS = INTERVAL_MS;
+module.exports.REPEAT_MS = INTERVAL_MS;
+module.exports.POLL_MS = BLOCKED_RETRY_MS;
+module.exports.BLOCKED_RETRY_MS = BLOCKED_RETRY_MS;

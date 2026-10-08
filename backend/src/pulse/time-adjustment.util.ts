@@ -16,6 +16,27 @@ export function resolveAdjustmentDeltaSeconds(input: {
   return 0;
 }
 
+/** Holiday/leave credit that still applies after tracked time (never stacks on top). */
+export function leaveTopUpHours(trackedHours: number, leaveCreditHours: number): number {
+  const tracked = Number(trackedHours) || 0;
+  const leave = Number(leaveCreditHours) || 0;
+  return Math.max(0, Math.round((leave - tracked) * 10) / 10);
+}
+
+/**
+ * Holiday is a floor, not a stack: work 2h + 7h holiday → 7h; work 9h + 7h holiday → 9h.
+ */
+export function dayHoursWithLeaveTopUp(input: {
+  trackedHours: number;
+  otherAdjustmentHours?: number;
+  leaveCreditHours?: number;
+}): number {
+  const tracked = Number(input.trackedHours) || 0;
+  const other = Number(input.otherAdjustmentHours) || 0;
+  const leaveApplied = leaveTopUpHours(tracked, Number(input.leaveCreditHours) || 0);
+  return Math.max(0, Math.round((tracked + other + leaveApplied) * 10) / 10);
+}
+
 /**
  * Day total after applying a new adjustment.
  * Returns null when the result would be negative.

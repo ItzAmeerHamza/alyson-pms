@@ -23,7 +23,12 @@ import {
   workDateKey,
   workDayBoundsMs,
 } from '../lib/work-timezone';
-import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
+import {
+  SCREENSHOT_IS_VIDEO_MEETING_SQL,
+  SCREENSHOT_IS_PARTICIPATING_MEETING_SQL,
+  MEETING_IDLE_SHIELD_MS,
+  hasVideoMeetingEvidence,
+} from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
   intervalContains,
@@ -33,6 +38,10 @@ import {
   type TimeInterval,
 } from './meeting-intervals';
 import { lowActivityCapMs, screenshotOwnedRangeMs } from '../lib/screenshot-owned-interval';
+import {
+  dailyEffectiveInputsFromHourMaps,
+  type DailyEffectiveInput,
+} from '../lib/effective-daily';
 
 /**
  * Which workspace to restrict to, or null for no restriction (super admins, and
@@ -43,9 +52,14 @@ export interface WorkspaceFilter {
   workspaceId: number | null;
 }
 
+export type { DailyEffectiveInput } from '../lib/effective-daily';
+export { dailyEffectiveInputsFromHourMaps } from '../lib/effective-daily';
+
 export interface IdleAndLowActivity {
   idleSeconds: number;
   lowActivitySeconds: number;
+  /** Work-date keys (YYYY-MM-DD) under the same TZ Pulse reports use. */
+  daily: Record<string, DailyEffectiveInput>;
 }
 
 export type IdleLogRow = {
@@ -62,6 +76,10 @@ export type ScreenshotActivityRow = {
   activity_percent: number | null;
   is_meeting: boolean;
   is_low: boolean;
+  app_name?: string | null;
+  window_title?: string | null;
+  vision_summary?: string | null;
+  ocr_excerpt?: string | null;
 };
 
 @Injectable()
@@ -88,7 +106,7 @@ export class EffectiveTimeService {
   }
 
   private scope(filter: WorkspaceFilter, alias: string): { clause: string; params: unknown[] } {
-    if (!filter.workspaceId) return { clause: '1=1', params: [] };
+    if (!filter.workspaceId) return { clause: '1=0', params: [] };
     return { clause: `${alias}.workspace_id = $1`, params: [filter.workspaceId] };
   }
 
@@ -161,7 +179,12 @@ export class EffectiveTimeService {
       }
 
       const meetings = meetingIntervalsByUser?.get(log.user_id) ?? [];
-      const remaining = subtractIntervals({ startMs, endMs }, meetings);
+      const longAfk = endMs - startMs >= MEETING_IDLE_SHIELD_MS;
+      // Leftover Meet tabs that were already floored to 50% must not eat
+      // overnight / AFK idle. Short listen-only pauses can still be clipped.
+      const remaining = longAfk
+        ? [{ startMs, endMs }]
+        : subtractIntervals({ startMs, endMs }, meetings);
       for (const piece of remaining) {
         const totalSeconds = Math.round((piece.endMs - piece.startMs) / 1000);
         if (totalSeconds < EffectiveTimeService.MIN_IDLE_REPORT_SECONDS) continue;
@@ -210,7 +233,7 @@ export class EffectiveTimeService {
        WHERE ${scope.clause}
          AND s.captured_at >= $${startIdx}::timestamptz
          AND s.captured_at < $${endIdx}::timestamptz
-         AND ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
+         AND ${SCREENSHOT_IS_PARTICIPATING_MEETING_SQL}
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
          ${userFilter}
        ORDER BY s.user_id, s.captured_at ASC`,
@@ -403,6 +426,10 @@ export class EffectiveTimeService {
          ${sqlWorkDate('s.captured_at', workTz)}::text AS activity_date,
          s.captured_at,
          s.activity_percent,
+         s.app_name,
+         s.window_title,
+         s.vision_summary,
+         LEFT(COALESCE(s.vision_analysis #>> '{image_context,ocr_excerpt}', ''), 2500) AS ocr_excerpt,
          (${SCREENSHOT_IS_VIDEO_MEETING_SQL}) AS is_meeting,
          (
            s.activity_percent IS NOT NULL
@@ -421,7 +448,22 @@ export class EffectiveTimeService {
        ORDER BY s.user_id, s.captured_at ASC`,
       params,
     );
-    return result.rows;
+    return result.rows.map((row) => {
+      const is_meeting = hasVideoMeetingEvidence(
+        row.app_name,
+        row.window_title,
+        `${row.ocr_excerpt || ''}\n${row.vision_summary || ''}`,
+      );
+      const pct = Number(row.activity_percent);
+      const belowThreshold = Number.isFinite(pct) && pct < lowActivityThreshold;
+      return {
+        ...row,
+        is_meeting,
+        is_low:
+          !is_meeting &&
+          (Boolean(row.is_low) || (Boolean(row.is_meeting) && belowThreshold)),
+      };
+    });
   }
 
   /**
@@ -557,9 +599,11 @@ export class EffectiveTimeService {
       return total;
     };
 
+    const daily = dailyEffectiveInputsFromHourMaps(userIdText, idleByDay, lowByDay);
     return {
       idleSeconds: Math.max(0, Math.round(sumHours(idleByDay) * 3600)),
       lowActivitySeconds: Math.max(0, Math.round(sumHours(lowByDay) * 3600)),
+      daily,
     };
   }
 }

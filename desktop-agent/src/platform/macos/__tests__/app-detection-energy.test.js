@@ -13,6 +13,6 @@ describe('macos app detection energy helpers', () => {
     expect(looksLikeBrowserApp('Cursor')).toBe(false);
     expect(looksLikeBrowserApp('Code')).toBe(false);
     expect(looksLikeBrowserApp('Slack')).toBe(false);
-    expect(looksLikeBrowserApp('Alyson PM')).toBe(false);
+    expect(looksLikeBrowserApp('Tavilo Time')).toBe(false);
   });
 });

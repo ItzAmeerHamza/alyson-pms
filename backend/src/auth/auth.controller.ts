@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -19,12 +20,16 @@ export class AuthController {
 
   @Public()
   @Get('me')
-  async getMe(@Headers('authorization') authorization?: string) {
+  async getMe(
+    @Headers('authorization') authorization?: string,
+    @Headers('x-pulse-workspace-id') workspaceId?: string,
+    @Query('pulseWorkspaceId') workspaceQuery?: string,
+  ) {
     if (!authorization) {
       throw new UnauthorizedException('Authorization header missing');
     }
     const token = this.authService.extractTokenFromHeader(authorization);
-    return this.authService.getAuthProfile(token);
+    return this.authService.getAuthProfile(token, workspaceId || workspaceQuery);
   }
 
   /**

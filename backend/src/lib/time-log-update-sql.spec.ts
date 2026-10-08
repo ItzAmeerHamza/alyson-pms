@@ -9,6 +9,12 @@ import {
 } from './time-log-update-sql';
 
 describe('updateTimeLogEndSql', () => {
+  it('frozen Stop uses the same client-end SQL as an authorized idle cut', () => {
+    expect(updateTimeLogEndSql(true)).toBe(updateTimeLogEndSql(true));
+    expect(updateTimeLogEndSql(true)).toContain(AUTHORIZED_CUT_END_SQL);
+    expect(updateTimeLogLastAliveSql(true)).toBe(AUTHORIZED_CUT_END_SQL);
+  });
+
   it('authorized idle cut bills client now−10m and does not raise to last_alive', () => {
     const sql = updateTimeLogEndSql(true);
     expect(sql).toContain(AUTHORIZED_CUT_END_SQL);

@@ -1,9 +1,15 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { ScopedAuthUser, parseWorkspaceId, workspaceScope } from '../database/time-doctor-sql';
+import {
+  SELECT_PULSE_COMPANY_MESSAGE,
+  ScopedAuthUser,
+  parseWorkspaceId,
+  workspaceScope,
+} from '../database/time-doctor-sql';
 import {
   SCREENSHOT_IS_VIDEO_MEETING_SQL,
-  applyMeetingActivityFloor,
+  applyMeetingScreenshotPresentation,
+  hasVideoMeetingEvidence,
 } from '../pulse/meeting-context';
 import { getWorkTimezone } from '../lib/work-timezone';
 
@@ -43,9 +49,17 @@ export class TimeDoctorService {
     `;
 
     if (user.is_super_admin) {
+      const selectedId = parseWorkspaceId(user.organization_id);
+      if (selectedId) {
+        const result = await this.database.query(`${base} WHERE w.id = $1 LIMIT 1`, [
+          selectedId,
+        ]);
+        return { accounts: result.rows };
+      }
       const result = await this.database.query(
         `${base}
          WHERE coalesce(w.active, true) = true
+           AND ws.workspace_id IS NOT NULL
          ORDER BY w.name ASC`,
       );
       return { accounts: result.rows };
@@ -187,6 +201,8 @@ export class TimeDoctorService {
          s.mouse_movements AS mousemovements,
          s.app_name,
          s.window_title,
+         s.vision_summary,
+         LEFT(COALESCE(s.vision_analysis #>> '{image_context,ocr_excerpt}', ''), 2500) AS ocr_excerpt,
          (s.activity_percent <= $2 AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}) AS is_low_activity
        FROM time_doctor.screenshots s
        WHERE s.workspace_id = $1
@@ -200,25 +216,30 @@ export class TimeDoctorService {
     const byUser = new Map<number, Record<string, unknown>[]>();
     for (const row of result.rows as Record<string, unknown>[]) {
       const uid = Number(row.user_id);
+      const presented = applyMeetingScreenshotPresentation({
+        app_name: row.app_name as string | null,
+        window_title: row.window_title as string | null,
+        vision_summary: row.vision_summary as string | null,
+        ocr_excerpt: row.ocr_excerpt as string | null,
+        activity_percent: row.activity_percent as number | null,
+        focus_percent: row.focus_percent as number | null,
+      });
+      const meeting = hasVideoMeetingEvidence(
+        presented.app_name,
+        presented.window_title,
+        `${row.ocr_excerpt || ''}\n${presented.vision_summary || ''}`,
+      );
       const shot = {
         id: row.id,
         timestamp: row.captured_at,
-        activity_percent: applyMeetingActivityFloor(
-          row.activity_percent as number | null,
-          row.app_name as string | null,
-          row.window_title as string | null,
-        ),
-        focus_percent: applyMeetingActivityFloor(
-          row.focus_percent as number | null,
-          row.app_name as string | null,
-          row.window_title as string | null,
-        ),
+        activity_percent: presented.activity_percent,
+        focus_percent: presented.focus_percent,
         mouse_clicks: row.mouse_clicks,
         keystrokes: row.keystrokes,
         mousemovements: row.mousemovements,
         app_name: row.app_name,
         window_title: row.window_title,
-        is_low_activity: row.is_low_activity,
+        is_low_activity: meeting ? false : row.is_low_activity,
         deleted: false,
       };
       const list = byUser.get(uid);
@@ -497,11 +518,11 @@ export class TimeDoctorService {
     limit: number,
     offset: number,
   ): Promise<{ items: unknown[] }> {
-    const wsId = user.is_super_admin ? null : parseWorkspaceId(user.organization_id);
+    const wsId = parseWorkspaceId(user.organization_id);
 
     const params: unknown[] = [];
-    let extWs = '1=1';
-    let tWs = '1=1';
+    let extWs = '1=0';
+    let tWs = '1=0';
     if (wsId) {
       params.push(wsId);
       extWs = `ext.workspace_id = $1`;
@@ -593,7 +614,16 @@ export class TimeDoctorService {
   }
 
   private assertWorkspaceAccess(user: ScopedAuthUser, companyId: number): void {
-    if (user.is_super_admin) return;
+    if (user.is_super_admin) {
+      const selected = parseWorkspaceId(user.organization_id);
+      if (!selected) {
+        throw new ForbiddenException(SELECT_PULSE_COMPANY_MESSAGE);
+      }
+      if (selected !== companyId) {
+        throw new ForbiddenException('You do not have access to this company');
+      }
+      return;
+    }
     const wsId = parseWorkspaceId(user.organization_id);
     if (wsId !== companyId) {
       throw new ForbiddenException('You do not have access to this company');

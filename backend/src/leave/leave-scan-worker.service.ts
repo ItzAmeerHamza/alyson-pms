@@ -9,8 +9,8 @@ import type {
 } from './leave-scan.types';
 
 /**
- * Non-VPC worker: Gmail DWD + DeepSeek, then POST batch to API Lambda (has DB).
- * API Lambda itself has no NAT — this is why scan cannot run in-process in prod.
+ * Non-VPC worker: Gmail DWD, then OpenRouter via the OpenRouter Lambda.
+ * Posts the batch to API Lambda (has DB). API Lambda has no NAT, so scan cannot run in-process in prod.
  */
 @Injectable()
 export class LeaveScanWorkerService {
@@ -41,7 +41,7 @@ export class LeaveScanWorkerService {
       throw new Error('Google DWD is not configured on leave-scan worker');
     }
     if (!this.classify.isConfigured()) {
-      throw new Error('DeepSeek is not configured on leave-scan worker');
+      throw new Error('OpenRouter is not configured on leave-scan worker');
     }
 
     const maxMessages = job.maxMessages || 100;

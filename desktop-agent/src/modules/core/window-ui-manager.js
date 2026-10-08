@@ -50,7 +50,7 @@ class WindowUIManager {
       icon: path.join(__dirname, '../../../assets/icon.png'),
       show: false,
       titleBarStyle: 'default',
-      title: 'Alyson Time Doctor',
+      title: 'Tavilo Time',
       backgroundColor: '#ffffff'
     });
 
@@ -97,7 +97,7 @@ class WindowUIManager {
     
     console.log('🔧 [TRAY] Creating tray menu...');
     
-    // Full-color Alyson PM logo (template icons collapse the orange disc to a blank circle)
+    // Full-color Tavilo Time logo (template icons collapse the orange disc to a blank circle)
     const trayIconPath = path.join(__dirname, '../../../assets', 'tray-icon.png');
     
     try {
@@ -109,11 +109,11 @@ class WindowUIManager {
           icon = nativeImage.createFromPath(fallbackPath);
         }
         if (!icon || icon.isEmpty()) {
-          console.error('❌ [TRAY] Failed to load Alyson tray icon from:', trayIconPath);
+          console.error('❌ [TRAY] Failed to load Tavilo Time tray icon from:', trayIconPath);
           return null;
         }
         this.tray = new Tray(icon.resize({ width: 22, height: 22 }));
-        console.log('✅ [TRAY] Created macOS colored Alyson PM tray icon');
+        console.log('✅ [TRAY] Created macOS colored Tavilo Time tray icon');
       } else {
         this.tray = new Tray(trayIconPath);
         console.log('✅ [TRAY] Created tray icon');
@@ -133,7 +133,7 @@ class WindowUIManager {
     // Simplified tray menu - only Toggle Monitoring Tools and Quit
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Alyson PM Agent',
+        label: 'Tavilo Time',
         enabled: false
       },
       { type: 'separator' },
@@ -157,7 +157,7 @@ class WindowUIManager {
       }
     ]);
     
-    this.tray.setToolTip('Alyson PM');
+    this.tray.setToolTip('Tavilo Time');
     this.tray.setContextMenu(contextMenu);
     
     // Handle tray click

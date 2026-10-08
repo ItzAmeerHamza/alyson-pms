@@ -21,6 +21,9 @@ class UIManager {
     this.monthlyReportRefreshInterval = null;
     this._monthlyReportMonthOffset = 0;
     this._monthlyReportCacheByOffset = {};
+    this._monthlyReportLoadGen = 0;
+    this._trackerScreenshotsCacheByDate = {};
+    this._trackerScreenshotsLoadGen = 0;
     
     // UI state
     this.cachedElements = null;
@@ -73,14 +76,14 @@ class UIManager {
       if (!result?.success) {
         console.error('❌ [UI-MANAGER] Failed to open dashboard:', result?.error);
         this.notificationManager?.showNotification?.(
-          'Could not open the web dashboard. Please visit app.alyson.ai in your browser.',
+          'Could not open the web dashboard. Please visit app.tavilo.ai in your browser.',
           'error'
         );
       }
     } catch (err) {
       console.error('❌ [UI-MANAGER] openExternalDashboard error:', err?.message || err);
       this.notificationManager?.showNotification?.(
-        'Could not open the web dashboard. Please visit app.alyson.ai in your browser.',
+        'Could not open the web dashboard. Please visit app.tavilo.ai in your browser.',
         'error'
       );
     }
@@ -474,6 +477,7 @@ class UIManager {
         this.startMonthlyReportAutoRefresh();
         // Load recent screenshots on the time tracker page
         this.loadTrackerScreenshots();
+        this.prefetchAssistantBriefing();
       }, 100);
     } else {
       this.stopMonthlyReportAutoRefresh();
@@ -594,15 +598,25 @@ class UIManager {
       }
       this.assistantCoachInstance.open();
     } catch (err) {
-      console.error('❌ [UI-MANAGER] Failed to open Alyson Coach:', err?.message || err);
+      console.error('❌ [UI-MANAGER] Failed to open Tavilo Coach:', err?.message || err);
     }
+  }
+
+  prefetchAssistantBriefing() {
+    try {
+      if (!this.assistantCoachInstance) {
+        const AssistantCoach = require('./assistant-coach');
+        this.assistantCoachInstance = new AssistantCoach(this.ipcRenderer);
+      }
+      this.assistantCoachInstance.prefetch();
+    } catch (_) { /* first open will fetch */ }
   }
 
   getPageTitle(pageId) {
     const pageTitles = {
       'dashboard': 'Dashboard',
       'timetracker': 'Time Tracker',
-      'assistant': 'Alyson Coach',
+      'assistant': 'Tavilo Coach',
       'screenshots': 'Screenshots',
       'reports': 'Live Report',
       'url-activity': 'URL History',
@@ -4216,7 +4230,7 @@ class UIManager {
       if (updateInfo.dmgInstallReady) {
         message = `${versionPrefix}Automatic update could not finish. Click Retry Update to install in place. Use Download Installer only if Retry keeps failing.`;
       } else if (updateInfo.windowsInstaller || updateInfo.showManualDownloadOption || updateInfo.fallbackToWindowsInstaller) {
-        message = `${versionPrefix}Click Retry Update — Alyson PM will download and install automatically. Use Download Installer Manually only if Retry keeps failing.`;
+        message = `${versionPrefix}Click Retry Update — Tavilo Time will download and install automatically. Use Download Installer Manually only if Retry keeps failing.`;
       } else {
         message = `${versionPrefix}Click Retry Update to continue the automatic install.`;
       }
@@ -4228,11 +4242,11 @@ class UIManager {
     try {
       const result = await this.ipcRenderer.invoke('open-manual-update-download');
       if (!result?.success) {
-        this.showUpdateError('Could not open the download page. Visit GitHub Releases for Alyson PM.');
+        this.showUpdateError('Could not open the download page. Visit GitHub Releases for Tavilo Time.');
       }
     } catch (error) {
       console.error('❌ [UI-MANAGER] Manual download failed:', error);
-      this.showUpdateError('Could not open the download page. Visit GitHub Releases for Alyson PM.');
+      this.showUpdateError('Could not open the download page. Visit GitHub Releases for Tavilo Time.');
     }
   }
 
@@ -4508,7 +4522,7 @@ class UIManager {
         this.isInstallingUpdate = false;
         if (btnText) btnText.textContent = 'Installer Opened';
         if (btnSpinner) btnSpinner.style.display = 'none';
-        this.showUpdateError(result.message || 'Installer opened. Drag Alyson PM to Applications, then reopen the app.');
+        this.showUpdateError(result.message || 'Installer opened. Drag Tavilo Time to Applications, then reopen the app.');
       } else if (result && result.installing) {
         // Update is installing, app will quit - show success state
         if (btnText) btnText.textContent = 'Restarting...';
@@ -4671,14 +4685,6 @@ class UIManager {
   async loadTrackerScreenshots(forceRefresh = false) {
     const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes cache
     const now = Date.now();
-
-    // Cache check
-    if (!forceRefresh && this._trackerScreenshotsCache && (now - this._trackerScreenshotsCacheTime) < CACHE_TTL_MS) {
-      console.log('[TRACKER-SCREENSHOTS] Using cached data');
-      this._renderTrackerScreenshots(this._trackerScreenshotsCache);
-      return;
-    }
-
     const loadingEl = document.getElementById('trackerScreenshotsLoading');
     const emptyEl = document.getElementById('trackerScreenshotsEmpty');
     const gridEl = document.getElementById('trackerScreenshotsGrid');
@@ -4692,6 +4698,18 @@ class UIManager {
     }
 
     const selectedDate = dateInput ? dateInput.value : workDateKey();
+    const loadId = (this._trackerScreenshotsLoadGen = (this._trackerScreenshotsLoadGen || 0) + 1);
+    const stillThisLoad = () =>
+      loadId === this._trackerScreenshotsLoadGen &&
+      (dateInput ? dateInput.value : workDateKey()) === selectedDate;
+
+    const cacheStore = this._trackerScreenshotsCacheByDate || (this._trackerScreenshotsCacheByDate = {});
+    const cached = cacheStore[selectedDate];
+    if (!forceRefresh && cached?.screenshots && (now - cached.time) < CACHE_TTL_MS) {
+      console.log('[TRACKER-SCREENSHOTS] Using cached data');
+      this._renderTrackerScreenshots(cached.screenshots);
+      return;
+    }
 
     // Show loading
     if (loadingEl) loadingEl.style.display = 'block';
@@ -4717,6 +4735,13 @@ class UIManager {
         limit: 9
       });
 
+      if (!stillThisLoad()) {
+        console.log('[TRACKER-SCREENSHOTS] Discarding stale day payload', {
+          requestedDate: selectedDate,
+        });
+        return;
+      }
+
       if (loadingEl) loadingEl.style.display = 'none';
 
       const screenshots = response && response.success ? response.screenshots : [];
@@ -4727,7 +4752,7 @@ class UIManager {
         return;
       }
 
-      // Cache the data
+      cacheStore[selectedDate] = { screenshots, time: now };
       this._trackerScreenshotsCache = screenshots;
       this._trackerScreenshotsCacheTime = now;
 
@@ -4890,18 +4915,15 @@ class UIManager {
       if (nextKey > workDateKey()) return; // Don't go past company "today"
 
       dateInput.value = nextKey;
-      this._trackerScreenshotsCache = null; // invalidate cache
-      this.loadTrackerScreenshots(true);
+      this.loadTrackerScreenshots(false);
     };
 
     if (prevBtn) prevBtn.addEventListener('click', () => navigateDate(-1));
     if (nextBtn) nextBtn.addEventListener('click', () => navigateDate(1));
     if (dateInput) dateInput.addEventListener('change', () => {
-      this._trackerScreenshotsCache = null;
-      this.loadTrackerScreenshots(true);
+      this.loadTrackerScreenshots(false);
     });
     if (refreshBtn) refreshBtn.addEventListener('click', () => {
-      this._trackerScreenshotsCache = null;
       this.loadTrackerScreenshots(true);
     });
   }
@@ -4924,7 +4946,56 @@ class UIManager {
     if (nextBtn) nextBtn.disabled = offset >= 0;
   }
 
+  _monthLabelForOffset(offset = this._monthlyReportMonthOffset || 0) {
+    try {
+      const { monthLabelForOffset } = require('../../src/modules/utils/monthly-report-month');
+      return monthLabelForOffset(offset);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  _showMonthlyReportLoading(label) {
+    const loadingEl = document.getElementById('monthlyReportLoading');
+    const emptyEl = document.getElementById('monthlyReportEmpty');
+    const contentEl = document.getElementById('monthlyReportContent');
+    const labelEl = document.getElementById('monthlyReportLabel');
+    if (labelEl && label) labelEl.textContent = label;
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (contentEl) contentEl.style.display = 'none';
+    this._syncMonthlyReportNavButtons();
+  }
+
+  _reportMatchesViewedMonth(reportData) {
+    try {
+      const { reportMatchesViewedMonth } = require('../../src/modules/utils/monthly-report-month');
+      return reportMatchesViewedMonth(reportData, this._monthlyReportMonthOffset || 0);
+    } catch (_) {
+      return !!reportData && !reportData.error;
+    }
+  }
+
+  shiftMonthlyReportMonth(delta) {
+    const {
+      resolveMonthOffset,
+    } = require('../../src/modules/utils/monthly-report-month');
+    const next = resolveMonthOffset((this._monthlyReportMonthOffset || 0) + delta);
+    if (next === (this._monthlyReportMonthOffset || 0)) return Promise.resolve();
+    this._monthlyReportMonthOffset = next;
+    this._monthlyReportLoadGen = (this._monthlyReportLoadGen || 0) + 1;
+    this._syncMonthlyReportNavButtons();
+    const cached = this._monthlyReportCacheByOffset?.[next];
+    if (cached?.reportData && this._reportMatchesViewedMonth(cached.reportData)) {
+      this._applyMonthlyReportToDom(cached.reportData);
+      return this.loadMonthlyReport(false, { silent: true });
+    }
+    this._showMonthlyReportLoading(this._monthLabelForOffset(next));
+    return this.loadMonthlyReport(false);
+  }
+
   _applyMonthlyReportToDom(reportData) {
+    if (!this._reportMatchesViewedMonth(reportData)) return;
     const loadingEl = document.getElementById('monthlyReportLoading');
     const emptyEl = document.getElementById('monthlyReportEmpty');
     const contentEl = document.getElementById('monthlyReportContent');
@@ -4938,7 +5009,7 @@ class UIManager {
     this._renderMonthlyWeeklyBreakdown(reportData);
     this._renderMonthlyProjectBreakdown(reportData);
     this._renderMonthlySessionList(reportData);
-    if (labelEl) labelEl.textContent = reportData.monthLabel || '';
+    if (labelEl) labelEl.textContent = reportData.monthLabel || this._monthLabelForOffset();
     this._syncMonthlyReportNavButtons();
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
@@ -4949,6 +5020,10 @@ class UIManager {
     const CACHE_TTL_MS = 60 * 1000;
     const now = Date.now();
     const offset = this._monthlyReportMonthOffset || 0;
+    const loadId = (this._monthlyReportLoadGen = (this._monthlyReportLoadGen || 0) + 1);
+    const stillThisLoad = () =>
+      loadId === this._monthlyReportLoadGen &&
+      (this._monthlyReportMonthOffset || 0) === offset;
     this._syncMonthlyReportNavButtons();
 
     // Check cache — if valid, re-render from cached data instead of fetching.
@@ -4958,7 +5033,7 @@ class UIManager {
     const cached = cacheStore[offset];
     if (!forceRefresh && cached?.reportData && (now - cached.time) < CACHE_TTL_MS) {
       console.log('[MONTHLY-REPORT] Using cached data — re-rendering');
-      this._applyMonthlyReportToDom(cached.reportData);
+      if (stillThisLoad()) this._applyMonthlyReportToDom(cached.reportData);
       return;
     }
 
@@ -4969,13 +5044,15 @@ class UIManager {
 
     if (!contentEl) return; // section not in DOM
 
-    // Show loading (skip on silent auto-refresh so the section doesn't flicker)
+    // Show loading (skip on silent auto-refresh so the section doesn't flicker).
+    // Always retarget the label so a late current-month refresh cannot keep
+    // last month's name while swapping in this month's numbers (or the reverse).
     const hadContent =
       contentEl.style.display !== 'none' && contentEl.childElementCount > 0;
     if (!silent || !hadContent) {
-      if (loadingEl) loadingEl.style.display = 'block';
-      if (emptyEl) emptyEl.style.display = 'none';
-      if (contentEl) contentEl.style.display = 'none';
+      this._showMonthlyReportLoading(this._monthLabelForOffset(offset));
+    } else if (labelEl) {
+      labelEl.textContent = this._monthLabelForOffset(offset);
     }
 
     try {
@@ -4983,11 +5060,28 @@ class UIManager {
         monthOffset: offset,
       });
 
+      if (!stillThisLoad()) {
+        console.log('[MONTHLY-REPORT] Discarding stale month payload', {
+          requestedOffset: offset,
+          viewedOffset: this._monthlyReportMonthOffset || 0,
+          payloadOffset: reportData?.monthOffset,
+        });
+        return;
+      }
+      if (reportData && !reportData.error && !this._reportMatchesViewedMonth(reportData)) {
+        console.log('[MONTHLY-REPORT] Discarding mismatched month payload', {
+          requestedOffset: offset,
+          payloadOffset: reportData.monthOffset,
+        });
+        return;
+      }
+
       console.log('[MONTHLY-REPORT] Data fetched:', {
         totalSeconds: reportData?.totalSeconds,
         sessions: reportData?.totalSessions,
         projects: reportData?.projectBreakdown?.length,
         weeks: reportData?.weeklyBreakdown?.length,
+        monthOffset: reportData?.monthOffset,
         silent
       });
 
@@ -5016,11 +5110,11 @@ class UIManager {
           if (emptyCopy) {
             emptyCopy.innerHTML = offset === 0
               ? 'No sessions tracked this month yet.<br>Start your first session above!'
-              : `No sessions tracked in ${reportData?.monthLabel || 'this month'}.`;
+              : `No sessions tracked in ${reportData?.monthLabel || this._monthLabelForOffset(offset)}.`;
           }
         }
         if (contentEl) contentEl.style.display = 'none';
-        if (labelEl) labelEl.textContent = reportData?.monthLabel || 'No data';
+        if (labelEl) labelEl.textContent = reportData?.monthLabel || this._monthLabelForOffset(offset);
         this._syncMonthlyReportNavButtons();
         return;
       }
@@ -5036,6 +5130,7 @@ class UIManager {
 
     } catch (err) {
       console.error('[MONTHLY-REPORT] Error loading report:', err);
+      if (!stillThisLoad()) return;
       if (loadingEl) loadingEl.style.display = 'none';
       if (!silent) {
         if (emptyEl) {
@@ -5081,6 +5176,7 @@ class UIManager {
 
   /** Render the summary stat cards (Total / Non-effective / Effective) */
   _renderMonthlyReportSummary(reportData) {
+    if (!this._reportMatchesViewedMonth(reportData)) return;
     const aligned = this._alignMonthlySummaryWithLiveToday(reportData);
     const totalSeconds = aligned.totalSeconds;
     const nonEffectiveSeconds = aligned.nonEffectiveSeconds;
@@ -5116,6 +5212,11 @@ class UIManager {
     let nonEffectiveSeconds = Math.max(0, Math.floor(Number(reportData?.nonEffectiveSeconds) || 0));
 
     try {
+      const { shouldPaintLiveTodayOntoMonthlyReport } = require('../../src/modules/utils/monthly-report-month');
+      if (!shouldPaintLiveTodayOntoMonthlyReport(this._monthlyReportMonthOffset || 0)) {
+        const effectiveSeconds = Math.max(0, totalSeconds - Math.min(totalSeconds, nonEffectiveSeconds));
+        return { totalSeconds, nonEffectiveSeconds: Math.min(totalSeconds, nonEffectiveSeconds), effectiveSeconds };
+      }
       const todayStr = typeof this._localDateStr === 'function' ? this._localDateStr() : null;
       const todayRow =
         todayStr && Array.isArray(reportData?.dailyBreakdown)
@@ -5178,6 +5279,8 @@ class UIManager {
    */
   _raiseTodayTrackedFloorFromMonthly(reportData) {
     try {
+      const { shouldPaintLiveTodayOntoMonthlyReport } = require('../../src/modules/utils/monthly-report-month');
+      if (!shouldPaintLiveTodayOntoMonthlyReport(this._monthlyReportMonthOffset || 0)) return;
       const todayStr = typeof this._localDateStr === 'function' ? this._localDateStr() : null;
       if (!todayStr || !Array.isArray(reportData?.dailyBreakdown)) return;
       const todayRow = reportData.dailyBreakdown.find((d) => d && d.date === todayStr);
@@ -5226,15 +5329,18 @@ class UIManager {
       return { tracked, effective };
     };
 
-    // Scale bars to effective (adjusted) time so the chart matches the Effective KPI.
-    const maxSeconds = Math.max(...daily.map((d) => daySeconds(d).effective), 1);
+    // Scale against a 12-hour workday (not the tallest bar) so 9h and 7h
+    // stay visibly different. Pixel heights — % heights in this flex
+    // column all stretched to the same full bar.
+    const { monthlyDailyBarHeightPx } = require('../../src/modules/utils/monthly-report-chart');
+    const maxSeconds = Math.max(...daily.map((d) => daySeconds(d).effective), 0);
     // Company work calendar — matches daily totals and session dates
     const todayStr = this._localDateStr();
 
     let html = '';
     daily.forEach(day => {
       const { tracked, effective } = daySeconds(day);
-      const heightPct = Math.max(2, (effective / maxSeconds) * 100);
+      const heightPx = monthlyDailyBarHeightPx(effective, maxSeconds);
       const isToday = day.date === todayStr;
       const isZero = effective === 0;
       const dayNum = parseInt(day.date.split('-')[2], 10);
@@ -5253,7 +5359,7 @@ class UIManager {
       html += `
         <div class="mr-day-bar-wrapper" data-date="${this._escapeHtml(day.date)}" data-tooltip="${this._escapeHtml(tooltip)}" role="button" tabindex="0" title="Show screenshots for this day">
           <div class="mr-day-bar ${isToday ? 'today' : ''} ${isZero ? 'zero' : ''}"
-               style="height: ${isZero ? '2px' : heightPct + '%'};"></div>
+               style="height: ${heightPx}px;"></div>
           <div class="mr-day-label ${isToday ? 'today' : ''}">${dayNum}</div>
         </div>
       `;

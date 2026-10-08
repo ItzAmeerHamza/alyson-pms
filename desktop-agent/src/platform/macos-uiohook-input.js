@@ -1,6 +1,6 @@
 /**
  * In-process macOS input capture via uiohook-napi.
- * Runs inside the Electron main process — users only grant Accessibility to "Alyson PM"
+ * Runs inside the Electron main process — users only grant Accessibility to "Tavilo Time"
  * (no separate macos-input-helper binary / TCC entry).
  */
 

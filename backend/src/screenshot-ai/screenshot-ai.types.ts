@@ -36,6 +36,16 @@ export const SCREENSHOT_AI_CATEGORIES = [
 
 export type ScreenshotAiCategory = (typeof SCREENSHOT_AI_CATEGORIES)[number];
 
+export const SCREENSHOT_AI_PRODUCTIVITY_FLAGS = [
+  'on_task',
+  'mixed',
+  'off_task',
+  'idle',
+  'unclear',
+] as const;
+
+export type ScreenshotProductivityFlag = (typeof SCREENSHOT_AI_PRODUCTIVITY_FLAGS)[number];
+
 export type ScreenshotAiJobSource = 'upload' | 'backfill' | 'manual';
 
 export interface ScreenshotAiJobMessage {
@@ -55,10 +65,14 @@ export interface ScreenshotAiAnalysisResult {
   is_work_related: boolean;
   confidence_score: number;
   distraction_score: number;
-  /** Plain-language description of what is on screen */
+  /** Plain-language description of what the employee is doing in this frame */
   description: string;
   /** Alias kept for backward compatibility */
   summary: string;
+  /** Coaching copy stored separately from the frame description */
+  feedback?: string;
+  /** Frame-level status derived from the activity in this screenshot */
+  productivity_flag: ScreenshotProductivityFlag;
 }
 
 export interface ScreenshotAiStatusCounts {
@@ -78,6 +92,8 @@ export interface BackfillOptions {
   endDate?: string;
   newestFirst?: boolean;
   includeFailed?: boolean;
+  /** When set, only enqueue / retry rows in this workspace. */
+  workspaceId?: number;
 }
 
 export interface ScreenshotRowForAnalysis {

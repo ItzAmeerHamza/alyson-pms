@@ -5,6 +5,8 @@ import { ScreenshotImageContextService } from './screenshot-image-context.servic
 import { ScreenshotAiRepository } from './screenshot-ai.repository';
 import { writeScreenshotThumb } from '../lib/screenshot-thumb';
 import { ScreenshotAiJobMessage, ScreenshotRowForAnalysis } from './screenshot-ai.types';
+import { applyMeetingAiClassification } from './meeting-classification';
+import { visionAnalysisPayload } from './screenshot-ai-copy';
 
 const MAX_RETRIES = 3;
 
@@ -53,7 +55,7 @@ export class ScreenshotAiAnalyzerService {
       const { buffer, contentType } = await this.s3.getObjectBuffer(row.s3_key);
       const thumbS3Key = await writeScreenshotThumb(this.s3, row.s3_key, buffer);
       const extracted = await this.imageContext.extractFromImage(buffer);
-      const { result, raw } = await this.deepseek.analyzeScreenshot({
+      const { result: rawResult, raw } = await this.deepseek.analyzeScreenshot({
         imageBase64: buffer.toString('base64'),
         mimeType: contentType,
         appName: row.app_name,
@@ -61,21 +63,35 @@ export class ScreenshotAiAnalyzerService {
         capturedAt: row.captured_at,
         imageContext: extracted,
       });
+      const result = applyMeetingAiClassification(rawResult, {
+        appName: row.app_name,
+        windowTitle: row.window_title,
+        ocrText: extracted.ocrText,
+      });
 
       await this.repo.markCompleted(job.screenshotId, {
-        ai_model_used: String(raw.model || 'deepseek'),
+        ai_model_used: String(raw.model || 'deepseek/deepseek-chat'),
         activity_type: result.activity_type,
         category: result.category,
         is_work_related: result.is_work_related,
         confidence_score: result.confidence_score,
         distraction_score: result.distraction_score,
         vision_summary: result.description,
-        vision_analysis: {
-          ...raw,
-          description: result.description,
+        vision_analysis: visionAnalysisPayload(raw, result, {
+          meeting_override:
+            rawResult.category !== result.category ||
+            rawResult.is_work_related !== result.is_work_related ||
+            rawResult.productivity_flag !== result.productivity_flag,
           source: job.source,
           analyzed_at: new Date().toISOString(),
-        },
+          image_context: {
+            ...(((raw.image_context as Record<string, unknown> | undefined) || {}) as Record<
+              string,
+              unknown
+            >),
+            ocr_excerpt: extracted.ocrText ? extracted.ocrText.slice(0, 2500) : null,
+          },
+        }),
         thumb_s3_key: thumbS3Key,
       });
 

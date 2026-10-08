@@ -5,9 +5,11 @@ import { ScreenshotAiApiClientService } from './screenshot-ai-api-client.service
 import { ScreenshotImageContextService } from './screenshot-image-context.service';
 import { writeScreenshotThumb } from '../lib/screenshot-thumb';
 import { ScreenshotAiJobMessage } from './screenshot-ai.types';
+import { applyMeetingAiClassification } from './meeting-classification';
+import { visionAnalysisPayload } from './screenshot-ai-copy';
 
 /**
- * Runs outside VPC: S3 + DeepSeek + persists via API Lambda (RDS).
+ * Runs outside VPC: S3 + OpenRouter (DeepSeek model) + persists via API Lambda (RDS).
  */
 @Injectable()
 export class ScreenshotAiWorkerService {
@@ -40,7 +42,7 @@ export class ScreenshotAiWorkerService {
       const { buffer, contentType } = await this.s3.getObjectBuffer(s3Key);
       const thumbS3Key = await writeScreenshotThumb(this.s3, s3Key, buffer);
       const extracted = await this.imageContext.extractFromImage(buffer);
-      const { result, raw } = await this.deepseek.analyzeScreenshot({
+      const { result: rawResult, raw } = await this.deepseek.analyzeScreenshot({
         imageBase64: buffer.toString('base64'),
         mimeType: contentType,
         appName: job.appName,
@@ -48,23 +50,37 @@ export class ScreenshotAiWorkerService {
         capturedAt: job.capturedAt,
         imageContext: extracted,
       });
+      const result = applyMeetingAiClassification(rawResult, {
+        appName: job.appName,
+        windowTitle: job.windowTitle,
+        ocrText: extracted.ocrText,
+      });
 
       await this.api.markCompleted({
         screenshotId: job.screenshotId,
         source: job.source,
-        ai_model_used: String(raw.model || 'deepseek'),
+        ai_model_used: String(raw.model || 'deepseek/deepseek-chat'),
         activity_type: result.activity_type,
         category: result.category,
         is_work_related: result.is_work_related,
         confidence_score: result.confidence_score,
         distraction_score: result.distraction_score,
         vision_summary: result.description,
-        vision_analysis: {
-          ...raw,
-          description: result.description,
+        vision_analysis: visionAnalysisPayload(raw, result, {
+          meeting_override:
+            rawResult.category !== result.category ||
+            rawResult.is_work_related !== result.is_work_related ||
+            rawResult.productivity_flag !== result.productivity_flag,
           source: job.source,
           analyzed_at: new Date().toISOString(),
-        },
+          image_context: {
+            ...(((raw.image_context as Record<string, unknown> | undefined) || {}) as Record<
+              string,
+              unknown
+            >),
+            ocr_excerpt: extracted.ocrText ? extracted.ocrText.slice(0, 2500) : null,
+          },
+        }),
         thumb_s3_key: thumbS3Key,
       });
 

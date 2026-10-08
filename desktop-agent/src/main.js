@@ -361,14 +361,12 @@ const packageJson = require('../package.json');
 global.agentVersion = packageJson.version;
 console.log(`📦 [AGENT-VERSION] Desktop agent version: ${global.agentVersion}`);
 
-// ─── Cache Alyson icon path globally for BrowserWindow and Tray ─────────
-// The real Alyson icon lives at assets/icon.png (the compass logo).
-// We make it accessible globally so all windows and tray use it.
+// ─── Cache Tavilo Time icon path globally for BrowserWindow and Tray ─────────
 (function cacheIconPath() {
   const path = require('path');
   const iconPath = path.join(__dirname, '../assets/icon.png');
   global.__alysonIconPath = iconPath;
-  console.log('🎨 [ICON] Using Alyson release icon:', iconPath);
+  console.log('🎨 [ICON] Using Tavilo Time icon:', iconPath);
 })();
 
 // CRITICAL FIX: Initialize tracking state to false on app startup
@@ -414,6 +412,12 @@ if (isElectronMain) {
   // We're in Electron - import all modules
   const electronModules = require('electron');
   ({ app, BrowserWindow, powerMonitor, screen, ipcMain, Notification, Tray, Menu, desktopCapturer, systemPreferences, globalShortcut } = electronModules);
+
+  // productName is "Tavilo Time". Electron would otherwise move userData to a
+  // new folder and drop offline queues, update state, and saved sessions.
+  if (app && typeof app.setPath === 'function' && typeof app.getPath === 'function') {
+    app.setPath('userData', require('path').join(app.getPath('appData'), 'Alyson PM'));
+  }
 
   // === MEMORY OPTIMIZATION: Disable GPU process ===
   // Eliminates the GPU subprocess (~30-50MB savings)
@@ -787,6 +791,16 @@ if (isElectronMain) {
    */
   global._isStoppingTracking = false; // Reentrancy guard
   global.stopTracking = async function stopTracking(reason = 'manual', details = null, options = {}) {
+    const { isAllowedLiveClockStopReason } = require('./modules/utils/live-clock-policy');
+    const liveNow =
+      !!(global.isTracking || global.trackingManager?.isTracking) &&
+      !!(global.currentTimeLogId || global.trackingManager?.currentTimeLogId);
+    if (liveNow && !isAllowedLiveClockStopReason(reason)) {
+      console.warn(
+        `⏱️ [LIVE-CLOCK] Refusing Stop (${reason || 'unknown'}) — clock keeps running until the user or device ends the session`,
+      );
+      return { success: false, refused: true, reason: 'live_clock_protected' };
+    }
     console.log(`🛑 [GLOBAL] stopTracking called with reason: ${reason}`, options?.endTimeOverride ? `endTimeOverride: ${options.endTimeOverride}` : '');
 
     const gracefulShutdownManager = require('./modules/core/graceful-shutdown-manager');
@@ -3725,7 +3739,7 @@ if (isElectronContext && ipcMain) {
     // ================================
     // AUTO-START AT LOGIN (default ON)
     // ================================
-    // Product default: start Alyson PM when the user logs into the device.
+    // Product default: start Tavilo Time when the user logs into the device.
     // Preference is persisted; tray / IPC can toggle it off.
     try {
       const { initAutoLaunch } = require('./modules/utils/auto-launch');
@@ -3740,6 +3754,7 @@ if (isElectronContext && ipcMain) {
           'alyson-pms',
           'alyson-time-doctor',
           'alyson-work-time-agent',
+          'Alyson PM',
         ];
         staleKeys.forEach((keyName) => {
           exec(
@@ -3778,7 +3793,7 @@ if (isElectronContext && ipcMain) {
           // FIX: Wait for app to be ready before creating notification
           if (app.isReady()) {
             const notification = new Notification({
-              title: 'Alyson PM Agent',
+              title: 'Tavilo Time',
               body: 'Desktop Agent is already running and has been brought to the front.',
               silent: false
             });
@@ -3787,7 +3802,7 @@ if (isElectronContext && ipcMain) {
         } else if (tray) {
           // If no window but tray exists, show notification
           const notification = new Notification({
-            title: 'Alyson PM Agent',
+            title: 'Tavilo Time',
             body: 'Desktop Agent is already running in the system tray.',
             silent: false
           });
@@ -4202,7 +4217,7 @@ if (isElectronContext && ipcMain) {
 
   // Global permission shortcut will be registered after app is ready
 
-  safeLog('✅ Alyson PM Agent ready');
+  safeLog('✅ Tavilo Time ready');
   safeLog('🔬 Debug Console: Right-click tray icon → Debug Console, or press Ctrl+Shift+D');
   safeLog('🔒 Permission Request: Press Ctrl+Shift+P to manage screen recording permissions');
 
@@ -4895,7 +4910,7 @@ if (isElectronContext && ipcMain) {
                 spellcheck: false
               },
               icon: global.getIconPath ? global.getIconPath('icon.png') : path.join(__dirname, '../assets/icon.png'),
-              title: 'Alyson PM',
+              title: 'Tavilo Time',
               titleBarStyle: 'hiddenInset',
               backgroundColor: '#ffffff',
               resizable: true,
@@ -5423,7 +5438,7 @@ if (isElectronContext && ipcMain) {
     global.eventHandlerManager.initializeAllEventHandlers();
   }
 
-  console.log('📱 Alyson PM Desktop Agent initialized');
+  console.log('📱 Tavilo Time initialized');
 
   // Initialize components
   // Helper function for warning manager to get main window
@@ -5531,7 +5546,15 @@ if (isElectronContext && ipcMain) {
       isPaused: global.isPaused || global.trackingManager?.isPaused || false,
       sessionStartTime,
       currentTimeLogId: global.currentTimeLogId || global.trackingManager?.currentTimeLogId || null,
-      trackingDuration
+      trackingDuration,
+      lastStopAt:
+        global._lastExplicitStopEndIso ||
+        global._stopEndTimeOverride ||
+        global._lastStopEndAtMs ||
+        null,
+      sessionIdleSeconds: isTracking
+        ? Math.max(0, Math.floor(Number(global.enhancedIdleMonitor?.getReportableSessionIdleSeconds?.()) || 0))
+        : 0,
     };
 
     return state;
@@ -5924,7 +5947,12 @@ if (isElectronContext && ipcMain) {
       const floor = getFrozenTotalFloor();
       if (completedClosedSeconds <= 0 && floor > 0 && (agg.timeLogsCount || 0) === 0) {
         completedClosedSeconds = floor;
-      } else if (completedClosedSeconds > 0 || (agg.timeLogsCount || 0) > 0) {
+      } else if (
+        isTracking &&
+        (completedClosedSeconds > 0 || (agg.timeLogsCount || 0) > 0)
+      ) {
+        // Keep the Stop snapshot while idle — the next Start needs it.
+        // Clearing it here is what let the tray seed 00:00:00 after a break.
         global._lastTodayTotalAtStop = null;
         global._rendererFrozenTotalAtStop = null;
       }
@@ -6043,6 +6071,9 @@ if (isElectronContext && ipcMain) {
         lowActivitySeconds,
         effectiveStatsComputed,
         effectiveStatsSource,
+        sessionIdleSeconds: isTracking
+          ? Math.max(0, Math.floor(Number(global.enhancedIdleMonitor?.getReportableSessionIdleSeconds?.()) || 0))
+          : 0,
         userId,
         workDate: todayKey,
         date: todayKey,
@@ -6537,7 +6568,7 @@ if (isElectronContext && ipcMain) {
 
   // === NODE.JS STANDALONE MODE ===
   if (!isElectronContext) {
-    console.log('🚀 Starting Alyson PM Agent in Node.js mode...');
+    console.log('🚀 Starting Tavilo Time in Node.js mode...');
 
     // Initialize components for Node.js mode
     async function initNodeJsMode() {
@@ -6614,7 +6645,7 @@ if (isElectronContext && ipcMain) {
           console.log('⚠️ No user_id found - URL capture may not work properly');
         }
 
-        console.log('✅ Alyson PM Agent running in Node.js mode');
+        console.log('✅ Tavilo Time running in Node.js mode');
         console.log('📊 Monitoring app and URL activity...');
 
         // Start periodic database status reporting

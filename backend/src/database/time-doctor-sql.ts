@@ -20,16 +20,76 @@ export const TRACKABLE_PULSE_ROLES = [
 export const TRACKABLE_PULSE_ROLES_SQL = `ext.pulse_role IN ('employee', 'team_leader', 'admin', 'manager')`;
 
 /**
+ * Roles expected to meet the daily hours goal (Team Time, Check-in, pacing, low-hours).
+ * Admins who track are included. Managers are omitted so they do not inflate under-hours metrics.
+ */
+export const HOURS_GOAL_PULSE_ROLES = ['employee', 'team_leader', 'admin'] as const;
+
+export const HOURS_GOAL_PULSE_ROLES_SQL = `coalesce(ext.pulse_role, 'employee') IN ('employee', 'team_leader', 'admin')`;
+
+/** Has signed into Pulse / the agent at least once (not merely invited). */
+export const HOURS_GOAL_SIGNED_IN_SQL = `ext.signed_in_at IS NOT NULL`;
+
+/**
+ * Team Time / hours-goal grids omit managers and people who have never
+ * signed in so they do not inflate under-hours metrics.
+ * A specific-user lookup (self Coach, one employee) must still return hours.
+ */
+export function hoursGoalRosterSql(restrictToUserId?: string | null): string[] {
+  if (restrictToUserId) return [];
+  return [HOURS_GOAL_PULSE_ROLES_SQL, HOURS_GOAL_SIGNED_IN_SQL];
+}
+
+/** Header super-admins send to operate inside one company. Express lowercases it. */
+export const PULSE_WORKSPACE_HEADER = 'x-pulse-workspace-id';
+
+export const SELECT_PULSE_COMPANY_MESSAGE = 'Select a company';
+
+/** Header or `pulseWorkspaceId` query — query survives API Gateway CORS allowlists. */
+export function pulseWorkspaceFromRequest(
+  headers?: Record<string, unknown>,
+  query?: Record<string, unknown>,
+): unknown {
+  const fromHeader =
+    headers?.[PULSE_WORKSPACE_HEADER] ?? headers?.['X-Pulse-Workspace-Id'];
+  if (fromHeader != null && String(fromHeader).trim() !== '') {
+    return fromHeader;
+  }
+  return query?.pulseWorkspaceId ?? query?.[PULSE_WORKSPACE_HEADER];
+}
+
+export function hasPulseWorkspace(
+  user: Pick<ScopedAuthUser, 'organization_id'>,
+): boolean {
+  return Boolean(parseWorkspaceId(user.organization_id));
+}
+
+/** Platform operator — list/create companies; not a workspace membership. */
+export function isPulsePlatformAdmin(
+  user: Pick<ScopedAuthUser, 'is_super_admin'>,
+): boolean {
+  return Boolean(user.is_super_admin);
+}
+
+/**
+ * Super-admins act as org admin only when a company is selected
+ * (X-Pulse-Workspace-Id overlay). Missing org is never a cross-tenant bypass.
+ */
+export function isPulseOrgAdmin(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
+): boolean {
+  if (user.is_super_admin) return hasPulseWorkspace(user);
+  return user.role === 'admin';
+}
+
+/**
  * Org-wide Pulse dashboards/reports access.
  * Admin only — managers may manage users but do not get org report access.
  */
-export function isPulseAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>): boolean {
-  return Boolean(user.is_super_admin || user.role === 'admin');
-}
-
-/** Admin or super-admin — org-wide Pulse access (all employees). */
-export function isPulseOrgAdmin(user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>): boolean {
-  return Boolean(user.is_super_admin || user.role === 'admin');
+export function isPulseAdmin(
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
+): boolean {
+  return isPulseOrgAdmin(user);
 }
 
 /** Manager or team lead — may view direct reports (time/progress, not screenshots). */
@@ -39,11 +99,10 @@ export function isPulseTeamManager(user: Pick<ScopedAuthUser, 'role'>): boolean 
 
 /** Admin or manager — may add/remove/update team members. */
 export function canManagePulseUsers(
-  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
 ): boolean {
-  return Boolean(
-    user.is_super_admin || user.role === 'admin' || user.role === 'manager',
-  );
+  if (user.is_super_admin) return hasPulseWorkspace(user);
+  return user.role === 'admin' || user.role === 'manager';
 }
 
 /**
@@ -51,7 +110,7 @@ export function canManagePulseUsers(
  * Managers invite users/projects; they cannot adjust hours.
  */
 export function canAdjustPulseTime(
-  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
 ): boolean {
   return isPulseOrgAdmin(user);
 }
@@ -61,7 +120,7 @@ export function canAdjustPulseTime(
  * Admin only — managers invite members and do not see team reports.
  */
 export function canAccessPulseTeamReports(
-  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
 ): boolean {
   return isPulseOrgAdmin(user);
 }
@@ -71,21 +130,44 @@ export function canAccessPulseTeamReports(
  * Admin/manager: full org. Team lead: their own team only (service-scoped).
  */
 export function canViewPulseTeam(
-  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
 ): boolean {
-  return Boolean(
-    user.is_super_admin ||
-      user.role === 'admin' ||
-      user.role === 'manager' ||
-      user.role === 'team_leader',
+  if (user.is_super_admin) return hasPulseWorkspace(user);
+  return (
+    user.role === 'admin' ||
+    user.role === 'manager' ||
+    user.role === 'team_leader'
   );
 }
 
 /** Only org admins may view other employees' screenshots. */
 export function canViewOrgScreenshots(
-  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin'>,
+  user: Pick<ScopedAuthUser, 'role' | 'is_super_admin' | 'organization_id'>,
 ): boolean {
   return isPulseOrgAdmin(user);
+}
+
+/** Why a super-admin tenant call should 403, or null if the request may continue. */
+export function pulseTenantForbiddenMessage(
+  user: Pick<ScopedAuthUser, 'is_super_admin' | 'organization_id'>,
+): string | null {
+  if (user.is_super_admin && !hasPulseWorkspace(user)) {
+    return SELECT_PULSE_COMPANY_MESSAGE;
+  }
+  return null;
+}
+
+/**
+ * Overlay selected company for platform operators.
+ * Company admins keep their membership workspace; the header is ignored.
+ */
+export function applyPulseWorkspaceContext<T extends ScopedAuthUser>(
+  user: T,
+  headerValue: unknown,
+): T {
+  if (!user.is_super_admin) return user;
+  const wsId = parseWorkspaceId(headerValue);
+  return { ...user, organization_id: wsId ? String(wsId) : null };
 }
 
 /**
@@ -99,16 +181,13 @@ export function scopedPulseUserId(
   return requestedUserId ?? user.id;
 }
 
-/** Scope queries to a workspace (organization_id in JWT = tenant.workspace.id). */
+/** Scope queries to a workspace. Missing org is fail-closed (no rows), never all tenants. */
 export function workspaceScope(
   user: ScopedAuthUser,
   alias: string,
 ): { clause: string; params: unknown[] } {
-  if (user.is_super_admin || !user.organization_id) {
-    return { clause: '1=1', params: [] };
-  }
   const wsId = parseWorkspaceId(user.organization_id);
-  if (!wsId) return { clause: '1=1', params: [] };
+  if (!wsId) return { clause: '1=0', params: [] };
   return { clause: `${alias}.workspace_id = $1`, params: [wsId] };
 }
 
@@ -122,7 +201,8 @@ export const USER_PROFILE_SELECT = `
     ext.workspace_id::text AS organization_id,
     ext.cognito_sub,
     (coalesce(ext.pulse_role, 'employee') = 'admin') AS is_org_admin,
-    false AS is_super_admin,
+    coalesce(ext.is_super_admin, false) AS is_super_admin,
+    ext.signed_in_at::text AS signed_in_at,
     coalesce(ext.created_at, u.created::timestamptz)::text AS created_at,
     coalesce(ext.updated_at, u.last_modified::timestamptz)::text AS updated_at
   FROM tenant."user" u
@@ -156,9 +236,11 @@ export const EMPLOYEE_USER_SELECT = `
     ext.manager_id::text AS manager_id,
     ext.department,
     ext.location,
+    ext.country,
     ext.started_on::text AS started_on,
+    ext.signed_in_at::text AS signed_in_at,
     (coalesce(ext.pulse_role, 'employee') = 'admin') AS is_org_admin,
-    false AS is_super_admin
+    coalesce(ext.is_super_admin, false) AS is_super_admin
   FROM tenant."user" u
   JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
 `;
@@ -176,6 +258,9 @@ export function parseTenantUserId(raw: unknown): number {
 }
 
 export function parseWorkspaceId(raw: unknown): number | null {
+  if (Array.isArray(raw)) {
+    return parseWorkspaceId(raw[0]);
+  }
   if (raw === undefined || raw === null || String(raw).trim() === '') {
     return null;
   }

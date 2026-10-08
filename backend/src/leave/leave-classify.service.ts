@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DeepseekVisionService } from '../screenshot-ai/deepseek-vision.service';
-import { isLeaveType, leaveDaysInclusive, LeaveType } from './leave-days';
+import { LlmChatClient } from '../screenshot-ai/llm-chat.client';
+import {
+  extractLeaveDateKeysFromText,
+  isLeaveType,
+  leaveDaysInclusive,
+  LeaveType,
+  parseLeaveDateKey,
+} from './leave-days';
 
 /**
  * Alyson HR leave intake prompt — conservative false positives.
@@ -12,6 +18,9 @@ const LEAVE_EXTRACT_PROMPT = `You are Alyson HR leave intake. Parse ONE email to
 Schema:
 {
   "isLeaveRequest": true,
+  "isPublicHoliday": false,
+  "country": "India|Pakistan|null",
+  "office": "Pune|Karachi|null",
   "confidence": 0.0,
   "employee": {
     "name": "string",
@@ -39,7 +48,8 @@ Rules:
 - If the email lists specific weekdays only (e.g. 7th and 10th), set startDate/endDate to earliest/latest and days to how many weekdays were requested.
 - half day → days=0.5, halfDay=true, startDate=endDate on that weekday.
 - leaveType: annual (vacation/PTO/casual when balance mentioned), sick, personal, unpaid, other.
-- isLeaveRequest=false for FYI, meeting invites, payroll/benefits, recruitment/hiring threads, interview pipelines, newsletters, pure WFH with no leave, and other non-leave mail. Use low confidence.
+- isPublicHoliday=true when the email announces a public holiday, festival, or office closure for a site/country (e.g. "Pune Office Closed for Janmashtami - 4th September, 2026"). Set country and/or office. startDate/endDate MUST be the closed day(s) as YYYY-MM-DD, NEVER the email sent/received date. These notices are often mailed 3–4 days ahead.
+- isLeaveRequest=false for FYI, meeting invites, payroll/benefits, recruitment/hiring threads, interview pipelines, newsletters, pure WFH with no leave, and other non-leave mail. Use low confidence. Office-closed / public-holiday notices use isPublicHoliday=true and isLeaveRequest=false.
 - isLeaveRequest=true only when the email requests, confirms, or cancels employee time off / leave / OOO absence.
 - isCancellation=true if user cancels or withdraws previously requested leave.
 - Extract employee email from From: when possible; if a manager writes for someone else, set matchedFrom=manager_on_behalf and extract the employee from the body.
@@ -58,6 +68,9 @@ export type LeaveMatchedFrom =
 
 export type LeaveExtraction = {
   isLeaveRequest: boolean;
+  isPublicHoliday: boolean;
+  country: string | null;
+  office: string | null;
   confidence: number; // 0–1
   confidencePct: number; // 0–100 for UI
   employee: {
@@ -84,7 +97,7 @@ export type LeaveExtraction = {
 export class LeaveClassifyService {
   private readonly logger = new Logger(LeaveClassifyService.name);
 
-  constructor(private readonly deepseek: DeepseekVisionService) {}
+  constructor(private readonly deepseek: LlmChatClient) {}
 
   isConfigured(): boolean {
     return this.deepseek.isConfigured();
@@ -99,7 +112,7 @@ export class LeaveClassifyService {
     receivedAt?: Date | string | null;
   }): Promise<LeaveExtraction> {
     if (!this.deepseek.isConfigured()) {
-      throw new Error('DeepSeek is not configured');
+      throw new Error('LLM is not configured');
     }
 
     const receivedIso = input.receivedAt
@@ -111,7 +124,7 @@ export class LeaveClassifyService {
       'Parse this People Ops email for leave intake.',
       `Email received at (UTC): ${receivedIso || '(unknown)'}`,
       receivedDay
-        ? `If the email says "today" / "this day" without a calendar date, use ${receivedDay} as startDate and endDate.`
+        ? `If this is a PERSONAL leave request that says "today" with no calendar date, use ${receivedDay}. If this is a holiday / office-closed notice (often sent 3–4 days ahead), use the closed day in the email, not ${receivedDay}.`
         : null,
       `From: ${input.from || '(unknown)'}`,
       `To: ${input.to || '(unknown)'}`,
@@ -132,13 +145,18 @@ export class LeaveClassifyService {
       temperature: 0.1,
     });
 
-    return this.normalize(parsed, input.from, receivedDay);
+    return this.normalize(parsed, input.from, receivedDay, {
+      subject: input.subject,
+      snippet: input.snippet,
+      bodyText: input.bodyText,
+    });
   }
 
   private normalize(
     raw: Record<string, unknown>,
     fromHeader: string | null,
     fallbackDate?: string | null,
+    source?: { subject?: string | null; snippet?: string | null; bodyText?: string | null },
   ): LeaveExtraction {
     const empObj =
       raw.employee && typeof raw.employee === 'object'
@@ -171,16 +189,35 @@ export class LeaveClassifyService {
 
     const leaveTypeRaw = leaveObj.leaveType ?? leaveObj.type ?? raw.leave_type;
     const leaveType = this.normalizeLeaveType(leaveTypeRaw);
+    const isPublicHoliday = Boolean(raw.isPublicHoliday ?? raw.is_public_holiday);
+    const yearHint = fallbackDate ? Number(String(fallbackDate).slice(0, 4)) : undefined;
+    const dateBlob = [
+      leaveObj.startDate,
+      leaveObj.endDate,
+      raw.start_date,
+      raw.end_date,
+      source?.subject,
+      source?.snippet,
+      source?.bodyText,
+      raw.rawSummary,
+    ]
+      .filter(Boolean)
+      .join(' ');
     let start =
-      this.asDate(leaveObj.startDate) ||
-      this.asDate(raw.start_date);
+      parseLeaveDateKey(leaveObj.startDate, { yearHint }) ||
+      parseLeaveDateKey(raw.start_date, { yearHint });
     let end =
-      this.asDate(leaveObj.endDate) ||
-      this.asDate(raw.end_date) ||
+      parseLeaveDateKey(leaveObj.endDate, { yearHint }) ||
+      parseLeaveDateKey(raw.end_date, { yearHint }) ||
       start;
+    if (!start) {
+      const fromCopy = extractLeaveDateKeysFromText(dateBlob, { yearHint });
+      start = fromCopy[0] || null;
+      end = fromCopy.length > 1 ? fromCopy[fromCopy.length - 1] : fromCopy[0] || null;
+    }
 
-    // "today" / missing dates → email received day (company leave day).
-    if ((!start || !end) && fallbackDate) {
+    // Personal leave "today" → received day. Never use sent date for holiday notices.
+    if ((!start || !end) && fallbackDate && !isPublicHoliday) {
       start = start || fallbackDate;
       end = end || start;
     }
@@ -215,6 +252,16 @@ export class LeaveClassifyService {
     const isLeaveRequest = Boolean(
       raw.isLeaveRequest ?? raw.is_leave,
     );
+    const country =
+      raw.country != null && String(raw.country).trim()
+        ? String(raw.country).trim()
+        : null;
+    const office =
+      raw.office != null && String(raw.office).trim()
+        ? String(raw.office).trim()
+        : leaveObj.office != null
+          ? String(leaveObj.office).trim()
+          : null;
 
     const warnings = Array.isArray(raw.warnings)
       ? raw.warnings.map((w) => String(w).slice(0, 200))
@@ -222,6 +269,9 @@ export class LeaveClassifyService {
 
     return {
       isLeaveRequest,
+      isPublicHoliday,
+      country,
+      office,
       confidence: confidence01,
       confidencePct: Math.round(confidence01 * 100),
       employee: {
@@ -268,11 +318,6 @@ export class LeaveClassifyService {
     if (!header) return null;
     const m = header.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
     return m ? m[0].toLowerCase() : null;
-  }
-
-  private asDate(value: unknown): string | null {
-    const s = String(value || '').slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
   }
 
   /** Accept 0–1 or 0–100. */

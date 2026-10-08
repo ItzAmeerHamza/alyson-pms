@@ -70,7 +70,7 @@ class AppInitializationManager {
     const WarningManager = require('../ui/warning-manager');
     this.warningManager = new WarningManager(this.config);
     
-    console.log('📱 Alyson PM Agent initialized');
+    console.log('📱 Tavilo Time initialized');
     
     // Load saved system state and offline queue on startup
     this.loadSystemState();

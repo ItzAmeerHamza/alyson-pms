@@ -145,6 +145,40 @@ describe('lowActivityHoursFromRows', () => {
     expect(hours.get('1228')).toBeUndefined();
   });
 
+  it('does not bill dual-screen Word shots during a live meeting as low-activity', () => {
+    const hours = svc.lowActivityHoursFromRows(
+      [
+        {
+          user_id: '1203',
+          activity_date: '2026-09-04',
+          captured_at: '2026-09-04T12:30:00.000Z',
+          activity_percent: 2,
+          is_meeting: true,
+          is_low: false,
+        },
+        {
+          user_id: '1203',
+          activity_date: '2026-09-04',
+          captured_at: '2026-09-04T12:35:00.000Z',
+          activity_percent: 1,
+          is_meeting: false,
+          is_low: true,
+        },
+        {
+          user_id: '1203',
+          activity_date: '2026-09-04',
+          captured_at: '2026-09-04T12:38:00.000Z',
+          activity_percent: 2,
+          is_meeting: true,
+          is_low: false,
+        },
+      ],
+      [],
+      5,
+    );
+    expect(hours.get('1203')).toBeUndefined();
+  });
+
   it('does not change idle minutes when screenshots fall inside an idle stretch', () => {
     const idle = svc.countedIdleIntervalsByUser([
       {

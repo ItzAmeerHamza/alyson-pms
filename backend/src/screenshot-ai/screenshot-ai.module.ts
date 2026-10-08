@@ -9,15 +9,18 @@ import { ScreenshotAiInternalController } from './screenshot-ai-internal.control
 import { ScreenshotAiQueueService } from './screenshot-ai-queue.service';
 import { ScreenshotAiRepository } from './screenshot-ai.repository';
 import { DeepseekVisionService } from './deepseek-vision.service';
+import { LlmChatClient } from './llm-chat.client';
 import { ScreenshotImageContextService } from './screenshot-image-context.service';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [ConfigModule, AuthModule, CommonModule],
+  imports: [ConfigModule, AuthModule, CommonModule, BillingModule],
   controllers: [ScreenshotAiController, ScreenshotAiInternalController],
   providers: [
     ScreenshotAiRepository,
     ScreenshotAiQueueService,
     DeepseekVisionService,
+    LlmChatClient,
     ScreenshotImageContextService,
     ScreenshotAiAnalyzerService,
     ScreenshotAiBackfillService,
@@ -26,6 +29,7 @@ import { ScreenshotImageContextService } from './screenshot-image-context.servic
     ScreenshotAiBackfillService,
     ScreenshotAiAnalyzerService,
     DeepseekVisionService,
+    LlmChatClient,
   ],
 })
 export class ScreenshotAiModule {}

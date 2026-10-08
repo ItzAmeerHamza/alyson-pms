@@ -202,7 +202,7 @@ class IPCManager {
             (data.start_time || data.startTime
               ? new Date(data.start_time || data.startTime)
               : new Date());
-          window.beginLocalTrackingClock(t);
+          window.beginLocalTrackingClock(t, data.lastStopAt);
           this.startSessionTimer();
         }
         return;
@@ -311,6 +311,9 @@ class IPCManager {
       }
       
       // Update local state
+      try {
+        window.__lastTrackingStoppedAt = Date.now();
+      } catch (_) { /* ignore */ }
       this.isTracking = false;
       this.trackingStatus = 'stopped';
       
@@ -938,7 +941,7 @@ class IPCManager {
               mainState.sessionStartTime ||
               this.sessionStartTime ||
               new Date();
-            window.beginLocalTrackingClock(t);
+            window.beginLocalTrackingClock(t, mainState.lastStopAt);
           }
           this.startSessionTimer();
           console.log('⏭️ [IPC-MANAGER] Already tracking — re-armed clock, not a second session');
@@ -1069,7 +1072,7 @@ class IPCManager {
           : (this.sessionStartTime || optimisticStartTime);
         this.sessionStartTime = confirmedStart;
         if (typeof window.beginLocalTrackingClock === 'function') {
-          window.beginLocalTrackingClock(confirmedStart);
+          window.beginLocalTrackingClock(confirmedStart, result.lastStopAt);
         }
         this.stopSessionTimer({ clearDisplayTimers: false });
         this.startSessionTimer();
@@ -1451,14 +1454,14 @@ class IPCManager {
             // PAYROLL CRITICAL: require two consecutive "not tracking" readings before
             // flipping a live timer to stopped (prevents single stale sync from killing UI).
             if (!mainState.isTracking && this.isTracking) {
-              this._falseTrackingSyncCount = (this._falseTrackingSyncCount || 0) + 1;
-              if (this._falseTrackingSyncCount < 2) {
-                console.warn(
-                  '⚠️ [TRACKING-SYNC] Main said not tracking while UI is tracking — waiting for confirmation',
-                  { count: this._falseTrackingSyncCount, timeLogId: this.currentTimeLogId },
-                );
-                return;
-              }
+              // A poll must never paint Stop. Real Stop arrives as tracking-stopped
+              // (user click, idle, lid, quit). Health/sync/network blips used to
+              // flip the UI clock off while Start was still intended.
+              console.warn(
+                '⚠️ [TRACKING-SYNC] Main said not tracking while UI is tracking — keeping live clock',
+                { timeLogId: this.currentTimeLogId },
+              );
+              return;
             }
 
             console.log('🔄 Syncing tracking state with main process:', mainState);

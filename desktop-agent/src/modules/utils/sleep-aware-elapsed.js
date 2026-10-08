@@ -71,6 +71,72 @@ function closedBaseAfterSleep(dbCompletedSeconds) {
 }
 
 /**
+ * Closed base for a new Start paint.
+ * Never flash 00:00:00 when today's last-good total is already on screen.
+ * Only discard the "since midnight" orphan when there is no completed floor
+ * and no Stop-click / last-painted Continue total.
+ */
+/**
+ * Recover-after-idle reused the original Start. The idle Stop's seconds then
+ * sit in closedBase AND in (now − originalStart) — Hamza 29 Sep showed
+ * 3h16m (3787+8026) then snapped to 2h14m. Strip this session's own Stop
+ * out of closedBase. A new Start after Stop has sessionStart >= lastStop
+ * and is unchanged.
+ */
+function excludeOwnSessionFromClosedBase({
+  closedBase = 0,
+  sessionStart,
+  lastStopAt,
+} = {}) {
+  const closed = Math.max(0, Math.floor(Number(closedBase) || 0));
+  const startMs = msOf(sessionStart);
+  const stopMs = msOf(lastStopAt);
+  if (!Number.isFinite(startMs) || !Number.isFinite(stopMs)) return closed;
+  if (startMs >= stopMs - 2000) return closed;
+  const own = Math.max(0, Math.floor((stopMs - startMs) / 1000));
+  const remain = Math.max(0, closed - Math.min(closed, own));
+  // Idle-cut vs painted Stop floor often differs by a few seconds.
+  if (remain > 0 && remain <= 30) return 0;
+  return remain;
+}
+
+function resolveLiveTrackedSeconds({
+  closedBase = 0,
+  sessionStart,
+  lastStopAt,
+  nowMs = Date.now(),
+  lastWakeMs = 0,
+} = {}) {
+  const closed = excludeOwnSessionFromClosedBase({
+    closedBase,
+    sessionStart,
+    lastStopAt,
+  });
+  const live = elapsedSecondsExcludingSleep(sessionStart, nowMs, lastWakeMs);
+  return closed + live;
+}
+
+function resolveClosedBaseForStart({
+  closedBase = 0,
+  stopFloor = 0,
+  lastPainted = 0,
+  liveElapsed = 0,
+  nearWorkDayCap = false,
+} = {}) {
+  const closed = Math.max(0, Math.floor(Number(closedBase) || 0));
+  const stop = Math.max(0, Math.floor(Number(stopFloor) || 0));
+  const painted = Math.max(0, Math.floor(Number(lastPainted) || 0));
+  const elapsed = Math.max(0, Math.floor(Number(liveElapsed) || 0));
+  const completed = Math.max(closed, stop);
+  if (completed > 0) return completed;
+  const implied = Math.max(0, painted - elapsed);
+  // Orphan leftover ≈ wall-clock since midnight, and nothing was actually
+  // closed today. A real 1h Stop→Start must keep last-painted via stopFloor.
+  if (nearWorkDayCap && implied > 180) return 0;
+  return implied;
+}
+
+/**
  * Stopped + local clock ≫ DB. Classic leftover after lid-sleep / new day.
  * Requires a completed DB read (dbHydrated) so offline unsynced hours are kept.
  */
@@ -90,5 +156,8 @@ module.exports = {
   effectiveSessionStart,
   elapsedSecondsExcludingSleep,
   closedBaseAfterSleep,
+  resolveClosedBaseForStart,
+  excludeOwnSessionFromClosedBase,
+  resolveLiveTrackedSeconds,
   isPhantomStoppedTotal,
 };

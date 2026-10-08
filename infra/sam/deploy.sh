@@ -33,8 +33,17 @@ IMAGE_URI_LATEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_RE
 
 echo "==> Build NestJS"
 cd "$BACKEND_DIR"
-npm ci
-npm run build
+if [[ "${SKIP_NPM_CI:-}" == "1" ]]; then
+  echo "==> Skipping npm ci (SKIP_NPM_CI=1)"
+else
+  npm ci
+fi
+if [[ -x node_modules/.bin/nest ]]; then
+  npm run build
+else
+  echo "==> nest binary missing; building via @nestjs/cli"
+  node node_modules/@nestjs/cli/bin/nest.js build
+fi
 
 echo "==> Ensure ECR repository exists"
 aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" 2>/dev/null \
@@ -151,6 +160,8 @@ sam deploy \
   --s3-bucket "$SAM_DEPLOY_BUCKET" \
   --s3-prefix "$SAM_DEPLOY_PREFIX" \
   --resolve-image-repos \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
   --tags team="Alyson PM" \
   --parameter-overrides \
     "ImageUri=${IMAGE_URI}" \
@@ -166,7 +177,8 @@ sam deploy \
     "InternalApiKey=${INTERNAL_API_KEY}" \
     "CognitoUserPoolId=${COGNITO_USER_POOL_ID}" \
     "CognitoClientId=${COGNITO_CLIENT_ID}" \
-    "DeepseekApiKey=${DEEPSEEK_API_KEY:-}" \
+    "OpenrouterApiKey=${OPENROUTER_API_KEY:-}" \
+    "AutumnSecretKey=${AUTUMN_SECRET_KEY:-}" \
     "GoogleDwdClientEmail=${GOOGLE_DWD_CLIENT_EMAIL:-}" \
     "GoogleDwdPrivateKey=${GOOGLE_DWD_PRIVATE_KEY_PARAM}" \
     "GoogleDwdSubject=${GOOGLE_DWD_SUBJECT:-people-ops@cintara.ai}" \

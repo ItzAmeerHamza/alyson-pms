@@ -108,6 +108,7 @@ Pulse profile layer on top of `tenant."user"`.
 | `cognito_sub` | TEXT | NULL | — | **UNIQUE**; Cognito subject |
 | `manager_id` | INTEGER | NULL | — | FK → `tenant."user"(id)` ON DELETE SET NULL |
 | `pulse_role` | TEXT | NOT NULL | `'employee'` | CHECK: `admin` \| `manager` \| `team_leader` \| `employee` |
+| `is_super_admin` | BOOLEAN | NOT NULL | `false` | Platform operator (032). Not a workspace role. |
 | `department` | TEXT | NULL | — | |
 | `location` | TEXT | NULL | — | |
 | `last_activity` | TIMESTAMPTZ | NULL | `NOW()` | |

@@ -2,6 +2,8 @@
  * HR pacing digest email — one HTML report of selected employees for hamza@.
  */
 
+import { formatDecimalHours } from './format-hours';
+
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -12,6 +14,10 @@ function escapeHtml(value: unknown): string {
 }
 
 function fmtHours(n: unknown): string {
+  return formatDecimalHours(n, { emptyLabel: '—' });
+}
+
+function fmtPct(n: unknown): string {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
   return v.toFixed(2);
@@ -136,7 +142,7 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
         `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">${escapeHtml(r.remainingWorkDays ?? '—')}</td>`,
         ...(progressCol
           ? [
-              `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">${fmtHours(r.monthProgressPct)}%</td>`,
+              `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">${fmtPct(r.monthProgressPct)}%</td>`,
             ]
           : []),
         `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">
@@ -164,7 +170,7 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
         <tr>
           <td style="padding:20px 24px 8px;">
             <div style="font-size:13px;color:#595959;margin-bottom:12px;">
-              Leave credit ${escapeHtml(input.leaveHoursPerDay)}h/weekday · TZ ${escapeHtml(input.timezone)} ·
+              Leave credit ${escapeHtml(fmtHours(input.leaveHoursPerDay))}/weekday · TZ ${escapeHtml(input.timezone)} ·
               ${escapeHtml(input.rows.length)} employee${input.rows.length === 1 ? '' : 's'} selected
             </div>
             ${summaryBits ? `<div style="margin-bottom:8px;">${summaryBits}</div>` : ''}
@@ -241,7 +247,7 @@ export function buildPacingDigestCsv(
       csvEscape(fmtHours(r.projectedPace)),
       csvEscape(fmtHours(r.paceDelta)),
       csvEscape(r.remainingWorkDays ?? ''),
-      ...(mode === 'monthly' ? [csvEscape(fmtHours(r.monthProgressPct))] : []),
+      ...(mode === 'monthly' ? [csvEscape(fmtPct(r.monthProgressPct))] : []),
       csvEscape(statusLabel(r.status)),
     ];
     lines.push(cols.join(','));

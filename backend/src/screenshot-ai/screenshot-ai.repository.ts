@@ -20,11 +20,13 @@ export class ScreenshotAiRepository {
     AND ai_retry_count < 3
   `;
 
-  async getStatusCounts(): Promise<ScreenshotAiStatusCounts> {
+  async getStatusCounts(workspaceId: number): Promise<ScreenshotAiStatusCounts> {
     const result = await this.db.query<{ status: string; count: string }>(
       `SELECT ai_analysis_status AS status, COUNT(*)::text AS count
        FROM time_doctor.screenshots
+       WHERE workspace_id = $1
        GROUP BY ai_analysis_status`,
+      [workspaceId],
     );
 
     const counts: ScreenshotAiStatusCounts = {
@@ -61,6 +63,10 @@ export class ScreenshotAiRepository {
       params.push(parseInt(options.userId, 10));
       filters.push(`user_id = $${params.length}`);
     }
+    if (options.workspaceId) {
+      params.push(options.workspaceId);
+      filters.push(`workspace_id = $${params.length}`);
+    }
     if (options.startDate) {
       params.push(options.startDate);
       filters.push(`captured_at >= $${params.length}::timestamptz`);
@@ -92,38 +98,56 @@ export class ScreenshotAiRepository {
   }
 
   /** Queued in DB but SQS message may be missing — re-send without changing status. */
-  async findQueuedForReenqueue(limit: number): Promise<ScreenshotRowForAnalysis[]> {
+  async findQueuedForReenqueue(
+    limit: number,
+    workspaceId?: number,
+  ): Promise<ScreenshotRowForAnalysis[]> {
     const batch = Math.max(1, Math.min(limit, 1000));
+    const params: unknown[] = [];
+    const filters = [`ai_analysis_status = 'queued'`, this.analyzableWhere];
+    if (workspaceId) {
+      params.push(workspaceId);
+      filters.push(`workspace_id = $${params.length}`);
+    }
+    params.push(batch);
     const result = await this.db.query<ScreenshotRowForAnalysis>(
       `SELECT id, user_id, workspace_id, s3_key, captured_at, app_name, window_title,
               ai_analysis_status, ai_retry_count
        FROM time_doctor.screenshots
-       WHERE ai_analysis_status = 'queued'
-         AND ${this.analyzableWhere}
+       WHERE ${filters.join(' AND ')}
        ORDER BY ai_queued_at ASC NULLS LAST, captured_at ASC
-       LIMIT $1`,
-      [batch],
+       LIMIT $${params.length}`,
+      params,
     );
     return result.rows;
   }
 
   /** Worker crashed mid-job — return to pending for a new claim/enqueue cycle. */
-  async resetStaleProcessing(limit = 100): Promise<number> {
+  async resetStaleProcessing(limit = 100, workspaceId?: number): Promise<number> {
     const batch = Math.max(1, Math.min(limit, 1000));
+    const params: unknown[] = [];
+    const filters = [
+      `ai_analysis_status = 'processing'`,
+      `ai_queued_at < NOW() - INTERVAL '1 hour'`,
+      this.analyzableWhere,
+    ];
+    if (workspaceId) {
+      params.push(workspaceId);
+      filters.push(`workspace_id = $${params.length}`);
+    }
+    params.push(batch);
     const result = await this.db.query(
       `UPDATE time_doctor.screenshots
        SET ai_analysis_status = 'pending', ai_error_message = 'stale_processing_reset'
        WHERE id IN (
          SELECT id FROM time_doctor.screenshots
-         WHERE ai_analysis_status = 'processing'
-           AND ai_queued_at < NOW() - INTERVAL '1 hour'
-           AND ${this.analyzableWhere}
+         WHERE ${filters.join(' AND ')}
          ORDER BY ai_queued_at ASC NULLS LAST
-         LIMIT $1
+         LIMIT $${params.length}
          FOR UPDATE SKIP LOCKED
        )
        RETURNING id`,
-      [batch],
+      params,
     );
     return result.rowCount;
   }
@@ -226,17 +250,24 @@ export class ScreenshotAiRepository {
     );
   }
 
-  async resetFailedToPending(limit = 500): Promise<number> {
+  async resetFailedToPending(limit = 500, workspaceId?: number): Promise<number> {
+    const params: unknown[] = [];
+    const filters = [`ai_analysis_status = 'failed'`];
+    if (workspaceId) {
+      params.push(workspaceId);
+      filters.push(`workspace_id = $${params.length}`);
+    }
+    params.push(Math.min(limit, 5000));
     const result = await this.db.query(
       `UPDATE time_doctor.screenshots
        SET ai_analysis_status = 'pending', ai_retry_count = 0, ai_error_message = NULL
        WHERE id IN (
          SELECT id FROM time_doctor.screenshots
-         WHERE ai_analysis_status = 'failed'
-         LIMIT $1
+         WHERE ${filters.join(' AND ')}
+         LIMIT $${params.length}
        )
        RETURNING id`,
-      [Math.min(limit, 5000)],
+      params,
     );
     return result.rowCount;
   }

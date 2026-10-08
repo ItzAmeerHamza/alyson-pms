@@ -9,7 +9,7 @@ import { DatabaseService } from '../database/database.service';
 import { S3Service } from '../common/s3.service';
 import {
   SCREENSHOT_IS_VIDEO_MEETING_SQL,
-  applyMeetingActivityFloor,
+  applyMeetingScreenshotPresentation,
 } from '../pulse/meeting-context';
 import {
   EMPLOYEE_USER_SELECT,
@@ -69,6 +69,7 @@ const SCREENSHOT_LIST_SELECT = `
   s.confidence_score,
   s.distraction_score,
   s.vision_summary,
+  LEFT(COALESCE(s.vision_analysis #>> '{image_context,ocr_excerpt}', ''), 2500) AS ocr_excerpt,
   ${FEEDBACK_SQL} AS feedback,
   ${PRODUCTIVITY_FLAG_SQL} AS productivity_flag,
   CASE WHEN s.vision_analysis->>'vision_used' = 'true' THEN true ELSE false END AS vision_used
@@ -116,7 +117,7 @@ function applyScreenshotProductivityFilter(
           OR (
             s.ai_analysis_status = 'completed'
             AND (
-              ${PRODUCTIVITY_FLAG_SQL} = 'unclear'
+              ${PRODUCTIVITY_FLAG_SQL} IN ('idle', 'unclear')
               OR (s.category = 'neutral' AND COALESCE(s.distraction_score, 0) <= 20)
             )
           )
@@ -229,14 +230,39 @@ export class DataService {
 
   /** Whether the viewer may access non-screenshot data for targetUserId. */
   async canAccessUserData(viewer: ScopedAuthUser, targetUserId: string): Promise<boolean> {
-    if (isPulseOrgAdmin(viewer) || viewer.is_super_admin) return true;
     if (String(targetUserId) === String(viewer.id)) return true;
+    const wsId = parseWorkspaceId(viewer.organization_id);
+    if (!wsId) return false;
+
+    if (isPulseOrgAdmin(viewer)) {
+      return this.userBelongsToWorkspace(targetUserId, wsId);
+    }
     try {
       const granted = await this.accessGrants.getGrantedTargetIds(viewer);
       return granted.map(String).includes(String(targetUserId));
     } catch {
       return false;
     }
+  }
+
+  private async userBelongsToWorkspace(
+    targetUserId: string,
+    workspaceId: number,
+  ): Promise<boolean> {
+    let uid: number;
+    try {
+      uid = parseTenantUserId(targetUserId);
+    } catch {
+      return false;
+    }
+    const result = await this.database.query<{ ok: number }>(
+      `SELECT 1 AS ok
+       FROM time_doctor.user_extensions ext
+       WHERE ext.user_id = $1 AND ext.workspace_id = $2
+       LIMIT 1`,
+      [uid, workspaceId],
+    );
+    return Boolean(result.rows[0]);
   }
 
   async listScreenshotUsers(user: ScopedAuthUser) {
@@ -254,6 +280,7 @@ export class DataService {
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
          ${userFilter}
        ORDER BY full_name ASC NULLS LAST`,
       params,
@@ -288,6 +315,7 @@ export class DataService {
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND u.email NOT ILIKE '%@example.com%'
+         AND ext.paused_at IS NULL
          ${teamFilter}
        ORDER BY full_name ASC NULLS LAST`,
       params,
@@ -336,9 +364,7 @@ export class DataService {
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Insufficient permissions to create project');
     }
-    const workspaceId = user.is_super_admin
-      ? parseWorkspaceId(payload.organization_id) ?? parseWorkspaceId(user.organization_id)
-      : parseWorkspaceId(user.organization_id);
+    const workspaceId = parseWorkspaceId(user.organization_id);
     if (!workspaceId) {
       throw new Error('Workspace is required to create a project');
     }
@@ -701,11 +727,15 @@ export class DataService {
   }
 
   /**
-   * Remove a person from this Pulse workspace and wipe their Pulse data so they
-   * no longer appear on team, hours, screenshots, or assignments.
-   * Does not delete tenant."user" (shared Palisade identity).
+   * Soft-remove a person from the active team. Time, screenshots, and
+   * user_extensions stay. They move to the inactive list and drop off reports
+   * after the Sunday of the week they were paused. Cognito is not deleted.
    */
-  async deleteUser(user: ScopedAuthUser, targetUserId: string): Promise<boolean> {
+  async deleteUser(
+    user: ScopedAuthUser,
+    targetUserId: string,
+    options?: { reassignManagerId?: string | null },
+  ): Promise<boolean> {
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Insufficient permissions to delete user');
     }
@@ -714,6 +744,7 @@ export class DataService {
     }
 
     const uid = parseTenantUserId(targetUserId);
+    const actorId = parseTenantUserId(user.id);
     const scope = workspaceScope(user, 'ext');
     const existing = await this.database.query<{
       user_id: number;
@@ -729,6 +760,12 @@ export class DataService {
     );
     const row = existing.rows[0];
     if (!row?.workspace_id) return false;
+
+    const successorId = await this.resolveSuccessorManagerId(
+      row.workspace_id,
+      uid,
+      options?.reassignManagerId,
+    );
 
     if (row.pulse_role === 'admin') {
       const otherAdmin = await this.database.query(
@@ -746,86 +783,30 @@ export class DataService {
       }
     }
 
-    const objects = await this.database.query<{
-      s3_key: string | null;
-      thumb_s3_key: string | null;
-      file_path: string | null;
-    }>(
-      `SELECT s.s3_key, s.thumb_s3_key, s.file_path
-       FROM time_doctor.screenshots s
-       WHERE s.user_id = $1
-         AND (s.workspace_id = $2 OR s.workspace_id IS NULL)`,
-      [uid, row.workspace_id],
-    );
-
     const client = await this.database.getClient();
     try {
       await client.query('BEGIN');
       const ws = row.workspace_id;
-      const owned = `user_id = $1 AND (workspace_id = $2 OR workspace_id IS NULL)`;
 
       await client.query(
-        `DELETE FROM time_doctor.access_grant_targets agt
-         USING time_doctor.access_grants ag
-         WHERE agt.grant_id = ag.id
-           AND ag.workspace_id = $1
-           AND (agt.target_user_id = $2 OR ag.grantee_user_id = $2)`,
-        [ws, uid],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.access_grants
-         WHERE workspace_id = $1 AND grantee_user_id = $2`,
-        [ws, uid],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.employee_project_assignments epa
-         USING time_doctor.projects p
-         WHERE epa.project_id = p.id
-           AND p.workspace_id = $1
-           AND epa.user_id = $2`,
-        [ws, uid],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.screenshots WHERE ${owned}`,
-        [uid, ws],
-      );
-      await client.query(`DELETE FROM time_doctor.app_logs WHERE ${owned}`, [uid, ws]);
-      await client.query(`DELETE FROM time_doctor.url_logs WHERE ${owned}`, [uid, ws]);
-      await client.query(`DELETE FROM time_doctor.idle_logs WHERE ${owned}`, [uid, ws]);
-      await client.query(
-        `DELETE FROM time_doctor.time_log_events WHERE ${owned}`,
-        [uid, ws],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.session_heartbeats WHERE ${owned}`,
-        [uid, ws],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.time_adjustments
-         WHERE user_id = $1 AND workspace_id = $2`,
-        [uid, ws],
-      );
-      await client.query(
-        `DELETE FROM time_doctor.low_hours_email_log
-         WHERE employee_id = $1 AND (workspace_id = $2 OR workspace_id IS NULL)`,
-        [uid, ws],
-      );
-      await client.query(`DELETE FROM time_doctor.time_logs WHERE ${owned}`, [uid, ws]);
-      await client.query(
         `UPDATE time_doctor.user_extensions
-         SET manager_id = NULL, updated_at = NOW()
+         SET manager_id = $3, updated_at = NOW()
          WHERE workspace_id = $1 AND manager_id = $2`,
-        [ws, uid],
+        [ws, uid, successorId],
       );
-      const removed = await client.query(
-        `DELETE FROM time_doctor.user_extensions
+      const paused = await client.query(
+        `UPDATE time_doctor.user_extensions
+         SET paused_at = COALESCE(paused_at, NOW()),
+             paused_by = COALESCE(paused_by, $3),
+             pause_reason = COALESCE(pause_reason, $4),
+             updated_at = NOW()
          WHERE workspace_id = $1 AND user_id = $2
          RETURNING user_id`,
-        [ws, uid],
+        [ws, uid, actorId, 'removed_from_workspace'],
       );
       await client.query('COMMIT');
 
-      if (!removed.rows[0]) return false;
+      if (!paused.rows[0]) return false;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
@@ -833,27 +814,96 @@ export class DataService {
       client.release();
     }
 
-    for (const shot of objects.rows) {
-      await this.s3.deleteObject(shot.s3_key || shot.file_path);
-      await this.s3.deleteObject(shot.thumb_s3_key);
-    }
-
-    try {
-      await this.database.query(
-        `DELETE FROM time_doctor.leave_events
-         WHERE user_id = $1 AND workspace_id = $2`,
-        [uid, row.workspace_id],
-      );
-    } catch (leaveErr) {
-      this.logger.warn(
-        `leave_events cleanup skipped for user ${uid}: ${
-          leaveErr instanceof Error ? leaveErr.message : String(leaveErr)
-        }`,
-      );
-    }
-
-    this.logger.log(`Removed Pulse user ${uid} from workspace ${row.workspace_id}`);
+    this.logger.log(`Paused Pulse user ${uid} in workspace ${row.workspace_id}`);
     return true;
+  }
+
+  /**
+   * Move every direct report from one lead to another (or unassign).
+   * Successor must be admin, manager, or team_leader in the same workspace.
+   */
+  async reassignReports(
+    user: ScopedAuthUser,
+    fromManagerId: string,
+    toManagerId: string | null,
+  ): Promise<{ moved: number; from_manager_id: string; to_manager_id: string | null }> {
+    if (!canManagePulseUsers(user)) {
+      throw new ForbiddenException('Insufficient permissions to reassign team members');
+    }
+    if (!fromManagerId) {
+      throw new BadRequestException('from_manager_id is required');
+    }
+    if (toManagerId != null && String(fromManagerId) === String(toManagerId)) {
+      throw new BadRequestException('Choose a different team lead');
+    }
+
+    const fromId = parseTenantUserId(fromManagerId);
+    const scope = workspaceScope(user, 'ext');
+    const fromRow = await this.database.query<{ workspace_id: number }>(
+      `SELECT ext.workspace_id
+       FROM time_doctor.user_extensions ext
+       WHERE ${scope.clause}
+         AND ext.user_id = $${scope.params.length + 1}
+       LIMIT 1`,
+      [...scope.params, fromId],
+    );
+    const workspaceId = fromRow.rows[0]?.workspace_id;
+    if (!workspaceId) {
+      throw new BadRequestException('Team lead not found in this workspace');
+    }
+
+    const successorId = await this.resolveSuccessorManagerId(
+      workspaceId,
+      fromId,
+      toManagerId,
+    );
+
+    const moved = await this.database.query<{ user_id: number }>(
+      `UPDATE time_doctor.user_extensions
+       SET manager_id = $3, updated_at = NOW()
+       WHERE workspace_id = $1 AND manager_id = $2
+       RETURNING user_id`,
+      [workspaceId, fromId, successorId],
+    );
+
+    return {
+      moved: moved.rows.length,
+      from_manager_id: String(fromId),
+      to_manager_id: successorId == null ? null : String(successorId),
+    };
+  }
+
+  private async resolveSuccessorManagerId(
+    workspaceId: number,
+    departingUserId: number,
+    rawSuccessor?: string | null,
+  ): Promise<number | null> {
+    if (rawSuccessor === undefined || rawSuccessor === null || rawSuccessor === '') {
+      return null;
+    }
+    const successorId = parseTenantUserId(rawSuccessor);
+    if (successorId === departingUserId) {
+      throw new BadRequestException('Cannot assign people to the person being removed');
+    }
+    const successor = await this.database.query<{ pulse_role: string }>(
+      `SELECT ext.pulse_role
+       FROM time_doctor.user_extensions ext
+       WHERE ext.workspace_id = $1
+         AND ext.user_id = $2
+         AND ext.paused_at IS NULL
+       LIMIT 1`,
+      [workspaceId, successorId],
+    );
+    const role = successor.rows[0]?.pulse_role;
+    if (!role) {
+      throw new BadRequestException('New team lead was not found in this workspace');
+    }
+    if (role !== 'admin' && role !== 'manager' && role !== 'team_leader') {
+      throw new BadRequestException(
+        'New team lead must be a team leader, manager, or admin',
+      );
+    }
+    return successorId;
   }
 
   async closeTimeLog(user: ScopedAuthUser, logId: string, endTime?: string) {
@@ -1153,9 +1203,11 @@ export class DataService {
   }
 
   async listOrganizations(user: ScopedAuthUser) {
-    if (user.is_super_admin) {
+    const selectedId = parseWorkspaceId(user.organization_id);
+    if (user.is_super_admin && !selectedId) {
       const result = await this.database.query(
         `${WORKSPACE_AS_ORG_SELECT}
+         INNER JOIN time_doctor.workspace_settings ws ON ws.workspace_id = w.id
          WHERE coalesce(w.active, true) = true
          ORDER BY w.name ASC`,
       );
@@ -1314,30 +1366,6 @@ export class DataService {
       result.rows.map((row) => this.mapScreenshotListRow(row)),
       { originals: includeOriginal },
     );
-    // #region agent log
-    {
-      const jsonBytes = Buffer.byteLength(JSON.stringify(rows));
-      const withVision = rows.filter((r) => 'vision_analysis' in r).length;
-      fetch('http://127.0.0.1:7612/ingest/1c3b1140-705f-4d26-95d3-63a9580b70d3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'dd6ce4' },
-        body: JSON.stringify({
-          sessionId: 'dd6ce4',
-          runId: 'post-slim',
-          hypothesisId: 'A',
-          location: 'data.service.ts:listScreenshots',
-          message: 'screenshot list payload',
-          data: {
-            rowCount: rows.length,
-            jsonBytes,
-            visionAnalysisRows: withVision,
-            avgBytes: rows.length ? Math.round(jsonBytes / rows.length) : 0,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return rows;
   }
 
@@ -1348,23 +1376,24 @@ export class DataService {
       app_name?: string | null;
       window_title?: string | null;
       vision_summary?: string | null;
+      ocr_excerpt?: string | null;
+      ocr_text?: string | null;
       ai_analysis_status?: string | null;
+      category?: string | null;
+      is_work_related?: boolean | null;
+      distraction_score?: number | null;
+      confidence_score?: number | null;
+      activity_type?: string | null;
     },
   >(row: T) {
+    const presented = applyMeetingScreenshotPresentation(row);
+    const publicRow = { ...presented };
+    delete publicRow.ocr_excerpt;
+    delete publicRow.ocr_text;
     return {
-      ...row,
-      activity_percent: applyMeetingActivityFloor(
-        row.activity_percent,
-        row.app_name,
-        row.window_title,
-      ),
-      focus_percent: applyMeetingActivityFloor(
-        row.focus_percent,
-        row.app_name,
-        row.window_title,
-      ),
-      description: row.vision_summary ?? null,
-      ai_status: row.ai_analysis_status ?? 'pending',
+      ...publicRow,
+      description: presented.vision_summary ?? null,
+      ai_status: presented.ai_analysis_status ?? 'pending',
     };
   }
 

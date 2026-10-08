@@ -303,11 +303,12 @@ class ErrorManager extends EventEmitter {
     console.log('🚨 [ERROR-MANAGER] Emergency cleanup initiated...');
     
     try {
-      // Stop all tracking
-      if (global.stopTracking) {
-        global.stopTracking('emergency_error');
-      }
-      
+      // Never Stop a live Start from an error. Checkpoint and queue so
+      // the clock keeps moving; sync resumes when the network is back.
+      try {
+        global.trackingManager?._storeSessionCheckpoint?.();
+      } catch (_) { /* ignore */ }
+
       // Cleanup all systems
       if (global.cleanupRegistry) {
         global.cleanupRegistry.emergencyCleanup();

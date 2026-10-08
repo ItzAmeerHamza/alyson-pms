@@ -56,11 +56,16 @@ Parameters:
   CognitoClientId:
     Type: String
     Description: Cognito app client id
-  DeepseekApiKey:
+  OpenrouterApiKey:
     Type: String
     NoEcho: true
     Default: ''
-    Description: DeepSeek API key for screenshot vision analysis and leave email classification
+    Description: OpenRouter API key for screenshot analysis, Tavilo Coach, and leave email classification
+  AutumnSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Autumn Cloud secret key (am_sk_). Empty keeps billing off and leaves current access unchanged.
   GoogleDwdClientEmail:
     Type: String
     Default: ''
@@ -229,6 +234,8 @@ Resources:
               Action:
                 - cognito-idp:AdminCreateUser
                 - cognito-idp:AdminDeleteUser
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminSetUserPassword
               Resource: !Sub 'arn:aws:cognito-idp:${CognitoRegion}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
 
   # Outside VPC: public SES SendEmail (API Lambda has no NAT; do not add SES VPC endpoints).
@@ -258,7 +265,46 @@ Resources:
                 - ses:SendRawEmail
               Resource: '*'
 
-  # Outside VPC: Gmail DWD + DeepSeek leave scan (API Lambda has no NAT / internet egress).
+  # Outside VPC: OpenRouter chat for Coach and leave classification.
+  # API Lambda cannot call OpenRouter (no NAT) and cannot store the key (4KB env, DWD PEM).
+  OpenRouterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-openrouter-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/openrouter-handler.handler
+      Timeout: 25
+      MemorySize: 1024
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          OPENROUTER_API_KEY: !Ref OpenrouterApiKey
+
+  # Outside VPC: Autumn Cloud. API Lambda has no NAT and must not hold the secret.
+  AutumnFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-autumn-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/autumn-handler.handler
+      Timeout: 20
+      MemorySize: 256
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          AUTUMN_SECRET_KEY: !Ref AutumnSecretKey
+
+  # Outside VPC: Gmail DWD only. Classification invokes OpenRouterFunction.
   LeaveScanWorkerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -275,8 +321,7 @@ Resources:
       Environment:
         Variables:
           NODE_ENV: production
-          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
-          DEEPSEEK_TEXT_MODEL: deepseek-chat
+          OPENROUTER_FUNCTION_NAME: !Ref OpenRouterFunction
           GOOGLE_DWD_CLIENT_EMAIL: !Ref GoogleDwdClientEmail
           GOOGLE_DWD_PRIVATE_KEY: !Ref GoogleDwdPrivateKey
           GOOGLE_DWD_SUBJECT: !Ref GoogleDwdSubject
@@ -285,6 +330,13 @@ Resources:
           INTERNAL_API_KEY: !Ref InternalApiKey
           # Parameter (not !Sub HttpApi) — avoids circular dependency with API Function
           LEAVE_SCAN_API_BASE_URL: !Ref LeaveScanApiBaseUrl
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt OpenRouterFunction.Arn
 
   ScreenshotAiDLQ:
     Type: AWS::SQS::Queue
@@ -325,7 +377,7 @@ Resources:
           NODE_ENV: production
           AWS_S3_SCREENSHOTS_BUCKET: !Ref S3BucketName
           AWS_S3_SCREENSHOTS_PREFIX: !Ref S3Prefix
-          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
+          OPENROUTER_API_KEY: !Ref OpenrouterApiKey
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
           SCREENSHOT_OCR_PROVIDER: !Ref ScreenshotOcrProvider
           SCREENSHOT_AI_API_BASE_URL: !Sub 'https://${AlysonTimeDoctorHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
@@ -545,12 +597,10 @@ Resources:
           SCREENSHOT_AI_ENABLED: !Ref ScreenshotAiEnabled
           SCREENSHOT_OCR_PROVIDER: !Ref ScreenshotOcrProvider
           SQS_VPC_ENDPOINT_URL: !Sub 'https://${SqsVpcEndpointDnsName}'
-          # Leave module: scan runs on non-VPC LeaveScanWorker (Gmail + DeepSeek); API persists via ingest-batch
-          DEEPSEEK_API_KEY: !Ref DeepseekApiKey
-          GOOGLE_DWD_CLIENT_EMAIL: !Ref GoogleDwdClientEmail
-          GOOGLE_DWD_PRIVATE_KEY: !Ref GoogleDwdPrivateKey
-          GOOGLE_DWD_SUBJECT: !Ref GoogleDwdSubject
-          GOOGLE_WORKSPACE_ADMIN_SUBJECT_EMAIL: !Ref GoogleDwdSubject
+          # DWD PEM lives on the leave-scan Lambda. OpenRouter key lives on OpenRouterFunction.
+          # This VPC function only stores names and invokes them (no NAT, 4KB env limit).
+          OPENROUTER_FUNCTION_NAME: !Ref OpenRouterFunction
+          AUTUMN_FUNCTION_NAME: !Ref AutumnFunction
           LEAVE_CREDIT_HOURS_PER_DAY: !Ref LeaveCreditHoursPerDay
           # Name string (not !Ref worker) — avoids circular dependency with worker → API URL
           LEAVE_SCAN_FUNCTION_NAME: !Sub 'alyson-time-doctor-leave-scan-${EnvironmentName}'
@@ -570,7 +620,7 @@ Resources:
                 - ec2:DescribeNetworkInterfaces
                 - ec2:DeleteNetworkInterface
               Resource: '*'
-        # Invoke non-VPC workers (Cognito / SES / leave-scan) via Lambda VPC endpoint.
+        # Invoke non-VPC workers (Cognito / SES / leave-scan / OpenRouter) via Lambda VPC endpoint.
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -579,6 +629,8 @@ Resources:
               Resource:
                 - !GetAtt CognitoAdminFunction.Arn
                 - !GetAtt SesEmailFunction.Arn
+                - !GetAtt OpenRouterFunction.Arn
+                - !GetAtt AutumnFunction.Arn
                 - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:alyson-time-doctor-leave-scan-${EnvironmentName}'
                 - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:aws-cost-explorer-lambda'
       Events:
@@ -612,7 +664,10 @@ Resources:
         AllowHeaders:
           - Authorization
           - Content-Type
+          - Accept
           - x-api-key
+          - x-auth-token
+          - x-pulse-workspace-id
         AllowCredentials: true
       # Auth is enforced in Nest (Cognito JWT + INTERNAL_API_KEY for /sync).
       # Do not set a default API Gateway JWT authorizer — it would block /sync/desktop-action.

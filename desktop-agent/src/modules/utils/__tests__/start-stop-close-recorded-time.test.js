@@ -19,6 +19,7 @@ const {
   elapsedSecondsExcludingSleep,
   closedBaseAfterSleep,
   isPhantomStoppedTotal,
+  resolveClosedBaseForStart,
 } = require('../sleep-aware-elapsed');
 const EventHandlerManager = require('../event-handler-manager');
 
@@ -123,6 +124,25 @@ describe('recorded time across Start / Stop / close', () => {
         nowMs: now,
       });
       expect(painted).toBe(4 * 3600 + 4 * 60);
+    });
+
+    it('Start after a 1h break paints 1h immediately, never 00:00:00', () => {
+      const closedKnown = resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 3600,
+        lastPainted: 3600,
+        liveElapsed: 0,
+        nearWorkDayCap: false,
+      });
+      expect(closedKnown).toBe(3600);
+      const start = '2026-08-25T16:00:00.000Z';
+      const painted = paintedToday({
+        closedDbSeconds: closedKnown,
+        sessionStart: start,
+        nowMs: ms(start) + 1000,
+      });
+      expect(painted).toBe(3601);
+      expect(painted).toBeGreaterThan(0);
     });
 
     it('overnight leftover 3h vs empty DB is discarded (Month blink / Start seed)', () => {

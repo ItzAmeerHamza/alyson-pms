@@ -39,16 +39,22 @@ export class CreateLeaveEventDto {
 }
 
 export class CreateTeamLeaveEventDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
-  location!: string;
+  location?: string;
+
+  /** When set, credit every active employee in this country. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  country?: string;
 
   /** Department / team name, or `__all_teams__`. */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
-  team!: string;
+  team?: string;
 
   @IsString()
   @IsIn([...LEAVE_TYPES])

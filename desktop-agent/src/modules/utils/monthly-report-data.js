@@ -9,6 +9,7 @@ const { fetchScreenshotsFromBackend } = require('./backend-screenshots');
 const { listUserProjects } = require('./backend-time-logs');
 const { normalizeTenantUserId } = require('./tenant-user-id');
 const { applyPulseEffectiveByDay, applyTodayEffectiveIfMeasured } = require('./monthly-report-pulse-days');
+const { resolveMonthOffset } = require('./monthly-report-month');
 const {
   computeEffectiveSeconds,
   resolveScreenshotIntervalSeconds,
@@ -63,8 +64,7 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   const userId = normalizeTenantUserId(rawUserId);
   if (!userId) return { error: 'User not authenticated' };
 
-  const parsedOffset = Number(monthOffset);
-  const offset = Number.isFinite(parsedOffset) ? Math.min(0, Math.max(-24, Math.trunc(parsedOffset))) : 0;
+  const offset = resolveMonthOffset(monthOffset);
   const today = new Date();
   const currentMonth = workMonthBounds(today);
   let targetYear = currentMonth.year;
@@ -378,6 +378,7 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
     screenshotIntervalSeconds: intervalSeconds,
     screenshotIntervalMinutes: Math.max(1, Math.round(intervalSeconds / 60) || 1),
     todayDate: todayKey,
+    monthOffset: offset,
     avgActivityPercent,
     totalSessions: sessions.length,
     activeDays,

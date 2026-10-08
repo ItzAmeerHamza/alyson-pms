@@ -14,9 +14,11 @@ import {
   CognitoAdminCreateResult,
   CognitoAdminDeleteResult,
   CognitoAdminGetResult,
+  CognitoAdminResetPasswordResult,
   adminCreateUser,
   adminDeleteUser,
   adminGetUser,
+  adminResetTemporaryPassword,
 } from './cognito-admin.ops';
 
 function isCreateFailure(
@@ -34,6 +36,12 @@ function isGetFailure(
 function isDeleteFailure(
   result: CognitoAdminDeleteResult,
 ): result is Extract<CognitoAdminDeleteResult, { ok: false }> {
+  return result.ok === false;
+}
+
+function isResetFailure(
+  result: CognitoAdminResetPasswordResult,
+): result is Extract<CognitoAdminResetPasswordResult, { ok: false }> {
   return result.ok === false;
 }
 
@@ -190,6 +198,31 @@ export class CognitoAdminService {
     }
 
     return { sub: result.sub, username: result.username };
+  }
+
+  /** New temporary password; next sign-in must change it. */
+  async resetTemporaryPassword(emailOrUsername: string): Promise<{ temporaryPassword: string }> {
+    if (!this.enabled) {
+      throw new InternalServerErrorException('User provisioning is not configured');
+    }
+
+    const username = emailOrUsername.trim().toLowerCase();
+    const result = this.lambdaClient
+      ? await this.invokeAdmin<CognitoAdminResetPasswordResult>({
+          action: 'reset-password',
+          username,
+        })
+      : await adminResetTemporaryPassword(this.cognitoClient!, this.userPoolId, username);
+
+    if (isResetFailure(result)) {
+      if (result.code === 'NOT_FOUND') {
+        throw new NotFoundException('User not found in Cognito');
+      }
+      this.logger.error(`AdminSetUserPassword failed: ${result.message}`);
+      throw new InternalServerErrorException('Failed to reset the invite password');
+    }
+
+    return { temporaryPassword: result.temporaryPassword };
   }
 
   /** Best-effort rollback when the DB write fails after the Cognito user was created. */

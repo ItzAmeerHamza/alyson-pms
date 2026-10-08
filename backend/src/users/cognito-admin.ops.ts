@@ -3,6 +3,7 @@ import {
   AdminCreateUserCommand,
   AdminDeleteUserCommand,
   AdminGetUserCommand,
+  AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
   UserNotFoundException,
   UsernameExistsException,
@@ -33,6 +34,11 @@ export type CognitoAdminGetResult = CognitoAdminGetOk | CognitoAdminGetErr;
 export type CognitoAdminDeleteResult =
   | { ok: true }
   | { ok: false; code: 'ERROR'; message: string };
+
+export type CognitoAdminResetPasswordOk = { ok: true; temporaryPassword: string };
+export type CognitoAdminResetPasswordResult =
+  | CognitoAdminResetPasswordOk
+  | { ok: false; code: 'NOT_FOUND' | 'ERROR'; message: string };
 
 /**
  * Cognito pool min length can be 6, but Palisade sign-in validates min 8
@@ -118,6 +124,35 @@ export async function adminGetUser(
       return { ok: false, code: 'MISSING_IDENTIFIER', message: 'Cognito did not return a user identifier' };
     }
     return { ok: true, sub, username: resolvedUsername };
+  } catch (error) {
+    if (error instanceof UserNotFoundException) {
+      return { ok: false, code: 'NOT_FOUND', message: 'User not found in Cognito' };
+    }
+    return {
+      ok: false,
+      code: 'ERROR',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Reset to a new temporary password (force change on next sign-in). */
+export async function adminResetTemporaryPassword(
+  client: CognitoIdentityProviderClient,
+  userPoolId: string,
+  username: string,
+): Promise<CognitoAdminResetPasswordResult> {
+  try {
+    const temporaryPassword = generateInviteTemporaryPassword();
+    await client.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        Password: temporaryPassword,
+        Permanent: false,
+      }),
+    );
+    return { ok: true, temporaryPassword };
   } catch (error) {
     if (error instanceof UserNotFoundException) {
       return { ok: false, code: 'NOT_FOUND', message: 'User not found in Cognito' };

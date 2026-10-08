@@ -4,6 +4,7 @@
  */
 
 import { computeEffectiveTime } from '../lib/effective-time';
+import { formatDecimalHours } from './format-hours';
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -14,17 +15,9 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Decimal hours → "3 h 40 mins" (also handles negatives for pace delta). */
+/** Decimal hours → "1 hour 40 min" (also handles negatives for pace delta). */
 function hoursLabel(n: number): string {
-  const raw = Number(n);
-  if (!Number.isFinite(raw)) return '0 mins';
-  const sign = raw < 0 ? '-' : '';
-  const totalMinutes = Math.round(Math.abs(raw) * 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  if (h === 0) return `${sign}${m} mins`;
-  if (m === 0) return `${sign}${h} h`;
-  return `${sign}${h} h ${m} mins`;
+  return formatDecimalHours(n, { emptyLabel: '0 min' });
 }
 
 function dayName(dateKey: string): string {
@@ -249,7 +242,7 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
     ? 'Daily hours target'
     : isWeek
       ? 'Weekly hours target'
-      : `Hours target, MTD (Week ${input.weekIndex} × ${PACE_WEEKLY_HOURS}h)`;
+      : `Hours target, MTD (Week ${input.weekIndex} × ${formatDecimalHours(PACE_WEEKLY_HOURS, { emptyLabel: '0 hours' })})`;
 
   const intro = input.forManager
     ? `This email is an update on <strong>${escapeHtml(name)}</strong>'s working hours for <strong>${escapeHtml(periodLabel)}</strong>.`
@@ -542,7 +535,7 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
       ? `Daily hours target: ${hoursLabel(input.expectedHours)}`
       : isWeek
         ? `Weekly hours target: ${hoursLabel(input.expectedHours)}`
-        : `Target (MTD, Week ${input.weekIndex} × ${PACE_WEEKLY_HOURS}h): ${hoursLabel(input.expectedHours)}`,
+        : `Target (MTD, Week ${input.weekIndex} × ${formatDecimalHours(PACE_WEEKLY_HOURS, { emptyLabel: '0 hours' })}): ${hoursLabel(input.expectedHours)}`,
     ...(isDay ? [`Daily effective hours target: ${hoursLabel(effectiveTarget)}`] : []),
     `Total tracked: ${hoursLabel(input.hoursWorked)}`,
     `Non-effective: ${hoursLabel(input.nonEffectiveHours)}`,

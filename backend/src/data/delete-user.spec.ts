@@ -10,7 +10,7 @@ function makeService() {
       if (text.startsWith('BEGIN') || text.startsWith('COMMIT') || text.startsWith('ROLLBACK')) {
         return { rows: [] };
       }
-      if (text.includes('DELETE FROM time_doctor.user_extensions')) {
+      if (text.includes('paused_at = COALESCE') && text.includes('RETURNING')) {
         return { rows: [{ user_id: 42 }] };
       }
       return { rows: [] };
@@ -52,20 +52,73 @@ describe('DataService.deleteUser', () => {
     await expect(service.deleteUser(admin, '1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('purges Pulse rows and screenshot objects for the workspace user', async () => {
+  it('pauses the workspace user and keeps their Pulse data', async () => {
     const { service, client, s3 } = makeService();
     const ok = await service.deleteUser(admin, '42');
     expect(ok).toBe(true);
 
-    const sql = client.query.mock.calls.map((call) => String(call[0]));
-    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.screenshots'))).toBe(true);
-    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.time_logs'))).toBe(true);
-    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.employee_project_assignments'))).toBe(
-      true,
+    const pause = client.query.mock.calls.find((call) =>
+      String(call[0]).includes('paused_at = COALESCE'),
     );
-    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.user_extensions'))).toBe(true);
-    expect(s3.deleteObject).toHaveBeenCalledWith('shots/a.jpg');
-    expect(s3.deleteObject).toHaveBeenCalledWith('shots/a.thumb.jpg');
+    expect(pause?.[1]).toEqual([511, 42, 1, 'removed_from_workspace']);
+    const sql = client.query.mock.calls.map((call) => String(call[0]));
+    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.time_logs'))).toBe(false);
+    expect(sql.some((text) => text.includes('DELETE FROM time_doctor.user_extensions'))).toBe(false);
+    expect(s3.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('allows removing a team leader and unassigns their reports', async () => {
+    const { service, database, client } = makeService();
+    database.query.mockImplementation(async (text: string) => {
+      if (text.includes('SELECT ext.user_id, ext.pulse_role')) {
+        return { rows: [{ user_id: 42, pulse_role: 'team_leader', workspace_id: 511 }] };
+      }
+      return { rows: [] };
+    });
+    const ok = await service.deleteUser(admin, '42');
+    expect(ok).toBe(true);
+    const sql = client.query.mock.calls.map((call) => String(call[0]));
+    expect(sql.some((text) => text.includes('SET manager_id = $3'))).toBe(true);
+  });
+
+  it('moves reports to another lead when deleting', async () => {
+    const { service, database, client } = makeService();
+    database.query.mockImplementation(async (text: string) => {
+      if (text.includes('SELECT ext.user_id, ext.pulse_role, ext.workspace_id')) {
+        return { rows: [{ user_id: 42, pulse_role: 'team_leader', workspace_id: 511 }] };
+      }
+      if (text.includes('SELECT ext.pulse_role')) {
+        return { rows: [{ pulse_role: 'team_leader' }] };
+      }
+      return { rows: [] };
+    });
+    await service.deleteUser(admin, '42', { reassignManagerId: '99' });
+    const move = client.query.mock.calls.find((call) =>
+      String(call[0]).includes('SET manager_id = $3'),
+    );
+    expect(move?.[1]).toEqual([511, 42, 99]);
+  });
+
+  it('reassigns a whole team to another lead', async () => {
+    const { service, database } = makeService();
+    database.query.mockImplementation(async (text: string) => {
+      if (text.includes('SELECT ext.workspace_id')) {
+        return { rows: [{ workspace_id: 511 }] };
+      }
+      if (text.includes('SELECT ext.pulse_role')) {
+        return { rows: [{ pulse_role: 'manager' }] };
+      }
+      if (text.includes('SET manager_id = $3') && text.includes('RETURNING')) {
+        return { rows: [{ user_id: 7 }, { user_id: 8 }] };
+      }
+      return { rows: [] };
+    });
+    const result = await service.reassignReports(admin, '42', '99');
+    expect(result).toEqual({
+      moved: 2,
+      from_manager_id: '42',
+      to_manager_id: '99',
+    });
   });
 
   it('blocks removing the last workspace admin', async () => {

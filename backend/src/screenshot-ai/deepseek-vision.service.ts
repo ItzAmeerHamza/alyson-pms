@@ -7,57 +7,91 @@ import {
   SCREENSHOT_AI_ACTIVITY_TYPES,
   SCREENSHOT_AI_CATEGORIES,
 } from './screenshot-ai.types';
+import {
+  categoryFromFlag,
+  deriveProductivityFlag,
+  sanitizeScreenshotCopy,
+  visionAnalysisPayload,
+} from './screenshot-ai-copy';
 import { ScreenshotImageContext } from './screenshot-image-context.service';
 
-const PRODUCTIVITY_ANALYSIS_PROMPT = `You are a professional productivity analyst reviewing employee work screenshots for a time-tracking and coaching program.
+const PRODUCTIVITY_ANALYSIS_PROMPT = `You are reviewing ONE screenshot frame of an employee's computer for a time-tracking program.
 
-Managers use your analysis to give fair, specific feedback to employees. Scrutinize the evidence carefully — do not guess beyond what is visible.
-
-You receive metadata (application, window title) and often OCR text / scene labels extracted from the screenshot image.
+Write as if you are looking at that frame. Describe what the employee is doing. Do not mention OCR, Tesseract, extraction, pipelines, "we saw in OCR", or that text was provided to you.
 
 Return JSON only (no markdown):
 {
-  "description": "2-3 sentences describing what the employee was doing based on evidence. Name specific apps, sites, documents, or tasks visible. Say clearly if the screen is idle, locked, blank, or ambiguous.",
-  "feedback_for_employee": "1-2 sentences of constructive coaching in second person ('you'). Acknowledge productive work when earned; gently flag distractions or context-switching when evidence supports it. Respectful, actionable, never shaming.",
+  "description": "2-3 sentences: what the employee is doing in this frame. Name the app, site, document, or task on screen. If the frame is locked, idle, blank, or ambiguous, say that plainly.",
+  "feedback_for_employee": "1-2 sentences of constructive coaching in second person ('you'). Acknowledge focused work; flag distraction only when the frame shows it. Never mention OCR.",
   "activity_type": "development|communication|email|document|design|research|social|gaming|shopping|media|advertising|networking|music|general",
   "category": "productive|neutral|distraction",
   "is_work_related": true,
   "confidence_score": 0-100,
   "distraction_score": 0-100,
-  "productivity_flag": "on_task|mixed|off_task|unclear",
+  "productivity_flag": "on_task|mixed|off_task|idle|unclear",
   "visible_evidence": ["short factual observation 1", "observation 2"]
 }
 
-Classification rules:
-- productive: clear work — IDE/code, docs, spreadsheets, work email/chat, meetings, Jira/Linear, design tools, research for work.
-- distraction: social feeds, entertainment, gaming, shopping, unrelated personal browsing — only when OCR/title/metadata clearly show it.
-- neutral: unclear, login screens, system dialogs, empty desktop, screensaver, insufficient evidence.
+This-frame status (productivity_flag) — required, from THIS screenshot only:
+- on_task: focused work (IDE, docs, spreadsheets, work chat/email, meetings, tickets, design, work research).
+- mixed: work and non-work both visible in this frame.
+- off_task: social, entertainment, gaming, shopping, or unrelated personal browsing, and no live meeting is visible.
+- idle: lock screen, login screen, screensaver, empty desktop, or no meaningful activity in the frame.
+- unclear: not enough in the frame to judge.
+
+Category:
+- productive: on_task work.
+- distraction: off_task.
+- neutral: idle, system dialogs, or unclear.
+
+Dual-monitor / stitched screenshots:
+- If ANY region shows an active video meeting (Google Meet, Zoom, Teams, Webex, Skype), the whole frame is on_task communication: category=productive, is_work_related=true, distraction_score=0, productivity_flag=on_task.
+- Do not mark a meeting off_task because another monitor is idle, a desktop, email, or unrelated content.
 
 Scoring:
-- confidence_score: high only when OCR or window title gives specific content; cap at 55 if only app name is known.
-- distraction_score: 0 = fully work-aligned; 100 = clear non-work activity.
-- productivity_flag: on_task (focused work), mixed (work + distraction signals), off_task (non-work), unclear (not enough evidence).
+- confidence_score: high only when the frame content is specific; cap at 55 if only the app name is known.
+- distraction_score: 0 = fully work-aligned in this frame; 100 = clear non-work.
 
-Never invent URLs, messages, or personal details not present in the evidence. Never comment on sensitive personal attributes.`;
+Never invent URLs, messages, or personal details not present in the frame. Never comment on sensitive personal attributes.`;
 
-const METADATA_ONLY_PROMPT = `You analyze employee computer activity when the screenshot image could not be read (no OCR available).
+const OPENROUTER_DEFAULT_BASE_URL = 'https://openrouter.ai/api';
+const OPENROUTER_DEFAULT_MODEL = 'deepseek/deepseek-chat';
 
-You only have application name and window title. Be honest about uncertainty — do not pretend you saw the screen.
+function trimEnv(value: string | undefined | null): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed || null;
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/$/, '');
+}
+
+function openRouterModel(explicit: string | null): string {
+  if (!explicit) return OPENROUTER_DEFAULT_MODEL;
+  if (explicit.includes('/')) return explicit;
+  if (explicit === 'deepseek-chat') return OPENROUTER_DEFAULT_MODEL;
+  return `deepseek/${explicit}`;
+}
+
+const METADATA_ONLY_PROMPT = `You are judging ONE screenshot frame from application name and window title only. The pixel contents of the frame were not readable.
+
+Do not mention OCR, extraction, or missing image processing. Do not pretend you saw documents, messages, or sites that are not in the title.
 
 Return JSON only:
 {
-  "description": "1-2 sentences on what the employee was LIKELY doing based on app/window title. State that the screenshot content was not available.",
-  "feedback_for_employee": "1 brief neutral coaching sentence, or note that more context is needed for specific feedback.",
+  "description": "1-2 sentences on what the employee is likely doing in this frame from the app and window title.",
+  "feedback_for_employee": "1 brief coaching sentence, or say more of the frame is needed for specific feedback. Never mention OCR.",
   "activity_type": "development|communication|email|document|design|research|social|gaming|shopping|media|advertising|networking|music|general",
   "category": "productive|neutral|distraction",
   "is_work_related": true,
   "confidence_score": 0-100,
   "distraction_score": 0-100,
-  "productivity_flag": "on_task|mixed|off_task|unclear",
-  "visible_evidence": ["metadata-only: app/window title"]
+  "productivity_flag": "on_task|mixed|off_task|idle|unclear",
+  "visible_evidence": ["app and window title only"]
 }
 
-Cap confidence_score at 50. Use category=neutral unless window title clearly indicates work or distraction.`;
+Cap confidence_score at 50. Default category=neutral and productivity_flag=unclear unless the title clearly shows work, distraction, idle/lock, or a live meeting.
+If the application or window title is a video meeting (Google Meet, Zoom, Teams, Webex, Skype), use category=productive, is_work_related=true, distraction_score=0, productivity_flag=on_task.`;
 
 @Injectable()
 export class DeepseekVisionService {
@@ -65,17 +99,18 @@ export class DeepseekVisionService {
   private readonly apiKey: string | null;
   private readonly baseUrl: string;
   private readonly textModel: string;
+  private readonly referer: string;
+  private readonly appTitle: string;
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = this.config.get<string>('DEEPSEEK_API_KEY') ?? null;
-    this.baseUrl = (this.config.get<string>('DEEPSEEK_API_BASE_URL') || 'https://api.deepseek.com').replace(
-      /\/$/,
-      '',
+    this.apiKey = trimEnv(this.config.get<string>('OPENROUTER_API_KEY'));
+    this.baseUrl = stripTrailingSlash(
+      trimEnv(this.config.get<string>('OPENROUTER_API_BASE_URL')) || OPENROUTER_DEFAULT_BASE_URL,
     );
-    this.textModel =
-      this.config.get<string>('DEEPSEEK_TEXT_MODEL') ||
-      this.config.get<string>('DEEPSEEK_MODEL') ||
-      'deepseek-chat';
+    this.textModel = openRouterModel(trimEnv(this.config.get<string>('OPENROUTER_MODEL')));
+    this.referer =
+      trimEnv(this.config.get<string>('OPENROUTER_HTTP_REFERER')) || 'https://app.alyson.ai';
+    this.appTitle = trimEnv(this.config.get<string>('OPENROUTER_APP_TITLE')) || 'Alyson Pulse';
   }
 
   isConfigured(): boolean {
@@ -83,8 +118,8 @@ export class DeepseekVisionService {
   }
 
   /**
-   * Generic JSON chat completion (leave classifier, etc.).
-   * Reuses the same DeepSeek text model as screenshot analysis.
+   * Generic JSON chat completion (leave classifier, coach, etc.).
+   * Reuses the same text model as screenshot analysis.
    */
   async chatJson(params: {
     systemPrompt: string;
@@ -93,7 +128,7 @@ export class DeepseekVisionService {
     temperature?: number;
   }): Promise<{ parsed: Record<string, unknown>; model?: string; usage?: Record<string, unknown> }> {
     if (!this.apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is not configured');
+      throw new Error('OPENROUTER_API_KEY is not configured');
     }
     return this.callChat({
       model: this.textModel,
@@ -113,7 +148,7 @@ export class DeepseekVisionService {
     imageContext?: ScreenshotImageContext;
   }): Promise<{ result: ScreenshotAiAnalysisResult; raw: Record<string, unknown> }> {
     if (!this.apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is not configured');
+      throw new Error('OPENROUTER_API_KEY is not configured');
     }
 
     const imageContext = params.imageContext ?? { ocrText: null, labels: [], route: 'unavailable' as const };
@@ -132,18 +167,23 @@ export class DeepseekVisionService {
     const result = this.normalizeResult(payload.parsed, { metadataOnly: !hasImageEvidence });
     return {
       result,
-      raw: {
-        model: payload.model,
-        usage: payload.usage,
-        vision_used: hasImageEvidence,
-        vision_route: hasImageEvidence ? `${imageContext.route}+deepseek` : 'metadata-only+deepseek',
-        image_context: {
-          ocr_chars: imageContext.ocrText?.length ?? 0,
-          label_count: imageContext.labels.length,
-          labels: imageContext.labels,
+      raw: visionAnalysisPayload(
+        {
+          model: payload.model,
+          usage: payload.usage,
+          vision_used: hasImageEvidence,
+          vision_route: hasImageEvidence
+            ? `${imageContext.route}+openrouter`
+            : 'metadata-only+openrouter',
+          image_context: {
+            ocr_chars: imageContext.ocrText?.length ?? 0,
+            label_count: imageContext.labels.length,
+            labels: imageContext.labels,
+          },
+          parsed: payload.parsed,
         },
-        parsed: payload.parsed,
-      },
+        result,
+      ),
     };
   }
 
@@ -152,23 +192,23 @@ export class DeepseekVisionService {
     imageContext: ScreenshotImageContext,
   ): string {
     const sections = [
-      'Analyze this employee screenshot for productivity and coaching feedback.',
+      'Analyze this single screenshot frame. Describe what the employee is doing and set productivity_flag for this frame only.',
       this.buildMetadataBlock(params.appName, params.windowTitle, params.capturedAt),
     ];
 
     if (imageContext.labels.length > 0) {
-      sections.push(`Scene labels: ${imageContext.labels.join(', ')}`);
+      sections.push(`On-screen scene: ${imageContext.labels.join(', ')}`);
     }
 
     if (imageContext.ocrText?.trim()) {
       sections.push(
-        'Visible text extracted from screenshot (OCR — treat as primary evidence):\n---\n' +
-          imageContext.ocrText.trim() +
-          '\n---',
+        'On-screen content in this frame:\n---\n' + imageContext.ocrText.trim() + '\n---',
       );
     }
 
-    sections.push('Scrutinize the evidence above and return the JSON assessment.');
+    sections.push(
+      'Return JSON for this frame. Do not mention how the on-screen content was obtained.',
+    );
     return sections.join('\n\n');
   }
 
@@ -178,9 +218,9 @@ export class DeepseekVisionService {
     capturedAt: string,
   ): string {
     return [
-      'Screenshot image content was NOT available — metadata only.',
+      'Only the app and window title are available for this frame.',
       this.buildMetadataBlock(appName, windowTitle, capturedAt),
-      'Return the JSON assessment with low confidence.',
+      'Return JSON with low confidence. Do not invent on-screen details.',
     ].join('\n\n');
   }
 
@@ -208,6 +248,8 @@ export class DeepseekVisionService {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': this.referer,
+        'X-Title': this.appTitle,
       },
       body: JSON.stringify({
         model: params.model,
@@ -223,7 +265,7 @@ export class DeepseekVisionService {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`DeepSeek ${response.status}: ${body.slice(0, 200)}`);
+      throw new Error(`OpenRouter ${response.status}: ${body.slice(0, 200)}`);
     }
 
     const payload = (await response.json()) as {
@@ -234,14 +276,14 @@ export class DeepseekVisionService {
 
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error('Empty DeepSeek response');
+      throw new Error('Empty OpenRouter response');
     }
 
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(content) as Record<string, unknown>;
     } catch {
-      throw new Error('DeepSeek returned invalid JSON');
+      throw new Error('OpenRouter returned invalid JSON');
     }
 
     return { parsed, model: payload.model, usage: payload.usage ?? undefined };
@@ -252,12 +294,19 @@ export class DeepseekVisionService {
     opts?: { metadataOnly?: boolean },
   ): ScreenshotAiAnalysisResult {
     const activityType = String(raw.activity_type || 'general');
-    const category = String(raw.category || 'neutral');
-    const description = String(raw.description || raw.summary || 'Activity detected').slice(0, 600);
-    const feedback = String(raw.feedback_for_employee || '').trim().slice(0, 400);
-    const combinedSummary = feedback
-      ? `${description} ${feedback}`.slice(0, 900)
-      : description;
+    const rawCategory = String(raw.category || 'neutral');
+    const description =
+      sanitizeScreenshotCopy(String(raw.description || raw.summary || '')).slice(0, 600) ||
+      'Activity in this frame could not be determined.';
+    const feedback = sanitizeScreenshotCopy(String(raw.feedback_for_employee || '')).slice(0, 400);
+    const productivityFlag = deriveProductivityFlag({
+      flag: raw.productivity_flag,
+      category: rawCategory,
+      description,
+    });
+    const category = (SCREENSHOT_AI_CATEGORIES as readonly string[]).includes(rawCategory)
+      ? (rawCategory as ScreenshotAiCategory)
+      : categoryFromFlag(productivityFlag, 'neutral');
 
     let confidence = this.clampScore(raw.confidence_score, 50);
     if (opts?.metadataOnly) {
@@ -270,14 +319,15 @@ export class DeepseekVisionService {
       activity_type: (SCREENSHOT_AI_ACTIVITY_TYPES as readonly string[]).includes(activityType)
         ? (activityType as ScreenshotActivityType)
         : 'general',
-      category: (SCREENSHOT_AI_CATEGORIES as readonly string[]).includes(category)
-        ? (category as ScreenshotAiCategory)
-        : 'neutral',
-      is_work_related: Boolean(raw.is_work_related),
+      category,
+      is_work_related:
+        raw.is_work_related == null ? productivityFlag === 'on_task' : Boolean(raw.is_work_related),
       confidence_score: confidence,
       distraction_score: this.clampScore(raw.distraction_score, 0),
-      description: combinedSummary,
-      summary: combinedSummary,
+      description,
+      summary: description,
+      feedback: feedback || undefined,
+      productivity_flag: productivityFlag,
     };
   }
 

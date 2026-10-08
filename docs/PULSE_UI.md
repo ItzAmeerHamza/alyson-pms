@@ -11,6 +11,7 @@ Align with `pulsePermissions.js` and Nest (`canAccessPulseTeamReports`, `canAdju
 | Audience | Guard | Nav keys |
 |----------|--------|----------|
 | Org admin only | `PulseAdminRoute` | `ADMIN_KEYS` |
+| Super-admin (platform) | `PulsePlatformAdminRoute` | `PLATFORM_KEYS` (`421` Companies, `419` AWS costs) |
 | Admin + manager | `PulseUserManagementRoute` | include in `MANAGER_KEYS` if they should see the link |
 | Admin + manager + team lead | `PulseTeamDirectoryRoute` | `TEAM_LEAD_KEYS` |
 | Admin or access grant | `PulseTeamReportRoute` / `PulseOrgAdminRoute` (`allowDelegatedAccess`) | `DELEGATED_KEYS` if grant should see it |

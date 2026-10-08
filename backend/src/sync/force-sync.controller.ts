@@ -19,12 +19,15 @@ import {
   updateTimeLogEndSql,
   updateTimeLogLastAliveSql,
 } from '../lib/time-log-update-sql';
+import { EXTEND_IDLE_LOG_BY_START_SQL, UPSERT_IDLE_LOG_SQL } from '../lib/idle-log-insert-sql';
 import {
   endOfWorkDayExclusiveIso,
   normalizeWorkTimezone,
   startOfWorkDayIso,
   workDateKey,
 } from '../lib/work-timezone';
+import { applyMeetingScreenshotPresentation } from '../pulse/meeting-context';
+import { isDbUnavailableError } from '../lib/db-unavailable';
 
 function parseUserIdParam(raw: unknown): number {
   try {
@@ -74,10 +77,27 @@ export class ForceSyncController {
     userId: number,
     startDate: string,
     endDate: string,
-  ): Promise<Array<{ work_date: string; delta_seconds: number }>> {
-    const result = await this.db.query<{ work_date: string; delta_seconds: string | number }>(
+  ): Promise<
+    Array<{
+      work_date: string;
+      delta_seconds: number;
+      leave_seconds: number;
+      other_seconds: number;
+    }>
+  > {
+    const result = await this.db.query<{
+      work_date: string;
+      leave_seconds: string | number;
+      other_seconds: string | number;
+    }>(
       `SELECT a.work_date::text AS work_date,
-              COALESCE(SUM(a.delta_seconds), 0)::bigint AS delta_seconds
+              COALESCE(SUM(a.delta_seconds) FILTER (
+                WHERE a.source_type IN ('leave', 'leave_void')
+              ), 0)::bigint AS leave_seconds,
+              COALESCE(SUM(a.delta_seconds) FILTER (
+                WHERE a.source_type IS NULL
+                   OR a.source_type NOT IN ('leave', 'leave_void')
+              ), 0)::bigint AS other_seconds
          FROM time_doctor.time_adjustments a
         WHERE a.user_id = $1
           AND a.work_date >= $2::date
@@ -85,10 +105,16 @@ export class ForceSyncController {
         GROUP BY a.work_date`,
       [userId, startDate, endDate],
     );
-    return result.rows.map((row) => ({
-      work_date: String(row.work_date).slice(0, 10),
-      delta_seconds: Number(row.delta_seconds) || 0,
-    }));
+    return result.rows.map((row) => {
+      const leave_seconds = Number(row.leave_seconds) || 0;
+      const other_seconds = Number(row.other_seconds) || 0;
+      return {
+        work_date: String(row.work_date).slice(0, 10),
+        leave_seconds,
+        other_seconds,
+        delta_seconds: leave_seconds + other_seconds,
+      };
+    });
   }
 
   /** RDS screenshots columns are integer — agent may send floats for activity/focus %. */
@@ -575,6 +601,9 @@ export class ForceSyncController {
       if (error instanceof HttpException) {
         throw error;
       }
+      if (isDbUnavailableError(error)) {
+        throw error;
+      }
       throw new HttpException('Failed to insert URL', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -667,6 +696,9 @@ export class ForceSyncController {
       if (error instanceof HttpException) {
         throw error;
       }
+      if (isDbUnavailableError(error)) {
+        throw error;
+      }
       throw new HttpException('Failed to insert App', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -756,16 +788,69 @@ export class ForceSyncController {
     }
   }
 
+  private async assertUsersActiveForDesktop(data: Record<string, unknown> | null | undefined) {
+    const rawIds = new Set<unknown>();
+    if (data?.user_id != null) rawIds.add(data.user_id);
+    const nestedLog = data?.log;
+    if (nestedLog && typeof nestedLog === 'object' && 'user_id' in nestedLog && nestedLog.user_id != null) {
+      rawIds.add(nestedLog.user_id);
+    }
+    const lists = [data?.logs, data?.screenshots, data?.heartbeats];
+    for (const list of lists) {
+      if (!Array.isArray(list)) continue;
+      for (const row of list) {
+        if (row && typeof row === 'object' && 'user_id' in row && row.user_id != null) {
+          rawIds.add(row.user_id);
+        }
+      }
+    }
+    for (const raw of rawIds) {
+      const userId = parseUserIdParam(raw);
+      const paused = await this.db.query<{ paused_at: string | null }>(
+        `SELECT paused_at FROM time_doctor.user_extensions WHERE user_id = $1 LIMIT 1`,
+        [userId],
+      );
+      if (paused.rows[0]?.paused_at) {
+        throw new HttpException('User account is inactive', HttpStatus.FORBIDDEN);
+      }
+      await this.db.query(
+        `UPDATE time_doctor.user_extensions
+         SET signed_in_at = COALESCE(signed_in_at, NOW()),
+             updated_at = NOW()
+         WHERE user_id = $1
+           AND signed_in_at IS NULL`,
+        [userId],
+      ).catch(() => undefined);
+    }
+  }
+
   @Post('desktop-action')
   async desktopAction(@Body() body: { action: string; data: any }) {
+    try {
+      return await this.runDesktopAction(body);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      if (isDbUnavailableError(error)) {
+        this.logger.warn(`desktop-action ${body?.action}: database unavailable`);
+        throw new HttpException(
+          'Database temporarily unavailable',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async runDesktopAction(body: { action: string; data: any }) {
     const { action, data } = body || {};
     if (!action) {
       throw new HttpException('Missing action', HttpStatus.BAD_REQUEST);
     }
+    await this.assertUsersActiveForDesktop(data);
 
     switch (action) {
       case 'insert_app_logs': {
-        const logs = Array.isArray(data?.logs) ? data.logs : [];
+        const logs = (Array.isArray(data?.logs) ? data.logs : []).slice(0, 8);
         const ids: string[] = [];
         let inserted = 0;
         let skipped = 0;
@@ -778,7 +863,7 @@ export class ForceSyncController {
         return { success: true, inserted, skipped, ids };
       }
       case 'insert_url_logs': {
-        const logs = Array.isArray(data?.logs) ? data.logs : [];
+        const logs = (Array.isArray(data?.logs) ? data.logs : []).slice(0, 8);
         const ids: string[] = [];
         let inserted = 0;
         let skipped = 0;
@@ -834,28 +919,44 @@ export class ForceSyncController {
         );
         return { success: true, closed: result.rowCount ?? 0 };
       }
+      case 'upsert_idle_log':
       case 'insert_idle_log': {
         const log = data?.log;
         const userId = parseUserIdParam(log.user_id);
         const workspaceId = await this.resolveWorkspaceId(log.user_id, log.organization_id);
         const timeLogId = await this.resolveTimeLogId(log.time_log_id);
-        await this.db.query(
-          `INSERT INTO time_doctor.idle_logs
-            (user_id, time_log_id, idle_start, idle_end, duration_seconds, workspace_id)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [
+        const idleStart = log.idle_start || log.start_time || new Date().toISOString();
+        const idleEnd = log.idle_end || log.end_time || idleStart;
+        const durationSeconds =
+          log.idle_duration_seconds || log.idle_seconds || log.duration_seconds || 0;
+        const idleId = this.parseTimeLogUuid(log.id) || randomUUID();
+        try {
+          await this.db.query(UPSERT_IDLE_LOG_SQL, [
+            idleId,
             userId,
             timeLogId,
-            log.idle_start || log.start_time || new Date().toISOString(),
-            log.idle_end || log.end_time || new Date().toISOString(),
-            log.idle_duration_seconds || log.idle_seconds || log.duration_seconds || 0,
+            idleStart,
+            idleEnd,
+            durationSeconds,
             workspaceId,
-          ],
-        );
+          ]);
+        } catch (err) {
+          const code = (err as { code?: string })?.code;
+          // Same (user, idle_start), different client id (old agent). Extend
+          // the existing row — do not keep a 30s slice and drop a later 7m end.
+          if (code !== '23505') throw err;
+          await this.db.query(EXTEND_IDLE_LOG_BY_START_SQL, [
+            idleEnd,
+            durationSeconds,
+            timeLogId,
+            userId,
+            idleStart,
+          ]);
+        }
         this.logger.log(
-          `insert_idle_log: user=${userId} duration=${log.duration_seconds ?? 0}s workspace=${workspaceId ?? 'null'}`,
+          `upsert_idle_log: user=${userId} id=${idleId} duration=${durationSeconds}s workspace=${workspaceId ?? 'null'}`,
         );
-        return { success: true };
+        return { success: true, id: idleId };
       }
       case 'upsert_time_log': {
         const log = data?.log;
@@ -970,7 +1071,8 @@ export class ForceSyncController {
           return { success: false, id: data?.id ?? null, updated: 0, reason: 'no_row' };
         }
         const clientEnd = updates.end_time || null;
-        const authorizedIdleCut = updates.authorized_idle_cut === true;
+        const authorizedIdleCut =
+          updates.authorized_idle_cut === true || updates.frozen_end === true;
         // authorized_idle_cut: bill the client's now−10m and freeze last_alive
         // to that same instant. The laptop is still awake; raising to
         // last_alive / heartbeats undid every 10m cut (Garima 31 Aug).
@@ -1398,10 +1500,19 @@ export class ForceSyncController {
           tz,
         });
 
+        const daily: Record<string, { idle_seconds: number; low_activity_seconds: number }> = {};
+        for (const [date, row] of Object.entries(stats.daily || {})) {
+          daily[date] = {
+            idle_seconds: row.idleSeconds,
+            low_activity_seconds: row.lowActivitySeconds,
+          };
+        }
+
         return {
           success: true,
           idle_seconds: stats.idleSeconds,
           low_activity_seconds: stats.lowActivitySeconds,
+          daily,
           low_activity_threshold: lowActivityThreshold,
           screenshot_interval_minutes: intervalMinutes,
         };
@@ -1539,6 +1650,8 @@ export class ForceSyncController {
           time_logs: result.rows,
           work_date: workDate,
           adjustment_seconds: adjustments[0]?.delta_seconds || 0,
+          leave_seconds: adjustments[0]?.leave_seconds || 0,
+          other_seconds: adjustments[0]?.other_seconds || 0,
         };
       }
       case 'get_time_adjustments': {
@@ -1624,6 +1737,11 @@ export class ForceSyncController {
         const uid = parseUserIdParam(userId);
         const filters: string[] = ['user_id = $1'];
         const params: unknown[] = [uid];
+        const idleId = this.parseTimeLogUuid(data?.id);
+        if (idleId) {
+          params.push(idleId);
+          filters.push(`id = $${params.length}`);
+        }
         if (data?.start) {
           params.push(data.start);
           filters.push(`COALESCE(idle_end, idle_start) >= $${params.length}`);
@@ -1767,14 +1885,17 @@ export class ForceSyncController {
                   s.captured_at, s.activity_percent, s.focus_percent, s.mouse_clicks,
                   s.keystrokes, s.mouse_movements, s.app_name, s.window_title,
                   s.ai_analysis_status, s.category, s.is_work_related,
-                  s.confidence_score, s.distraction_score
+                  s.confidence_score, s.distraction_score, s.vision_summary,
+                  LEFT(COALESCE(s.vision_analysis #>> '{image_context,ocr_excerpt}', ''), 2500) AS ocr_excerpt
            FROM time_doctor.screenshots s
            WHERE ${filters.join(' AND ')}
            ORDER BY s.captured_at DESC
            LIMIT ${limit}`,
           params,
         );
-        const screenshots = await this.s3.attachPresignedUrls(result.rows);
+        const screenshots = await this.s3.attachPresignedUrls(
+          result.rows.map((row) => applyMeetingScreenshotPresentation(row)),
+        );
         return { success: true, screenshots };
       }
       case 'screenshot_upload_complete': {

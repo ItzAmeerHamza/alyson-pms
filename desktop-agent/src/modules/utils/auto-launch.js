@@ -94,17 +94,15 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
 
   try {
     // Electron login items work on both macOS (Launch Agents) and Windows
-    // (HKCU\\...\\Run). Pass execPath explicitly so NSIS-installed Windows
-    // builds register the real Alyson PM.exe, not a stale path.
+    // (HKCU\\...\\Run). Pass execPath so the login item points at Tavilo Time.exe.
     const settings = {
       openAtLogin: want,
       openAsHidden: true,
       path: process.execPath,
       args: [],
     };
-    // Windows: stable Run-key name matching productName.
     if (process.platform === 'win32') {
-      settings.name = 'Alyson PM';
+      settings.name = 'Tavilo Time';
     }
     app.setLoginItemSettings(settings);
 
@@ -124,7 +122,7 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
 
     console.log(
       want
-        ? `✅ [AUTO-LAUNCH] Enabled on ${process.platform} — Alyson PM will start at login` +
+        ? `✅ [AUTO-LAUNCH] Enabled on ${process.platform} — Tavilo Time will start at login` +
             (verified === false ? ' (warning: OS reports openAtLogin=false)' : '')
         : `✅ [AUTO-LAUNCH] Disabled on ${process.platform} — will not start at login`,
     );
@@ -142,6 +140,48 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
   }
 }
 
+/**
+ * Ask Launch Services to reread the installed bundle so the Dock, Login Items,
+ * and Privacy lists show CFBundleDisplayName ("Tavilo Time"). The .app path is
+ * left unchanged — moving it would drop Screen Recording and Accessibility.
+ */
+function refreshMacDisplayName() {
+  if (process.platform !== 'darwin') return;
+  let app;
+  try {
+    ({ app } = require('electron'));
+  } catch {
+    return;
+  }
+  if (!app?.isPackaged || typeof app.getPath !== 'function') return;
+
+  let bundlePath = null;
+  try {
+    const exe = app.getPath('exe');
+    const marker = '/Contents/MacOS/';
+    const idx = exe.indexOf(marker);
+    bundlePath = idx === -1 ? null : exe.slice(0, idx);
+  } catch {
+    bundlePath = null;
+  }
+  if (!bundlePath) return;
+
+  const lsregister =
+    '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
+  try {
+    const { execFile } = require('child_process');
+    execFile(lsregister, ['-f', bundlePath], { timeout: 15000 }, (err) => {
+      if (err) {
+        console.warn('⚠️ [AUTO-LAUNCH] Could not refresh app display name:', err.message);
+        return;
+      }
+      console.log('✅ [AUTO-LAUNCH] Refreshed installed app display name to Tavilo Time');
+    });
+  } catch (err) {
+    console.warn('⚠️ [AUTO-LAUNCH] Could not refresh app display name:', err?.message || err);
+  }
+}
+
 /** Read preference (default ON), persist if missing, apply OS login item. */
 function initAutoLaunch() {
   const pref = readPreference();
@@ -154,6 +194,7 @@ function initAutoLaunch() {
     }
   }
   const result = applyLoginItemSettings(pref.enabled);
+  refreshMacDisplayName();
   global.autoLaunchEnabled = pref.enabled;
   return { ...pref, ...result };
 }
@@ -182,6 +223,7 @@ module.exports = {
   readPreference,
   writePreference,
   applyLoginItemSettings,
+  refreshMacDisplayName,
   initAutoLaunch,
   getAutoLaunchEnabled,
   setAutoLaunchEnabled,

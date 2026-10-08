@@ -23,13 +23,17 @@ import { LeaveClassifyService, LeaveExtraction } from './leave-classify.service'
 import {
   DEFAULT_LEAVE_CREDIT_HOURS_PER_DAY,
   TEAM_LEAVE_ALL_TEAMS,
+  extractLeaveDateKeysFromText,
   isLeaveType,
   leaveCreditSecondsPerDay,
   leaveDaysInclusive,
   leaveWeekdayKeys,
-  matchesTeamLocation,
+  matchesTeamLeave,
   normLeaveFacet,
+  parseLeaveDateKey,
+  textLooksLikeOfficeHoliday,
 } from './leave-days';
+import { canonicalCountry, resolveHolidayCountry } from './holiday-country';
 import type { LeaveScanIngestBatchRequest, LeaveScanJob } from './leave-scan.types';
 
 type TrackableEmployee = {
@@ -38,6 +42,7 @@ type TrackableEmployee = {
   full_name: string;
   department: string | null;
   location: string | null;
+  country: string | null;
 };
 
 @Injectable()
@@ -124,7 +129,8 @@ export class LeaveService {
               lower(u.email) AS email,
               trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS full_name,
               ext.department,
-              ext.location
+              ext.location,
+              ext.country
          FROM tenant."user" u
          JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
         WHERE ext.workspace_id = $1
@@ -144,7 +150,8 @@ export class LeaveService {
               lower(u.email) AS email,
               trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS full_name,
               ext.department,
-              ext.location
+              ext.location,
+              ext.country
          FROM tenant."user" u
          JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
         WHERE u.id = $1
@@ -342,6 +349,171 @@ export class LeaveService {
     return result.rows[0] || null;
   }
 
+  private looksLikeOfficeHoliday(extraction: LeaveExtraction, msg: {
+    subject?: string | null;
+    snippet?: string | null;
+    bodyText?: string | null;
+  }): boolean {
+    if (extraction.isPublicHoliday) return true;
+    return textLooksLikeOfficeHoliday(
+      `${msg.subject || ''} ${msg.snippet || ''} ${String(msg.bodyText || '').slice(0, 2000)}`,
+    );
+  }
+
+  private async tryApplyPublicHoliday(params: {
+    user: ScopedAuthUser;
+    workspaceId: number;
+    actorId: number;
+    msg: {
+      id: string;
+      threadId?: string | null;
+      from?: string | null;
+      to?: string | null;
+      subject?: string | null;
+      snippet?: string | null;
+      bodyText?: string | null;
+    };
+    receivedAt: Date | string | null;
+    extraction: LeaveExtraction;
+    extractionPayload: Record<string, unknown>;
+    counts: Record<string, number>;
+    persistInbox?: boolean;
+  }): Promise<boolean> {
+    const { user, workspaceId, msg, extraction, extractionPayload, counts } = params;
+    const persistInbox = params.persistInbox !== false;
+    if (!this.looksLikeOfficeHoliday(extraction, msg)) {
+      return false;
+    }
+
+    const country = resolveHolidayCountry({
+      country: extraction.country,
+      office: extraction.office,
+      text: `${msg.subject || ''} ${msg.bodyText || ''} ${msg.snippet || ''}`,
+    });
+    const yearHint = params.receivedAt
+      ? new Date(params.receivedAt instanceof Date ? params.receivedAt : params.receivedAt).getUTCFullYear()
+      : undefined;
+    const fromCopy = extractLeaveDateKeysFromText(
+      `${extraction.leave.startDate || ''} ${extraction.leave.endDate || ''} ${msg.subject || ''} ${msg.snippet || ''} ${msg.bodyText || ''}`,
+      { yearHint },
+    );
+    let startDate =
+      parseLeaveDateKey(extraction.leave.startDate, { yearHint }) || fromCopy[0] || null;
+    let endDate =
+      parseLeaveDateKey(extraction.leave.endDate, { yearHint }) ||
+      (fromCopy.length > 1 ? fromCopy[fromCopy.length - 1] : null) ||
+      startDate;
+    if (startDate && endDate && endDate < startDate) {
+      const swap = startDate;
+      startDate = endDate;
+      endDate = swap;
+    }
+
+    const receivedAt =
+      params.receivedAt instanceof Date
+        ? params.receivedAt
+        : params.receivedAt
+          ? new Date(params.receivedAt)
+          : null;
+    const inboxBase = {
+      workspaceId,
+      gmailMessageId: msg.id,
+      gmailThreadId: msg.threadId ?? null,
+      from: msg.from ?? null,
+      to: msg.to ?? null,
+      subject: msg.subject ?? null,
+      snippet: msg.snippet ?? null,
+      bodyText: msg.bodyText ?? null,
+      receivedAt,
+    };
+
+    if (!country || !startDate || !endDate) {
+      counts.unmatched += 1;
+      if (persistInbox) {
+        await this.insertInboxRow({
+          ...inboxBase,
+          classification: 'unmatched',
+          deepseekJson: {
+            ...extractionPayload,
+            isPublicHoliday: true,
+            warnings: [
+              ...extraction.warnings,
+              country ? 'Holiday dates missing' : 'Could not resolve holiday country',
+            ],
+          },
+          leaveEventId: null,
+        });
+      }
+      return true;
+    }
+
+    try {
+      const event = await this.createTeamEvent(user, {
+        country,
+        leaveType: 'holiday',
+        startDate,
+        endDate,
+        note: extraction.leave.reason || msg.subject || 'Public holiday',
+      });
+      counts.approved += 1;
+      this.logger.log(
+        `Holiday applied country=${country} ${startDate}..${endDate} credited=${event.credited_users} persistInbox=${persistInbox}`,
+      );
+      if (persistInbox) {
+        await this.insertInboxRow({
+          ...inboxBase,
+          classification: 'approved',
+          deepseekJson: {
+            ...extractionPayload,
+            isPublicHoliday: true,
+            country,
+            team_leave_event_id: event.id,
+            credited_users: event.credited_users,
+            duplicate: Boolean((event as { duplicate?: boolean }).duplicate),
+          },
+          leaveEventId: null,
+        });
+      }
+    } catch (err) {
+      counts.extraction_failed += 1;
+      this.logger.warn(`Holiday create from email failed: ${String(err)}`);
+      if (persistInbox) {
+        await this.insertInboxRow({
+          ...inboxBase,
+          classification: 'extraction_failed',
+          deepseekJson: {
+            ...extractionPayload,
+            isPublicHoliday: true,
+            create_error: String(err).slice(0, 300),
+          },
+          leaveEventId: null,
+        });
+      }
+    }
+    return true;
+  }
+
+  private async findActiveHoliday(
+    workspaceId: number,
+    country: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<string | null> {
+    const result = await this.db.query<{ id: string }>(
+      `SELECT id::text AS id
+         FROM time_doctor.team_leave_events
+        WHERE workspace_id = $1
+          AND status = 'active'
+          AND leave_type = 'holiday'
+          AND lower(trim(country)) = lower($2)
+          AND start_date = $3::date
+          AND end_date = $4::date
+        LIMIT 1`,
+      [workspaceId, country, startDate, endDate],
+    );
+    return result.rows[0]?.id ?? null;
+  }
+
   async createEvent(
     user: ScopedAuthUser,
     input: {
@@ -510,6 +682,7 @@ export class LeaveService {
     const result = await this.db.query(
       `SELECT t.id::text AS id,
               t.location,
+              t.country,
               t.team,
               t.leave_type,
               t.start_date::text AS start_date,
@@ -517,6 +690,14 @@ export class LeaveService {
               t.days::float AS days,
               t.note,
               t.status,
+              (
+                SELECT COUNT(DISTINCT a.user_id)::int
+                  FROM time_doctor.time_adjustments a
+                 WHERE a.workspace_id = t.workspace_id
+                   AND a.source_type = 'leave'
+                   AND a.source_id = t.id
+                   AND a.delta_seconds > 0
+              ) AS credited_users,
               t.created_by::text AS created_by,
               t.created_at::text AS created_at,
               t.voided_at::text AS voided_at
@@ -532,8 +713,9 @@ export class LeaveService {
   async createTeamEvent(
     user: ScopedAuthUser,
     input: {
-      location: string;
-      team: string;
+      location?: string;
+      country?: string | null;
+      team?: string;
       leaveType: string;
       startDate: string;
       endDate: string;
@@ -551,27 +733,76 @@ export class LeaveService {
     if (endDate < startDate) {
       throw new BadRequestException('endDate must be on or after startDate');
     }
-    const location = normLeaveFacet(input.location, 'Unknown');
-    const team = input.team === TEAM_LEAVE_ALL_TEAMS
+    const country = canonicalCountry(input.country);
+    const location = country || normLeaveFacet(input.location, 'Unknown');
+    const team = country
       ? TEAM_LEAVE_ALL_TEAMS
-      : normLeaveFacet(input.team, 'Unassigned');
+      : input.team === TEAM_LEAVE_ALL_TEAMS
+        ? TEAM_LEAVE_ALL_TEAMS
+        : normLeaveFacet(input.team, 'Unassigned');
+    const leaveType = country && input.leaveType === 'other' ? 'holiday' : input.leaveType;
 
     const workTz = await this.getWorkTimezone(workspaceId);
     const days = leaveDaysInclusive(startDate, endDate, workTz);
-    if (days <= 0) {
+    if (days <= 0 && leaveType !== 'holiday') {
       throw new BadRequestException('Leave range has no weekdays');
+    }
+
+    if (country) {
+      const existing = await this.findActiveHoliday(workspaceId, country, startDate, endDate);
+      if (existing) {
+        const credited = await this.creditTeamEventToEmployees({
+          workspaceId,
+          eventId: existing,
+          country,
+          location,
+          team,
+          leaveType,
+          startDate,
+          endDate,
+          workTz,
+          actorId,
+        });
+        await this.audit(workspaceId, 'append_team_leave', actorId, {
+          team_leave_event_id: existing,
+          location,
+          country,
+          team,
+          leave_type: leaveType,
+          start_date: startDate,
+          end_date: endDate,
+          matched_users: credited.matched_users,
+          credited_users: credited.credited_users,
+          duplicate: true,
+        });
+        return {
+          id: existing,
+          location,
+          country,
+          team,
+          leave_type: 'holiday',
+          start_date: startDate,
+          end_date: endDate,
+          days,
+          matched_users: credited.matched_users,
+          credited_users: credited.credited_users,
+          timezone: workTz,
+          duplicate: true,
+        };
+      }
     }
 
     const inserted = await this.db.query<{ id: string }>(
       `INSERT INTO time_doctor.team_leave_events
-         (workspace_id, location, team, leave_type, start_date, end_date, days, note, status, created_by)
-       VALUES ($1, $2, $3, $4, $5::date, $6::date, $7, $8, 'active', $9)
+         (workspace_id, location, country, team, leave_type, start_date, end_date, days, note, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9, 'active', $10)
        RETURNING id::text AS id`,
       [
         workspaceId,
         location,
+        country,
         team,
-        input.leaveType,
+        leaveType,
         startDate,
         endDate,
         days,
@@ -580,53 +811,86 @@ export class LeaveService {
       ],
     );
     const eventId = inserted.rows[0].id;
-
-    const employees = await this.loadTrackableEmployees(workspaceId);
-    const matched = employees.filter((e) =>
-      matchesTeamLocation(e.location, e.department, location, team),
-    );
-
-    const creditedUsers: Array<{ user_id: number; days: string[] }> = [];
-    for (const emp of matched) {
-      const credited = await this.creditLeaveDays({
-        workspaceId,
-        userId: emp.id,
-        leaveEventId: eventId,
-        leaveType: input.leaveType,
-        startDate,
-        endDate,
-        workTz,
-        createdBy: actorId,
-        isTeam: true,
-      });
-      if (credited.length) {
-        creditedUsers.push({ user_id: emp.id, days: credited });
-      }
-    }
+    const credited = await this.creditTeamEventToEmployees({
+      workspaceId,
+      eventId,
+      country,
+      location,
+      team,
+      leaveType,
+      startDate,
+      endDate,
+      workTz,
+      actorId,
+    });
 
     await this.audit(workspaceId, 'append_team_leave', actorId, {
       team_leave_event_id: eventId,
       location,
+      country,
       team,
-      leave_type: input.leaveType,
+      leave_type: leaveType,
       start_date: startDate,
       end_date: endDate,
-      matched_users: matched.length,
-      credited_users: creditedUsers.length,
+      matched_users: credited.matched_users,
+      credited_users: credited.credited_users,
     });
 
     return {
       id: eventId,
       location,
+      country,
       team,
-      leave_type: input.leaveType,
+      leave_type: leaveType,
       start_date: startDate,
       end_date: endDate,
       days,
-      matched_users: matched.length,
-      credited_users: creditedUsers.length,
+      matched_users: credited.matched_users,
+      credited_users: credited.credited_users,
       timezone: workTz,
     };
+  }
+
+  private async creditTeamEventToEmployees(params: {
+    workspaceId: number;
+    eventId: string;
+    country: string | null;
+    location: string;
+    team: string;
+    leaveType: string;
+    startDate: string;
+    endDate: string;
+    workTz: string;
+    actorId: number;
+  }): Promise<{ matched_users: number; credited_users: number }> {
+    const employees = await this.loadTrackableEmployees(params.workspaceId);
+    const matched = employees.filter((e) =>
+      matchesTeamLeave({
+        employeeCountry: e.country,
+        employeeLocation: e.location,
+        employeeTeam: e.department,
+        leaveCountry: params.country,
+        leaveLocation: params.location,
+        leaveTeam: params.team,
+      }),
+    );
+
+    let creditedUsers = 0;
+    for (const emp of matched) {
+      const credited = await this.creditLeaveDays({
+        workspaceId: params.workspaceId,
+        userId: emp.id,
+        leaveEventId: params.eventId,
+        leaveType: params.leaveType,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        workTz: params.workTz,
+        createdBy: params.actorId,
+        isTeam: true,
+      });
+      if (credited.length) creditedUsers += 1;
+    }
+    return { matched_users: matched.length, credited_users: creditedUsers };
   }
 
   async voidTeamEvent(user: ScopedAuthUser, eventId: string) {
@@ -1062,7 +1326,7 @@ export class LeaveService {
     const periodCfg = this.resolveScanPeriod(opts?.period);
     const maxMessages = opts?.maxMessages ?? periodCfg.maxMessages;
 
-    // Prod API Lambda has no NAT — Gmail/DeepSeek run on non-VPC leave-scan worker.
+    // Prod API Lambda has no NAT — Gmail runs on the leave-scan worker.
     if (this.leaveScanLambda && this.leaveScanFunctionName) {
       const job: LeaveScanJob = {
         workspaceId,
@@ -1108,7 +1372,7 @@ export class LeaveService {
       );
     }
     if (!this.classify.isConfigured()) {
-      throw new ServiceUnavailableException('DeepSeek is not configured (DEEPSEEK_API_KEY)');
+      throw new ServiceUnavailableException('LLM is not configured (OPENROUTER_API_KEY)');
     }
 
     const listed = await this.gmail.listMessages({
@@ -1208,6 +1472,9 @@ export class LeaveService {
       const extractionPayload = {
         ...extraction.raw,
         isLeaveRequest: extraction.isLeaveRequest,
+        isPublicHoliday: extraction.isPublicHoliday,
+        country: extraction.country,
+        office: extraction.office,
         confidence: extraction.confidence,
         confidencePct: extraction.confidencePct,
         employee: extraction.employee,
@@ -1219,8 +1486,24 @@ export class LeaveService {
       await this.audit(workspaceId, 'classify', actorId, {
         gmail_message_id: msg.id,
         isLeaveRequest: extraction.isLeaveRequest,
+        isPublicHoliday: extraction.isPublicHoliday,
         confidence: extraction.confidence,
       });
+
+      if (
+        await this.tryApplyPublicHoliday({
+          user,
+          workspaceId,
+          actorId,
+          msg,
+          receivedAt: msg.receivedAt,
+          extraction,
+          extractionPayload,
+          counts,
+        })
+      ) {
+        continue;
+      }
 
       if (!extraction.isLeaveRequest) {
         counts.not_leave += 1;
@@ -1514,6 +1797,36 @@ export class LeaveService {
       );
       if (exists.rows[0]) {
         if (exists.rows[0].classification !== 'extraction_failed') {
+          const extraction = item.extraction as LeaveExtraction | null;
+          const msg = item.message;
+          if (extraction && msg) {
+            const extractionPayload = {
+              ...extraction.raw,
+              isLeaveRequest: extraction.isLeaveRequest,
+              isPublicHoliday: extraction.isPublicHoliday,
+              country: extraction.country,
+              office: extraction.office,
+              confidence: extraction.confidence,
+              confidencePct: extraction.confidencePct,
+              employee: extraction.employee,
+              leave: extraction.leave,
+              warnings: extraction.warnings,
+              rawSummary: extraction.rawSummary,
+            };
+            const receivedAt = msg.receivedAt ? new Date(msg.receivedAt) : null;
+            const applied = await this.tryApplyPublicHoliday({
+              user,
+              workspaceId,
+              actorId,
+              msg,
+              receivedAt,
+              extraction,
+              extractionPayload,
+              counts,
+              persistInbox: false,
+            });
+            if (applied) continue;
+          }
           counts.skipped += 1;
           continue;
         }
@@ -1570,6 +1883,9 @@ export class LeaveService {
       const extractionPayload = {
         ...extraction.raw,
         isLeaveRequest: extraction.isLeaveRequest,
+        isPublicHoliday: extraction.isPublicHoliday,
+        country: extraction.country,
+        office: extraction.office,
         confidence: extraction.confidence,
         confidencePct: extraction.confidencePct,
         employee: extraction.employee,
@@ -1581,8 +1897,24 @@ export class LeaveService {
       await this.audit(workspaceId, 'classify', actorId, {
         gmail_message_id: msg.id,
         isLeaveRequest: extraction.isLeaveRequest,
+        isPublicHoliday: extraction.isPublicHoliday,
         confidence: extraction.confidence,
       });
+
+      if (
+        await this.tryApplyPublicHoliday({
+          user,
+          workspaceId,
+          actorId,
+          msg,
+          receivedAt,
+          extraction,
+          extractionPayload,
+          counts,
+        })
+      ) {
+        continue;
+      }
 
       if (!extraction.isLeaveRequest) {
         counts.not_leave += 1;
@@ -1929,8 +2261,8 @@ export class LeaveService {
   async getScanStatus(user: ScopedAuthUser) {
     this.ensureCanManage(user);
     return {
-      gmail_configured: this.gmail.isConfigured(),
-      deepseek_configured: this.classify.isConfigured(),
+      gmail_configured: this.gmail.isConfigured() || Boolean(this.leaveScanFunctionName),
+      deepseek_configured: this.classify.isConfigured() || Boolean(this.leaveScanFunctionName),
       gmail_subject: this.gmail.subjectEmail(),
       gmail_mailbox: this.gmail.mailboxFilter(),
       hr_review_enabled: this.hrReviewEnabled(),
@@ -1950,7 +2282,7 @@ export class LeaveService {
     subject: string | null;
     snippet: string | null;
     bodyText: string | null;
-    receivedAt: Date | null;
+    receivedAt: Date | string | null;
     classification: string;
     deepseekJson: Record<string, unknown> | null;
     leaveEventId: string | null;

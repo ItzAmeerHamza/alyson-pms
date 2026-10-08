@@ -6,7 +6,7 @@
  * When the user has had no keyboard/mouse input for a while, the main tracking
  * window is brought forward with a countdown and two choices:
  *   - "I'm working"                 -> keep tracking (resolves 'working')
- *   - "On break — stop Time Doctor" -> stop now, no 10m cut (resolves 'break')
+ *   - "On break — stop Tavilo Time" -> stop now, no 10m cut (resolves 'break')
  *   - countdown finishes unanswered -> stop + deduct 10m (resolves 'timeout')
  *     ONLY if this overlay was actually shown.
  *

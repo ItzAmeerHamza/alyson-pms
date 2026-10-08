@@ -1038,7 +1038,7 @@ class AuthManager {
     }
 
     window.dispatchEvent(new Event('userLoggedIn'));
-    this.notificationManager.showNotification('Login successful! Welcome to Alyson Time Doctor.', 'success');
+    this.notificationManager.showNotification('Login successful! Welcome to Tavilo Time.', 'success');
   }
 
   async handleLogin(e) {
@@ -1132,7 +1132,7 @@ class AuthManager {
         msg.includes('link your Cognito')
       ) {
         errorMessage =
-          "We couldn't find an employee account for this email. Ask your admin to add you in Alyson Pulse, then try signing in again.";
+          "We couldn't find an employee account for this email. Ask your admin to add you in Tavilo Workspace, then try signing in again.";
       } else if (
         msg.includes('Invalid credentials') ||
         msg.includes('Incorrect username or password') ||

@@ -36,7 +36,7 @@ describe('window close keeps tracking', () => {
     expect(hide).toHaveBeenCalled();
     expect(global.stopTracking).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(
-      'Alyson PM',
+      'Tavilo Time',
       expect.stringMatching(/Still tracking/),
     );
   });

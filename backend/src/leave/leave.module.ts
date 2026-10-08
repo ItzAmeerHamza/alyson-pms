@@ -6,9 +6,10 @@ import { LeaveClassifyService } from './leave-classify.service';
 import { LeaveController } from './leave.controller';
 import { LeaveInternalController } from './leave-internal.controller';
 import { LeaveService } from './leave.service';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [AuthModule, ScreenshotAiModule],
+  imports: [AuthModule, ScreenshotAiModule, BillingModule],
   controllers: [LeaveController, LeaveInternalController],
   providers: [LeaveService, GmailDwdService, LeaveClassifyService],
   exports: [LeaveService],

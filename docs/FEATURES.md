@@ -40,17 +40,21 @@ The desktop clock is the live tray timer. Pulse is the report of record after sy
 
 ## Roles and who sees what
 
-Pulse role lives on `time_doctor.user_extensions.pulse_role`.
+Pulse role lives on `time_doctor.user_extensions.pulse_role`. Platform operators have `is_super_admin` on the same row — that is **not** a workspace role.
 
-| Capability | Admin | Manager | Team lead | Employee | Delegated grant |
-|------------|:-----:|:-------:|:---------:|:--------:|:---------------:|
-| Org dashboard & team reports | ✓ | | | | team time / people / activity / screenshots for granted users |
-| Adjust hours | ✓ | | | | |
-| Invite users, assign projects | ✓ | ✓ | roster only | | |
-| Access grants | ✓ | | | | |
-| Workspace settings, AWS costs, leave, pacing, emails | ✓ | | | | |
-| Own dashboard / reports / screenshots | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Download agent + FAQ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Capability | Super-admin | Admin | Manager | Team lead | Employee | Delegated grant |
+|------------|:-----------:|:-----:|:-------:|:---------:|:--------:|:---------------:|
+| List / create companies | ✓ | | | | | |
+| AWS costs (Alyson PM spend) | ✓ | | | | | |
+| Org dashboard & team reports | selected company | ✓ | | | | team time / people / activity / screenshots for granted users |
+| Adjust hours | selected company | ✓ | | | | |
+| Invite users, assign projects | selected company | ✓ | ✓ | roster only | | |
+| Access grants | selected company | ✓ | | | | |
+| Workspace settings, leave, pacing, emails | selected company | ✓ | | | | |
+| Own dashboard / reports / screenshots | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Download agent + FAQ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Company admins **never** see another company's roster, admins, or reports. Super-admins pick a company (`X-Pulse-Workspace-Id`) before opening tenant pages.
 
 Managers **cannot** open team reports or change hours. Team leads see Team Management (their roster) plus their own “You” pages.
 
@@ -75,13 +79,16 @@ Org snapshot for a day / week / month:
 
 ### Team Management
 
-**Route:** `alyson-pulse/team-management` · **API:** `GET /pulse/team`, `POST /pulse/users`, `PATCH /pulse/users/:id`, `DELETE /data/users/:id`, project assignment routes
+**Route:** `alyson-pulse/team-management` · **API:** `GET /pulse/team`, `POST /pulse/users`, `PATCH /pulse/users/:id`, `POST /pulse/users/:id/resend-invite`, `POST /pulse/users/bulk-country`, `DELETE /data/users/:id`, project assignment routes
 
-- Roster: name, email, role, department, manager / lead, status, weekly hours
-- Invite (Cognito `AdminCreateUser` + Pulse profile)
-- Edit role (`employee` / `team_leader` / `manager` / `admin`), manager, department
+- Roster: name, email, role, country, department, manager / lead, status (Active / Invited / Inactive), weekly hours
+- Invited = invite sent, they have not signed in; Resend invite sends a new temporary password
+- Invite (Cognito `AdminCreateUser` + Pulse profile) with start date and country
+- Resend invite (new temporary password + SES email)
+- Edit name, role (`employee` / `team_leader` / `manager` / `admin`), manager, department, country, start date
+- Bulk-set country for people missing one (public holidays credit by country)
+- Remove (soft-pause) and Activate — not the Edit Active switch
 - Assign projects to a person
-- Delete user (admin)
 - Search and CSV export
 
 ### Project Management
@@ -124,11 +131,17 @@ Weekly and monthly pace vs target (on track / behind / at risk / critical). Filt
 
 **Route:** `alyson-pulse/aws-costs` · **API:** `GET /pulse/aws-costs`
 
-Admin-only cost rollup for a date range (Pulse cost explorer data, not employee time).
+Super-admin only. Alyson PM tagged AWS spend — not a per-customer bill.
+
+### Companies
+
+**Route:** `alyson-pulse/companies` · **API:** `GET/POST /pulse/workspaces`
+
+Platform operators list Pulse-enabled companies, onboard a new one (or enable Pulse on an existing Palisade workspace), and switch into a company. Company admins cannot open this page.
 
 ### Workspace Settings
 
-**Route:** `alyson-pulse/workspace-settings` · **API:** `GET/PATCH /pulse/settings`, `POST /pulse/workspaces`
+**Route:** `alyson-pulse/workspace-settings` · **API:** `GET/PATCH /pulse/settings`
 
 | Setting | Default | Effect |
 |---------|---------|--------|
@@ -140,7 +153,7 @@ Admin-only cost rollup for a date range (Pulse cost explorer data, not employee 
 | Window minutes | 10 | Agent random window |
 | Interval (derived) | 5 | Report math (`window / count`) |
 
-Admins can also create another Pulse workspace (new org + slug).
+Admins can rename the company and change Pulse settings for **their** workspace. Creating another company is a **super-admin** action (`alyson-pulse/companies`).
 
 ### Email Reporting (low hours)
 
@@ -319,7 +332,7 @@ Sync retries on an interval (~10s). After reconnect, the UI allows a short grace
 
 ## Auth and config
 
-1. Cognito sign-in (password in OS keychain via keytar).
+1. Cognito sign-in (password in OS keychain via keytar). Pulse invites with a temporary password can set a permanent password in the agent. Forgot password emails a reset code from the login screen or Change Password. Signed-in users who still know the current password can change it from the sidebar.
 2. `GET /auth/me` for user id, workspace, role.
 3. `get_workspace_settings` for screenshot schedule and thresholds.
 4. Sync URL = `BACKEND_API_URL` (`…/sync/desktop-action`) with `INTERNAL_API_KEY`.
@@ -345,6 +358,7 @@ No microphone / camera / audio recording.
 
 - Login
 - Timer (start / stop / pause, today hours, effective estimate)
+- **Tavilo Coach** — personal AI briefing. Opening chat is always a month-to-date summary of the signed-in user’s recorded hours, then they can ask follow-ups. Follow-ups use conversation history and recorded facts (sessions, projects, screenshot vision), not a canned script. Also covers today, effective/non-effective, screenshot vision, week pacing (7h × completed weekdays vs 35h), and coaching tips. Numbers come from Pulse (not the live tray estimate or the HR pacing report).
 - Tray (clock, start/stop)
 - Idle prompt
 - Optional project picker
@@ -367,9 +381,13 @@ Desktop “effective” is a **local estimate** (idle_seconds + every screenshot
 
 | User action | UI | API |
 |-------------|----|-----|
+| See my month-to-date briefing | Alyson PM → Tavilo Coach | `GET /pulse/assistant/briefing` |
+| Ask about effective time / screenshots | Alyson PM → Tavilo Coach | `POST /pulse/assistant/chat` |
 | See team hours | Dashboard, Team Time | `GET /pulse/dashboard`, `/pulse/daily-hours` |
 | Fix a missed clock-in | Team Time → Adjust | `POST /pulse/time-adjustments` |
 | Invite someone | Team Management | `POST /pulse/users` |
+| Resend invite | Team Management (Invited) | `POST /pulse/users/:id/resend-invite` |
+| Set country in bulk | Team Management | `POST /pulse/users/bulk-country` |
 | Change screenshot cadence | Workspace Settings | `PATCH /pulse/settings` |
 | Review captures | Screenshots | `GET /data/screenshots` |
 | Delete a bad capture | Screenshots | `DELETE /data/screenshots/:id` |
@@ -393,6 +411,7 @@ Desktop “effective” is a **local estimate** (idle_seconds + every screenshot
 | [RUNBOOK.md](./RUNBOOK.md) | Breakage |
 | [RELEASE.md](./RELEASE.md) | Ship the agent |
 | [OPERATIONS.md](./OPERATIONS.md) | Privacy, devices, stage/prod |
+| [PULSE_REPORTS.md](./PULSE_REPORTS.md) | Catalog of every Pulse report (plain language) |
 | [PULSE_UI.md](./PULSE_UI.md) | New Pulse screen |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Auth, offline, recording pipeline |
 | [BACKEND_PIPELINE.md](./BACKEND_PIPELINE.md) | Every sync action and formula |

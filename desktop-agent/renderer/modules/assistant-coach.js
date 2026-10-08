@@ -49,7 +49,17 @@ function formatDateLabel(dateKey, todayKey) {
   return dateKey === todayKey ? `${label} · Today` : label;
 }
 
+const AUTH_TTL_MS = 4 * 60 * 1000;
+let cachedCoachAuth = { at: 0, value: null };
+
+function resetCoachAuthCacheForTests() {
+  cachedCoachAuth = { at: 0, value: null };
+}
+
 async function resolveCoachIdToken(ipcRenderer, cognitoAuth = require('./cognito-auth')) {
+  if (cachedCoachAuth.value?.idToken && Date.now() - cachedCoachAuth.at < AUTH_TTL_MS) {
+    return cachedCoachAuth.value;
+  }
   const authConfig = await ipcRenderer.invoke('get-config');
   const disk = await ipcRenderer.invoke('load-user-session');
   if (disk) cognitoAuth.hydrateCognitoSessionFromDisk(disk);
@@ -81,10 +91,12 @@ async function resolveCoachIdToken(ipcRenderer, cognitoAuth = require('./cognito
   } catch {
     /* main process still refreshes from disk if this persist fails */
   }
-  return {
+  const value = {
     idToken: session.idToken,
     organizationId: user.organization_id || disk?.organization_id || null,
   };
+  cachedCoachAuth = { at: Date.now(), value };
+  return value;
 }
 
 class AssistantCoach {
@@ -94,6 +106,25 @@ class AssistantCoach {
     this.history = [];
     this.loading = false;
     this.bound = false;
+    this._lastPayload = null;
+  }
+
+  hasPaintedBriefing() {
+    if (!this._lastPayload || this._lastPayload.date !== this.dateKey) return false;
+    if (!this.history.length) return false;
+    try {
+      return Boolean(document.querySelector('#assistantChatLog .assistant-msg:not(.is-typing)'));
+    } catch {
+      return this.history.length > 0;
+    }
+  }
+
+  restoreChatFromHistory() {
+    const log = document.getElementById('assistantChatLog');
+    if (!log || log.querySelector('.assistant-msg:not(.is-typing)')) return;
+    for (const turn of this.history) {
+      if (turn?.content) this.appendChat(turn.role || 'assistant', turn.content);
+    }
   }
 
   open() {
@@ -101,7 +132,30 @@ class AssistantCoach {
     if (typeof lucide !== 'undefined' && lucide.createIcons) {
       lucide.createIcons();
     }
+    if (this.hasPaintedBriefing()) {
+      this.setBusy(false);
+      void this.refresh({ silent: true });
+      return;
+    }
+    if (this._lastPayload && this._lastPayload.date === this.dateKey) {
+      this.renderPayload(this._lastPayload, { resetChat: this.history.length === 0 });
+      this.restoreChatFromHistory();
+      this.setBusy(false);
+      void this.refresh({ silent: true });
+      return;
+    }
+    if (this.loading) {
+      this._openWhenReady = true;
+      this.setBusy(true, { typing: true });
+      return;
+    }
     this.refresh();
+  }
+
+  prefetch() {
+    if (this._lastPayload && this._lastPayload.date === this.dateKey) return;
+    if (this.loading) return;
+    void this.refresh({ silent: true, prefetch: true });
   }
 
   bindOnce() {
@@ -137,10 +191,19 @@ class AssistantCoach {
     return workDateKey();
   }
 
+  isCoachPageOpen() {
+    try {
+      return Boolean(document.getElementById('assistantPage')?.classList.contains('active'));
+    } catch {
+      return false;
+    }
+  }
+
   shiftDay(delta) {
     const next = shiftDateKey(this.dateKey, delta);
     if (next > this.todayKey()) return;
     this.dateKey = next;
+    this._loadGen = (this._loadGen || 0) + 1;
     this.history = [];
     this.clearChat();
     this.refresh({ force: true });
@@ -148,26 +211,45 @@ class AssistantCoach {
 
   async refresh(opts = {}) {
     if (this.loading && !opts.force) return;
+    const dateKey = this.dateKey;
+    const silent = Boolean(opts.silent);
+    const keepChat = silent || Boolean(this.history.length);
+    const loadId = (this._loadGen = (this._loadGen || 0) + 1);
     this.loading = true;
-    this.setStatus('Reading your month so far…', 'busy');
-    this.setBusy(true, { typing: true });
+    if (!silent) {
+      this.setStatus('Reading your month so far…', 'busy');
+      this.setBusy(true, { typing: true });
+    }
     try {
       const auth = await resolveCoachIdToken(this.ipcRenderer);
       const result = await this.ipcRenderer.invoke('assistant:briefing', {
-        date: this.dateKey,
+        date: dateKey,
         idToken: auth?.idToken,
         organizationId: auth?.organizationId,
+        force: Boolean(opts.force),
       });
+      if (loadId !== this._loadGen || this.dateKey !== dateKey) return;
       if (!result?.success) {
-        this.setStatus(result?.error || 'Could not load Alyson Coach right now.', 'error');
+        if (!silent) {
+          this.setStatus(result?.error || 'Could not load Tavilo Coach right now.', 'error');
+        }
         return;
       }
-      this.renderPayload(result.data, { resetChat: true });
+      this._lastPayload = result.data;
+      const pageOpen = Boolean(this._openWhenReady) || this.isCoachPageOpen();
+      const paintOpening = !keepChat || (this.history.length === 0 && pageOpen);
+      if (opts.prefetch && this.hasPaintedBriefing()) return;
+      this.renderPayload(result.data, { resetChat: paintOpening && this.history.length === 0 });
+      if (!paintOpening) this.restoreChatFromHistory();
+      this._openWhenReady = false;
     } catch (err) {
-      this.setStatus('Could not load Alyson Coach right now.', 'error');
+      if (loadId !== this._loadGen || this.dateKey !== dateKey) return;
+      if (!silent) this.setStatus('Could not load Tavilo Coach right now.', 'error');
     } finally {
-      this.loading = false;
-      this.setBusy(false);
+      if (loadId === this._loadGen) {
+        this.loading = false;
+        if (!silent) this.setBusy(false);
+      }
     }
   }
 
@@ -179,7 +261,7 @@ class AssistantCoach {
     this.appendChat('user', message);
     this.loading = true;
     this.setBusy(true, { typing: true });
-    this.setStatus('Alyson is thinking…', 'busy');
+    this.setStatus('Tavilo Coach is thinking…', 'busy');
     try {
       const auth = await resolveCoachIdToken(this.ipcRenderer);
       const result = await this.ipcRenderer.invoke('assistant:chat', {
@@ -191,8 +273,8 @@ class AssistantCoach {
       });
       this.history.push({ role: 'user', content: message });
       if (!result?.success) {
-        this.appendChat('assistant', result?.error || 'Could not reach Alyson Coach right now.');
-        this.setStatus(result?.error || 'Could not reach Alyson Coach right now.', 'error');
+        this.appendChat('assistant', result?.error || 'Could not reach Tavilo Coach right now.');
+        this.setStatus(result?.error || 'Could not reach Tavilo Coach right now.', 'error');
         return;
       }
       const copy = result.data?.briefing || {};
@@ -201,8 +283,8 @@ class AssistantCoach {
       this.appendChat('assistant', reply);
       this.renderPayload(result.data, { resetChat: false });
     } catch (err) {
-      this.appendChat('assistant', 'Could not reach Alyson Coach right now.');
-      this.setStatus('Could not reach Alyson Coach right now.', 'error');
+      this.appendChat('assistant', 'Could not reach Tavilo Coach right now.');
+      this.setStatus('Could not reach Tavilo Coach right now.', 'error');
     } finally {
       this.loading = false;
       this.setBusy(false);
@@ -320,7 +402,7 @@ class AssistantCoach {
     row.id = 'assistantTyping';
     row.className = 'assistant-msg assistant-msg-assistant is-typing';
     row.innerHTML =
-      '<div class="assistant-msg-avatar" aria-hidden="true">A</div><div class="assistant-msg-body" aria-label="Alyson is thinking"><span class="assistant-typing-dot"></span><span class="assistant-typing-dot"></span><span class="assistant-typing-dot"></span></div>';
+      '<div class="assistant-msg-avatar" aria-hidden="true">T</div><div class="assistant-msg-body" aria-label="Tavilo Coach is thinking"><span class="assistant-typing-dot"></span><span class="assistant-typing-dot"></span><span class="assistant-typing-dot"></span></div>';
     log.appendChild(row);
     log.scrollTop = log.scrollHeight;
     this.syncEmpty();
@@ -359,3 +441,4 @@ module.exports.shiftDateKey = shiftDateKey;
 module.exports.renderSafeText = renderSafeText;
 module.exports.formatDateLabel = formatDateLabel;
 module.exports.resolveCoachIdToken = resolveCoachIdToken;
+module.exports.resetCoachAuthCacheForTests = resetCoachAuthCacheForTests;

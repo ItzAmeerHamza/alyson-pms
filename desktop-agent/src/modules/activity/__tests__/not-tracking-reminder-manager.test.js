@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * After Stop: popup at 10 minutes, then every 10 minutes while still off.
+ * After Stop: popup at exactly 10 minutes, then every 10 minutes while still off.
  * No OS-idle / "actively typing" gate.
  */
 
@@ -27,7 +27,7 @@ jest.mock(
 
 const { powerMonitor } = require('electron');
 const NotTrackingReminderManager = require('../not-tracking-reminder-manager');
-const { GRACE_MS, REPEAT_MS } = NotTrackingReminderManager;
+const { GRACE_MS, REPEAT_MS, BLOCKED_RETRY_MS } = NotTrackingReminderManager;
 
 describe('NotTrackingReminderManager', () => {
   let mgr;
@@ -71,12 +71,12 @@ describe('NotTrackingReminderManager', () => {
     expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
   });
 
-  test('shows popup 10 minutes after Stop', () => {
+  test('shows popup exactly 10 minutes after Stop', () => {
     mgr.start();
     mgr.onTrackingStopped();
-    jest.advanceTimersByTime(GRACE_MS - 5_000);
+    jest.advanceTimersByTime(GRACE_MS - 1_000);
     expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
-    jest.advanceTimersByTime(10_000);
+    jest.advanceTimersByTime(1_000);
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
     expect(win.show).toHaveBeenCalled();
     expect(win.focus).toHaveBeenCalled();
@@ -86,14 +86,14 @@ describe('NotTrackingReminderManager', () => {
     powerMonitor.getSystemIdleTime.mockReturnValue(200);
     mgr.start();
     mgr.onTrackingStopped();
-    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    jest.advanceTimersByTime(GRACE_MS);
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 
   test('onTrackingStarted suppresses further popups', () => {
     mgr.start();
     mgr.onTrackingStopped();
-    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    jest.advanceTimersByTime(GRACE_MS);
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
     win.webContents.send.mockClear();
     global.isTracking = true;
@@ -105,7 +105,7 @@ describe('NotTrackingReminderManager', () => {
   test('onTrackingStopped resets the 10m clock', () => {
     mgr.start();
     mgr.onTrackingStopped();
-    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    jest.advanceTimersByTime(GRACE_MS);
     expect(win.webContents.send).toHaveBeenCalledTimes(1);
     win.webContents.send.mockClear();
     mgr.onTrackingStopped();
@@ -115,13 +115,39 @@ describe('NotTrackingReminderManager', () => {
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 
+  test('ensureRunning does not reset the 10m clock', () => {
+    mgr.start();
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(GRACE_MS - 5_000);
+    mgr.ensureRunning();
+    jest.advanceTimersByTime(5_000);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+  });
+
   test('repeats every 10 minutes while still off', () => {
     mgr.start();
     mgr.onTrackingStopped();
-    jest.advanceTimersByTime(GRACE_MS + 30_000);
+    jest.advanceTimersByTime(GRACE_MS);
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
     win.webContents.send.mockClear();
-    jest.advanceTimersByTime(REPEAT_MS);
+    jest.advanceTimersByTime(REPEAT_MS - 1_000);
+    expect(win.webContents.send).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1_000);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+  });
+
+  test('Not now restarts the 10m clock from dismiss', () => {
+    mgr.start();
+    mgr.onTrackingStopped();
+    jest.advanceTimersByTime(GRACE_MS);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
+    win.webContents.send.mockClear();
+    jest.advanceTimersByTime(3 * 60_000);
+    mgr.onSnoozed();
+    win.webContents.send.mockClear();
+    jest.advanceTimersByTime(REPEAT_MS - 1_000);
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
+    jest.advanceTimersByTime(1_000);
     expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 
@@ -140,5 +166,18 @@ describe('NotTrackingReminderManager', () => {
     mgr.onTrackingStopped();
     jest.advanceTimersByTime(GRACE_MS + 60_000);
     expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
+  });
+
+  test('does not fire immediately after unlock — waits a full 10m', () => {
+    mgr.start();
+    mgr.onTrackingStopped();
+    global.isScreenLocked = true;
+    jest.advanceTimersByTime(GRACE_MS + BLOCKED_RETRY_MS);
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
+    global.isScreenLocked = false;
+    jest.advanceTimersByTime(BLOCKED_RETRY_MS);
+    expect(win.webContents.send).not.toHaveBeenCalledWith('display-start-reminder');
+    jest.advanceTimersByTime(GRACE_MS);
+    expect(win.webContents.send).toHaveBeenCalledWith('display-start-reminder');
   });
 });

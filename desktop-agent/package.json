@@ -1,7 +1,7 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.244",
-  "description": "Alyson PM Agent - Desktop companion app",
+  "version": "1.0.245",
+  "description": "Tavilo Time — desktop time tracking",
   "main": "src/main.js",
   "author": "RevCloud",
   "repository": {
@@ -57,7 +57,8 @@
   },
   "build": {
     "appId": "com.alyson.work-time-agent",
-    "productName": "Alyson PM",
+    "productName": "Tavilo Time",
+    "executableName": "Tavilo Time",
     "directories": {
       "output": "dist"
     },
@@ -104,7 +105,7 @@
     "afterPack": "scripts/after-pack.js",
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "assets/icon.png",
+      "icon": "assets/icon.icns",
       "identity": "Alyson PM Code Signing",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
@@ -129,11 +130,12 @@
       ],
       "extendInfo": {
         "CFBundleIdentifier": "com.alyson.work-time-agent",
-        "CFBundleName": "Alyson PM",
-        "NSCameraUsageDescription": "Alyson PM needs camera access for screenshot monitoring",
-        "NSMicrophoneUsageDescription": "Alyson PM needs microphone access for activity detection",
-        "NSScreenCaptureDescription": "Alyson PM needs screen recording permission for productivity monitoring",
-        "NSAccessibilityUsageDescription": "Alyson PM needs accessibility permission for activity monitoring"
+        "CFBundleName": "Tavilo Time",
+        "CFBundleDisplayName": "Tavilo Time",
+        "NSCameraUsageDescription": "Tavilo Time needs camera access for screenshot monitoring",
+        "NSMicrophoneUsageDescription": "Tavilo Time needs microphone access for activity detection",
+        "NSScreenCaptureDescription": "Tavilo Time needs screen recording permission for productivity monitoring",
+        "NSAccessibilityUsageDescription": "Tavilo Time needs accessibility permission for activity monitoring"
       }
     },
     "win": {
@@ -145,7 +147,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -172,8 +174,8 @@
       "category": "Utility"
     },
     "dmg": {
-      "title": "Install Alyson PM v${version}",
-      "icon": "assets/icon.png",
+      "title": "Install Tavilo Time v${version}",
+      "icon": "assets/icon.icns",
       "background": null,
       "window": {
         "width": 540,

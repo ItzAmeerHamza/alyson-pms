@@ -5,7 +5,29 @@ import type { TimeInterval } from '../src/pulse/meeting-intervals';
 const svc = new EffectiveTimeService({} as never);
 
 describe('idleHoursFromIdleLogs meeting exclusion', () => {
-  it('drops a 1-hour idle that sits entirely inside a meeting', () => {
+  it('clips short listen-only idle inside a meeting (under 10 minutes)', () => {
+    const meetStart = Date.parse('2026-08-24T12:00:00Z');
+    const meetings = new Map<string, TimeInterval[]>([
+      ['1196', [{ startMs: meetStart, endMs: meetStart + 60 * 60 * 1000 }]],
+    ]);
+
+    const byUser = svc.idleHoursFromIdleLogs(
+      [
+        {
+          user_id: '1196',
+          idle_start: '2026-08-24T12:10:00Z',
+          idle_end: '2026-08-24T12:18:00Z',
+          duration_seconds: 8 * 60,
+        },
+      ],
+      'America/Chicago',
+      meetings,
+    );
+
+    expect(byUser.get('1196')?.get('2026-08-24') ?? 0).toBe(0);
+  });
+
+  it('keeps AFK idle of 10+ minutes even if old leftover Meet shots were floored to 50%', () => {
     const meetStart = Date.parse('2026-08-24T12:00:00Z');
     const meetings = new Map<string, TimeInterval[]>([
       ['1196', [{ startMs: meetStart, endMs: meetStart + 60 * 60 * 1000 }]],
@@ -24,7 +46,7 @@ describe('idleHoursFromIdleLogs meeting exclusion', () => {
       meetings,
     );
 
-    expect(byUser.get('1196')?.get('2026-08-24') ?? 0).toBe(0);
+    expect(byUser.get('1196')?.get('2026-08-24')).toBeCloseTo(40 / 60, 5);
   });
 
   it('keeps idle that is outside the meeting and at least 5 minutes', () => {
@@ -60,8 +82,8 @@ describe('idleHoursFromIdleLogs meeting exclusion', () => {
         {
           user_id: '1196',
           idle_start: '2026-08-24T12:00:00Z',
-          idle_end: '2026-08-24T13:00:00Z',
-          duration_seconds: 3600,
+          idle_end: '2026-08-24T12:08:00Z',
+          duration_seconds: 8 * 60,
         },
       ],
       'America/Chicago',
@@ -103,5 +125,22 @@ describe('idleHoursFromIdleLogs meeting exclusion', () => {
     );
 
     expect(byUser.get('1196')?.get('2026-08-25')).toBeCloseTo(0.25, 5);
+  });
+
+  it('keeps overnight idle when leftover Meet shots are not participating (0% activity)', () => {
+    const overnight = svc.idleHoursFromIdleLogs(
+      [
+        {
+          user_id: '1196',
+          idle_start: '2026-08-24T22:00:00Z',
+          idle_end: '2026-08-25T06:00:00Z',
+          duration_seconds: 8 * 3600,
+        },
+      ],
+      'America/Chicago',
+      new Map(),
+    );
+    expect(overnight.get('1196')?.get('2026-08-24')).toBeGreaterThan(0);
+    expect(overnight.get('1196')?.get('2026-08-25')).toBeGreaterThan(0);
   });
 });

@@ -11,14 +11,8 @@ const { getDeviceId } = require('./device-id');
 const log = createFeatureLogger('SESSION', { adapter: 'recovery' });
 
 function appDataDir() {
-  const path = require('path');
-  const os = require('os');
-  const userDataDir =
-    process.env.APPDATA ||
-    (process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support')
-      : path.join(os.homedir(), '.config'));
-  return path.join(userDataDir, 'Alyson Work Time');
+  const { getPayrollAppDataDir } = require('./payroll-app-data-dir');
+  return getPayrollAppDataDir();
 }
 
 function readLocalCheckpoint() {
@@ -52,22 +46,67 @@ function readLocalCheckpointAt(timeLogId = null) {
   return cp.checkpointAt;
 }
 
+function pendingSessionsDir() {
+  const path = require('path');
+  return path.join(appDataDir(), 'pending_sessions');
+}
+
+function parsePendingSessionFile(raw, fallbackId = null) {
+  if (!raw) return null;
+  const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  const timeLogId = data?.timeLogId || data?.id || fallbackId || null;
+  const end = data?.endTime || data?.end_time;
+  const ms = end ? new Date(end).getTime() : NaN;
+  if (!Number.isFinite(ms)) return null;
+  return {
+    timeLogId: timeLogId != null ? String(timeLogId) : null,
+    endTime: new Date(ms).toISOString(),
+    startTime: data?.startTime || data?.start_time || null,
+    userId: data?.userId || data?.user_id || null,
+    projectId: data?.projectId || data?.project_id || null,
+    deviceId: data?.deviceId || data?.device_id || null,
+    reason: data?.reason || null,
+  };
+}
+
+/** Every unfinished local close — used to queue the frozen end when the network returns. */
+function listPendingSessionCloses() {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = pendingSessionsDir();
+    if (!fs.existsSync(dir)) return [];
+    const out = [];
+    for (const file of fs.readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue;
+      try {
+        const parsed = parsePendingSessionFile(
+          fs.readFileSync(path.join(dir, file), 'utf8'),
+          file.replace(/\.json$/i, ''),
+        );
+        if (parsed?.timeLogId) out.push(parsed);
+      } catch (_) { /* skip corrupt */ }
+    }
+    return out;
+  } catch (_) {
+    return [];
+  }
+}
+
 /** Pending end_time for a session — that session's file only, never the newest of all. */
 function readPendingSessionEndTime(timeLogId = null) {
   try {
     const fs = require('fs');
     const path = require('path');
-    const dir = path.join(appDataDir(), 'pending_sessions');
+    const dir = pendingSessionsDir();
     if (!fs.existsSync(dir)) return null;
 
     if (timeLogId) {
       const filePath = path.join(dir, `${timeLogId}.json`);
       if (!fs.existsSync(filePath)) return null;
       try {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const end = data?.endTime || data?.end_time;
-        const ms = end ? new Date(end).getTime() : NaN;
-        return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+        const parsed = parsePendingSessionFile(fs.readFileSync(filePath, 'utf8'), timeLogId);
+        return parsed?.endTime || null;
       } catch (_) {
         return null;
       }
@@ -150,6 +189,12 @@ function explicitStopFlagPath() {
 /** Persist intentional stop so relaunch does not re-adopt orphans as "tracking". */
 function markUserExplicitlyStopped(meta = {}) {
   global.userExplicitlyStopped = true;
+  const timeLogId = meta.timeLogId || global.currentTimeLogId || null;
+  const reason = meta.reason || 'manual';
+  const endTime = meta.endTime || global._stopEndTimeOverride || null;
+  global._lastExplicitStopTimeLogId = timeLogId;
+  global._lastExplicitStopReason = reason;
+  global._lastExplicitStopEndIso = endTime;
   try {
     const fs = require('fs');
     const dir = appDataDir();
@@ -158,14 +203,136 @@ function markUserExplicitlyStopped(meta = {}) {
       explicitStopFlagPath(),
       JSON.stringify({
         stoppedAt: new Date().toISOString(),
-        timeLogId: meta.timeLogId || global.currentTimeLogId || null,
-        reason: meta.reason || 'manual',
+        timeLogId,
+        reason,
+        endTime,
       }),
       'utf8',
     );
   } catch (err) {
     log.warn({ step: 'EXPLICIT_STOP_PERSIST_FAILED', message: err?.message || String(err) });
   }
+}
+
+function earlierIso(...candidates) {
+  let best = null;
+  let bestMs = Infinity;
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const ms = new Date(raw).getTime();
+    if (!Number.isFinite(ms) || ms >= bestMs) continue;
+    bestMs = ms;
+    best = new Date(ms).toISOString();
+  }
+  return best;
+}
+
+/** Read the last intentional stop without clearing it. Start uses this. */
+function peekExplicitStop() {
+  if (!global.userExplicitlyStopped || !global._lastExplicitStopTimeLogId) {
+    loadUserExplicitlyStoppedFromDisk();
+  }
+  return {
+    active: !!global.userExplicitlyStopped,
+    timeLogId: global._lastExplicitStopTimeLogId || null,
+    reason: global._lastExplicitStopReason || null,
+    endTime: global._lastExplicitStopEndIso || global._stopEndTimeOverride || null,
+  };
+}
+
+/**
+ * Durable Stop end for this row. Pending file wins, then the explicit-stop
+ * flag. Callers must never bill past this instant.
+ */
+function frozenEndForSession(timeLogId) {
+  if (!timeLogId) return null;
+  const pending = readPendingSessionEndTime(timeLogId);
+  const explicit = peekExplicitStop();
+  const explicitEnd =
+    explicit.timeLogId && String(explicit.timeLogId) === String(timeLogId)
+      ? explicit.endTime
+      : null;
+  return earlierIso(pending, explicitEnd);
+}
+
+/**
+ * A stopped session must never be adopted as live. Extra hours are always
+ * this row staying open after Stop (Hamza 21 Sep).
+ */
+function mustNotRecoverSession(timeLogId) {
+  if (!timeLogId) return false;
+  if (frozenEndForSession(timeLogId)) return true;
+  const explicit = peekExplicitStop();
+  if (explicit.active && !explicit.timeLogId) return true;
+  if (explicit.active && String(explicit.timeLogId) === String(timeLogId)) return true;
+  return listPendingSessionCloses().some(
+    (row) => String(row.timeLogId) === String(timeLogId),
+  );
+}
+
+/**
+ * Idle-timeout / Stop / sleep must not resume the row that was just closed.
+ * Recover is only for crash mid-session — not Continue after an explicit stop.
+ */
+function shouldDropRecoveredSession({
+  startAfterSleep = false,
+  explicitStop = false,
+  recoveredId = null,
+  stoppedId = null,
+} = {}) {
+  if (!recoveredId) return false;
+  if (startAfterSleep) return true;
+  if (explicitStop) return true;
+  if (stoppedId && String(recoveredId) === String(stoppedId)) return true;
+  if (mustNotRecoverSession(recoveredId)) return true;
+  return false;
+}
+
+/**
+ * Inspect may only resume a crash-mid-session row. Idle / Stop / a pending
+ * close on disk means Start must create a new row (Hamza 29–30 Sep: recover
+ * reused 5a9ac1d6 / f72034f2 and the clock showed ~2×).
+ */
+function shouldPreferRecover({ startAfterSleep = false, explicitStop = false } = {}) {
+  if (startAfterSleep) return false;
+  if (explicitStop) return false;
+  try {
+    if (peekExplicitStop().active) return false;
+  } catch (_) { /* peek is best-effort */ }
+  try {
+    if (listPendingSessionCloses().length > 0) return false;
+  } catch (_) { /* pending dir optional in tests */ }
+  return true;
+}
+
+/**
+ * If tracking was resumed for a session that already has a frozen Stop,
+ * detach immediately and keep that end on the retry queue.
+ */
+function refuseLiveFrozenSession() {
+  const id = liveTimeLogId();
+  const endTime = frozenEndForSession(id);
+  if (!id || !endTime) return null;
+  log.warn({
+    step: 'REFUSE_LIVE_FROZEN',
+    message: 'Live session already has a frozen Stop — detaching, will write that end',
+    ctx: { timeLogId: id, endTime },
+  });
+  clearLocalTrackingAfterStaleClose({ reason: 'frozen_stop' });
+  try {
+    global.trackingManager?._queueOfflineTimeLogUpdate?.(
+      {
+        id,
+        end_time: endTime,
+        status: 'completed',
+        last_alive_at: endTime,
+        client_last_seen_at: endTime,
+        frozen_end: true,
+      },
+      { flush: true },
+    );
+  } catch (_) { /* queue is best-effort; pending file remains */ }
+  return { id, endTime };
 }
 
 function clearUserExplicitlyStopped() {
@@ -186,10 +353,17 @@ function loadUserExplicitlyStoppedFromDisk() {
     const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (parsed?.stoppedAt) {
       global.userExplicitlyStopped = true;
+      if (parsed.timeLogId) global._lastExplicitStopTimeLogId = parsed.timeLogId;
+      if (parsed.reason) global._lastExplicitStopReason = parsed.reason;
+      if (parsed.endTime) global._lastExplicitStopEndIso = parsed.endTime;
       log.info({
         step: 'EXPLICIT_STOP_LOADED',
         message: 'Prior intentional stop in effect — will close open sessions, not recover',
-        ctx: { stoppedAt: parsed.stoppedAt, timeLogId: parsed.timeLogId || null },
+        ctx: {
+          stoppedAt: parsed.stoppedAt,
+          timeLogId: parsed.timeLogId || null,
+          endTime: parsed.endTime || null,
+        },
       });
       return true;
     }
@@ -221,6 +395,90 @@ function hasLiveSessionToProtect(state = global) {
  * unconfirmed. The liveness ceiling clamps the value either way, so the flag
  * exists to make the audit trail honest about provenance.
  */
+async function flushFrozenPendingCloses(options = {}) {
+  const pending = listPendingSessionCloses();
+  const backendTimeLogs = require('./backend-time-logs');
+  if (!pending.length) return { flushed: 0, pending };
+  if (
+    !backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config) ||
+    typeof backendTimeLogs.updateTimeLog !== 'function'
+  ) {
+    return { flushed: 0, deferred: true, pending };
+  }
+  if (backendTimeLogs.isLikelyOffline()) {
+    log.info({
+      step: 'FROZEN_CLOSE_OFFLINE',
+      message: 'Frozen Stop stays queued until the network returns',
+      ctx: { count: pending.length },
+    });
+    try {
+      global.trackingManager?.hydratePendingClosesIntoOfflineQueue?.({ flush: true });
+    } catch (_) { /* pending files remain */ }
+    return { flushed: 0, deferred: true, pending };
+  }
+
+  let flushed = 0;
+  for (const row of pending) {
+    try {
+      await backendTimeLogs.updateTimeLog(
+        row.timeLogId,
+        {
+          end_time: row.endTime,
+          status: 'completed',
+          last_alive_at: row.endTime,
+          client_last_seen_at: row.endTime,
+          frozen_end: true,
+        },
+        options.config || global.config,
+        { timeoutMs: options.timeoutMs || 12000 },
+      );
+      flushed += 1;
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const filePath = path.join(pendingSessionsDir(), `${row.timeLogId}.json`);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch (_) { /* file can retry next flush */ }
+      try {
+        global.trackingManager?._markTimeLogSynced?.({
+          id: row.timeLogId,
+          start_time: row.startTime,
+          end_time: row.endTime,
+          status: 'completed',
+          event: 'synced_update',
+        });
+      } catch (_) { /* ledger is best-effort */ }
+    } catch (err) {
+      log.warn({
+        step: 'FROZEN_CLOSE_FLUSH_FAILED',
+        message: err?.message || String(err),
+        ctx: { timeLogId: row.timeLogId, endTime: row.endTime },
+      });
+      try {
+        global.trackingManager?._queueOfflineTimeLogUpdate?.(
+          {
+            id: row.timeLogId,
+            user_id: row.userId,
+            start_time: row.startTime,
+            end_time: row.endTime,
+            status: 'completed',
+            last_alive_at: row.endTime,
+            client_last_seen_at: row.endTime,
+            frozen_end: true,
+          },
+          { flush: false },
+        );
+      } catch (_) { /* file remains */ }
+    }
+  }
+  if (flushed < pending.length) {
+    try {
+      global.trackingManager?.startOfflineSync?.();
+    } catch (_) { /* ignore */ }
+  }
+  return { flushed, pending };
+}
+
 async function closeOpenSessionsAfterExplicitStop(options = {}) {
   const backendTimeLogs = require('./backend-time-logs');
   const userId = options.userId || global.currentUserId || global.config?.user_id;
@@ -229,6 +487,17 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
     return { success: false, closed: 0, reason: 'no_user' };
   }
   const deviceId = options.deviceId !== undefined ? options.deviceId : getDeviceId();
+
+  // Frozen pending closes first. kill-all at last_alive must not raise a
+  // Stop that already has a durable earlier end.
+  try {
+    await flushFrozenPendingCloses(options);
+  } catch (flushErr) {
+    log.warn({
+      step: 'FROZEN_CLOSE_PRE_KILL_FAILED',
+      message: flushErr?.message || String(flushErr),
+    });
+  }
 
   // Offline: the end time is already durable on disk (pending close + offline
   // queue) and will sync. Chaining more network calls here only makes the
@@ -405,6 +674,17 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
 }
 
 function applyRecoveredSession(activeLog) {
+  if (!activeLog?.id) return { refused: true, reason: 'no_id' };
+  if (mustNotRecoverSession(activeLog.id)) {
+    const endTime = frozenEndForSession(activeLog.id);
+    log.warn({
+      step: 'RECOVER_REFUSED',
+      message: 'Refusing to resume a session that already has a frozen Stop',
+      ctx: { timeLogId: activeLog.id, endTime },
+    });
+    return { refused: true, reason: 'frozen_end', endTime };
+  }
+
   global.currentTimeLogId = activeLog.id;
   global.currentProjectId = activeLog.project_id;
   global.isTracking = true;
@@ -449,6 +729,7 @@ function applyRecoveredSession(activeLog) {
       ageSeconds: activeLog.age_seconds,
     },
   });
+  return { recovered: true, timeLogId: activeLog.id };
 }
 
 /**
@@ -474,10 +755,7 @@ async function reconcileDeviceSessions({ preferRecover = true } = {}) {
 /**
  * Periodic session health check to prevent sync issues
  */
-function startSessionHealthCheck() {
-  const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
-
-  const healthCheck = async () => {
+async function runSessionHealthCheckTick() {
     try {
       if (!global.currentUserId) {
         log.debug({ step: 'HEALTH_CHECK_SKIP', message: 'No user ID, skipping' });
@@ -485,6 +763,21 @@ function startSessionHealthCheck() {
       }
 
       if (global.isTracking && global.currentTimeLogId) {
+        const refused = refuseLiveFrozenSession();
+        if (refused) {
+          try {
+            await closeOpenSessionsAfterExplicitStop({
+              timeLogId: refused.id,
+              end_time: refused.endTime,
+            });
+          } catch (closeErr) {
+            log.warn({
+              step: 'HEALTH_CHECK_FROZEN_CLOSE_FAILED',
+              message: closeErr?.message || String(closeErr),
+            });
+          }
+          return;
+        }
         const checkpointAt = readLocalCheckpointAt();
         try {
           const start =
@@ -514,7 +807,7 @@ function startSessionHealthCheck() {
                 end_time: dayEnd,
                 timeLogId: global.currentTimeLogId,
               });
-              clearLocalTrackingAfterStaleClose();
+              clearLocalTrackingAfterStaleClose({ reason: 'cross_midnight' });
               if (projectId && typeof global.startTracking === 'function') {
                 try {
                   await global.startTracking(projectId);
@@ -534,7 +827,10 @@ function startSessionHealthCheck() {
             message: dayErr?.message || String(dayErr),
           });
         }
-        if (isIsoRecent(checkpointAt, STALE_CHECKPOINT_MS)) {
+        const tmCheckpoint =
+          global.trackingManager?._readSessionCheckpoint?.()?.checkpointAt || null;
+        const durableAt = checkpointAt || tmCheckpoint;
+        if (isIsoRecent(durableAt, STALE_CHECKPOINT_MS)) {
           log.debug({
             step: 'HEALTH_CHECK_OK',
             ctx: {
@@ -545,26 +841,18 @@ function startSessionHealthCheck() {
           });
           return;
         }
+        // This process is alive — the health tick is running. A missing or
+        // stale checkpoint file (wrong app-data dir, RDS backoff skipping
+        // the remote heartbeat, slow internet) must not Stop the employee.
+        // Dead-man's switch is for when the process vanishes, not for this.
         log.warn({
-          step: 'HEALTH_CHECK_STALE_WHILE_TRACKING',
-          message: 'Tracking flag set but checkpoint is stale — closing at last durable mark',
-          ctx: { timeLogId: global.currentTimeLogId, checkpointAt },
+          step: 'HEALTH_CHECK_HEAL_CHECKPOINT',
+          message: 'Checkpoint missing/stale while tracking — refreshing mark, not stopping',
+          ctx: { timeLogId: global.currentTimeLogId, checkpointAt: durableAt },
         });
         try {
-          global.trackingManager?._stopTimeLogCheckpoint?.();
+          await global.trackingManager?._checkpointCurrentTimeLog?.();
         } catch (_) { /* ignore */ }
-        try {
-          await closeOpenSessionsAfterExplicitStop({
-            end_time: checkpointAt || undefined,
-            protectLive: false,
-          });
-        } catch (closeErr) {
-          log.warn({
-            step: 'HEALTH_CHECK_STALE_CLOSE_FAILED',
-            message: closeErr?.message || String(closeErr),
-          });
-        }
-        clearLocalTrackingAfterStaleClose();
         return;
       }
 
@@ -579,13 +867,18 @@ function startSessionHealthCheck() {
           return;
         }
 
-        const preferRecover = !global.userExplicitlyStopped;
+        const explicit = peekExplicitStop();
+        const pendingCloses = listPendingSessionCloses();
+        const preferRecover = !explicit.active && pendingCloses.length === 0;
         const backendTimeLogs = require('./backend-time-logs');
 
-        // Intentional Stop → close remaining open sessions (do not leave orphans).
-        if (global.userExplicitlyStopped) {
+        // Intentional Stop or a pending frozen close → never recover.
+        if (!preferRecover) {
           try {
-            await closeOpenSessionsAfterExplicitStop();
+            await closeOpenSessionsAfterExplicitStop({
+              timeLogId: explicit.timeLogId || pendingCloses[0]?.timeLogId || undefined,
+              end_time: explicit.endTime || pendingCloses[0]?.endTime || undefined,
+            });
           } catch (closeErr) {
             log.warn({
               step: 'EXPLICIT_STOP_CLOSE_FAILED',
@@ -598,7 +891,20 @@ function startSessionHealthCheck() {
         if (backendTimeLogs.isBackendTimeLogsEnabled()) {
           const result = await reconcileDeviceSessions({ preferRecover });
           if (result?.recovered?.id) {
-            applyRecoveredSession(result.recovered);
+            const applied = applyRecoveredSession(result.recovered);
+            if (applied?.refused) {
+              try {
+                await closeOpenSessionsAfterExplicitStop({
+                  timeLogId: result.recovered.id,
+                  end_time: applied.endTime || undefined,
+                });
+              } catch (closeErr) {
+                log.warn({
+                  step: 'RECOVER_REFUSED_CLOSE_FAILED',
+                  message: closeErr?.message || String(closeErr),
+                });
+              }
+            }
             return;
           }
           if (result?.flagged_count) {
@@ -634,10 +940,13 @@ function startSessionHealthCheck() {
     } catch (error) {
       log.warn({ step: 'HEALTH_CHECK_ERROR', message: error.message });
     }
-  };
+}
 
-  setTimeout(healthCheck, 30000);
-  const interval = setInterval(healthCheck, HEALTH_CHECK_INTERVAL);
+function startSessionHealthCheck() {
+  const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+  setTimeout(() => { void runSessionHealthCheckTick(); }, 30000);
+  const interval = setInterval(() => { void runSessionHealthCheckTick(); }, HEALTH_CHECK_INTERVAL);
 
   if (global.cleanupRegistry) {
     global.cleanupRegistry.registerResource({
@@ -654,13 +963,21 @@ function startSessionHealthCheck() {
  */
 async function forceSyncSessionState() {
   try {
-    if (global.userExplicitlyStopped) {
+    const refusedLive = refuseLiveFrozenSession();
+    const explicit = peekExplicitStop();
+    const pendingCloses = listPendingSessionCloses();
+    if (explicit.active || pendingCloses.length || refusedLive) {
       log.info({
         step: 'FORCE_SYNC_EXPLICIT_STOP',
         message: 'Intentional stop in effect — closing open sessions instead of recovering',
       });
       try {
-        await closeOpenSessionsAfterExplicitStop();
+        await closeOpenSessionsAfterExplicitStop({
+          timeLogId:
+            refusedLive?.id || explicit.timeLogId || pendingCloses[0]?.timeLogId || undefined,
+          end_time:
+            refusedLive?.endTime || explicit.endTime || pendingCloses[0]?.endTime || undefined,
+        });
       } catch (err) {
         log.warn({ step: 'FORCE_SYNC_CLOSE_FAILED', message: err?.message || String(err) });
       }
@@ -676,8 +993,19 @@ async function forceSyncSessionState() {
     if (backendTimeLogs.isBackendTimeLogsEnabled() && global.currentUserId) {
       const result = await reconcileDeviceSessions({ preferRecover: true });
       if (result?.recovered?.id) {
-        applyRecoveredSession(result.recovered);
-        return true;
+        const applied = applyRecoveredSession(result.recovered);
+        if (applied?.refused) {
+          try {
+            await closeOpenSessionsAfterExplicitStop({
+              timeLogId: result.recovered.id,
+              end_time: applied.endTime || undefined,
+            });
+          } catch (err) {
+            log.warn({ step: 'FORCE_SYNC_REFUSED_CLOSE_FAILED', message: err?.message || String(err) });
+          }
+          return false;
+        }
+        return !!applied?.recovered;
       }
       if (result?.flagged_count) {
         log.info({
@@ -711,8 +1039,25 @@ async function forceSyncSessionState() {
   }
 }
 
-function clearLocalTrackingAfterStaleClose() {
+function clearLocalTrackingAfterStaleClose(options = {}) {
+  const { isAllowedLiveClockStopReason } = require('./live-clock-policy');
+  const reason = options.reason || '';
+  const live =
+    !!(global.isTracking || global.trackingManager?.isTracking) &&
+    !!(global.currentTimeLogId || global.trackingManager?.currentTimeLogId) &&
+    !global.isStopping;
+  if (live && !isAllowedLiveClockStopReason(reason)) {
+    log.warn({
+      step: 'REFUSE_CLEAR_LIVE_CLOCK',
+      message: 'Will not clear a live Start — queue/resync instead',
+      ctx: { reason: reason || 'unspecified', timeLogId: global.currentTimeLogId },
+    });
+    return false;
+  }
   global.isTracking = false;
+  try {
+    global.trayManager?.stopTrayTimer?.();
+  } catch (_) { /* ignore */ }
   global.currentTimeLogId = null;
   global.currentSession = null;
   global.sessionStartTime = null;
@@ -764,11 +1109,24 @@ async function reconcileAfterWake() {
     } catch (err) {
       log.warn({ step: 'WAKE_LID_CLOSE_FAILED', message: err?.message || String(err) });
     }
-    clearLocalTrackingAfterStaleClose();
+    clearLocalTrackingAfterStaleClose({ reason: 'system_sleep' });
     return { closedStale: true, lidStop: true, end_time: proofIso || checkpointAt || null };
   }
 
   if (!stale && (global.isTracking || global.trackingManager?.isTracking)) {
+    const refused = refuseLiveFrozenSession();
+    if (refused) {
+      try {
+        await closeOpenSessionsAfterExplicitStop({
+          timeLogId: refused.id,
+          end_time: refused.endTime,
+          protectLive: false,
+        });
+      } catch (err) {
+        log.warn({ step: 'WAKE_FROZEN_CLOSE_FAILED', message: err?.message || String(err) });
+      }
+      return { closedStale: true, frozenStop: true, end_time: refused.endTime };
+    }
     log.info({ step: 'WAKE_CONTINUE', message: 'Checkpoint is fresh — keeping session' });
     return { continued: true };
   }
@@ -792,12 +1150,13 @@ async function reconcileAfterWake() {
   } catch (err) {
     log.warn({ step: 'WAKE_STALE_CLOSE_FAILED', message: err?.message || String(err) });
   }
-  clearLocalTrackingAfterStaleClose();
+  clearLocalTrackingAfterStaleClose({ reason: 'system_sleep' });
   return { closedStale: true, end_time: proofIso || checkpointAt || null };
 }
 
 module.exports = {
   startSessionHealthCheck,
+  runSessionHealthCheckTick,
   forceSyncSessionState,
   reconcileDeviceSessions,
   closeOpenSessionsAfterExplicitStop,
@@ -805,7 +1164,17 @@ module.exports = {
   liveTimeLogId,
   markUserExplicitlyStopped,
   clearUserExplicitlyStopped,
+  peekExplicitStop,
+  shouldDropRecoveredSession,
+  shouldPreferRecover,
+  frozenEndForSession,
+  mustNotRecoverSession,
+  refuseLiveFrozenSession,
+  flushFrozenPendingCloses,
+  applyRecoveredSession,
   loadUserExplicitlyStoppedFromDisk,
+  listPendingSessionCloses,
+  readPendingSessionEndTime,
   resolveExplicitStopEndTime,
   resolveExplicitStopEnd,
   readLocalCheckpointAt,

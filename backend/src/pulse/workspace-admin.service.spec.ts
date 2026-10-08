@@ -84,8 +84,9 @@ describe('WorkspaceAdminService.createWorkspace', () => {
         invite_email_sent: true,
       })),
     };
+    const billing = { ensureCustomer: vi.fn(async () => undefined) };
     return {
-      service: new WorkspaceAdminService(db as never, users as never),
+      service: new WorkspaceAdminService(db as never, users as never, billing as never),
       db,
       users,
       client,

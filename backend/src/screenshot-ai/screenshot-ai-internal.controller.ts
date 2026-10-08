@@ -52,7 +52,7 @@ export class ScreenshotAiInternalController {
     }
 
     await this.repo.markCompleted(screenshotId, {
-      ai_model_used: body.ai_model_used || 'deepseek',
+      ai_model_used: body.ai_model_used || 'deepseek/deepseek-chat',
       activity_type: body.activity_type || 'general',
       category: body.category || 'neutral',
       is_work_related: Boolean(body.is_work_related),

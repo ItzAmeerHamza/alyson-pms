@@ -1042,6 +1042,22 @@ class EnhancedIdleMonitor {
     return Math.max(0, Math.floor(this._sessionIdleSeconds || 0));
   }
 
+  /**
+   * Idle the Today cards may show while a session is still open.
+   * Pulse only counts closed / flushed periods, so an in-progress idle
+   * (or one not yet in the last Pulse read) would otherwise appear on Stop.
+   */
+  getReportableSessionIdleSeconds(minReportSeconds = 5 * 60) {
+    const credited = this.getSessionIdleSeconds();
+    let open = 0;
+    if (this.currentIdleStartTime && this.wasIdleLastCheck) {
+      open = Math.max(0, Math.floor((Date.now() - this.currentIdleStartTime) / 1000));
+    }
+    const best = Math.max(credited, open);
+    const floor = Math.max(0, Math.floor(Number(minReportSeconds) || 0));
+    return best >= floor ? best : 0;
+  }
+
   /** Call on Start so idle does not carry over from the previous session. */
   resetSessionIdleSeconds() {
     this._sessionIdleSeconds = 0;

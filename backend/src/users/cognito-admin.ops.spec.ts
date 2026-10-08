@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UsernameExistsException } from '@aws-sdk/client-cognito-identity-provider';
-import { adminCreateUser, generateInviteTemporaryPassword } from './cognito-admin.ops';
+import {
+  adminCreateUser,
+  adminResetTemporaryPassword,
+  generateInviteTemporaryPassword,
+} from './cognito-admin.ops';
 
 describe('generateInviteTemporaryPassword', () => {
   it('meets Palisade min length and includes mixed character classes', () => {
@@ -58,5 +62,28 @@ describe('adminCreateUser', () => {
       code: 'USERNAME_EXISTS',
       message: 'A user with this email already exists',
     });
+  });
+});
+
+describe('adminResetTemporaryPassword', () => {
+  it('sets a non-permanent password and returns it', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const result = await adminResetTemporaryPassword(
+      { send } as never,
+      'us-west-2_pool',
+      'ada@cintara.ai',
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.temporaryPassword.length).toBeGreaterThanOrEqual(8);
+    }
+    expect(send).toHaveBeenCalledTimes(1);
+    const command = send.mock.calls[0][0];
+    expect(command.input.Permanent).toBe(false);
+    expect(command.input.Password).toBe(
+      result.ok ? result.temporaryPassword : undefined,
+    );
+    expect(command.input.Username).toBe('ada@cintara.ai');
   });
 });

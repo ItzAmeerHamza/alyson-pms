@@ -33,6 +33,9 @@ describe('non-effective time — Mac and Windows Pulse', () => {
       isVideoMeetingScreenshot('Google Chrome', 'Meet - Daily Sync - Google Chrome'),
     ).toBe(true);
     expect(applyMeetingActivityFloor(0, 'Google Chrome', 'Meet - Daily Sync - Google Chrome')).toBe(
+      0,
+    );
+    expect(applyMeetingActivityFloor(12, 'Google Chrome', 'Meet - Daily Sync - Google Chrome')).toBe(
       MEETING_ACTIVITY_FLOOR_PERCENT,
     );
 
@@ -43,19 +46,34 @@ describe('non-effective time — Mac and Windows Pulse', () => {
 
   it('Windows Zoom desktop + no keys does not become non-effective', () => {
     expect(isVideoMeetingScreenshot('Zoom', 'Zoom Meeting')).toBe(true);
-    expect(applyMeetingActivityFloor(2, 'Zoom', 'Zoom Meeting')).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
+    expect(applyMeetingActivityFloor(2, 'Zoom', 'Zoom Meeting')).toBe(2);
+    expect(applyMeetingActivityFloor(20, 'Zoom', 'Zoom Meeting')).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
 
     const result = splitHours(2, 0, 0);
     expect(result.non_effective_hours).toBe(0);
   });
 
-  it('idle that sits inside a meeting interval is clipped (Mac or Windows capture)', () => {
+  it('clips short idle inside a meeting and keeps AFK idle of 10+ minutes', () => {
     const meetStart = Date.parse('2026-08-26T14:00:00Z');
     const meetings = new Map([
       ['1196', [{ startMs: meetStart, endMs: meetStart + min(120) }]],
     ]);
 
-    const byUser = svc.idleHoursFromIdleLogs(
+    const shortIdle = svc.idleHoursFromIdleLogs(
+      [
+        {
+          user_id: '1196',
+          idle_start: '2026-08-26T14:05:00Z',
+          idle_end: '2026-08-26T14:13:00Z',
+          duration_seconds: 8 * 60,
+        },
+      ],
+      'America/Chicago',
+      meetings,
+    );
+    expect(shortIdle.get('1196')?.get('2026-08-26') ?? 0).toBe(0);
+
+    const longAfk = svc.idleHoursFromIdleLogs(
       [
         {
           user_id: '1196',
@@ -67,8 +85,7 @@ describe('non-effective time — Mac and Windows Pulse', () => {
       'America/Chicago',
       meetings,
     );
-
-    expect(byUser.get('1196')?.get('2026-08-26') ?? 0).toBe(0);
+    expect(longAfk.get('1196')?.get('2026-08-26')).toBeCloseTo(110 / 60, 5);
     expect(splitHours(2, 0, 0).non_effective_hours).toBe(0);
   });
 
@@ -92,6 +109,27 @@ describe('non-effective time — Mac and Windows Pulse', () => {
     );
     expect(leftoverIdle).toEqual([]);
     expect(isVideoMeetingScreenshot('Microsoft Word', 'Notes.docx')).toBe(false);
+  });
+
+  it('dual-screen AFK of 10+ minutes during a leftover meeting still counts as idle', () => {
+    const meetStart = Date.parse('2026-09-04T12:30:00Z');
+    const meetings = new Map([
+      ['1203', [{ startMs: meetStart, endMs: meetStart + min(60) }]],
+    ]);
+    const byUser = svc.idleHoursFromIdleLogs(
+      [
+        {
+          user_id: '1203',
+          idle_start: '2026-09-04T12:33:00Z',
+          idle_end: '2026-09-04T13:20:00Z',
+          duration_seconds: 47 * 60,
+        },
+      ],
+      'Asia/Karachi',
+      meetings,
+    );
+    expect(byUser.get('1203')?.get('2026-09-04')).toBeCloseTo(47 / 60, 5);
+    expect(splitHours(1, 0, 0).non_effective_hours).toBe(0);
   });
 
   it('low activity without a meeting is non-effective on both platforms', () => {

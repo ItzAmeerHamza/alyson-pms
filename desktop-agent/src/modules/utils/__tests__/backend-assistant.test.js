@@ -10,6 +10,7 @@ const {
   genericError,
   fetchAssistantBriefing,
   fetchAssistantChat,
+  resetBriefingCacheForTests,
 } = require('../backend-assistant');
 
 describe('backend assistant client', () => {
@@ -17,6 +18,7 @@ describe('backend assistant client', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    resetBriefingCacheForTests();
     jest.clearAllMocks();
   });
 
@@ -28,7 +30,7 @@ describe('backend assistant client', () => {
 
   it('keeps API errors generic', () => {
     expect(genericError(401)).toBe('Please sign in again.');
-    expect(genericError(403)).toBe('Could not load Alyson Coach right now.');
+    expect(genericError(403)).toBe('Could not load Tavilo Coach right now.');
     expect(genericError(429)).toMatch(/busy/i);
     expect(genericError(500)).not.toMatch(/stack|internal/i);
   });
@@ -69,5 +71,19 @@ describe('backend assistant client', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(global.fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer fresh-token');
     expect(global.fetch.mock.calls[1][1].headers['X-Pulse-Workspace-Id']).toBe('10');
+  });
+
+  it('reuses a fresh briefing instead of calling the API again', async () => {
+    resolveAssistantToken.mockResolvedValue('fresh-token');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ opening: 'Here is your month so far.' }),
+    });
+    const payload = { date: '2026-09-17', organizationId: '10' };
+    const first = await fetchAssistantBriefing({ api_base_url: 'https://api.example' }, payload);
+    const second = await fetchAssistantBriefing({ api_base_url: 'https://api.example' }, payload);
+    expect(first.success).toBe(true);
+    expect(second.cached).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

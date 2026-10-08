@@ -10,6 +10,7 @@ import {
   resolvePacingStatus,
   weekdayKeysInclusive,
 } from './pacing-math';
+import { leaveTopUpHours } from './time-adjustment.util';
 
 describe('pacing-math acceptance', () => {
   it('monthly target = weekdays × 7 (22 → 154)', () => {
@@ -90,6 +91,24 @@ describe('pacing-math acceptance', () => {
     expect(row.hoursWorked).toBe(26);
     expect(row.projectedPace).toBe(32.5); // weekly: sum(sample)+avg = 26+6.5
     expect(row.hoursWorkedLogged).toBe(21);
+  });
+
+  it('holiday work above the leave floor is not stacked', () => {
+    const tracked = 9;
+    const rawLeave = leaveHoursFromFraction(1);
+    const applied = leaveTopUpHours(tracked, rawLeave);
+    const row = computePacingRowMetrics({
+      hoursWorkedLogged: tracked,
+      leaveHoursCredit: applied,
+      targetHours: WEEKLY_HOURS_TARGET,
+      dailyHoursSample: [tracked],
+      remainingWorkDays: 4,
+      mode: 'weekly',
+    });
+    expect(rawLeave).toBe(8);
+    expect(applied).toBe(0);
+    expect(row.hoursWorked).toBe(9);
+    expect(row.leaveHoursCredit).toBe(0);
   });
 
   it('weekly leave credit does not change the sample-based projection formula', () => {

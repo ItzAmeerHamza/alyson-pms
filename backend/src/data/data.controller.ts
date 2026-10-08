@@ -14,7 +14,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
-import { canManagePulseUsers, isPulseAdmin } from '../database/time-doctor-sql';
+import { BILLING_FEATURES } from '../billing/billing.catalog';
+import { BillingFeatureGuard, RequireBillingFeature } from '../billing/billing-feature.guard';
+import { canManagePulseUsers, isPulseAdmin, pulseTenantForbiddenMessage } from '../database/time-doctor-sql';
 import {
   DataService,
   normalizeScreenshotProductivityFilter,
@@ -22,17 +24,25 @@ import {
 } from './data.service';
 
 @Controller('data')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, BillingFeatureGuard)
 export class DataController {
   constructor(private readonly dataService: DataService) {}
 
   private ensureAdmin(user: any) {
+    const tenantMsg = pulseTenantForbiddenMessage(user);
+    if (tenantMsg) {
+      throw new ForbiddenException(tenantMsg);
+    }
     if (!isPulseAdmin(user)) {
       throw new ForbiddenException('Admin role required');
     }
   }
 
   private ensureCanManageUsers(user: any) {
+    const tenantMsg = pulseTenantForbiddenMessage(user);
+    if (tenantMsg) {
+      throw new ForbiddenException(tenantMsg);
+    }
     if (!canManagePulseUsers(user)) {
       throw new ForbiddenException('Admin or manager role required');
     }
@@ -69,6 +79,7 @@ export class DataController {
   }
 
   @Post('projects')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async createProject(
     @Req() req: { user: any },
     @Body() body: { name: string; description?: string; organization_id?: string | null },
@@ -81,6 +92,7 @@ export class DataController {
   }
 
   @Patch('projects/:id')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async updateProject(
     @Req() req: { user: any },
     @Param('id') id: string,
@@ -93,6 +105,7 @@ export class DataController {
   }
 
   @Delete('projects/:id')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async deleteProject(@Req() req: { user: any }, @Param('id') id: string) {
     this.ensureAdmin(req.user);
     const deleted = await this.dataService.deleteProject(req.user, id);
@@ -114,6 +127,7 @@ export class DataController {
   }
 
   @Post('projects/:id/assignments')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async setProjectAssignments(
     @Req() req: { user: any },
     @Param('id') id: string,
@@ -124,6 +138,7 @@ export class DataController {
   }
 
   @Delete('projects/:id/assignments/:userId')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async unassignUserFromProject(
     @Req() req: { user: any },
     @Param('id') id: string,
@@ -136,6 +151,7 @@ export class DataController {
   }
 
   @Delete('projects/:id/assignments')
+  @RequireBillingFeature(BILLING_FEATURES.projects)
   async deleteProjectAssignments(@Req() req: { user: any }, @Param('id') id: string) {
     this.ensureAdmin(req.user);
     await this.dataService.deleteProjectAssignments(req.user, id);
@@ -369,10 +385,32 @@ export class DataController {
     return this.dataService.setUserProjects(req.user, id, body?.project_ids ?? []);
   }
 
-  @Delete('users/:id')
-  async deleteUser(@Req() req: { user: any }, @Param('id') id: string) {
+  @Post('users/reassign-reports')
+  async reassignReports(
+    @Req() req: { user: any },
+    @Body() body: { from_manager_id?: string; to_manager_id?: string | null },
+  ) {
     this.ensureCanManageUsers(req.user);
-    const deleted = await this.dataService.deleteUser(req.user, id);
+    if (!body?.from_manager_id) {
+      throw new BadRequestException('from_manager_id is required');
+    }
+    return this.dataService.reassignReports(
+      req.user,
+      body.from_manager_id,
+      body.to_manager_id ?? null,
+    );
+  }
+
+  @Delete('users/:id')
+  async deleteUser(
+    @Req() req: { user: any },
+    @Param('id') id: string,
+    @Query('reassignManagerId') reassignManagerId?: string,
+  ) {
+    this.ensureCanManageUsers(req.user);
+    const deleted = await this.dataService.deleteUser(req.user, id, {
+      reassignManagerId: reassignManagerId || null,
+    });
     if (!deleted) throw new NotFoundException('User not found');
     return { success: true };
   }

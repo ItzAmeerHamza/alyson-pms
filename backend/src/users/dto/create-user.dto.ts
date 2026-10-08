@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -41,6 +42,17 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(120)
   department?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  country?: string;
+
+  /** First work day expected to track (YYYY-MM-DD). Defaults to today. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  started_on?: string;
 
   /** Optional project UUIDs to assign on invite (workspace-scoped). */
   @IsOptional()

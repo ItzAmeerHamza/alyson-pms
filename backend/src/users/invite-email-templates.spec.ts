@@ -26,9 +26,11 @@ describe('invite email', () => {
     expect(mail.html).toContain('Tmp#Pass12');
     expect(mail.html).toContain('set a new password');
     expect(mail.html).toContain('Alyson Time Doctor');
+    expect(mail.html).toContain('desktop app');
     expect(mail.html).toContain('/dashboard/alyson-pulse/download');
     expect(mail.text).toContain('Temporary password: Tmp#Pass12');
     expect(mail.text).toContain('desktop app');
+    expect(mail.text).toContain('web app and the desktop app');
   });
 
   it('escapes HTML in the name and password', () => {

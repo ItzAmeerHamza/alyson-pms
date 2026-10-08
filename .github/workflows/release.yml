@@ -291,12 +291,23 @@ jobs:
           name: windows-artifacts
           path: release-assets
 
-      # electron-builder writes Alyson-PM in yml but ships Alyson.PM files — patch before publish.
+      # productName is "Tavilo Time", so electron-builder emits "Tavilo Time-*"
+      # files and "Tavilo-Time-*" urls. Installed apps request Alyson.PM-* .
+      # Rename the binaries and patch the manifests before publish.
       - name: Fix updater metadata filenames
         run: |
+          shopt -s nullglob
+          for f in release-assets/Tavilo\ Time-* release-assets/Tavilo-Time-*; do
+            [ -e "$f" ] || continue
+            base="$(basename "$f")"
+            base="${base#Tavilo Time-}"
+            base="${base#Tavilo-Time-}"
+            mv -- "$f" "release-assets/Alyson.PM-$base"
+            echo "Renamed updater asset to Alyson.PM-$base"
+          done
           for f in release-assets/latest-mac.yml release-assets/latest.yml; do
             if [ -f "$f" ]; then
-              sed -i.bak 's/Alyson-PM/Alyson.PM/g' "$f"
+              sed -i.bak -e 's/Tavilo-Time/Alyson.PM/g' -e 's/Alyson-PM/Alyson.PM/g' "$f"
               rm -f "$f.bak"
               echo "Patched $f"
             fi
@@ -399,7 +410,7 @@ jobs:
 
             **macOS first install:** Download the DMG for your chip (arm64 = Apple Silicon, x64 = Intel).
             Right-click the app → **Open** if Gatekeeper blocks a double-click, then grant
-            **Screen Recording** and **Accessibility** to **Alyson PM**.
+            **Screen Recording** and **Accessibility** to **Tavilo Time**.
 
             **Windows:** Download the `.exe` Setup installer and run it.
             SmartScreen may warn because the installer is unsigned — **More info** → **Run anyway**.

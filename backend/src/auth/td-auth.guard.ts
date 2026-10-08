@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { IS_PUBLIC_KEY } from './public.decorator';
+import { applyPulseWorkspaceContext, pulseWorkspaceFromRequest } from '../database/time-doctor-sql';
 
 /**
  * Palisade-style auth for the Time Doctor-compatible API.
@@ -38,7 +39,11 @@ export class TdAuthGuard implements CanActivate {
       throw new UnauthorizedException('Authentication token missing');
     }
 
-    request.user = await this.authService.getUserFromAppToken(token);
+    const user = await this.authService.getUserFromAppToken(token);
+    request.user = applyPulseWorkspaceContext(
+      user,
+      pulseWorkspaceFromRequest(request.headers, request.query),
+    );
     return true;
   }
 

@@ -69,9 +69,11 @@ function applyScreenshotIntervalMinutes(minutes, options = {}) {
   const changed = prevSeconds !== seconds;
   lastAppliedMinutes = mins;
 
-  console.log(
-    `📸 [WORKSPACE-SETTINGS] Screenshot interval from database: ${mins} min (${seconds}s)`,
-  );
+  if (changed) {
+    console.log(
+      `📸 [WORKSPACE-SETTINGS] Screenshot interval from database: ${mins} min (${seconds}s)`,
+    );
+  }
 
   if (changed && options.restartCapture && global.isTracking && global.enhancedScreenshotManager) {
     try {

@@ -1130,7 +1130,7 @@ class ForceUpdater {
     console.log(`🔧 [FORCE-UPDATER] Windows download soft-fallback (auto-retry kept): ${url} (${reason || 'unknown'})`);
     const friendly = this.isTransientNetworkUpdateError(reason)
       ? 'Could not reach the update server. Click Retry Update — the app will download and install automatically. Manual download is only if Retry keeps failing.'
-      : 'Download interrupted. Click Retry Update — Alyson PM will download and install automatically. Use Download Installer only if Retry keeps failing.';
+      : 'Download interrupted. Click Retry Update — Tavilo Time will download and install automatically. Use Download Installer only if Retry keeps failing.';
     return {
       success: false,
       error: reason || 'download_failed',
@@ -1530,7 +1530,7 @@ class ForceUpdater {
       success: true,
       installing: true,
       via: 'windows-setup-exe',
-      message: 'Updating Alyson PM… The app will close and reopen on the new version.',
+      message: 'Updating Tavilo Time… The app will close and reopen on the new version.',
     };
   }
 
@@ -1569,7 +1569,7 @@ class ForceUpdater {
         }
       });
       if (!writableAt) {
-        throw new Error(`No write access to ${bundlePath} (move Alyson PM to Applications, then retry)`);
+        throw new Error(`No write access to ${bundlePath} (move Tavilo Time to Applications, then retry)`);
       }
 
       fs.mkdirSync(extractDir, { recursive: true });
@@ -1717,7 +1717,7 @@ class ForceUpdater {
         dmgOpened: true,
         manualInstallRequired: true,
         manualDownloadUrl: this.getManualDownloadUrl(),
-        message: 'Installer opened in your browser. Drag Alyson PM to Applications, then reopen the app.',
+        message: 'Installer opened in your browser. Drag Tavilo Time to Applications, then reopen the app.',
       };
     }
 
@@ -1788,7 +1788,7 @@ open "$TARGET"
         manualInstallRequired: true,
         manualDownloadUrl: this.getManualDownloadUrl(),
         error: error.message,
-        message: 'Automatic install failed. Installer opened in your browser — drag Alyson PM to Applications, then reopen.',
+        message: 'Automatic install failed. Installer opened in your browser — drag Tavilo Time to Applications, then reopen.',
       };
     }
   }
@@ -1859,7 +1859,7 @@ open "$TARGET"
         dmgOpened: true,
         manualInstallRequired: true,
         manualDownloadUrl: url,
-        message: 'Installer opened in your browser. Drag Alyson PM to Applications to replace the old version, then reopen the app.',
+        message: 'Installer opened in your browser. Drag Tavilo Time to Applications to replace the old version, then reopen the app.',
       };
     }
 

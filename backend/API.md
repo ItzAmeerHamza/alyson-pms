@@ -87,6 +87,19 @@ JWT required. Employees only see own data unless admin (or a delegated grant).
 
 ---
 
+## Tavilo Coach (employee self)
+
+Desktop **Tavilo Coach** sidebar. JWT only; always scoped to the signed-in user (never another employee). Uses Pulse effective-time rules and existing screenshot vision analysis. Follow-ups are answered from recorded facts plus recent chat turns. Canned templates are only a fallback if DeepSeek is not configured or the model invents numbers.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/pulse/assistant/briefing?date=YYYY-MM-DD` | Opening month-to-date summary plus today, effective/non-effective, screenshot vision, week/month pacing, coaching tips |
+| POST | `/pulse/assistant/chat` | Follow-up question. Body: `{ date?, message, history? }` |
+
+`date` is the company work day. Omit it for today.
+
+---
+
 ## Desktop agent sync
 
 | Method | Path | Auth | Description |
@@ -119,6 +132,7 @@ Actions: `create_time_log`, `upsert_time_log`, `update_time_log`, `close_active_
 | `RESEND_API_KEY` | For email | Low-hours notifications |
 | `EMAIL_FROM` | Optional | Sender address |
 | `ALLOWED_ORIGINS` | Yes | CORS for Palisade web (`localhost:3000`, `app.palisade.ai`, QA Vercel) |
+| `OPENROUTER_API_KEY` | For vision + Coach | Screenshot analysis and Tavilo Coach copy via OpenRouter (DeepSeek model); briefing still returns Pulse stats without it |
 
 ---
 

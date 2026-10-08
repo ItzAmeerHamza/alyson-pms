@@ -5,6 +5,9 @@ const {
   effectiveSessionStart,
   elapsedSecondsExcludingSleep,
   closedBaseAfterSleep,
+  resolveClosedBaseForStart,
+  excludeOwnSessionFromClosedBase,
+  resolveLiveTrackedSeconds,
   isPhantomStoppedTotal,
 } = require('../sleep-aware-elapsed');
 
@@ -113,5 +116,182 @@ describe('sleep-aware elapsed (lid down must not count)', () => {
       expect(billed).toBe(3600);
       expect(wallIncludingSleep).toBeGreaterThan(2.8 * 3600);
     });
+  });
+});
+
+describe('resolveClosedBaseForStart — never flash 00:00:00 on Continue', () => {
+  it('keeps a known closed total even when the Start path has no fresh DB auth', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 2 * 3600,
+        stopFloor: 0,
+        lastPainted: 2 * 3600,
+        liveElapsed: 0,
+        nearWorkDayCap: false,
+      }),
+    ).toBe(2 * 3600);
+  });
+
+  it('uses last painted total when closed base was wrongly dropped to 0', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 0,
+        lastPainted: 90 * 60,
+        liveElapsed: 0,
+        nearWorkDayCap: false,
+      }),
+    ).toBe(90 * 60);
+  });
+
+  it('uses the Stop-click floor when closed base was cleared', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 5400,
+        lastPainted: 5400,
+        liveElapsed: 0,
+        nearWorkDayCap: false,
+      }),
+    ).toBe(5400);
+  });
+
+  it('does not double-count live elapsed when re-arming mid-session', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 0,
+        lastPainted: 2 * 3600 + 600,
+        liveElapsed: 600,
+        nearWorkDayCap: false,
+      }),
+    ).toBe(2 * 3600);
+  });
+
+  it('discards a since-midnight leftover when there is no completed floor', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 0,
+        lastPainted: 3 * 3600,
+        liveElapsed: 0,
+        nearWorkDayCap: true,
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps a real full-day closed total even when it sits near the work-day cap', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 8 * 3600,
+        stopFloor: 8 * 3600,
+        lastPainted: 8 * 3600,
+        liveElapsed: 0,
+        nearWorkDayCap: true,
+      }),
+    ).toBe(8 * 3600);
+  });
+
+  it('Hamza 21 Sep 15:25 — Stop floor 5713 must win over stale before-current 711', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 711,
+        stopFloor: 5713,
+        lastPainted: 5722,
+        liveElapsed: 0,
+        nearWorkDayCap: false,
+      }),
+    ).toBe(5713);
+  });
+
+  it('Start after a 1h break keeps the Stop floor even near the work-day cap', () => {
+    expect(
+      resolveClosedBaseForStart({
+        closedBase: 0,
+        stopFloor: 3600,
+        lastPainted: 3600,
+        liveElapsed: 0,
+        nearWorkDayCap: true,
+      }),
+    ).toBe(3600);
+  });
+});
+
+describe('recover-after-idle must not double-count (Hamza 29 Sep)', () => {
+  const start = '2026-09-29T15:37:43.818Z';
+  const idleEnd = '2026-09-29T16:40:46.596Z';
+  const finalStop = '2026-09-29T17:51:30.052Z';
+
+  it('strips this session out of closedBase when Start reused the original start', () => {
+    expect(
+      excludeOwnSessionFromClosedBase({
+        closedBase: 3787,
+        sessionStart: start,
+        lastStopAt: idleEnd,
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps earlier sessions when recovering a later row', () => {
+    expect(
+      excludeOwnSessionFromClosedBase({
+        closedBase: 2 * 3600 + 3787,
+        sessionStart: start,
+        lastStopAt: idleEnd,
+      }),
+    ).toBe(2 * 3600 + 5);
+  });
+
+  it('does not strip closedBase for a new Start after Stop', () => {
+    expect(
+      excludeOwnSessionFromClosedBase({
+        closedBase: 3787,
+        sessionStart: '2026-09-29T16:52:02.000Z',
+        lastStopAt: idleEnd,
+      }),
+    ).toBe(3787);
+  });
+
+  it('live clock stays at one wall, not closed + live of the same row', () => {
+    const shown = resolveLiveTrackedSeconds({
+      closedBase: 3787,
+      sessionStart: start,
+      lastStopAt: idleEnd,
+      nowMs: new Date(finalStop).getTime(),
+    });
+    expect(shown).toBe(8026);
+    expect(shown).not.toBe(3787 + 8026);
+  });
+});
+
+describe('recover-after-idle must not double-count (Hamza 30 Sep)', () => {
+  const start = '2026-09-30T08:48:00.000Z'; // 13:48 PKT
+  const idleEnd = '2026-09-30T11:36:00.000Z'; // 16:36 PKT authorized cut
+  const now = '2026-09-30T11:56:00.000Z'; // 16:56 PKT
+  const idleStopFloor = 10607;
+  const ownSession = Math.floor((new Date(idleEnd) - new Date(start)) / 1000);
+  const morningClosed = idleStopFloor - ownSession;
+  const liveFromStart = Math.floor((new Date(now) - new Date(start)) / 1000);
+
+  it('strips the idle-stopped session out of the Stop floor', () => {
+    expect(
+      excludeOwnSessionFromClosedBase({
+        closedBase: idleStopFloor,
+        sessionStart: start,
+        lastStopAt: idleEnd,
+      }),
+    ).toBe(morningClosed);
+  });
+
+  it('does not paint 3h as 6h when recover reused the original Start', () => {
+    const shown = resolveLiveTrackedSeconds({
+      closedBase: idleStopFloor,
+      sessionStart: start,
+      lastStopAt: idleEnd,
+      nowMs: new Date(now).getTime(),
+    });
+    expect(shown).toBe(morningClosed + liveFromStart);
+    expect(shown).toBeLessThan(4 * 3600);
+    expect(shown).not.toBe(idleStopFloor + liveFromStart);
   });
 });

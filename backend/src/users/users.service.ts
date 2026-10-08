@@ -1,12 +1,14 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { SesEmailService } from '../common/ses-email.service';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
+  parseTenantUserId,
   parseWorkspaceId,
 } from '../database/time-doctor-sql';
+import { normalizeStartedOn } from '../pulse/employment-start';
 import { CognitoAdminService } from './cognito-admin.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { buildInviteEmail } from './invite-email-templates';
@@ -36,6 +38,8 @@ export class UsersService {
     const firstName = dto.first_name.trim();
     const lastName = dto.last_name.trim();
     const department = dto.department?.trim() || null;
+    const country = dto.country?.trim() || null;
+    const startedOn = normalizeStartedOn(dto.started_on);
     const profileName = `${firstName} ${lastName}`.trim() || email;
     const workspaceRole =
       dto.role === 'admin' || dto.role === 'manager' ? 'admin' : 'member';
@@ -57,6 +61,7 @@ export class UsersService {
     if (!cognito.created) {
       this.logger.log(`Linking existing Cognito user for ${email} (no new invite email)`);
     }
+    const signedInAt = cognito.created ? null : new Date().toISOString();
 
     const client = await this.db.getClient();
     let userId: string;
@@ -133,16 +138,18 @@ export class UsersService {
 
       await client.query(
         `INSERT INTO time_doctor.user_extensions
-           (user_id, workspace_id, cognito_sub, pulse_role, department, started_on, created_at, updated_at)
-         VALUES ($1::int, $2, $3, $4, $5, CURRENT_DATE, NOW(), NOW())
+           (user_id, workspace_id, cognito_sub, pulse_role, department, country, started_on, signed_in_at, created_at, updated_at)
+         VALUES ($1::int, $2, $3, $4, $5, $6, COALESCE($7::date, CURRENT_DATE), $8::timestamptz, NOW(), NOW())
          ON CONFLICT (user_id) DO UPDATE SET
            workspace_id = EXCLUDED.workspace_id,
            cognito_sub = COALESCE(EXCLUDED.cognito_sub, time_doctor.user_extensions.cognito_sub),
            pulse_role = EXCLUDED.pulse_role,
            department = COALESCE(EXCLUDED.department, time_doctor.user_extensions.department),
+           country = COALESCE(EXCLUDED.country, time_doctor.user_extensions.country),
            started_on = COALESCE(time_doctor.user_extensions.started_on, EXCLUDED.started_on),
+           signed_in_at = COALESCE(time_doctor.user_extensions.signed_in_at, EXCLUDED.signed_in_at),
            updated_at = NOW()`,
-        [userId, workspaceId, cognito.sub, dto.role, department],
+        [userId, workspaceId, cognito.sub, dto.role, department, country, startedOn, signedInAt],
       );
 
       const projectIds = Array.from(
@@ -196,6 +203,55 @@ export class UsersService {
     return {
       ...(created.rows[0] ?? { id: userId, email, role: dto.role }),
       linked_existing: Boolean(existingUserId) || !cognito.created,
+      invite_email_sent: inviteEmailSent,
+    };
+  }
+
+  /** Reset Cognito to a new temp password and resend the Pulse invite email. */
+  async resendInvite(actor: ScopedAuthUser, targetId: string) {
+    const workspaceId = parseWorkspaceId(actor.organization_id);
+    if (!workspaceId) {
+      throw new BadRequestException(
+        'Your account is not linked to an organization',
+      );
+    }
+
+    let uid: number;
+    try {
+      uid = parseTenantUserId(targetId);
+    } catch {
+      throw new BadRequestException('Invalid user id');
+    }
+
+    const found = await this.db.query<{
+      id: string;
+      email: string;
+      full_name: string;
+    }>(
+      `${EMPLOYEE_USER_SELECT}
+       WHERE u.id = $1
+         AND ext.workspace_id = $2
+       LIMIT 1`,
+      [uid, workspaceId],
+    );
+    const row = found.rows[0];
+    if (!row?.email) {
+      throw new NotFoundException('User not found');
+    }
+
+    const email = String(row.email).trim().toLowerCase();
+    const firstName =
+      String(row.full_name || '').trim().split(/\s+/).filter(Boolean)[0] || email;
+    const reset = await this.cognitoAdmin.resetTemporaryPassword(email);
+    const inviteEmailSent = await this.sendInviteEmail({
+      firstName,
+      email,
+      temporaryPassword: reset.temporaryPassword,
+    });
+
+    return {
+      id: row.id,
+      email,
       invite_email_sent: inviteEmailSent,
     };
   }

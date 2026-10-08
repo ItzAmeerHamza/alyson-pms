@@ -55,6 +55,13 @@ class TrackingController {
    * this only tears down the local state this controller owns.
    */
   async stopTracking(reason = 'manual', details = null) {
+    const { isAllowedLiveClockStopReason } = require('../utils/live-clock-policy');
+    if (this.isTracking && this.currentTimeLogId && !isAllowedLiveClockStopReason(reason)) {
+      console.warn(
+        `⏱️ [LIVE-CLOCK] Refusing controller Stop (${reason || 'unknown'}) — clock keeps running`,
+      );
+      return { success: false, refused: true, reason: 'live_clock_protected' };
+    }
     console.log(`🛑 Stopping tracking (reason: ${reason})`);
     
     if (!this.isTracking || !this.currentTimeLogId) {

@@ -2,11 +2,19 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.245] - 2026-10-09
+
+### Changed
+- The desktop app is now **Tavilo Time** (name, icon, and on-screen text). Installed apps still update in place. Screen Recording and Accessibility stay on the same bundle id and signing identity. Saved data stays in the existing app folder.
+
+### Fixed
+- Tavilo Coach answers plain questions, including arithmetic, without turning them into a time-tracking reply.
+
 ## [1.0.244] - 2026-09-17
 
 ### Added
 - **Password in the app**: Invited users can set a password on first login. Forgot password (email code) and Change Password work in the sidebar — same password as app.alyson.ai.
-- **Alyson Coach**: New sidebar page with a daily hours briefing and chat.
+- **Tavilo Coach**: New sidebar page with a daily hours briefing and chat.
 - Closing the window (X) hides to the tray and **keeps tracking**. Only Stop, Quit, or lid/idle close the session.
 
 ### Fixed

@@ -1,48 +1,75 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const assetsDir = path.resolve(root, "assets");
-const logoSvgPath = path.resolve(assetsDir, "tray-icon.svg");
-const wideSvgPath = path.resolve(assetsDir, "alysonlogo.svg");
+const sourcePng = path.resolve(root, "../tavilo-time-logo-2048.png");
 
-const outIconPng = path.resolve(assetsDir, "icon.png");
-const outTrayPng = path.resolve(assetsDir, "tray-icon.png");
-const outTrayTemplate = path.resolve(assetsDir, "tray-iconTemplate.png");
-const outTrayTemplate2x = path.resolve(assetsDir, "tray-iconTemplate@2x.png");
-
-function pickSvg() {
-  if (fs.existsSync(logoSvgPath)) return logoSvgPath;
-  if (fs.existsSync(wideSvgPath)) return wideSvgPath;
-  console.error("No SVG source found in assets/");
+if (!fs.existsSync(sourcePng)) {
+  console.error(`Missing Tavilo Time logo: ${sourcePng}`);
   process.exit(1);
 }
 
-async function renderSquareIcon(svgPath, size, outPath) {
-  const svgBuffer = fs.readFileSync(svgPath);
-  const rendered = sharp(svgBuffer, { density: 600 }).png();
-  const meta = await rendered.metadata();
-  const width = meta.width ?? 0;
-  const height = meta.height ?? 0;
-  if (!width || !height) {
-    throw new Error(`Could not read rendered SVG size for ${svgPath}`);
-  }
-  const side = Math.min(width, height);
-  await rendered
-    .extract({ left: 0, top: 0, width: side, height: side })
-    .resize(size, size)
+fs.mkdirSync(assetsDir, { recursive: true });
+
+async function renderPng(size, outPath) {
+  await sharp(sourcePng)
+    .resize(size, size, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png({ compressionLevel: 9 })
     .toFile(outPath);
+  console.log("Wrote:", outPath);
 }
 
-/** macOS menu bar template: black silhouette on transparent background. */
-async function renderTemplateIcon(svgPath, size, outPath) {
-  const svgBuffer = fs.readFileSync(svgPath);
-  const { data, info } = await sharp(svgBuffer, { density: 600 })
-    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+async function renderBuffer(size) {
+  return sharp(sourcePng)
+    .resize(size, size, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+/** Windows ICO with embedded PNGs (Vista+). */
+function buildIco(images) {
+  const count = images.length;
+  const headerSize = 6 + count * 16;
+  const header = Buffer.alloc(headerSize);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(count, 4);
+  let offset = headerSize;
+  const parts = [header];
+  images.forEach((img, index) => {
+    const entry = 6 + index * 16;
+    header.writeUInt8(img.size >= 256 ? 0 : img.size, entry);
+    header.writeUInt8(img.size >= 256 ? 0 : img.size, entry + 1);
+    header.writeUInt8(0, entry + 2);
+    header.writeUInt8(0, entry + 3);
+    header.writeUInt16LE(1, entry + 4);
+    header.writeUInt16LE(32, entry + 6);
+    header.writeUInt32LE(img.buffer.length, entry + 8);
+    header.writeUInt32LE(offset, entry + 12);
+    offset += img.buffer.length;
+    parts.push(img.buffer);
+  });
+  return Buffer.concat(parts);
+}
+
+/** macOS menu-bar template fallback: black silhouette on transparent. */
+async function renderTemplateIcon(size, outPath) {
+  const { data, info } = await sharp(sourcePng)
+    .resize(size, size, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -65,18 +92,46 @@ async function renderTemplateIcon(svgPath, size, outPath) {
   })
     .png({ compressionLevel: 9 })
     .toFile(outPath);
+  console.log("Wrote:", outPath);
 }
 
-const svgPath = pickSvg();
+await renderPng(1024, path.join(assetsDir, "icon.png"));
+await renderPng(256, path.join(assetsDir, "tavilo-mark.png"));
+await renderPng(32, path.join(assetsDir, "tray-icon.png"));
+await renderTemplateIcon(22, path.join(assetsDir, "tray-iconTemplate.png"));
+await renderTemplateIcon(44, path.join(assetsDir, "tray-iconTemplate@2x.png"));
 
-await renderSquareIcon(svgPath, 1024, outIconPng);
-console.log("Wrote:", outIconPng);
+const icoSizes = [16, 24, 32, 48, 64, 128, 256];
+const icoImages = [];
+for (const size of icoSizes) {
+  icoImages.push({ size, buffer: await renderBuffer(size) });
+}
+const icoPath = path.join(assetsDir, "icon.ico");
+fs.writeFileSync(icoPath, buildIco(icoImages));
+console.log("Wrote:", icoPath);
 
-await renderSquareIcon(svgPath, 32, outTrayPng);
-console.log("Wrote:", outTrayPng);
-
-await renderTemplateIcon(svgPath, 22, outTrayTemplate);
-console.log("Wrote:", outTrayTemplate);
-
-await renderTemplateIcon(svgPath, 44, outTrayTemplate2x);
-console.log("Wrote:", outTrayTemplate2x);
+const iconset = path.join(assetsDir, "Tavilo.iconset");
+fs.rmSync(iconset, { recursive: true, force: true });
+fs.mkdirSync(iconset, { recursive: true });
+const icnsSizes = [
+  ["icon_16x16.png", 16],
+  ["icon_16x16@2x.png", 32],
+  ["icon_32x32.png", 32],
+  ["icon_32x32@2x.png", 64],
+  ["icon_128x128.png", 128],
+  ["icon_128x128@2x.png", 256],
+  ["icon_256x256.png", 256],
+  ["icon_256x256@2x.png", 512],
+  ["icon_512x512.png", 512],
+  ["icon_512x512@2x.png", 1024],
+];
+for (const [name, size] of icnsSizes) {
+  const filePath = path.join(iconset, name);
+  await renderPng(size, filePath);
+  // iconutil rejects sharp PNGs; sips rewrites them into a set it accepts.
+  execFileSync("sips", ["-s", "format", "png", filePath, "--out", filePath], { stdio: "ignore" });
+}
+const icnsPath = path.join(assetsDir, "icon.icns");
+execFileSync("iconutil", ["-c", "icns", iconset, "-o", icnsPath], { stdio: "inherit" });
+fs.rmSync(iconset, { recursive: true, force: true });
+console.log("Wrote:", icnsPath);

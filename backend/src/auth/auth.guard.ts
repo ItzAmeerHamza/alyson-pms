@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthService, User } from './auth.service';
+import { applyPulseWorkspaceContext, pulseWorkspaceFromRequest } from '../database/time-doctor-sql';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
 @Injectable()
@@ -26,7 +27,11 @@ export class AuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     try {
-      request.user = await this.resolveUser(request);
+      const user = await this.resolveUser(request);
+      request.user = applyPulseWorkspaceContext(
+        user,
+        pulseWorkspaceFromRequest(request.headers, request.query),
+      );
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) {

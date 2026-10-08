@@ -114,9 +114,9 @@ Index: `(ai_analysis_status, captured_at)` for backfill polling.
 
 | Variable | Example |
 |----------|---------|
-| `DEEPSEEK_API_KEY` | `sk-…` |
-| `DEEPSEEK_API_BASE_URL` | `https://api.deepseek.com` |
-| `DEEPSEEK_VISION_MODEL` | Model with image input support |
+| `OPENROUTER_API_KEY` | `sk-or-v1-…` |
+| `OPENROUTER_API_BASE_URL` | `https://openrouter.ai/api` |
+| `OPENROUTER_MODEL` | `deepseek/deepseek-chat` |
 | `SCREENSHOT_AI_ENABLED` | `true` / `false` kill switch |
 | `SCREENSHOT_OCR_PROVIDER` | `tesseract` (default) / `none` |
 
@@ -149,7 +149,7 @@ Add to `infra/sam/template.yaml`:
 | `ScreenshotAiWorkerFunction` | Lambda, 1024MB, 300s timeout, SQS event source |
 | `ScreenshotAiBackfillFunction` | Lambda, EventBridge `rate(5 minutes)` |
 | `ScreenshotAiApiPolicy` | API Lambda: `sqs:SendMessage` |
-| Secrets | `DEEPSEEK_API_KEY` via SSM/Secrets Manager |
+| Secrets | `OPENROUTER_API_KEY` via SSM/Secrets Manager |
 
 Worker shares the same ECR image with a different handler: `dist/lambda/screenshot-ai-worker.handler`.
 
@@ -220,7 +220,7 @@ Some rows may already have `vision_analysis` from the old DeepSeek pipeline. Opt
 
 ## Security
 
-- `DEEPSEEK_API_KEY` only in Secrets Manager / Lambda env — never in repo.
+- `OPENROUTER_API_KEY` only in Secrets Manager / Lambda env — never in repo.
 - Worker runs in VPC (RDS access); needs NAT or VPC endpoint for DeepSeek HTTPS egress.
 - Do not return `ai_error_message` or raw `vision_analysis` to employees — admin/manager only.
 - Screenshot images sent to DeepSeek — document in privacy policy.
@@ -228,7 +228,7 @@ Some rows may already have `vision_analysis` from the old DeepSeek pipeline. Opt
 ## Deployment checklist
 
 1. Run migration `007_screenshot_ai_analysis.sql` on `revclouddb` (done).
-2. Set `DEEPSEEK_API_KEY` in `infra/sam/deploy.env`.
+2. Set `OPENROUTER_API_KEY` in `infra/sam/deploy.env`.
 3. Deploy SAM stack: `cd infra/sam && ./deploy.sh` with `SCREENSHOT_AI_ENABLED=true`.
 4. See `infra/sam/SCREENSHOT_AI_SERVICES.md` for AWS services used.
 5. Verify: upload one screenshot → status `completed` within ~30s.

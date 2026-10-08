@@ -112,7 +112,7 @@ class TrayManager {
 
   /**
    * Build the macOS menu-bar tray image.
-   * Prefer the full-color Alyson PM logo. Template (monochrome) icons turn the
+   * Prefer the full-color Tavilo Time logo. Template (monochrome) icons turn the
    * logo's solid orange disc into a blank white circle in the menu bar.
    */
   _loadMacTrayImage() {
@@ -131,16 +131,24 @@ class TrayManager {
       return image;
     };
 
+    const { macTrayIconWithWhiteBackground } = require('./tray-icon-bg');
+    const withWhiteBg = (image, label) => {
+      const badged = macTrayIconWithWhiteBackground(image);
+      if (badged) {
+        console.log(`✅ [TRAY] ${label} with white menu-bar background`);
+        return badged;
+      }
+      return image.resize({ width: 22, height: 22 });
+    };
+
     const colored = tryImage(coloredTrayPath, false);
     if (colored) {
-      console.log('✅ [TRAY] Loaded colored Alyson PM tray icon for macOS');
-      return colored.resize({ width: 22, height: 22 });
+      return withWhiteBg(colored, 'Loaded colored Tavilo Time tray icon');
     }
 
     const appIcon = tryImage(appIconPath, false);
     if (appIcon) {
-      console.log('⚠️ [TRAY] Using app icon fallback on macOS');
-      return appIcon.resize({ width: 22, height: 22 });
+      return withWhiteBg(appIcon, 'Using app icon fallback');
     }
 
     // Last resort: monochrome template (often looks like a filled circle)
@@ -195,7 +203,7 @@ class TrayManager {
           throw new Error('No macOS tray icon assets found — run npm run generate:icons');
         }
         this.tray = new this.Tray(trayIcon);
-        console.log('✅ [TRAY] macOS tray created with colored Alyson PM icon');
+        console.log('✅ [TRAY] macOS tray created with colored Tavilo Time icon');
       } else {
         const alysonIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
         const trayPngPath = this._resolveAssetPath('tray-icon.png');
@@ -223,7 +231,7 @@ class TrayManager {
     this._setStoppedIcon();
     
     // Set tooltip
-    this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
+    this.tray.setToolTip('⏹ Tavilo Time — Not Tracking');
     
     // Create initial menu
     this.updateMenu();
@@ -235,7 +243,7 @@ class TrayManager {
       }
     });
     
-    console.log(`✅ System tray created (${isMac ? 'macOS colored Alyson PM icon' : 'standard icon'})`);
+    console.log(`✅ System tray created (${isMac ? 'macOS colored Tavilo Time icon' : 'standard icon'})`);
     this._startLocalDayWatch();
   }
 
@@ -580,13 +588,10 @@ class TrayManager {
    * the window is hidden (except periodic heartbeat / force on show).
    */
   _pushRendererTick({ force = false, display, cumulativeDisplay, elapsed, cumulativeSeconds } = {}) {
-    const elapsedSec =
-      elapsed != null ? elapsed : this._getSessionElapsedSeconds();
-    const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
+    const live = this._resolveLiveClock();
+    const elapsedSec = elapsed != null ? elapsed : live.elapsed;
     const cum =
-      cumulativeSeconds != null
-        ? cumulativeSeconds
-        : Math.max(0, baseSec + elapsedSec);
+      cumulativeSeconds != null ? cumulativeSeconds : live.cumulative;
     const disp = display != null ? display : this._formatElapsed(elapsedSec);
     const cumDisp =
       cumulativeDisplay != null ? cumulativeDisplay : this._formatElapsed(cum);
@@ -613,12 +618,18 @@ class TrayManager {
     this._lastRendererPushAt = now;
     this._lastPushedCumulative = cum;
     try {
+      let sessionIdleSeconds = 0;
+      try {
+        sessionIdleSeconds =
+          global.enhancedIdleMonitor?.getReportableSessionIdleSeconds?.() || 0;
+      } catch (_) { /* idle monitor optional */ }
       win.webContents.send('tray-timer-tick', {
         display: disp,
         cumulativeDisplay: cumDisp,
         elapsed: elapsedSec,
         cumulativeSeconds: cum,
         sessionElapsedSeconds: elapsedSec,
+        sessionIdleSeconds,
       });
     } catch (_) { /* ignore */ }
   }
@@ -626,6 +637,86 @@ class TrayManager {
   _getSessionElapsedSeconds() {
     const { elapsedSecondsSinceLocalMidnight } = require('../utils/today-time-log-stats');
     return elapsedSecondsSinceLocalMidnight(this._trackingStartTime);
+  }
+
+  /**
+   * Closed-today + live. If Start recovered the idle-stopped row, strip that
+   * session out of the Stop floor so 3h cannot paint as 6h (Hamza 29–30 Sep).
+   */
+  _resolveLiveClock(nowMs = Date.now()) {
+    const {
+      excludeOwnSessionFromClosedBase,
+      elapsedSecondsExcludingSleep,
+    } = require('../utils/sleep-aware-elapsed');
+    const lastStopAt =
+      global._lastExplicitStopEndIso ||
+      global._stopEndTimeOverride ||
+      global._lastStopEndAtMs ||
+      null;
+    const lastWakeMs = Number(global._lastWakeAtMs) || 0;
+    const elapsed = elapsedSecondsExcludingSleep(
+      this._trackingStartTime,
+      nowMs,
+      lastWakeMs,
+    );
+    const base = excludeOwnSessionFromClosedBase({
+      closedBase: this._cumulativeBaseSeconds,
+      sessionStart: this._trackingStartTime,
+      lastStopAt,
+    });
+    return {
+      elapsed,
+      base,
+      cumulative: Math.max(0, base + elapsed),
+    };
+  }
+
+  _hasLiveSession() {
+    return !!(
+      global.isTracking ||
+      global.trackingManager?.isTracking ||
+      global.currentTimeLogId ||
+      global.trackingManager?.currentTimeLogId
+    );
+  }
+
+  /**
+   * Menu bar and main window must show the same clock. If Start is still
+   * open, heal a false isTracking=false. If there is no session, kill the
+   * orphan tray so it cannot run ahead of a Stopped window.
+   */
+  _ensureLiveSessionForTick() {
+    if (this._hasLiveSession()) {
+      if (!global.isTracking) {
+        global.isTracking = true;
+        if (global.trackingManager) global.trackingManager.isTracking = true;
+        console.warn('⏱️ [TRAY] Healed isTracking — menu bar and app stay on the same live clock');
+      }
+      return true;
+    }
+    if (global.userExplicitlyStopped) return false;
+    try {
+      const cp = global.trackingManager?._readSessionCheckpoint?.();
+      const id = cp?.timeLogId || cp?.time_log_id || cp?.id;
+      if (!id) return false;
+      global.isTracking = true;
+      global.currentTimeLogId = id;
+      if (cp.startTime || cp.start_time) {
+        const start = cp.startTime || cp.start_time;
+        global.sessionStartTime = start;
+      }
+      if (global.trackingManager) {
+        global.trackingManager.isTracking = true;
+        global.trackingManager.currentTimeLogId = id;
+        if (cp.startTime || cp.start_time) {
+          global.trackingManager.sessionStartTime = cp.startTime || cp.start_time;
+        }
+      }
+      console.warn('⏱️ [TRAY] Healed live session from checkpoint — clock keeps running');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /**
@@ -652,9 +743,9 @@ class TrayManager {
     this._maybeRolloverLocalDay();
 
     // Set initial display based on actual elapsed time (not always 00:00:00)
-    const initialElapsed = this._getSessionElapsedSeconds();
-    const base = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
-    const initialCumulative = base + initialElapsed;
+    const initialLive = this._resolveLiveClock();
+    const initialElapsed = initialLive.elapsed;
+    const initialCumulative = initialLive.cumulative;
     const initialDisplay = this._formatElapsed(initialElapsed);
     const initialCumulativeDisplay = this._formatElapsed(initialCumulative);
 
@@ -680,14 +771,17 @@ class TrayManager {
         // from. Offline that is the whole ~2s stop round-trip, billed once per
         // stop/start cycle and never rewound (the base is forward-only).
         if (global.isStopping) return;
+        if (!this._ensureLiveSessionForTick()) {
+          console.warn('⏱️ [TRAY] No live session — stopping orphan menu-bar clock');
+          this.stopTrayTimer();
+          return;
+        }
 
         this._maybeRolloverLocalDay();
-        const elapsed = this._getSessionElapsedSeconds();
+        const live = this._resolveLiveClock();
+        const elapsed = live.elapsed;
         const display = this._formatElapsed(elapsed);
-        const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
-        // LIVE ACCURACY: wall-clock only (closed base + session elapsed).
-        // Do not hold an inflated prior cumulative — that lagged/froze the title.
-        const cumulativeSeconds = Math.max(0, baseSec + elapsed);
+        const cumulativeSeconds = live.cumulative;
         const cumulativeDisplay = this._formatElapsed(cumulativeSeconds);
         this._lastCumulativeSeconds = cumulativeSeconds;
         // High-water tracks real live total only (never invents time).
@@ -755,7 +849,7 @@ class TrayManager {
       if (process.platform === 'darwin') {
         this.tray.setTitle('');
       }
-      this.tray.setToolTip('⏹ Alyson Time Doctor — Not Tracking');
+      this.tray.setToolTip('⏹ Tavilo Time — Not Tracking');
     }
     console.log('⏱️ [TRAY] Timer stopped');
   }
@@ -773,9 +867,8 @@ class TrayManager {
 
       // ── Header: elapsed time or idle label ──
       if (this.isTracking && this._trackingStartTime) {
-        const elapsed = this._getSessionElapsedSeconds();
-        const baseSec = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
-        const todayTotal = this._formatElapsed(baseSec + elapsed);
+        const live = this._resolveLiveClock();
+        const todayTotal = this._formatElapsed(live.cumulative);
         const projectLabel = this._currentProjectName || 'No Project';
         menuItems.push({
           label: `${projectLabel}  ${todayTotal}`,
@@ -783,7 +876,7 @@ class TrayManager {
         });
       } else {
         menuItems.push({
-          label: 'Alyson PM Agent  —  Idle',
+          label: 'Tavilo Time — Idle',
           enabled: false
         });
       }
@@ -845,7 +938,7 @@ class TrayManager {
         autoLaunchChecked = true;
       }
       menuItems.push({
-        label: 'Start Alyson PM at login',
+        label: 'Start Tavilo Time at login',
         type: 'checkbox',
         checked: autoLaunchChecked,
         click: (menuItem) => {
@@ -1158,7 +1251,7 @@ class TrayManager {
         // Still send a silent welcome notification (works if allowed, harmless if not)
         try {
           new this.Notification({
-            title: 'Alyson PM Agent',
+            title: 'Tavilo Time',
             body: 'Notifications enabled — you\'ll be alerted on auto-stop.',
             silent: true
           }).show();
@@ -1172,7 +1265,7 @@ class TrayManager {
       // No dialog — just fire the notification and mark as checked
       try {
         new this.Notification({
-          title: 'Alyson PM Agent',
+          title: 'Tavilo Time',
           body: 'Notifications enabled — you\'ll be alerted on auto-stop.',
           silent: true
         }).show();

@@ -11,6 +11,7 @@ import {
 } from '../database/time-doctor-sql';
 import { normalizeWorkTimezone } from '../lib/work-timezone';
 import { UsersService } from '../users/users.service';
+import { BillingService } from '../billing/billing.service';
 import {
   CreateWorkspaceDto,
   UpdateWorkspaceSettingsDto,
@@ -178,6 +179,7 @@ export class WorkspaceAdminService {
   constructor(
     private readonly db: DatabaseService,
     private readonly users: UsersService,
+    private readonly billing: BillingService,
   ) {}
 
   async getAdminView(user: ScopedAuthUser): Promise<WorkspaceAdminView> {
@@ -281,6 +283,42 @@ export class WorkspaceAdminService {
     }
 
     return this.getAdminView(user);
+  }
+
+  async listPulseWorkspaces(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      slug: string;
+      logo_url: string | null;
+      is_active: boolean;
+      timezone: string | null;
+    }>
+  > {
+    const result = await this.db.query<{
+      id: string;
+      name: string;
+      slug: string;
+      logo_url: string | null;
+      is_active: boolean;
+      timezone: string | null;
+    }>(
+      `SELECT
+         w.id::text AS id,
+         w.name,
+         coalesce(nullif(lower(trim(w.key)), ''), w.id::text) AS slug,
+         w.image_uri AS logo_url,
+         coalesce(w.active, true) AS is_active,
+         ws.settings->>'timezone' AS timezone
+       FROM tenant.workspace w
+       INNER JOIN time_doctor.workspace_settings ws ON ws.workspace_id = w.id
+       WHERE coalesce(w.active, true) = true
+       ORDER BY w.name ASC`,
+    );
+    return result.rows.map((row) => ({
+      ...row,
+      timezone: row.timezone ? normalizeWorkTimezone(row.timezone) : null,
+    }));
   }
 
   async createWorkspace(
@@ -412,6 +450,12 @@ export class WorkspaceAdminService {
     } finally {
       client.release();
     }
+
+    await this.billing.ensureCustomer(String(workspaceId), workspaceName).catch((err) => {
+      this.logger.warn(
+        `Autumn customer skipped: ${err instanceof Error ? err.message : 'failed'}`,
+      );
+    });
 
     const admin = await this.users.createUser(
       { ...user, organization_id: String(workspaceId) },

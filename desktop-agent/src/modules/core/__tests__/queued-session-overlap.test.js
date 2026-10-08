@@ -112,6 +112,68 @@ describe('offline queue overlap clamping', () => {
     }
   });
 
+  it('Hamza Sep 24 — frozen close must survive backfill next to the next Start', () => {
+    const queue = [
+      create('7b9178df', '2026-09-24T15:11:02.266Z', '2026-09-24T15:12:23.426Z'),
+      {
+        type: 'create_time_log',
+        data: {
+          id: '773566bb',
+          start_time: '2026-09-24T15:12:29.420Z',
+          end_time: null,
+          status: 'active',
+        },
+      },
+      {
+        type: 'update_time_log',
+        data: {
+          id: '773566bb',
+          start_time: '2026-09-24T15:12:29.420Z',
+          end_time: '2026-09-24T15:23:34.600Z',
+          status: 'completed',
+          frozen_end: true,
+        },
+      },
+      create('f9e0c5b9', '2026-09-24T15:42:32.640Z', '2026-09-24T16:27:03.724Z'),
+    ];
+
+    clamp(queue);
+
+    const hamza = queue.filter((q) => String(q.data.id) === '773566bb');
+    expect(hamza.length).toBeGreaterThan(0);
+    expect(hamza.every((q) => q.data.end_time === '2026-09-24T15:23:34.600Z')).toBe(true);
+    expect(hamza.some((q) => q.data.frozen_end === true)).toBe(true);
+  });
+
+  it('does not treat create(active)+frozen update as crash-open at the next Start', () => {
+    const queue = [
+      {
+        type: 'create_time_log',
+        data: {
+          id: 'a',
+          start_time: '2026-08-14T10:00:00.000Z',
+          end_time: null,
+          status: 'active',
+        },
+      },
+      {
+        type: 'update_time_log',
+        data: {
+          id: 'a',
+          start_time: '2026-08-14T10:00:00.000Z',
+          end_time: '2026-08-14T10:25:00.000Z',
+          frozen_end: true,
+        },
+      },
+      create('b', '2026-08-14T10:30:00.000Z', '2026-08-14T11:00:00.000Z'),
+    ];
+
+    clamp(queue);
+
+    const a = queue.filter((q) => q.data.id === 'a');
+    expect(a.every((q) => q.data.end_time === '2026-08-14T10:25:00.000Z')).toBe(true);
+  });
+
   it('ignores non-create entries and malformed rows', () => {
     const queue = [
       { type: 'update_time_log', data: { id: 'x', end_time: '2026-08-14T12:00:00.000Z' } },

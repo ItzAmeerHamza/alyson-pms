@@ -38,6 +38,14 @@ export function setupApp(app: NestExpressApplication): void {
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    allowedHeaders: [
+      'Authorization',
+      'Content-Type',
+      'Accept',
+      'x-api-key',
+      'x-auth-token',
+      'x-pulse-workspace-id',
+    ],
   });
 
   if (!isProduction && process.env.DISABLE_SWAGGER !== '1') {

@@ -1,9 +1,10 @@
 /**
- * Turn meeting screenshots into time ranges, then subtract those ranges from idle.
+ * Turn live-call screenshots into time ranges, then subtract those ranges from idle.
  *
- * A 1-hour Google Meet with no typing is still work. Pulse used to add that hour
- * as idle (and sometimes as low-activity when she flipped to Signal/docs). These
- * helpers keep meeting minutes out of both non-effective buckets.
+ * A 1-hour Google Meet with no typing is still work. Leftover Meet/Zoom tabs while
+ * the user is AFK or asleep are not: those shots stay at 0–9% activity and must
+ * not eat idle. Only participating captures (≥ 50% after the live-call floor)
+ * join into meeting intervals.
  */
 
 export type TimeInterval = { startMs: number; endMs: number };

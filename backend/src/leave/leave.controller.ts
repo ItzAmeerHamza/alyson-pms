@@ -9,6 +9,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { BILLING_FEATURES } from '../billing/billing.catalog';
+import { BillingFeatureGuard, RequireBillingFeature } from '../billing/billing-feature.guard';
 import {
   AssignInboxLeaveDto,
   CreateLeaveEventDto,
@@ -18,7 +20,8 @@ import {
 import { LeaveService } from './leave.service';
 
 @Controller('pulse/leave')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, BillingFeatureGuard)
+@RequireBillingFeature(BILLING_FEATURES.leave)
 export class LeaveController {
   constructor(private readonly leave: LeaveService) {}
 
@@ -110,6 +113,7 @@ export class LeaveController {
   createTeamEvent(@Req() req: { user: any }, @Body() body: CreateTeamLeaveEventDto) {
     return this.leave.createTeamEvent(req.user, {
       location: body.location,
+      country: body.country,
       team: body.team,
       leaveType: body.leaveType,
       startDate: body.startDate,

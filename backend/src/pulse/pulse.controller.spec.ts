@@ -4,6 +4,13 @@ import { PulseController } from './pulse.controller';
 
 const admin = { id: '1', role: 'admin', organization_id: '10' };
 const employee = { id: '4', role: 'employee', organization_id: '10' };
+const superAdmin = { id: '9', role: 'employee', is_super_admin: true };
+const superInCompany = {
+  id: '9',
+  role: 'employee',
+  is_super_admin: true,
+  organization_id: '10',
+};
 
 function makeController(opts?: { delegated?: boolean }) {
   const pulse = {
@@ -20,17 +27,21 @@ function makeController(opts?: { delegated?: boolean }) {
     getAdminView: vi.fn(),
     updateSettings: vi.fn(),
     createWorkspace: vi.fn(),
+    listPulseWorkspaces: vi.fn(),
   };
+  const billing = { assertFeature: vi.fn(async () => undefined) };
   return {
     controller: new PulseController(
       pulse as never,
       pacing as never,
       awsCosts as never,
       workspaceAdmin as never,
+      billing as never,
     ),
     pulse,
     awsCosts,
     workspaceAdmin,
+    billing,
   };
 }
 
@@ -60,17 +71,33 @@ describe('PulseController daily-hours', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(pulse.getDailyHours).not.toHaveBeenCalled();
   });
+
+  it('asks a super-admin without a selected company to pick one', async () => {
+    const { controller, pulse } = makeController();
+    await expect(
+      controller.dailyHours({ user: superAdmin }, '2026-08-01', '2026-08-31'),
+    ).rejects.toMatchObject({ message: 'Select a company' });
+    expect(pulse.getDailyHours).not.toHaveBeenCalled();
+  });
 });
 
 describe('PulseController aws-costs', () => {
-  it('allows admins to load Alyson PM costs', async () => {
+  it('allows platform admins to load Alyson PM costs', async () => {
     const { controller, awsCosts } = makeController();
     awsCosts.getAlysonPmCosts.mockResolvedValue({ team: 'Alyson PM', totals: { day: 1, week: 2, mtd: 3 } });
-    await controller.awsCostsReport({ user: admin }, '2026-08-01', '2026-08-31');
+    await controller.awsCostsReport({ user: superAdmin }, '2026-08-01', '2026-08-31');
     expect(awsCosts.getAlysonPmCosts).toHaveBeenCalledWith({
       start: '2026-08-01',
       end: '2026-08-31',
     });
+  });
+
+  it('blocks company admins from AWS costs', async () => {
+    const { controller, awsCosts } = makeController();
+    await expect(
+      controller.awsCostsReport({ user: admin }, '2026-08-01', '2026-08-31'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(awsCosts.getAlysonPmCosts).not.toHaveBeenCalled();
   });
 
   it('blocks employees from AWS costs', async () => {
@@ -97,7 +124,22 @@ describe('PulseController workspace settings', () => {
     });
   });
 
-  it('lets admins create a workspace', async () => {
+  it('lets a super-admin with a selected company read settings', async () => {
+    const { controller, workspaceAdmin } = makeController();
+    workspaceAdmin.getAdminView.mockResolvedValue({ organization_id: '10' });
+    await controller.settings({ user: superInCompany });
+    expect(workspaceAdmin.getAdminView).toHaveBeenCalledWith(superInCompany);
+  });
+
+  it('asks a super-admin without a selected company to pick one', async () => {
+    const { controller, workspaceAdmin } = makeController();
+    await expect(controller.settings({ user: superAdmin })).rejects.toMatchObject({
+      message: 'Select a company',
+    });
+    expect(workspaceAdmin.getAdminView).not.toHaveBeenCalled();
+  });
+
+  it('lets platform admins create a workspace', async () => {
     const { controller, workspaceAdmin } = makeController();
     const body = {
       name: 'Acme',
@@ -106,8 +148,36 @@ describe('PulseController workspace settings', () => {
       admin_last_name: 'Admin',
     };
     workspaceAdmin.createWorkspace.mockResolvedValue({ organization: { id: '99' } });
-    await controller.createWorkspace({ user: admin }, body);
-    expect(workspaceAdmin.createWorkspace).toHaveBeenCalledWith(admin, body);
+    await controller.createWorkspace({ user: superAdmin }, body);
+    expect(workspaceAdmin.createWorkspace).toHaveBeenCalledWith(superAdmin, body);
+  });
+
+  it('blocks company admins from creating a workspace', async () => {
+    const { controller, workspaceAdmin } = makeController();
+    await expect(
+      controller.createWorkspace({ user: admin }, {
+        name: 'Acme',
+        admin_email: 'admin@acme.test',
+        admin_first_name: 'Ada',
+        admin_last_name: 'Admin',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(workspaceAdmin.createWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('lists Pulse companies for platform admins', async () => {
+    const { controller, workspaceAdmin } = makeController();
+    workspaceAdmin.listPulseWorkspaces.mockResolvedValue([{ id: '10', name: 'RevCloud' }]);
+    await controller.listWorkspaces({ user: superAdmin });
+    expect(workspaceAdmin.listPulseWorkspaces).toHaveBeenCalled();
+  });
+
+  it('blocks company admins from listing all companies', async () => {
+    const { controller, workspaceAdmin } = makeController();
+    await expect(controller.listWorkspaces({ user: admin })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(workspaceAdmin.listPulseWorkspaces).not.toHaveBeenCalled();
   });
 
   it('blocks employees from settings and create', async () => {

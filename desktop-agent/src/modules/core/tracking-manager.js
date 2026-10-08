@@ -157,15 +157,23 @@ try {
 
       // Safety net: if user is starting tracking, the screen is clearly not locked
       global.isScreenLocked = false;
-      // Clear the explicit stop flag so session recovery works again
+      // Peek the last Stop before clearing. Idle-timeout / manual Stop must
+      // not resume that same row (Hamza 21 Sep: recovered 1f610840 at 20:54
+      // and the clock jumped 6h20m → 8h50m).
       try {
-        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
-        clearUserExplicitlyStopped();
+        const { refuseLiveFrozenSession } = require('../utils/session-recovery');
+        refuseLiveFrozenSession();
+      } catch (_) { /* pending close stays on disk */ }
+
+      let explicitStop = { active: false, timeLogId: null, reason: null, endTime: null };
+      try {
+        const { peekExplicitStop } = require('../utils/session-recovery');
+        explicitStop = peekExplicitStop() || explicitStop;
       } catch (_) {
-        global.userExplicitlyStopped = false;
+        explicitStop = { active: !!global.userExplicitlyStopped, timeLogId: null, reason: null, endTime: null };
       }
+      const priorStopEndIso = global._stopEndTimeOverride || explicitStop.endTime || null;
       global._windowCloseHandled = false;
-      global._stopEndTimeOverride = null;
       this._localSessionArmed = false;
 
       const priorStop = await this._waitForPriorStopToFinish(25000);
@@ -336,6 +344,9 @@ try {
       const deviceId = getDeviceId();
       console.log(`🔒 [TRACKING-MANAGER] Pre-insert inspect for user ${effectiveUserId}, device ${deviceId}`);
       const localCheckpoint = this._readSessionCheckpoint?.() || null;
+      try {
+        this.hydratePendingClosesIntoOfflineQueue({ flush: false });
+      } catch (_) { /* pending files stay on disk */ }
       let recoveredSession = null;
       // Already known offline: skip the inspect + cleanup preamble entirely.
       // Re-discovering the outage here cost 5s + 5s before Start even tried to
@@ -360,8 +371,18 @@ try {
             deviceId,
             this.config,
             {
-              // Lid-down: never continue the pre-sleep row (that bills the nap).
-              prefer_recover: !startAfterSleep,
+              // Lid-down / idle-timeout / Stop: never continue the closed row.
+              prefer_recover: (() => {
+                try {
+                  const { shouldPreferRecover } = require('../utils/session-recovery');
+                  return shouldPreferRecover({
+                    startAfterSleep,
+                    explicitStop: explicitStop.active,
+                  });
+                } catch (_) {
+                  return !startAfterSleep && !explicitStop.active;
+                }
+              })(),
               client_last_seen_at: localCheckpoint?.checkpointAt || null,
               freshness_minutes: 15,
               timeoutMs: 5000,
@@ -489,11 +510,54 @@ try {
 
       const finalProjectId = projectId || global.currentProjectId || this.config.project_id || null;
       const startAfterSleep = !!global._startAfterSleep;
-      if (startAfterSleep && recoveredSession) {
-        console.warn(
-          `🚩 [TRACKING-MANAGER] Dropping recovered session ${recoveredSession.id} after sleep — new row from wake`,
-        );
-        recoveredSession = null;
+      try {
+        const { shouldDropRecoveredSession, closeOpenSessionsAfterExplicitStop } =
+          require('../utils/session-recovery');
+        const queuedClose = this._queuedCloseEndTime?.(recoveredSession?.id);
+        if (
+          recoveredSession &&
+          (queuedClose ||
+            shouldDropRecoveredSession({
+              startAfterSleep,
+              explicitStop: explicitStop.active,
+              recoveredId: recoveredSession.id,
+              stoppedId: explicitStop.timeLogId,
+            }))
+        ) {
+          const why = startAfterSleep
+            ? 'after sleep — new row from wake'
+            : `after ${explicitStop.reason || 'stop'} — new row (do not resume ${recoveredSession.id})`;
+          console.warn(`🚩 [TRACKING-MANAGER] Dropping recovered session ${recoveredSession.id} ${why}`);
+          try {
+            await closeOpenSessionsAfterExplicitStop({
+              userId: effectiveUserId,
+              deviceId,
+              timeLogId: recoveredSession.id,
+              end_time:
+                priorStopEndIso ||
+                queuedClose ||
+                recoveredSession.suggested_end_at ||
+                recoveredSession.last_heartbeat_at ||
+                localCheckpoint?.checkpointAt ||
+                undefined,
+              config: this.config,
+              timeoutMs: 5000,
+            });
+          } catch (closeErr) {
+            console.warn(
+              '⚠️ [TRACKING-MANAGER] Close dropped recovery failed:',
+              closeErr?.message || closeErr,
+            );
+          }
+          recoveredSession = null;
+        }
+      } catch (dropErr) {
+        if (startAfterSleep && recoveredSession) {
+          console.warn(
+            `🚩 [TRACKING-MANAGER] Dropping recovered session ${recoveredSession.id} after sleep — new row from wake`,
+          );
+          recoveredSession = null;
+        }
       }
       const startTimeIso =
         (!startAfterSleep && recoveredSession?.start_time) ||
@@ -607,6 +671,15 @@ try {
       };
       this._localSessionArmed = true;
       this._sessionGeneration = (this._sessionGeneration || 0) + 1;
+      // Only drop the Stop flag after a NEW session is actually armed.
+      // Clearing earlier let a failed Start recover the still-open row.
+      try {
+        const { clearUserExplicitlyStopped } = require('../utils/session-recovery');
+        clearUserExplicitlyStopped();
+      } catch (_) {
+        global.userExplicitlyStopped = false;
+      }
+      global._stopEndTimeOverride = null;
 
       try {
         require('../utils/session-audit').sessionCreated({
@@ -653,8 +726,16 @@ try {
         const projectName = this.currentSession?.projectName || null;
         // PAYROLL CRITICAL: never block Start on today-stats network fetch.
         // Use last-known local floor immediately; refresh base in background.
-        const completedTodayBeforeSessionSeconds =
-          this._resolveStartClosedBaseSeconds(startAfterSleep);
+        const completedTodayBeforeSessionSeconds = recoveredSession?.id
+          ? Math.max(
+              0,
+              Math.floor(
+                Number(
+                  global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
+                ) || 0,
+              ),
+            )
+          : this._resolveStartClosedBaseSeconds(startAfterSleep);
         if (startAfterSleep) {
           global._trayTodayHighWaterSeconds = completedTodayBeforeSessionSeconds;
         }
@@ -703,7 +784,14 @@ try {
       // screenshots/input/app detection (those can be slow on weak machines/networks).
       try {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('tracking-started', this.currentSession);
+          this.mainWindow.webContents.send('tracking-started', {
+          ...this.currentSession,
+          lastStopAt:
+            global._lastExplicitStopEndIso ||
+            global._stopEndTimeOverride ||
+            global._lastStopEndAtMs ||
+            null,
+        });
         }
       } catch {}
 
@@ -713,6 +801,14 @@ try {
       try {
         global.enhancedIdleMonitor?.resetSessionIdleSeconds?.();
       } catch (_) { /* idle monitor optional */ }
+      try {
+        global._nonEffectiveAtLiveStart = Math.max(
+          0,
+          Math.floor(Number(global._lastGoodTodayStats?.nonEffectiveSeconds) || 0),
+        );
+      } catch (_) {
+        global._nonEffectiveAtLiveStart = 0;
+      }
 
       const startResult = {
         success: true,
@@ -721,6 +817,11 @@ try {
         startTime: this.sessionStartTime,
         isTracking: true,
         offline: !!(this.currentSession?._offline || String(this.currentTimeLogId || '').startsWith('temp-')),
+        lastStopAt:
+          global._lastExplicitStopEndIso ||
+          global._stopEndTimeOverride ||
+          global._lastStopEndAtMs ||
+          null,
       };
 
       // Fire-and-forget subsystem bring-up (never blocks Start IPC / UI confirm).
@@ -1110,6 +1211,13 @@ try {
    * @returns {Object} Result object with success status
    */
   async stopTracking(reason = 'manual', message = null) {
+    const { isAllowedLiveClockStopReason } = require('../utils/live-clock-policy');
+    if ((this.isTracking || global.isTracking) && !isAllowedLiveClockStopReason(reason)) {
+      console.warn(
+        `⏱️ [LIVE-CLOCK] Refusing Stop (${reason || 'unknown'}) — clock keeps running until the user or device ends the session`,
+      );
+      return { success: false, refused: true, reason: 'live_clock_protected' };
+    }
     const stopStartTime = Date.now();
     const stopTargetId = this.currentTimeLogId || global.currentTimeLogId || null;
     const generationAtEntry = this._sessionGeneration || 0;
@@ -1161,8 +1269,20 @@ try {
       const timeLogIdForBackground = this.currentTimeLogId;
 
       // Freeze end time and displayed total at click — DB write may finish seconds later.
-      global._stopEndTimeOverride = new Date().toISOString();
-      global._lastStopEndAtMs = Date.now();
+      // Idle-alert already froze now−10m. Do not replace that cut with "now"
+      // or the next Start recover will paint closed + live of the same row.
+      if (!global._stopAuthorizedIdleCut) {
+        if (!global._stopEndTimeOverride) {
+          global._stopEndTimeOverride = new Date().toISOString();
+        }
+        const frozenMs = new Date(global._stopEndTimeOverride).getTime();
+        global._lastStopEndAtMs = Number.isFinite(frozenMs) ? frozenMs : Date.now();
+      } else if (global._stopEndTimeOverride) {
+        const cutMs = new Date(global._stopEndTimeOverride).getTime();
+        global._lastStopEndAtMs = Number.isFinite(cutMs) ? cutMs : Date.now();
+      } else {
+        global._lastStopEndAtMs = Date.now();
+      }
       this._captureStopTodayTotalSnapshot();
       
       // Update local state immediately
@@ -1531,8 +1651,18 @@ try {
     // This must be set BEFORE changing isTracking to prevent race conditions
     global.isStopping = true;
 
-    global._stopEndTimeOverride = new Date().toISOString();
-    global._lastStopEndAtMs = Date.now();
+    if (!global._stopAuthorizedIdleCut) {
+      if (!global._stopEndTimeOverride) {
+        global._stopEndTimeOverride = new Date().toISOString();
+      }
+      const frozenMs = new Date(global._stopEndTimeOverride).getTime();
+      global._lastStopEndAtMs = Number.isFinite(frozenMs) ? frozenMs : Date.now();
+    } else if (global._stopEndTimeOverride) {
+      const cutMs = new Date(global._stopEndTimeOverride).getTime();
+      global._lastStopEndAtMs = Number.isFinite(cutMs) ? cutMs : Date.now();
+    } else {
+      global._lastStopEndAtMs = Date.now();
+    }
     this._captureStopTodayTotalSnapshot();
 
     const timeLogIdForBackground = this.currentTimeLogId;
@@ -1937,21 +2067,25 @@ try {
   }
 
   /**
-   * Closed-today seconds to seed the next Start. Never last-good totalTime or
-   * leftover tray high-water — those include a prior live session and jam the clock.
+   * Closed-today seconds to seed the next Start.
+   * After a same-day Stop the last-good "before current session" field is often
+   * still 0 (it was captured while live). Use the Stop snapshot and the
+   * renderer closed/stop floor so the tray does not start at 00:00:00.
+   * Leftover tray high-water / last-good totalTime alone must not seed — those
+   * include a prior live session and jam the clock.
    */
   _resolveStartClosedBaseSeconds(startAfterSleep = false) {
     const { closedBaseAfterSleep } = require('../utils/sleep-aware-elapsed');
-    if (startAfterSleep) {
-      return closedBaseAfterSleep(
-        global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
-      );
-    }
-    let closed = Math.max(
+    const completedBefore = Math.max(
       0,
       Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
-      Math.floor(Number(global._lastTodayTotalAtStop) || 0),
     );
+    const stopFloor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
+    const rendererFloor = Math.max(0, Math.floor(Number(global._rendererTodayFloorSeconds) || 0));
+    if (startAfterSleep) {
+      return Math.max(closedBaseAfterSleep(completedBefore), stopFloor, rendererFloor);
+    }
+    let closed = Math.max(completedBefore, stopFloor, rendererFloor);
     const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
     if (trayHw > 0 && closed > 0 && trayHw <= closed + 5) {
       closed = Math.max(closed, trayHw);
@@ -2454,6 +2588,9 @@ try {
         end_time: endTime,
         status: 'completed',
         project_id: this.currentProjectId || this.currentSession?.project_id || null,
+        last_alive_at: endTime,
+        client_last_seen_at: endTime,
+        frozen_end: true,
         ...(idleCutSeconds ? { authorized_idle_cut: true, time_cut_seconds: idleCutSeconds } : {}),
       },
       { flush: false },
@@ -2527,6 +2664,9 @@ try {
             end_time: endTime,
             status: 'completed',
             idle_seconds: idleSeconds || 0,
+            last_alive_at: endTime,
+            client_last_seen_at: endTime,
+            frozen_end: true,
             ...(idleCutSeconds ? { authorized_idle_cut: true } : {}),
           },
           this.config,
@@ -2647,6 +2787,63 @@ try {
     }
   }
 
+  _queuedCloseEndTime(timeLogId) {
+    const sid = timeLogId != null ? String(timeLogId) : '';
+    if (!sid) return null;
+    try {
+      const { readPendingSessionEndTime } = require('../utils/session-recovery');
+      const pending = readPendingSessionEndTime(sid);
+      if (pending) return pending;
+    } catch (_) { /* ignore */ }
+    try {
+      const queue = this.getOfflineQueue();
+      for (const item of queue) {
+        if (
+          item?.type === 'update_time_log' &&
+          String(item?.data?.id || '') === sid &&
+          item?.data?.end_time
+        ) {
+          return item.data.end_time;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+
+  /**
+   * Move pending_sessions/*.json into the retry queue so a restore writes
+   * the frozen Stop end_time, not a recovered open row.
+   */
+  hydratePendingClosesIntoOfflineQueue({ flush = false } = {}) {
+    let pending = [];
+    try {
+      const { listPendingSessionCloses } = require('../utils/session-recovery');
+      pending = listPendingSessionCloses() || [];
+    } catch (_) {
+      return 0;
+    }
+    for (const row of pending) {
+      if (!row?.timeLogId || !row?.endTime) continue;
+      this._queueOfflineTimeLogUpdate(
+        {
+          id: row.timeLogId,
+          user_id: row.userId || this.config?.user_id || global.currentUserId,
+          start_time: row.startTime || null,
+          end_time: row.endTime,
+          status: 'completed',
+          project_id: row.projectId || null,
+          device_id: row.deviceId || null,
+          last_alive_at: row.endTime,
+          client_last_seen_at: row.endTime,
+          frozen_end: true,
+        },
+        { flush: false },
+      );
+    }
+    if (flush && pending.length) this.startOfflineSync();
+    return pending.length;
+  }
+
   /**
    * Handle post-stop actions like tray updates and notifications
    */
@@ -2704,7 +2901,12 @@ try {
         startTime: this.sessionStartTime || null,
         currentTimeLogId: this.currentTimeLogId || null,
         projectId: this.currentProjectId || null,
-        sessionStartTime: this.sessionStartTime || null
+        sessionStartTime: this.sessionStartTime || null,
+        lastStopAt:
+          global._lastExplicitStopEndIso ||
+          global._stopEndTimeOverride ||
+          global._lastStopEndAtMs ||
+          null,
       };
       
       console.log(`📡 [TRACKING-MANAGER] Sending tracking-state-changed (${trackingStateData.status}) to renderer:`, trackingStateData);
@@ -2722,7 +2924,12 @@ try {
       currentSession: this.currentSession,
       currentTimeLogId: this.currentTimeLogId,
       currentProjectId: this.currentProjectId,
-      sessionStartTime: this.sessionStartTime
+      sessionStartTime: this.sessionStartTime,
+      lastStopAt:
+        global._lastExplicitStopEndIso ||
+        global._stopEndTimeOverride ||
+        global._lastStopEndAtMs ||
+        null,
     };
   }
 
@@ -2779,17 +2986,8 @@ try {
    * App data dir for durable offline payroll files
    */
   _getAppDataDir() {
-    const fs = require('fs');
-    const path = require('path');
-    const os = require('os');
-    const userDataDir = process.env.APPDATA || (process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support')
-      : path.join(os.homedir(), '.config'));
-    const appDataDir = path.join(userDataDir, 'Alyson Work Time');
-    if (!fs.existsSync(appDataDir)) {
-      fs.mkdirSync(appDataDir, { recursive: true });
-    }
-    return appDataDir;
+    const { getPayrollAppDataDir } = require('../utils/payroll-app-data-dir');
+    return getPayrollAppDataDir();
   }
 
   /**
@@ -2831,19 +3029,61 @@ try {
         return Number.isFinite(ms) ? ms : null;
       };
 
-      const creates = queue
-        .filter((i) => i?.type === 'create_time_log' && i?.data?.start_time)
-        .map((i) => ({ item: i, startMs: new Date(i.data.start_time).getTime() }))
-        .filter((x) => Number.isFinite(x.startMs))
-        .sort((a, b) => {
-          if (a.startMs !== b.startMs) return a.startMs - b.startMs;
-          return (endMsOf(b.item.data) ?? Infinity) - (endMsOf(a.item.data) ?? Infinity);
-        });
+      // Backfill / ledger replay often leaves create(active) + later update(frozen).
+      // Treating that create as crash-open closed it at the next Start (or its own
+      // start) and then spliced the honest close — Hamza 773566bb 665s → 0s.
+      const latestCloseById = new Map();
+      for (const item of queue) {
+        const id = item?.data?.id != null ? String(item.data.id) : '';
+        const end = endMsOf(item?.data);
+        if (!id || end == null) continue;
+        const frozen =
+          item.data.frozen_end === true || item.data.authorized_idle_cut === true;
+        const prev = latestCloseById.get(id);
+        if (!prev || end > prev.end || (end === prev.end && frozen)) {
+          latestCloseById.set(id, {
+            end,
+            endIso: item.data.end_time,
+            frozen,
+          });
+        }
+      }
+      for (const item of queue) {
+        if (item?.type !== 'create_time_log' || !item.data?.id) continue;
+        const known = latestCloseById.get(String(item.data.id));
+        if (!known) continue;
+        const curEnd = endMsOf(item.data);
+        if (curEnd == null || known.end > curEnd) {
+          item.data.end_time = known.endIso;
+          item.data.status = 'completed';
+          if (known.frozen) item.data.frozen_end = true;
+        }
+      }
+
+      const bestCreateById = new Map();
+      for (const item of queue) {
+        if (item?.type !== 'create_time_log' || !item?.data?.start_time) continue;
+        const startMs = new Date(item.data.start_time).getTime();
+        if (!Number.isFinite(startMs)) continue;
+        const id = String(item.data.id || '');
+        if (!id) continue;
+        const end = endMsOf(item.data);
+        const prev = bestCreateById.get(id);
+        if (!prev || (end != null && (prev.end == null || end >= prev.end))) {
+          bestCreateById.set(id, { item, startMs, end });
+        }
+      }
+      const creates = [...bestCreateById.values()].sort((a, b) => {
+        if (a.startMs !== b.startMs) return a.startMs - b.startMs;
+        return (b.end ?? Infinity) - (a.end ?? Infinity);
+      });
 
       // 1. Crash-open rows close at the next start (no known tail to keep).
+      // A frozen Stop is not crash-open — backfill must not rewrite it.
       for (let i = 0; i < creates.length - 1; i += 1) {
         const cur = creates[i].item.data;
         if (endMsOf(cur) != null) continue;
+        if (cur.frozen_end === true || cur.authorized_idle_cut === true) continue;
         const nextStartMs = creates[i + 1].startMs;
         const clampedMs = Math.max(creates[i].startMs, nextStartMs);
         const before = cur.end_time || 'open';
@@ -2928,9 +3168,17 @@ try {
       if (absorbedIds.size === 0) return;
       for (let i = queue.length - 1; i >= 0; i -= 1) {
         const id = queue[i]?.data?.id;
-        if (id != null && absorbedIds.has(String(id))) {
-          queue.splice(i, 1);
+        if (id == null || !absorbedIds.has(String(id))) continue;
+        const data = queue[i].data;
+        const startMs = data?.start_time ? new Date(data.start_time).getTime() : NaN;
+        const endMs = endMsOf(data);
+        const frozen =
+          data?.frozen_end === true || data?.authorized_idle_cut === true;
+        // Never drop a frozen Stop — that is the billed end from disk.
+        if (frozen && Number.isFinite(startMs) && endMs != null && endMs > startMs) {
+          continue;
         }
+        queue.splice(i, 1);
       }
     } catch (err) {
       console.warn('⚠️ [TRACKING-MANAGER] Queue overlap clamp failed:', err?.message || err);
@@ -3007,10 +3255,51 @@ try {
   /**
    * Queue a completed/update time log so stop-during-outage never loses hours
    */
+  _saferQueuedClosePayload(prev, next) {
+    if (!next) return prev || null;
+    if (!prev) {
+      return next.end_time ? { ...next, frozen_end: next.frozen_end !== false } : next;
+    }
+    const prevEnd = prev.end_time ? new Date(prev.end_time).getTime() : NaN;
+    const nextEnd = next.end_time ? new Date(next.end_time).getTime() : NaN;
+    const prevFrozen =
+      prev.frozen_end === true ||
+      prev.authorized_idle_cut === true ||
+      prev.status === 'completed';
+    if (prevFrozen && Number.isFinite(prevEnd) && Number.isFinite(nextEnd) && nextEnd > prevEnd) {
+      return {
+        ...next,
+        ...prev,
+        end_time: prev.end_time,
+        last_alive_at: prev.last_alive_at || prev.end_time,
+        client_last_seen_at: prev.end_time,
+        frozen_end: true,
+        status: 'completed',
+      };
+    }
+    return {
+      ...prev,
+      ...next,
+      frozen_end:
+        next.frozen_end === true ||
+        prev.frozen_end === true ||
+        !!(next.end_time || prev.end_time),
+    };
+  }
+
   _queueOfflineTimeLogUpdate(payload, { flush = true } = {}) {
     const offlineQueue = this.getOfflineQueue();
     const id = payload?.id ? String(payload.id) : null;
-    // Prefer a single pending update per id (latest end_time wins) so retries stay idempotent.
+    const existing = id
+      ? offlineQueue.find(
+          (item) =>
+            item?.type === 'update_time_log' &&
+            String(item?.data?.id) === id,
+        )
+      : null;
+    const merged = this._saferQueuedClosePayload(existing?.data, payload);
+    // Prefer a single pending update per id. A frozen Stop keeps the earlier
+    // end — a later heartbeat must not add time.
     const filtered = id
       ? offlineQueue.filter(
           (item) =>
@@ -3023,7 +3312,7 @@ try {
     filtered.push({
       type: 'update_time_log',
       data: {
-        ...payload,
+        ...merged,
         _offline: true,
         _retryCount: 0,
         _queued_at: new Date().toISOString(),
@@ -3033,10 +3322,10 @@ try {
     this._persistOfflineQueueOrThrow(filtered);
     this._appendTimeLedger({
       event: 'queue_update',
-      id: payload?.id || null,
-      start_time: payload?.start_time || null,
-      end_time: payload?.end_time || null,
-      status: payload?.status || 'completed',
+      id: merged?.id || payload?.id || null,
+      start_time: merged?.start_time || payload?.start_time || null,
+      end_time: merged?.end_time || payload?.end_time || null,
+      status: merged?.status || payload?.status || 'completed',
     });
     // Stop/shutdown write this for crash safety, then try the API. Flushing
     // before that write returns is what started the 10s Internal-server-error
@@ -3419,6 +3708,7 @@ try {
       this._reconnectFlushTimer = setTimeout(() => {
         this._reconnectFlushTimer = null;
         try {
+          this.hydratePendingClosesIntoOfflineQueue?.({ flush: false });
           this._rehydrateOfflineQueueFromLedger?.();
         } catch (_) { /* ignore */ }
         this._requestOfflineFlush({ ignoreBackoff: true });
@@ -3562,6 +3852,13 @@ try {
       }
 
       this._clampOverlappingQueuedSessions(queue);
+      // Frozen Stop closes first — a leftover ISE retry must not delay the
+      // session the employee already ended (Hamza 21 Sep leftover vs 1f610840).
+      queue.sort((a, b) => {
+        const score = (item) =>
+          item?.type === 'update_time_log' && item?.data?.end_time ? 0 : 1;
+        return score(a) - score(b);
+      });
 
       const remainingItems = [];
       const now = Date.now();
@@ -3798,6 +4095,7 @@ try {
                 end_time: updates.end_time || null,
                 status: updates.status || null,
               });
+              this._clearPendingSessionClose?.(id);
             } else {
               throw new Error('Backend API not configured for offline time log update');
             }

@@ -5,9 +5,10 @@ import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { CommonModule } from '../common/common.module';
 import { AccessGrantsModule } from '../access-grants/access-grants.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [AuthModule, DatabaseModule, CommonModule, AccessGrantsModule],
+  imports: [AuthModule, DatabaseModule, CommonModule, AccessGrantsModule, BillingModule],
   controllers: [DataController],
   providers: [DataService],
   exports: [DataService],

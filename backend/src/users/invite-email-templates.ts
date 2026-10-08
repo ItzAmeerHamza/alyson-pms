@@ -64,9 +64,9 @@ export function buildInviteEmail(input: {
             </div>
 
             <ol style="margin:0 0 20px;padding-left:20px;color:#262626;font-size:15px;line-height:1.6;">
-              <li style="margin-bottom:10px;">Go to <a href="${escapeHtml(signInUrl)}" style="color:#173b67;font-weight:600;">${escapeHtml(appHost)}</a> and sign in with the email and temporary password above.</li>
-              <li style="margin-bottom:10px;">The app will ask you to <strong>set a new password</strong>. Choose one you will remember — the temporary password only works once.</li>
-              <li>After your new password is saved, download the <strong>Alyson Time Doctor</strong> desktop app and sign in with the same email and new password to start tracking time.</li>
+              <li style="margin-bottom:10px;">Sign in with the email and temporary password above on <a href="${escapeHtml(signInUrl)}" style="color:#173b67;font-weight:600;">${escapeHtml(appHost)}</a> or in the <strong>Alyson Time Doctor</strong> desktop app.</li>
+              <li style="margin-bottom:10px;">You will be asked to <strong>set a new password</strong>. Choose one you will remember — the temporary password only works once.</li>
+              <li>After your new password is saved, use the same email and password on both the web app and the desktop app.</li>
             </ol>
 
             <p style="margin:0 0 16px;">
@@ -93,11 +93,11 @@ export function buildInviteEmail(input: {
     '',
     'You have been invited to Alyson Pulse. Activate your account:',
     '',
-    `1. Go to ${signInUrl} and sign in with:`,
+    `1. Sign in on ${signInUrl} or in the Alyson Time Doctor desktop app with:`,
     `   Email: ${email}`,
     `   Temporary password: ${password}`,
-    '2. The app will ask you to set a new password. The temporary password only works once.',
-    '3. After that, download the Alyson Time Doctor desktop app and sign in with the same email and your new password to start tracking time.',
+    '2. You will be asked to set a new password. The temporary password only works once.',
+    '3. After that, use the same email and new password on both the web app and the desktop app.',
     '',
     `Desktop app: ${downloadUrl}`,
   ].join('\n');

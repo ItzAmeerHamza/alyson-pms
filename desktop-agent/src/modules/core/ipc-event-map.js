@@ -336,6 +336,11 @@ class IPCEventMap {
       global.showTrayNotification?.(body, type);
     });
 
+    this.registerHandler('start-reminder-later', () => {
+      global.notTrackingReminderManager?.onSnoozed?.();
+      return { success: true };
+    });
+
     // App lifecycle
     this.registerHandler('restart-app', (event) => {
       console.log('🔄 [IPC] App restart requested');

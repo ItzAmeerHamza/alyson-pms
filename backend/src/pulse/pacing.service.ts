@@ -10,7 +10,8 @@ import { SesEmailService } from '../common/ses-email.service';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
-  TRACKABLE_PULSE_ROLES_SQL,
+  HOURS_GOAL_PULSE_ROLES_SQL,
+  HOURS_GOAL_SIGNED_IN_SQL,
   canAdjustPulseTime,
   workspaceScope,
 } from '../database/time-doctor-sql';
@@ -21,7 +22,8 @@ import {
   workDateRangeToUtcIso,
   workDayBoundsMs,
 } from '../lib/work-timezone';
-import { matchesTeamLocation, TEAM_LEAVE_ALL_TEAMS } from '../leave/leave-days';
+import { sqlPausedVisibleThrough } from '../lib/paused-roster';
+import { matchesTeamLeave, TEAM_LEAVE_ALL_TEAMS } from '../leave/leave-days';
 import {
   PACING_LEAVE_HOURS_PER_DAY,
   PACING_TARGET_HOURS_PER_WORKDAY,
@@ -40,6 +42,7 @@ import {
   buildPacingDigestCsv,
   buildPacingDigestEmail,
 } from './pacing-email-templates';
+import { leaveTopUpHours } from './time-adjustment.util';
 
 type EmpRow = {
   id: string;
@@ -47,6 +50,7 @@ type EmpRow = {
   email: string;
   department: string | null;
   location: string | null;
+  country: string | null;
   manager_id: string | null;
   started_on: string | null;
 };
@@ -98,16 +102,23 @@ export class PacingService {
     );
   }
 
-  private async loadEmployees(user: ScopedAuthUser): Promise<EmpRow[]> {
+  private async loadEmployees(
+    user: ScopedAuthUser,
+    reportEndKey: string,
+    workTz: string,
+  ): Promise<EmpRow[]> {
     const scope = workspaceScope(user, 'ext');
+    const params: unknown[] = [...scope.params];
+    const pausedVisible = sqlPausedVisibleThrough(params, reportEndKey, workTz);
     const result = await this.db.query<EmpRow>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
+         AND ${pausedVisible}
        ORDER BY full_name ASC NULLS LAST`,
-      scope.params,
+      params,
     );
     return result.rows.map((r) => ({
       ...r,
@@ -248,11 +259,12 @@ export class PacingService {
     const teamScope = workspaceScope(user, 't');
     const team = await this.db.query<{
       location: string;
+      country: string | null;
       team: string;
       start_date: string;
       end_date: string;
     }>(
-      `SELECT t.location, t.team,
+      `SELECT t.location, t.country, t.team,
               t.start_date::text AS start_date,
               t.end_date::text AS end_date
          FROM time_doctor.team_leave_events t
@@ -289,12 +301,14 @@ export class PacingService {
     for (const emp of employees) {
       for (const ev of team.rows) {
         if (
-          !matchesTeamLocation(
-            emp.location,
-            emp.department,
-            ev.location,
-            ev.team === TEAM_LEAVE_ALL_TEAMS ? TEAM_LEAVE_ALL_TEAMS : ev.team,
-          )
+          !matchesTeamLeave({
+            employeeCountry: emp.country,
+            employeeLocation: emp.location,
+            employeeTeam: emp.department,
+            leaveCountry: ev.country,
+            leaveLocation: ev.location,
+            leaveTeam: ev.team === TEAM_LEAVE_ALL_TEAMS ? TEAM_LEAVE_ALL_TEAMS : ev.team,
+          })
         ) {
           continue;
         }
@@ -316,9 +330,14 @@ export class PacingService {
     return round2(s);
   }
 
+  /**
+   * Leave is a floor per day: credit only the hours still needed after tracked time.
+   * Work 2h on a holiday → +6h pacing credit (to 8h). Work 9h → +0h, keep the 9h.
+   */
   private leaveHoursForDays(
     leaveMap: Map<string, number> | undefined,
     days: string[],
+    trackedMap?: Map<string, number>,
   ): { credit: number; byDay: Map<string, number>; leaveDays: number } {
     const byDay = new Map<string, number>();
     let leaveDays = 0;
@@ -327,9 +346,10 @@ export class PacingService {
       const frac = leaveMap?.get(d) ?? 0;
       if (frac <= 0) continue;
       leaveDays += frac;
-      const h = leaveHoursFromFraction(frac);
-      byDay.set(d, h);
-      credit += h;
+      const raw = leaveHoursFromFraction(frac);
+      const applied = leaveTopUpHours(trackedMap?.get(d) ?? 0, raw);
+      byDay.set(d, applied);
+      credit += applied;
     }
     return { credit: round2(credit), byDay, leaveDays: round2(leaveDays) };
   }
@@ -354,7 +374,7 @@ export class PacingService {
     const remainingWeekdays = weekdayKeysInclusive(addCalendarDays(rollup, 1), weekSunday);
     const sampleKeysBase = weeklySampleKeys(weekMonday, rollup);
 
-    const employees = await this.loadEmployees(user);
+    const employees = await this.loadEmployees(user, weekSunday, workTz);
     const tracked = await this.fetchTrackedByUserDay(user, weekMonday, rollup, workTz);
     const otherAdj = await this.fetchOtherAdjByUserDay(user, weekMonday, rollup);
     const leaveFrac = await this.fetchLeaveFractionByUserDay(
@@ -386,7 +406,11 @@ export class PacingService {
 
         const trackedMap = tracked.get(emp.id);
         const adjMap = otherAdj.get(emp.id);
-        const leave = this.leaveHoursForDays(leaveFrac.get(emp.id), empElapsed);
+        const leave = this.leaveHoursForDays(
+          leaveFrac.get(emp.id),
+          empElapsed,
+          trackedMap,
+        );
 
         const hoursWorkedLogged = this.sumMapDays(trackedMap, empElapsed);
         const otherAdjustmentHours = this.sumMapDays(adjMap, empElapsed);
@@ -496,7 +520,7 @@ export class PacingService {
     const elapsedWeekdays = weekdayKeysInclusive(periodStart, rollup);
     const remainingWeekdays = weekdayKeysInclusive(addCalendarDays(rollup, 1), periodEnd);
 
-    const employees = await this.loadEmployees(user);
+    const employees = await this.loadEmployees(user, periodEnd, workTz);
     const tracked = await this.fetchTrackedByUserDay(user, periodStart, rollup, workTz);
     const otherAdj = await this.fetchOtherAdjByUserDay(user, periodStart, rollup);
     const leaveFrac = await this.fetchLeaveFractionByUserDay(
@@ -519,7 +543,11 @@ export class PacingService {
 
         const trackedMap = tracked.get(emp.id);
         const adjMap = otherAdj.get(emp.id);
-        const leave = this.leaveHoursForDays(leaveFrac.get(emp.id), empElapsed);
+        const leave = this.leaveHoursForDays(
+          leaveFrac.get(emp.id),
+          empElapsed,
+          trackedMap,
+        );
 
         const hoursWorkedLogged = this.sumMapDays(trackedMap, empElapsed);
         const otherAdjustmentHours = this.sumMapDays(adjMap, empElapsed);

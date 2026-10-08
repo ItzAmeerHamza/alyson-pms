@@ -11,13 +11,23 @@ interface HealthCheck {
 
 const startTime = Date.now();
 
+const HEALTH_PING_CACHE_MS = 15_000;
+
 @SkipThrottle({ default: true, strict: true })
 @Controller('health')
 export class HealthController {
+  private cached:
+    | { at: number; result: HealthCheck }
+    | null = null;
+
   constructor(private databaseService: DatabaseService) {}
 
   @Get()
   async check(): Promise<HealthCheck> {
+    if (this.cached && Date.now() - this.cached.at < HEALTH_PING_CACHE_MS) {
+      return this.cached.result;
+    }
+
     const checks: HealthCheck['checks'] = {};
     const dbStart = Date.now();
 
@@ -51,11 +61,13 @@ export class HealthController {
     if (statuses.includes('unhealthy')) overall = 'unhealthy';
     else if (statuses.includes('degraded')) overall = 'degraded';
 
-    return {
+    const result: HealthCheck = {
       status: overall,
       checks,
       timestamp: new Date().toISOString(),
       uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     };
+    this.cached = { at: Date.now(), result };
+    return result;
   }
 }

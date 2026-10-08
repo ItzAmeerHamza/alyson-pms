@@ -9,10 +9,12 @@ import { mergeTimeIntervals, sessionEndMs } from '../lib/time-merge';
 import {
   EMPLOYEE_USER_SELECT,
   ScopedAuthUser,
+  HOURS_GOAL_PULSE_ROLES_SQL,
+  HOURS_GOAL_SIGNED_IN_SQL,
   TRACKABLE_PULSE_ROLES_SQL,
+  hoursGoalRosterSql,
   canAccessPulseTeamReports,
   canAdjustPulseTime,
-  isPulseAdmin,
   parseTenantUserId,
   parseWorkspaceId,
   workspaceScope,
@@ -24,7 +26,7 @@ import {
   buildPaceEmailMetrics,
   DAILY_EFFECTIVE_TARGET_HOURS,
 } from './low-hours-email-templates';
-import { SCREENSHOT_IS_VIDEO_MEETING_SQL } from './meeting-context';
+import { applyMeetingScreenshotPresentation } from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
   eachWorkDateKey,
@@ -34,9 +36,23 @@ import {
   workDateRangeToUtcIso,
   workDayBoundsMs,
 } from '../lib/work-timezone';
+import {
+  inclusiveWorkDateKeyFromRangeEnd,
+  mondaysOverlappingMonth,
+  resolveMonthWeekCheckpoint,
+  sqlPausedVisibleThrough,
+  weekHomeMonth,
+} from '../lib/paused-roster';
+import { pulseRosterStatus } from '../lib/roster-status';
 import { computeEffectiveTime } from '../lib/effective-time';
 import { EffectiveTimeService, WorkspaceFilter } from './effective-time.service';
 import {
+  mailTargetFromDailyEmployee,
+  resolveLowHoursSendWindow,
+  employeesFromSendSnapshot,
+} from './low-hours-send-window';
+import {
+  dayHoursWithLeaveTopUp,
   nextDayTotalHours,
   resolveAdjustmentDeltaSeconds,
 } from './time-adjustment.util';
@@ -122,7 +138,7 @@ export class PulseService {
 
   /** The workspace filter these reports run under, as the shared rules expect it. */
   private effectiveTimeFilter(user: ScopedAuthUser): WorkspaceFilter {
-    return { workspaceId: user.is_super_admin ? null : parseWorkspaceId(user.organization_id) };
+    return { workspaceId: parseWorkspaceId(user.organization_id) };
   }
 
   private workspaceId(user: ScopedAuthUser): number | null {
@@ -137,9 +153,6 @@ export class PulseService {
   private async visibleEmployeeIds(user: ScopedAuthUser): Promise<string[] | null> {
     // Admin org-wide team reports (same as canAccessPulseTeamReports).
     if (canAccessPulseTeamReports(user)) {
-      return null;
-    }
-    if (isPulseAdmin(user) || user.is_super_admin) {
       return null;
     }
     try {
@@ -234,6 +247,9 @@ export class PulseService {
       params.push(parseTenantUserId(userId));
       userFilter = `AND t.user_id = $${params.length}`;
     }
+    const settings = await this.getOrgSettings(user);
+    const reportEnd = inclusiveWorkDateKeyFromRangeEnd(end, settings.timezone);
+    const pausedVisible = sqlPausedVisibleThrough(params, reportEnd, settings.timezone);
     const result = await this.db.query<{
       user_id: string;
       start_time: string;
@@ -256,7 +272,7 @@ export class PulseService {
          AND t.start_time >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
          ${userFilter}
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
+         AND ${pausedVisible}
        ORDER BY t.start_time`,
       params,
     );
@@ -333,36 +349,65 @@ export class PulseService {
     return byUserDay;
   }
 
-  /** Day total = tracked + admin adjustments (never below 0). Product-wide actual time. */
-  private hoursWorkedForDay(trackedHours: number, adjustmentHours = 0): number {
-    return Math.max(
-      0,
-      Math.round((Number(trackedHours) + Number(adjustmentHours)) * 10) / 10,
-    );
+  /** Day total = tracked + other adj + holiday top-up (never below 0). */
+  private hoursWorkedForDay(
+    trackedHours: number,
+    otherAdjustmentHours = 0,
+    leaveCreditHours = 0,
+  ): number {
+    return dayHoursWithLeaveTopUp({
+      trackedHours,
+      otherAdjustmentHours,
+      leaveCreditHours,
+    });
+  }
+
+  /** Applied net (holiday top-up + other adj), not the raw +7h leave row. */
+  private appliedAdjustmentHours(
+    trackedHours: number,
+    otherAdjustmentHours = 0,
+    leaveCreditHours = 0,
+  ): number {
+    return Math.round(
+      (this.hoursWorkedForDay(trackedHours, otherAdjustmentHours, leaveCreditHours) -
+        (Number(trackedHours) || 0)) *
+        10,
+    ) / 10;
   }
 
   /**
-   * Merge admin adjustments into tracked daily maps.
-   * Result is the canonical "actual hours" used across Pulse reports.
+   * Merge admin + leave adjustments into tracked daily maps.
+   * Holiday/leave is a floor: extra tracked time above the credit is kept.
    */
   private mergeTrackedWithAdjustments(
     trackedByUser: Map<string, Map<string, number>>,
     adjustmentByUser: Map<string, Map<string, number>>,
+    leaveByUser: Map<string, Map<string, number>> = new Map(),
   ): Map<string, Map<string, number>> {
     const out = new Map<string, Map<string, number>>();
     const userIds = new Set<string>([
       ...trackedByUser.keys(),
       ...adjustmentByUser.keys(),
+      ...leaveByUser.keys(),
     ]);
     for (const uid of userIds) {
       const tracked = trackedByUser.get(uid) ?? new Map<string, number>();
       const adj = adjustmentByUser.get(uid) ?? new Map<string, number>();
-      const days = new Set<string>([...tracked.keys(), ...adj.keys()]);
+      const leave = leaveByUser.get(uid) ?? new Map<string, number>();
+      const days = new Set<string>([
+        ...tracked.keys(),
+        ...adj.keys(),
+        ...leave.keys(),
+      ]);
       const dayMap = new Map<string, number>();
       for (const day of days) {
         dayMap.set(
           day,
-          this.hoursWorkedForDay(tracked.get(day) ?? 0, adj.get(day) ?? 0),
+          this.hoursWorkedForDay(
+            tracked.get(day) ?? 0,
+            adj.get(day) ?? 0,
+            leave.get(day) ?? 0,
+          ),
         );
       }
       if (dayMap.size > 0) out.set(uid, dayMap);
@@ -383,14 +428,18 @@ export class PulseService {
   }
 
   /**
-   * Net admin adjustments (hours) per user_id → work_date (company work day).
+   * Net adjustments (hours) per user_id → work_date, split so holiday leave
+   * can top up to 7h instead of stacking on tracked time.
    */
   private async fetchAdjustmentHoursInRange(
     user: ScopedAuthUser,
     startKey: string,
     endKey: string,
     restrictToUserId?: string,
-  ): Promise<Map<string, Map<string, number>>> {
+  ): Promise<{
+    other: Map<string, Map<string, number>>;
+    leave: Map<string, Map<string, number>>;
+  }> {
     const scope = workspaceScope(user, 'a');
     const params: unknown[] = [...scope.params, startKey, endKey];
     let userFilter = '';
@@ -405,11 +454,18 @@ export class PulseService {
     const result = await this.db.query<{
       user_id: string;
       work_date: string;
-      delta_seconds: string | number;
+      leave_seconds: string | number;
+      other_seconds: string | number;
     }>(
       `SELECT a.user_id::text AS user_id,
               a.work_date::text AS work_date,
-              SUM(a.delta_seconds)::bigint AS delta_seconds
+              COALESCE(SUM(a.delta_seconds) FILTER (
+                WHERE a.source_type IN ('leave', 'leave_void')
+              ), 0)::bigint AS leave_seconds,
+              COALESCE(SUM(a.delta_seconds) FILTER (
+                WHERE a.source_type IS NULL
+                   OR a.source_type NOT IN ('leave', 'leave_void')
+              ), 0)::bigint AS other_seconds
          FROM time_doctor.time_adjustments a
         WHERE ${scope.clause}
           AND a.work_date >= $${scope.params.length + 1}::date
@@ -419,14 +475,26 @@ export class PulseService {
       params,
     );
 
-    const byUser = new Map<string, Map<string, number>>();
+    const other = new Map<string, Map<string, number>>();
+    const leave = new Map<string, Map<string, number>>();
+    const toHours = (secs: string | number) =>
+      Math.round(((Number(secs) || 0) / 3600) * 10) / 10;
+    const put = (
+      dest: Map<string, Map<string, number>>,
+      userId: string,
+      day: string,
+      hours: number,
+    ) => {
+      if (!hours) return;
+      if (!dest.has(userId)) dest.set(userId, new Map());
+      dest.get(userId)!.set(day, hours);
+    };
     for (const row of result.rows) {
-      const secs = Number(row.delta_seconds) || 0;
-      const hours = Math.round((secs / 3600) * 10) / 10;
-      if (!byUser.has(row.user_id)) byUser.set(row.user_id, new Map());
-      byUser.get(row.user_id)!.set(String(row.work_date).slice(0, 10), hours);
+      const day = String(row.work_date).slice(0, 10);
+      put(leave, row.user_id, day, toHours(row.leave_seconds));
+      put(other, row.user_id, day, toHours(row.other_seconds));
     }
-    return byUser;
+    return { other, leave };
   }
 
   async listTimeAdjustments(user: ScopedAuthUser, userId: string, workDate: string) {
@@ -516,7 +584,7 @@ export class PulseService {
     }
 
     const wsId = parseWorkspaceId(user.organization_id);
-    if (!user.is_super_admin && !wsId) {
+    if (!wsId) {
       throw new BadRequestException('Workspace context required');
     }
 
@@ -528,10 +596,8 @@ export class PulseService {
         JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
        WHERE u.id = $1
          AND ${TRACKABLE_PULSE_ROLES_SQL}`;
-    if (!user.is_super_admin && wsId) {
-      targetParams.push(wsId);
-      targetSql += ` AND ext.workspace_id = $2`;
-    }
+    targetParams.push(wsId);
+    targetSql += ` AND ext.workspace_id = $2`;
     const target = await this.db.query<{ id: number; workspace_id: number }>(
       targetSql,
       targetParams,
@@ -644,6 +710,9 @@ export class PulseService {
       params.push(parseTenantUserId(userId));
       userFilter = `AND i.user_id = $${params.length}`;
     }
+    const settings = await this.getOrgSettings(user);
+    const reportEnd = inclusiveWorkDateKeyFromRangeEnd(end, settings.timezone);
+    const pausedVisible = sqlPausedVisibleThrough(params, reportEnd, settings.timezone);
     const result = await this.db.query<{
       user_id: string;
       idle_start: string;
@@ -659,6 +728,7 @@ export class PulseService {
          AND COALESCE(i.idle_end, NOW()) > $${scope.params.length + 1}::timestamptz
          AND i.idle_start >= ($${scope.params.length + 1}::timestamptz - INTERVAL '3 days')
          AND COALESCE(u.email, '') NOT ILIKE '%@example.com%'
+         AND ${pausedVisible}
          ${userFilter}
        ORDER BY i.idle_start`,
       params,
@@ -771,12 +841,15 @@ export class PulseService {
     start.setUTCDate(start.getUTCDate() - days);
     const startIso = start.toISOString();
     const endIso = end.toISOString();
+    const settings = await this.getOrgSettings(user);
 
     const scope = workspaceScope(user, 'ext');
     const usersResult = await this.db.query<{
       id: string;
       is_active: boolean;
       last_activity: string | null;
+      signed_in_at: string | null;
+      paused_at: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
@@ -784,6 +857,11 @@ export class PulseService {
          AND u.email NOT ILIKE '%@example.com%'
          AND ext.paused_at IS NULL`,
       scope.params,
+    );
+    const activeIds = new Set(
+      usersResult.rows
+        .filter((u) => pulseRosterStatus(u) === 'active')
+        .map((u) => u.id),
     );
 
     const timeScope = workspaceScope(user, 't');
@@ -795,9 +873,13 @@ export class PulseService {
          AND t.start_time > NOW() - INTERVAL '12 hours'`,
       timeScope.params,
     );
-    const onlineIds = new Set(activeSessions.rows.map((r) => r.user_id));
+    const onlineIds = new Set<string>();
+    for (const row of activeSessions.rows) {
+      if (activeIds.has(row.user_id)) onlineIds.add(row.user_id);
+    }
     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
     for (const u of usersResult.rows) {
+      if (pulseRosterStatus(u) !== 'active') continue;
       if (u.last_activity && new Date(u.last_activity).getTime() > fiveMinAgo) {
         onlineIds.add(u.id);
       }
@@ -807,14 +889,15 @@ export class PulseService {
     const trackedByUser = this.dailyHoursFromLogs(logs);
     const startKey = workDateKey(start);
     const endKey = workDateKey(end);
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+    const { other: adjOther, leave: adjLeave } = await this.fetchAdjustmentHoursInRange(
       user,
       startKey,
       endKey,
     );
     const dailyByUser = this.mergeTrackedWithAdjustments(
       trackedByUser,
-      adjustmentByUser,
+      adjOther,
+      adjLeave,
     );
 
     const dailyTotals = new Map<string, number>();
@@ -825,8 +908,6 @@ export class PulseService {
     }
 
     const totalHours = [...dailyTotals.values()].reduce((a, b) => a + b, 0);
-    const settings = await this.getOrgSettings(user);
-
     const shotScope = workspaceScope(user, 's');
     const activityParams = [...shotScope.params, startIso, endIso];
     const activityResult = await this.db.query<{ avg_activity: string }>(
@@ -845,7 +926,8 @@ export class PulseService {
     return {
       total_hours: Math.round(totalHours * 10) / 10,
       active_users: onlineIds.size,
-      offline_users: Math.max(0, usersResult.rows.length - onlineIds.size),
+      offline_users: Math.max(0, activeIds.size - onlineIds.size),
+      total_users: activeIds.size,
       average_activity_percent: Math.round(Number(activityResult.rows[0]?.avg_activity ?? 0)),
       hours_threshold: settings.hours_threshold,
       daily_breakdown: breakdown,
@@ -857,12 +939,16 @@ export class PulseService {
     const settings = await this.getOrgSettings(user);
     const scope = workspaceScope(user, 'ext');
     const userParams: unknown[] = [...scope.params];
+    const endKey = String(end).slice(0, 10);
     const userFilters = [
       scope.clause,
-      TRACKABLE_PULSE_ROLES_SQL,
       `u.email NOT ILIKE '%@example.com%'`,
-      `ext.paused_at IS NULL`,
+      ...hoursGoalRosterSql(restrictToUserId),
     ];
+    // Team grids hide paused people; a named user (self Coach) still gets hours.
+    if (!restrictToUserId) {
+      userFilters.push(sqlPausedVisibleThrough(userParams, endKey, settings.timezone));
+    }
     if (restrictToUserId) {
       const visibleIds = await this.visibleEmployeeIds(user);
       if (visibleIds && !visibleIds.includes(String(restrictToUserId))) {
@@ -880,7 +966,11 @@ export class PulseService {
       id: string;
       full_name: string | null;
       email: string;
+      role: string | null;
       manager_id: string | null;
+      is_active: boolean;
+      paused_at: string | null;
+      signed_in_at: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${userFilters.join(' AND ')}
@@ -889,11 +979,10 @@ export class PulseService {
     );
 
     const startKey = String(start).slice(0, 10);
-    const endKey = String(end).slice(0, 10);
     const workTz = settings.timezone;
     const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey, workTz);
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
-    const [logs, idleLogs, adjustmentByUser, screenshotRows] = await Promise.all([
+    const [logs, idleLogs, adjustmentSplit, screenshotRows] = await Promise.all([
       this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
       this.fetchIdleLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
       this.fetchAdjustmentHoursInRange(user, startKey, endKey, restrictToUserId),
@@ -959,18 +1048,33 @@ export class PulseService {
       end: endKey,
       employees: usersResult.rows.map((emp) => {
         const dayMap = dailyByUser.get(emp.id) ?? new Map();
-        const adjMap = adjustmentByUser.get(emp.id) ?? new Map();
+        const otherMap = adjustmentSplit.other.get(emp.id) ?? new Map();
+        const leaveMap = adjustmentSplit.leave.get(emp.id) ?? new Map();
         const lowActivityMap = lowActivityByUser.get(emp.id) ?? new Map();
         const idleMap = idleByUser.get(emp.id) ?? new Map();
         return {
           employee_id: emp.id,
           full_name: emp.full_name,
           email: emp.email,
+          role: emp.role,
           manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
+          is_active: emp.is_active !== false,
+          paused_at: emp.paused_at ?? null,
+          signed_in_at: emp.signed_in_at ?? null,
           days: days.map((date) => {
             const trackedHours = dayMap.get(date) ?? 0;
-            const adjustmentHours = adjMap.get(date) ?? 0;
-            const hoursWorked = this.hoursWorkedForDay(trackedHours, adjustmentHours);
+            const otherHours = otherMap.get(date) ?? 0;
+            const leaveHours = leaveMap.get(date) ?? 0;
+            const hoursWorked = this.hoursWorkedForDay(
+              trackedHours,
+              otherHours,
+              leaveHours,
+            );
+            const adjustmentHours = this.appliedAdjustmentHours(
+              trackedHours,
+              otherHours,
+              leaveHours,
+            );
             const lowRaw = lowActivityMap.get(date) ?? 0;
             const idleRaw = idleMap.get(date) ?? 0;
             // Idle/low-activity stay based on tracked sessions only.
@@ -1069,15 +1173,29 @@ export class PulseService {
 
     // Adjustments are not project-scoped — surface as their own bucket so
     // org totals match Team Time / Email Reporting actual hours.
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
-      user,
-      startKey,
-      endKey,
-      restrictToUserId,
-    );
+    // Holiday leave is a top-up (floor), not stacked on tracked project hours.
+    const [adjustmentSplit, adjLogs] = await Promise.all([
+      this.fetchAdjustmentHoursInRange(user, startKey, endKey, restrictToUserId),
+      this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
+    ]);
+    const trackedByUser = this.dailyHoursFromLogs(adjLogs, workTz);
     let adjustmentHours = 0;
-    for (const dayMap of adjustmentByUser.values()) {
-      for (const hours of dayMap.values()) adjustmentHours += hours;
+    const adjUserIds = new Set<string>([
+      ...adjustmentSplit.other.keys(),
+      ...adjustmentSplit.leave.keys(),
+    ]);
+    for (const uid of adjUserIds) {
+      const otherMap = adjustmentSplit.other.get(uid) ?? new Map<string, number>();
+      const leaveMap = adjustmentSplit.leave.get(uid) ?? new Map<string, number>();
+      const trackedMap = trackedByUser.get(uid) ?? new Map<string, number>();
+      const days = new Set<string>([...otherMap.keys(), ...leaveMap.keys()]);
+      for (const day of days) {
+        adjustmentHours += this.appliedAdjustmentHours(
+          trackedMap.get(day) ?? 0,
+          otherMap.get(day) ?? 0,
+          leaveMap.get(day) ?? 0,
+        );
+      }
     }
     adjustmentHours = Math.round(adjustmentHours * 10) / 10;
 
@@ -1112,6 +1230,11 @@ export class PulseService {
       settings.timezone,
     );
     const params: unknown[] = [...scope.params, startIso, endExclusiveIso];
+    const pausedVisible = sqlPausedVisibleThrough(
+      params,
+      String(end).slice(0, 10),
+      settings.timezone,
+    );
     const visibleIds = await this.visibleEmployeeIds(user);
     const visibleFilter = this.applyVisibleUserFilter(visibleIds, params);
 
@@ -1119,6 +1242,7 @@ export class PulseService {
       user_id: string;
       full_name: string | null;
       email: string;
+      is_active: boolean;
       activity_date: string;
       total_inputs: string;
       tracked_minutes: string;
@@ -1128,6 +1252,7 @@ export class PulseService {
          s.user_id::text AS user_id,
          trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS full_name,
          u.email,
+         (ext.paused_at IS NULL) AS is_active,
          ${sqlWorkDate('s.captured_at')}::text AS activity_date,
          COALESCE(SUM(s.mouse_clicks + s.keystrokes), 0)::text AS total_inputs,
          GREATEST(COUNT(*) * 5, 1)::text AS tracked_minutes,
@@ -1136,11 +1261,14 @@ export class PulseService {
        JOIN tenant."user" u ON u.id = s.user_id
        JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
        WHERE ${scope.clause}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND s.captured_at >= $${scope.params.length + 1}::timestamptz
          AND s.captured_at < $${scope.params.length + 2}::timestamptz
          AND u.email NOT ILIKE '%@example.com%'
+         AND ${pausedVisible}
          ${visibleFilter}
-       GROUP BY s.user_id, u.first_name, u.last_name, u.email, ${sqlWorkDate('s.captured_at')}
+       GROUP BY s.user_id, u.first_name, u.last_name, u.email, ext.paused_at, ${sqlWorkDate('s.captured_at')}
        ORDER BY full_name, activity_date`,
       params,
     );
@@ -1151,6 +1279,7 @@ export class PulseService {
         user_id: string;
         full_name: string | null;
         email: string;
+        is_active: boolean;
         daily_scores: Array<{
           date: string;
           activity_score: number;
@@ -1165,6 +1294,7 @@ export class PulseService {
           user_id: row.user_id,
           full_name: row.full_name,
           email: row.email,
+          is_active: row.is_active !== false,
           daily_scores: [],
         });
       }
@@ -1194,21 +1324,32 @@ export class PulseService {
   }
 
   async getActivitySummary(user: ScopedAuthUser, start: string, end: string) {
+    const settings = await this.getOrgSettings(user);
     const scope = workspaceScope(user, 'ext');
     const userParams: unknown[] = [...scope.params];
+    const pausedVisible = sqlPausedVisibleThrough(
+      userParams,
+      String(end).slice(0, 10),
+      settings.timezone,
+    );
     const visibleIds = await this.visibleEmployeeIds(user);
     const visibleFilter = this.applyVisibleUserFilter(visibleIds, userParams);
     const usersResult = await this.db.query<{
       id: string;
       full_name: string | null;
       email: string;
+      role: string | null;
       manager_id: string | null;
+      is_active: boolean;
+      signed_in_at: string | null;
+      paused_at: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
+         AND ${pausedVisible}
          ${visibleFilter}
        ORDER BY full_name ASC NULLS LAST`,
       userParams,
@@ -1300,7 +1441,11 @@ export class PulseService {
           employee_id: emp.id,
           full_name: emp.full_name,
           email: emp.email,
+          role: emp.role,
+          signed_in_at: emp.signed_in_at,
+          paused_at: emp.paused_at,
           manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
+          is_active: emp.is_active !== false,
           screenshot_count: activity.screenshot_count,
           mouse_clicks: activity.mouse_clicks,
           keystrokes: activity.keystrokes,
@@ -1315,8 +1460,14 @@ export class PulseService {
 
   /** Per-employee AI screenshot insights with activity breakdown and recent descriptions. */
   async getAiInsights(user: ScopedAuthUser, start: string, end: string) {
+    const settings = await this.getOrgSettings(user);
     const scope = workspaceScope(user, 'ext');
     const userParams: unknown[] = [...scope.params];
+    const pausedVisible = sqlPausedVisibleThrough(
+      userParams,
+      String(end).slice(0, 10),
+      settings.timezone,
+    );
     const visibleIds = await this.visibleEmployeeIds(user);
     const visibleFilter = this.applyVisibleUserFilter(visibleIds, userParams);
     const rangeParams = [...scope.params, start, end];
@@ -1328,9 +1479,10 @@ export class PulseService {
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
+         AND ${pausedVisible}
          ${visibleFilter}
        ORDER BY full_name ASC NULLS LAST`,
       userParams,
@@ -1338,6 +1490,8 @@ export class PulseService {
 
     const analyzedResult = await this.db.query<{
       user_id: string;
+      app_name: string | null;
+      window_title: string | null;
       activity_type: string | null;
       category: string | null;
       confidence_score: number | null;
@@ -1345,12 +1499,15 @@ export class PulseService {
       id: string;
       captured_at: string;
       description: string | null;
+      ocr_excerpt: string | null;
       feedback: string | null;
       productivity_flag: string | null;
       vision_used: boolean | null;
     }>(
       `SELECT
          s.user_id::text AS user_id,
+         s.app_name,
+         s.window_title,
          s.activity_type,
          s.category,
          s.confidence_score,
@@ -1358,6 +1515,7 @@ export class PulseService {
          s.id::text AS id,
          s.captured_at,
          s.vision_summary AS description,
+         LEFT(COALESCE(s.vision_analysis #>> '{image_context,ocr_excerpt}', ''), 2500) AS ocr_excerpt,
          COALESCE(s.vision_analysis #>> '{parsed,feedback_for_employee}', s.vision_analysis->>'feedback_for_employee') AS feedback,
          COALESCE(s.vision_analysis #>> '{parsed,productivity_flag}', s.vision_analysis->>'productivity_flag') AS productivity_flag,
          CASE WHEN s.vision_analysis->>'vision_used' = 'true' THEN true ELSE false END AS vision_used
@@ -1412,7 +1570,11 @@ export class PulseService {
       }
     >();
 
-    for (const row of analyzedResult.rows) {
+    for (const raw of analyzedResult.rows) {
+      const row = applyMeetingScreenshotPresentation({
+        ...raw,
+        vision_summary: raw.description,
+      });
       if (!byUser.has(row.user_id)) {
         byUser.set(row.user_id, {
           analyzed_count: 0,
@@ -1482,35 +1644,6 @@ export class PulseService {
         };
       }),
     };
-    // #region agent log
-    {
-      const jsonBytes = Buffer.byteLength(JSON.stringify(payload));
-      const insightVision = payload.employees.reduce(
-        (n, emp) =>
-          n +
-          emp.recent_insights.filter((i) => (i as { vision_analysis?: unknown }).vision_analysis)
-            .length,
-        0,
-      );
-      fetch('http://127.0.0.1:7612/ingest/1c3b1140-705f-4d26-95d3-63a9580b70d3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'dd6ce4' },
-        body: JSON.stringify({
-          sessionId: 'dd6ce4',
-          runId: 'post-slim',
-          hypothesisId: 'B',
-          location: 'pulse.service.ts:getAiInsights',
-          message: 'ai-insights payload',
-          data: {
-            employeeCount: payload.employees.length,
-            jsonBytes,
-            insightVisionBlobs: insightVision,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     return payload;
   }
 
@@ -1540,22 +1673,27 @@ export class PulseService {
 
     const scope = workspaceScope(user, 'ext');
     const userParams: unknown[] = [...scope.params];
+    const pausedVisible = sqlPausedVisibleThrough(userParams, checkDate, settings.timezone);
     const visibleIds = await this.visibleEmployeeIds(user);
     const visibleFilter = this.applyVisibleUserFilter(visibleIds, userParams);
     const usersResult = await this.db.query<{
       id: string;
       full_name: string | null;
       email: string;
+      role: string | null;
       manager_id: string | null;
       last_activity: string | null;
+      is_active: boolean;
       paused_at: string | null;
       pause_reason: string | null;
+      signed_in_at: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
+         AND ${pausedVisible}
          ${visibleFilter}
        ORDER BY full_name ASC NULLS LAST`,
       userParams,
@@ -1564,14 +1702,15 @@ export class PulseService {
     const logs = await this.fetchTimeLogsInRange(user, prevStartIso, checkEndIso);
     const idleLogs = await this.fetchIdleLogsInRange(user, prevStartIso, checkEndIso);
     const trackedByUser = this.dailyHoursFromLogs(logs);
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+    const { other: adjOther, leave: adjLeave } = await this.fetchAdjustmentHoursInRange(
       user,
       previousKey,
       checkDate,
     );
     const dailyByUser = this.mergeTrackedWithAdjustments(
       trackedByUser,
-      adjustmentByUser,
+      adjOther,
+      adjLeave,
     );
     const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
       user,
@@ -1661,6 +1800,8 @@ export class PulseService {
         employee_id: emp.id,
         full_name: emp.full_name,
         email: emp.email,
+        role: emp.role,
+        signed_in_at: emp.signed_in_at,
         manager_email: emp.manager_id ? managerEmails.get(emp.manager_id) ?? null : null,
         // New canonical keys
         check_date: checkDate,
@@ -1681,6 +1822,7 @@ export class PulseService {
         not_tracking_both: notTrackingPrevious && notTrackingCheck,
         has_open_session: checkDate === todayKey && openSessionIds.has(emp.id),
         last_activity: emp.last_activity,
+        is_active: emp.is_active !== false,
         paused_at: emp.paused_at,
         pause_reason: emp.pause_reason,
         // Backward-compatible aliases (yesterday = previous, today = check)
@@ -1728,11 +1870,14 @@ export class PulseService {
       is_active: boolean;
       manager_id: string | null;
       started_on: string | null;
+      paused_at: string | null;
+      pause_reason: string | null;
+      country: string | null;
+      signed_in_at: string | null;
     }>(
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL
        ORDER BY full_name ASC NULLS LAST`,
       scope.params,
     );
@@ -1745,25 +1890,31 @@ export class PulseService {
     const trackedByUser = this.dailyHoursFromLogs(logs);
     const weekStartKey = workDateKey(weekStart);
     const weekEndKey = workDateKey(new Date());
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+    const { other: adjOther, leave: adjLeave } = await this.fetchAdjustmentHoursInRange(
       user,
       weekStartKey,
       weekEndKey,
     );
     const weeklyHours = this.sumDailyHoursByUser(
-      this.mergeTrackedWithAdjustments(trackedByUser, adjustmentByUser),
+      this.mergeTrackedWithAdjustments(trackedByUser, adjOther, adjLeave),
     );
 
-    let leads = usersResult.rows.filter(
+    const activeRows = usersResult.rows.filter((u) => u.is_active);
+    let inactiveRows = usersResult.rows.filter((u) => !u.is_active);
+
+    let leads = activeRows.filter(
       (u) => u.role === 'admin' || u.role === 'manager' || u.role === 'team_leader',
     );
 
-    let employees = usersResult.rows.filter((u) => u.role === 'employee');
+    let employees = activeRows.filter((u) => u.role === 'employee');
 
     // Team leads only see themselves as a lead + their direct reports (roster, not reports).
     if (user.role === 'team_leader' && !user.is_super_admin) {
       leads = leads.filter((u) => u.id === user.id);
       employees = employees.filter((e) => e.manager_id === user.id);
+      inactiveRows = inactiveRows.filter(
+        (e) => e.manager_id === user.id || e.id === user.id,
+      );
     }
 
     // Roster-only roles (manager, team lead) do not see teammate hours/reports.
@@ -1780,7 +1931,9 @@ export class PulseService {
           department: e.department,
           location: e.location,
           started_on: e.started_on ? String(e.started_on).slice(0, 10) : null,
-          status: e.is_active ? 'active' : 'inactive',
+          country: e.country,
+          status: pulseRosterStatus(e),
+          signed_in_at: e.signed_in_at,
           weekly_hours: includeHours ? weeklyHours.get(e.id) ?? 0 : null,
         }));
 
@@ -1795,7 +1948,9 @@ export class PulseService {
         department: lead.department,
         location: lead.location,
         started_on: lead.started_on ? String(lead.started_on).slice(0, 10) : null,
-        status: lead.is_active ? 'active' : 'inactive',
+        country: lead.country,
+        status: pulseRosterStatus(lead),
+        signed_in_at: lead.signed_in_at,
         direct_reports: reportsFor(lead.id),
       })),
       unassigned_employees: showUnassigned
@@ -1805,11 +1960,30 @@ export class PulseService {
               id: e.id,
               full_name: e.full_name,
               email: e.email,
+              role: e.role,
               department: e.department,
               started_on: e.started_on ? String(e.started_on).slice(0, 10) : null,
+              country: e.country,
+              status: pulseRosterStatus(e),
+              signed_in_at: e.signed_in_at,
               weekly_hours: weeklyHours.get(e.id) ?? 0,
             }))
         : [],
+      inactive_employees: inactiveRows.map((e) => ({
+        id: e.id,
+        full_name: e.full_name,
+        email: e.email,
+        role: e.role,
+        department: e.department,
+        location: e.location,
+        manager_id: e.manager_id,
+        started_on: e.started_on ? String(e.started_on).slice(0, 10) : null,
+        country: e.country,
+        status: 'inactive',
+        paused_at: e.paused_at,
+        pause_reason: e.pause_reason,
+        weekly_hours: includeHours ? weeklyHours.get(e.id) ?? 0 : null,
+      })),
     };
   }
 
@@ -1852,8 +2026,14 @@ export class PulseService {
     return this.addCalendarDays(dateKey, -fromMon);
   }
 
-  private async loadTrackableEmployeesWithManagers(user: ScopedAuthUser) {
+  private async loadTrackableEmployeesWithManagers(
+    user: ScopedAuthUser,
+    reportEndKey: string,
+    tz: string,
+  ) {
     const scope = workspaceScope(user, 'ext');
+    const userParams: unknown[] = [...scope.params];
+    const pausedVisible = sqlPausedVisibleThrough(userParams, reportEndKey, tz);
     const usersResult = await this.db.query<{
       id: string;
       full_name: string | null;
@@ -1862,14 +2042,13 @@ export class PulseService {
       department: string | null;
       started_on: string | null;
     }>(
-      // Soft-deleted / removed employees set paused_at (is_active=false).
-      // Email Reporting must exclude them — same gate as not-tracking report.
       `${EMPLOYEE_USER_SELECT}
        WHERE ${scope.clause}
-         AND ${TRACKABLE_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_PULSE_ROLES_SQL}
+         AND ${HOURS_GOAL_SIGNED_IN_SQL}
          AND u.email NOT ILIKE '%@example.com%'
-         AND ext.paused_at IS NULL`,
-      scope.params,
+         AND ${pausedVisible}`,
+      userParams,
     );
 
     const managerIds = [
@@ -1928,7 +2107,10 @@ export class PulseService {
         if (!mondays.length) {
           throw new BadRequestException('No work weeks found in month');
         }
-        if (!Number.isFinite(weekIndex) || weekIndex < 1) weekIndex = mondays.length;
+        if (!Number.isFinite(weekIndex) || weekIndex < 1) {
+          const today = workDateKey(new Date());
+          weekIndex = mondays.filter((m) => m <= today).length || 1;
+        }
         weekIndex = Math.min(Math.max(1, Math.round(weekIndex)), mondays.length);
         anchor = mondays[weekIndex - 1];
       }
@@ -1950,20 +2132,12 @@ export class PulseService {
     return this.getLowHoursDaily(user, date, opts.hours_threshold);
   }
 
-  /** Mondays (YYYY-MM-DD) whose calendar month matches YYYY-MM. */
+  /** Mondays of Mon–Fri weeks that overlap YYYY-MM (may start in the prior month). */
   private mondaysInMonth(monthKey: string): string[] {
     if (!/^\d{4}-\d{2}$/.test(monthKey)) {
       throw new BadRequestException('month must be YYYY-MM');
     }
-    const [y, m] = monthKey.split('-').map((n) => parseInt(n, 10));
-    const mondays: string[] = [];
-    for (let day = 1; day <= 31; day++) {
-      const key = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dt = new Date(Date.UTC(y, m - 1, day, 12));
-      if (dt.getUTCMonth() + 1 !== m) break;
-      if (dt.getUTCDay() === 1) mondays.push(key);
-    }
-    return mondays;
+    return mondaysOverlappingMonth(monthKey);
   }
 
   private countWeekdays(startKey: string, endKeyInclusive: string): number {
@@ -1978,8 +2152,9 @@ export class PulseService {
 
   /**
    * Pace engine (simple):
-   * - Week 1 / 2 / 3… = Mondays in that month
-   * - Count hours from first Monday through Friday of week N
+   * - Week 1 / 2 / 3… = Mon–Fri weeks that overlap the month
+   *   (if the 1st is mid-week, week 1 starts the previous Monday)
+   * - Count hours from that first Monday through Friday of week N
    * - Target = N × 35h (7h/day × 5 days)
    */
   private async getLowHoursPace(
@@ -1993,15 +2168,18 @@ export class PulseService {
       pace_percent?: number | string | null;
     },
   ) {
+    const settings = await this.getOrgSettings(user);
+    const workTz = settings.timezone;
+
     let monthKey = String(opts.month || '').trim();
     let weekIndex = Number(opts.week_index);
     let checkpointMonday = String(opts.week_start || '').trim();
 
     if (!/^\d{4}-\d{2}$/.test(monthKey)) {
       if (checkpointMonday && /^\d{4}-\d{2}-\d{2}$/.test(checkpointMonday)) {
-        monthKey = this.mondayKey(checkpointMonday).slice(0, 7);
+        monthKey = weekHomeMonth(this.mondayKey(checkpointMonday));
       } else {
-        monthKey = workDateKey(new Date()).slice(0, 7);
+        monthKey = workDateKey(new Date(), workTz).slice(0, 7);
       }
     }
 
@@ -2010,19 +2188,17 @@ export class PulseService {
       throw new BadRequestException('No work weeks found in month');
     }
 
-    if (checkpointMonday && /^\d{4}-\d{2}-\d{2}$/.test(checkpointMonday)) {
-      checkpointMonday = this.mondayKey(checkpointMonday);
-      weekIndex = mondays.indexOf(checkpointMonday) + 1;
-    }
-    if (!Number.isFinite(weekIndex) || weekIndex < 1) {
-      weekIndex = mondays.length;
-    }
-    weekIndex = Math.min(Math.max(1, Math.round(weekIndex)), mondays.length);
-    checkpointMonday = mondays[weekIndex - 1];
-
-    const periodStart = mondays[0]; // first Monday of month — not calendar day 1
+    const todayKey = workDateKey(new Date(), workTz);
+    const resolved = resolveMonthWeekCheckpoint({
+      mondays,
+      weekIndex,
+      weekStart: checkpointMonday,
+      todayKey,
+    });
+    weekIndex = resolved.weekIndex;
+    checkpointMonday = resolved.checkpointMonday;
+    const periodStart = resolved.periodStart;
     const weekEnd = this.addCalendarDays(checkpointMonday, 4); // Friday of week N
-    const todayKey = workDateKey(new Date());
     const effectiveEnd = weekEnd > todayKey ? todayKey : weekEnd;
 
     // Simple rule: week 1 = 35, week 2 = 70, week 3 = 105…
@@ -2073,42 +2249,42 @@ export class PulseService {
       };
     }
 
-    const dayKeys = eachWorkDateKey(periodStart, effectiveEnd).filter((d) => {
+    const dayKeys = eachWorkDateKey(periodStart, effectiveEnd, workTz).filter((d) => {
       const [y, m, dd] = d.split('-').map((n) => parseInt(n, 10));
       const dow = new Date(Date.UTC(y, m - 1, dd, 12)).getUTCDay();
       return dow >= 1 && dow <= 5;
     });
-    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(periodStart, effectiveEnd);
-    const logs = await this.fetchTimeLogsInRange(user, startIso, endExclusiveIso);
-    const dailyByUser = this.dailyHoursFromLogs(logs);
-    // Same Low + Idle metrics as Daily Hours dashboard.
-    const settings = await this.getOrgSettings(user);
+    const { startIso, endExclusiveIso } = workDateRangeToUtcIso(periodStart, effectiveEnd, workTz);
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
-    const lowActivityByUser = await this.fetchLowActivityHoursFromScreenshots(
-      user,
-      startIso,
-      endExclusiveIso,
-      lowActivityCutoff,
-      settings.screenshot_interval_minutes,
-    );
-    const idleLogs = await this.fetchIdleLogsInRange(user, startIso, endExclusiveIso);
+    const [logs, idleLogs, adjSplit, lowActivityByUser, staff] = await Promise.all([
+      this.fetchTimeLogsInRange(user, startIso, endExclusiveIso),
+      this.fetchIdleLogsInRange(user, startIso, endExclusiveIso),
+      this.fetchAdjustmentHoursInRange(user, periodStart, effectiveEnd),
+      this.fetchLowActivityHoursFromScreenshots(
+        user,
+        startIso,
+        endExclusiveIso,
+        lowActivityCutoff,
+        settings.screenshot_interval_minutes,
+        undefined,
+        workTz,
+      ),
+      this.loadTrackableEmployeesWithManagers(user, effectiveEnd, settings.timezone),
+    ]);
+    const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
     const idleByUser = this.dailyIdleHoursByUserDay(
       await this.dailyLowActivityFromIdleLogs(
         user,
         startIso,
         endExclusiveIso,
         idleLogs,
-        undefined,
+        workTz,
         settings.screenshot_interval_minutes,
       ),
-      this.dailyIdleSecondsFromTimeLogs(logs),
+      this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
-      user,
-      periodStart,
-      effectiveEnd,
-    );
-    const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
+    const { other: adjOther, leave: adjLeave } = adjSplit;
+    const { users, managerMap } = staff;
 
     const below = users
       .map((emp) => {
@@ -2126,7 +2302,8 @@ export class PulseService {
         const empDays = employment.employmentDays;
 
         const dayMap = dailyByUser.get(emp.id) ?? new Map<string, number>();
-        const adjMap = adjustmentByUser.get(emp.id) ?? new Map<string, number>();
+        const otherMap = adjOther.get(emp.id) ?? new Map<string, number>();
+        const leaveMap = adjLeave.get(emp.id) ?? new Map<string, number>();
         const lowMap = lowActivityByUser.get(emp.id) ?? new Map<string, number>();
         const idleMap = idleByUser.get(emp.id) ?? new Map<string, number>();
         let hours = 0;
@@ -2144,8 +2321,10 @@ export class PulseService {
         const daily_effective: Record<string, number> = {};
         for (const day of empDays) {
           const tracked = dayMap.get(day) ?? 0;
-          const adj = adjMap.get(day) ?? 0;
-          const worked = this.hoursWorkedForDay(tracked, adj);
+          const other = otherMap.get(day) ?? 0;
+          const leave = leaveMap.get(day) ?? 0;
+          const worked = this.hoursWorkedForDay(tracked, other, leave);
+          const adj = this.appliedAdjustmentHours(tracked, other, leave);
           const lowRaw = lowMap.get(day) ?? 0;
           const idleRaw = idleMap.get(day) ?? 0;
           // Idle/low stay based on tracked sessions; day total includes adjustments.
@@ -2254,8 +2433,16 @@ export class PulseService {
       ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(user, date, date);
-    const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
+    const { other: adjOther, leave: adjLeave } = await this.fetchAdjustmentHoursInRange(
+      user,
+      date,
+      date,
+    );
+    const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(
+      user,
+      date,
+      settings.timezone,
+    );
 
     const below = users
       .map((emp) => {
@@ -2263,8 +2450,14 @@ export class PulseService {
         if (startedOn && date < startedOn) return null;
 
         const tracked = dailyByUser.get(emp.id)?.get(date) ?? 0;
-        const adjustmentHours = adjustmentByUser.get(emp.id)?.get(date) ?? 0;
-        const hours = this.hoursWorkedForDay(tracked, adjustmentHours);
+        const otherHours = adjOther.get(emp.id)?.get(date) ?? 0;
+        const leaveHours = adjLeave.get(emp.id)?.get(date) ?? 0;
+        const hours = this.hoursWorkedForDay(tracked, otherHours, leaveHours);
+        const adjustmentHours = this.appliedAdjustmentHours(
+          tracked,
+          otherHours,
+          leaveHours,
+        );
         const lowRaw = lowActivityByUser.get(emp.id)?.get(date) ?? 0;
         const idleRaw = idleByUser.get(emp.id)?.get(date) ?? 0;
         const lowHours =
@@ -2388,12 +2581,16 @@ export class PulseService {
       ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
-    const adjustmentByUser = await this.fetchAdjustmentHoursInRange(
+    const { other: adjOther, leave: adjLeave } = await this.fetchAdjustmentHoursInRange(
       user,
       weekStart,
       effectiveEnd,
     );
-    const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(user);
+    const { users, managerMap } = await this.loadTrackableEmployeesWithManagers(
+      user,
+      effectiveEnd,
+      workTz,
+    );
 
     const hoursPerDay = hoursThreshold / 5;
     const below = users
@@ -2411,7 +2608,8 @@ export class PulseService {
         const empDays = employment.employmentDays;
 
         const dayMap = dailyByUser.get(emp.id) ?? new Map<string, number>();
-        const adjMap = adjustmentByUser.get(emp.id) ?? new Map<string, number>();
+        const otherMap = adjOther.get(emp.id) ?? new Map<string, number>();
+        const leaveMap = adjLeave.get(emp.id) ?? new Map<string, number>();
         const lowMap = lowActivityByUser.get(emp.id) ?? new Map<string, number>();
         const idleMap = idleByUser.get(emp.id) ?? new Map<string, number>();
         let hours = 0;
@@ -2428,8 +2626,10 @@ export class PulseService {
         const daily_effective: Record<string, number> = {};
         for (const day of empDays) {
           const tracked = dayMap.get(day) ?? 0;
-          const adj = adjMap.get(day) ?? 0;
-          const worked = this.hoursWorkedForDay(tracked, adj);
+          const other = otherMap.get(day) ?? 0;
+          const leave = leaveMap.get(day) ?? 0;
+          const worked = this.hoursWorkedForDay(tracked, other, leave);
+          const adj = this.appliedAdjustmentHours(tracked, other, leave);
           const lowRaw = lowMap.get(day) ?? 0;
           const idleRaw = idleMap.get(day) ?? 0;
           const low = tracked > 0 ? Math.min(lowRaw, tracked) : lowRaw;
@@ -2597,11 +2797,14 @@ export class PulseService {
       month?: string;
       week_index?: number;
       period?: string;
+      period_start?: string;
+      period_end?: string;
       employee_ids?: string[];
       notify_manager?: boolean;
       hours_threshold?: number;
       pace_percent?: number;
       from?: string;
+      employees?: unknown;
     },
   ) {
     const periodRaw = String(body.period || 'pace').toLowerCase();
@@ -2609,20 +2812,79 @@ export class PulseService {
       periodRaw === 'day' || periodRaw === 'week' || periodRaw === 'pace'
         ? periodRaw
         : 'pace';
-    const lowHours = await this.getLowHours(user, {
-      period,
-      date: body.date,
-      week_start: body.week_start || body.date,
-      month: body.month,
-      week_index: body.week_index,
-      hours_threshold: body.hours_threshold,
-      pace_percent: body.pace_percent,
-    });
-    let targets = lowHours.employees;
-    if (body.employee_ids?.length) {
-      const idSet = new Set(body.employee_ids.map(String));
-      targets = targets.filter((e) => idSet.has(String(e.employee_id)));
+    const settings = await this.getOrgSettings(user);
+    const workTz = settings.timezone;
+    const todayKey = workDateKey(new Date(), workTz);
+    const monthKey = String(body.month || '').trim();
+    const mondays = /^\d{4}-\d{2}$/.test(monthKey) ? this.mondaysInMonth(monthKey) : [];
+    let sendWindow;
+    try {
+      sendWindow = resolveLowHoursSendWindow({
+        period,
+        month: monthKey,
+        weekIndex: body.week_index,
+        weekStart: body.week_start || body.date,
+        date: body.date,
+        periodStart: body.period_start,
+        periodEnd: body.period_end,
+        hoursThreshold: body.hours_threshold,
+        todayKey,
+        mondays,
+        defaultDailyThreshold: this.resolveDailyHoursThreshold(
+          settings.hours_threshold,
+          period === 'day' ? body.hours_threshold : undefined,
+        ),
+      });
+    } catch {
+      throw new BadRequestException('Invalid email reporting period');
     }
+
+    const selectedIds = (body.employee_ids || []).map(String).filter(Boolean);
+    const snapshot = employeesFromSendSnapshot(body.employees, selectedIds);
+    const snapshotCovers =
+      selectedIds.length > 0 &&
+      selectedIds.every((id) => snapshot.some((emp) => String(emp.employee_id) === id));
+    let dailyEmployees = snapshotCovers ? snapshot : [];
+    if (!snapshotCovers) {
+      dailyEmployees =
+        (await this.getDailyHours(user, sendWindow.periodStart, sendWindow.periodEnd))
+          .employees || [];
+      if (selectedIds.length) {
+        const idSet = new Set(selectedIds);
+        dailyEmployees = dailyEmployees.filter((emp) =>
+          idSet.has(String(emp.employee_id)),
+        );
+      }
+    }
+
+    let targets = dailyEmployees.map((emp) =>
+      mailTargetFromDailyEmployee(
+        emp,
+        sendWindow.expectedHours,
+        sendWindow.periodStart,
+        sendWindow.periodEnd,
+      ),
+    );
+    if (selectedIds.length) {
+      const idSet = new Set(selectedIds);
+      targets = targets.filter((emp) => idSet.has(String(emp.employee_id)));
+    } else {
+      targets = targets.filter((emp) => emp.hours_worked < sendWindow.expectedHours);
+    }
+
+    const lowHours = {
+      period,
+      month: sendWindow.month,
+      week_index: sendWindow.weekIndex,
+      week_start: sendWindow.weekStart,
+      week_end: sendWindow.weekEnd,
+      period_start: sendWindow.periodStart,
+      period_end: sendWindow.periodEnd,
+      hours_threshold: sendWindow.expectedHours,
+      expected_hours: sendWindow.expectedHours,
+      day_keys: targets[0]?.day_keys,
+      employees: targets,
+    };
 
     if (!this.sesEmail.isEnabled()) {
       this.logger.warn('SES email not configured — recording send intent only');
@@ -2633,7 +2895,6 @@ export class PulseService {
     const from = this.sesEmail.resolveFrom(body.from);
     const sent: Array<{ employee_id: string; email: string; status: string }> = [];
     const wsId = this.workspaceId(user);
-    const todayKey = workDateKey(new Date());
 
     for (const emp of targets) {
       const expectedHours = Number(lowHours.expected_hours ?? lowHours.hours_threshold);
@@ -2762,19 +3023,15 @@ export class PulseService {
   async getLowHoursHistory(user: ScopedAuthUser, limit: number) {
     const wsId = this.workspaceId(user);
     const cap = Math.max(1, Math.min(limit, 200));
-    const params: unknown[] = [];
-    let where = '1=1';
-    if (!user.is_super_admin && wsId) {
-      params.push(wsId);
-      where = `l.workspace_id = $1`;
-    }
+    if (!wsId) return [];
+    const params: unknown[] = [wsId];
     const result = await this.db.query(
       `SELECT l.id, l.employee_id::text AS employee_id, l.employee_email, l.manager_email,
               l.work_date, l.hours_worked, l.hours_threshold, l.status, l.created_at,
               trim(both ' ' from coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS employee_name
        FROM time_doctor.low_hours_email_log l
        LEFT JOIN tenant."user" u ON u.id = l.employee_id
-       WHERE ${where}
+       WHERE l.workspace_id = $1
        ORDER BY l.created_at DESC
        LIMIT ${cap}`,
       params,
@@ -2808,6 +3065,7 @@ export class PulseService {
       role?: string;
       department?: string | null;
       location?: string | null;
+      country?: string | null;
       manager_id?: string | null;
       is_active?: boolean;
       started_on?: string | null;
@@ -2831,6 +3089,10 @@ export class PulseService {
       sets.push(`location = $${idx++}`);
       params.push(updates.location);
     }
+    if (updates.country !== undefined) {
+      sets.push(`country = $${idx++}`);
+      params.push(updates.country ? String(updates.country).trim() || null : null);
+    }
     if (updates.manager_id !== undefined) {
       sets.push(`manager_id = $${idx++}`);
       params.push(updates.manager_id ? parseTenantUserId(updates.manager_id) : null);
@@ -2844,9 +3106,12 @@ export class PulseService {
       params.push(started);
     }
     if (updates.is_active === false) {
-      sets.push('paused_at = NOW()');
+      sets.push('paused_at = COALESCE(paused_at, NOW())');
+      sets.push(`pause_reason = COALESCE(pause_reason, $${idx++})`);
+      params.push('deactivated');
     } else if (updates.is_active === true) {
-      sets.push('paused_at = NULL', 'pause_reason = NULL');
+      // Pulse roster only. Cognito is never deleted or recreated on remove/activate.
+      sets.push('paused_at = NULL', 'pause_reason = NULL', 'paused_by = NULL');
     }
 
     if (updates.full_name !== undefined) {
@@ -2874,5 +3139,40 @@ export class PulseService {
       [uid],
     );
     return refreshed.rows[0] ?? null;
+  }
+
+  /** Set country on selected workspace employees (public-holiday matching). */
+  async bulkSetCountry(
+    user: ScopedAuthUser,
+    input: { country: string; user_ids: string[] },
+  ) {
+    const country = String(input.country || '').trim();
+    if (!country) {
+      throw new BadRequestException('country is required');
+    }
+
+    let ids: number[];
+    try {
+      ids = [...new Set((input.user_ids || []).map((id) => parseTenantUserId(id)))];
+    } catch {
+      throw new BadRequestException('user_ids must be valid employee ids');
+    }
+    if (ids.length === 0) {
+      throw new BadRequestException('user_ids is required');
+    }
+
+    const scope = workspaceScope(user, 'ext');
+    const countryIdx = scope.params.length + 1;
+    const idsIdx = scope.params.length + 2;
+    const updated = await this.db.query<{ user_id: string }>(
+      `UPDATE time_doctor.user_extensions ext
+       SET country = $${countryIdx}, updated_at = NOW()
+       WHERE ${scope.clause}
+         AND ext.user_id = ANY($${idsIdx}::int[])
+       RETURNING ext.user_id::text AS user_id`,
+      [...scope.params, country, ids],
+    );
+
+    return { updated: updated.rowCount ?? updated.rows.length, country };
   }
 }

@@ -67,6 +67,30 @@ describe('ForceSyncController update_time_log', () => {
     });
   });
 
+  it('frozen_end bills the client Stop time and does not raise to last_alive', async () => {
+    const { controller, query } = makeController();
+    const frozenEnd = '2026-09-21T18:13:06.127Z';
+
+    await controller.desktopAction({
+      action: 'update_time_log',
+      data: {
+        id: '4b2ebd54-0000-4000-8000-000000000001',
+        updates: {
+          end_time: frozenEnd,
+          status: 'completed',
+          frozen_end: true,
+          last_alive_at: frozenEnd,
+        },
+      },
+    });
+
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain(updateTimeLogEndSql(true));
+    expect(sql).toContain(AUTHORIZED_CUT_END_SQL);
+    expect(sql).not.toMatch(/last_alive_at = CASE\s+WHEN t\.end_time IS NOT NULL THEN t\.last_alive_at/);
+    expect(params[1]).toBe(frozenEnd);
+  });
+
   it('a follow-up without the flag does not use the authorized-cut end SQL', async () => {
     const { controller, query } = makeController();
 
@@ -102,15 +126,34 @@ describe('ForceSyncController close_active_sessions', () => {
       },
     });
 
-    const [sql, params] = query.mock.calls[0];
-    expect(sql).toContain('t.id <>');
+    const closeCall = query.mock.calls.find(([sql]) => String(sql).includes('t.id <>'));
+    expect(closeCall).toBeTruthy();
+    const [, params] = closeCall;
     expect(params).toContain('090c3598-4505-4d58-b3c9-5cabca29d649');
+  });
+
+  it('rejects desktop sync when the Pulse user is paused', async () => {
+    const { controller, query } = makeController();
+    query.mockResolvedValueOnce({
+      rows: [{ paused_at: '2026-09-01T00:00:00.000Z' }],
+    });
+
+    await expect(
+      controller.desktopAction({
+        action: 'close_active_sessions',
+        data: { user_id: 1233 },
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[0][0])).toContain('paused_at');
   });
 });
 
 describe('ForceSyncController create_time_log conflict', () => {
   it('keeps a completed billed end on insert retry', async () => {
     const { controller, query } = makeController();
+    query.mockResolvedValueOnce({ rows: [{ paused_at: null }] });
+    query.mockResolvedValueOnce({ rows: [] });
     query.mockResolvedValueOnce({
       rows: [{ workspace_id: 511 }],
     });
@@ -141,7 +184,36 @@ describe('ForceSyncController create_time_log conflict', () => {
       },
     });
 
-    const insertSql = query.mock.calls[1][0];
+    const insertSql = query.mock.calls.find(([sql]) =>
+      String(sql).includes(COMPLETED_ROW_KEEPS_END_SQL),
+    )?.[0];
     expect(insertSql).toContain(COMPLETED_ROW_KEEPS_END_SQL);
+  });
+});
+
+describe('ForceSyncController DB unavailable', () => {
+  it('returns 503 when RDS has too many connections', async () => {
+    const query = vi.fn(async () => {
+      const err = Object.assign(new Error('sorry, too many clients already'), {
+        code: '53300',
+      });
+      throw err;
+    });
+    const controller = new ForceSyncController(
+      { query } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.desktopAction({
+        action: 'update_time_log',
+        data: {
+          id: '4b2ebd54-0000-4000-8000-000000000001',
+          updates: { status: 'active' },
+        },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
   });
 });

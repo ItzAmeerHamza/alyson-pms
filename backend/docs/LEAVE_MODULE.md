@@ -43,7 +43,7 @@ GOOGLE_WORKSPACE_ADMIN_SUBJECT_EMAIL=thirumalai@cintara.ai
 **B) Split vars (recommended for SAM `deploy.env`)**
 
 ```bash
-DEEPSEEK_API_KEY=...
+OPENROUTER_API_KEY=...
 # From JSON.client_email:
 GOOGLE_DWD_CLIENT_EMAIL=alyson-calendar-sync@YOUR_PROJECT.iam.gserviceaccount.com
 # From JSON.private_key (\n escaped). deploy.sh base64-encodes for SAM:
@@ -60,7 +60,7 @@ Unused for leave scan (keep for AlysonHR only): `GOOGLE_WORKSPACE_DOMAIN`, `GOOG
 
 Workspace Admin: authorize SA **Client ID** for `https://www.googleapis.com/auth/gmail.readonly`.
 
-API Lambda has **no NAT**. Gmail + DeepSeek run on non-VPC `LeaveScanWorkerFunction`;
+API Lambda has **no NAT**. Gmail + OpenRouter run on non-VPC `LeaveScanWorkerFunction`;
 `POST /pulse/leave/scan` Event-invokes that worker, which POSTs `/pulse/leave/internal/ingest-batch`.
 
 ## API

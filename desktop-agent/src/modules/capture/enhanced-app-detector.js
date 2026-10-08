@@ -760,19 +760,10 @@ class EnhancedAppDetector {
         accessibility = global.systemPreferences.isTrustedAccessibilityClient(false);
       } else {
         try {
-          const { execSync } = require('child_process');
-          execSync('/usr/bin/osascript -e "tell application \\"System Events\\" to get name of first process"', {
-            encoding: 'utf8',
-            timeout: 2000,
-            stdio: ['pipe', 'pipe', 'pipe']
-          });
-          accessibility = true;
-        } catch (error) {
-          if (error.message && (error.message.includes('not allowed') || error.message.includes('assistive'))) {
-            accessibility = false;
-          } else {
-            accessibility = true;
-          }
+          const { getAccessibilityAuthorized } = require('../../system/permissions-check');
+          accessibility = !!getAccessibilityAuthorized();
+        } catch (_) {
+          accessibility = false;
         }
       }
 

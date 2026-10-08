@@ -62,7 +62,7 @@ class WindowManager extends EventEmitter {
         spellcheck: false
       },
       icon: global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png'),
-      title: 'Alyson Time Doctor',
+      title: 'Tavilo Time',
       resizable: true,
       show: true,
       minWidth: 800,
@@ -86,7 +86,7 @@ class WindowManager extends EventEmitter {
         this.systemMonitor.registerMainWindow(this.mainWindow);
       }
       
-      console.log('✅ [WINDOW-MANAGER] Alyson PM Agent ready and visible');
+      console.log('✅ [WINDOW-MANAGER] Tavilo Time ready and visible');
       this.emit('main-window-ready', this.mainWindow);
     });
 
@@ -103,7 +103,7 @@ class WindowManager extends EventEmitter {
     this.mainWindow.on('minimize', () => {
       this.mainWindow.hide();
       if (this.showTrayNotification) {
-        this.showTrayNotification('Alyson PM continues tracking in background');
+        this.showTrayNotification('Tavilo Time continues tracking in background');
       }
       console.log('📱 [WINDOW-MANAGER] Window minimized and hidden - use tray or dock icon to restore');
       this.emit('window-minimized');
@@ -152,7 +152,7 @@ class WindowManager extends EventEmitter {
         spellcheck: false
       },
       icon: global.__alysonIconPath || path.join(__dirname, '../../../assets/icon.png'),
-      title: '🔬 Alyson PM Debug Console',
+      title: '🔬 Tavilo Time Debug Console',
       resizable: true,
       show: false,
       minWidth: 1000,

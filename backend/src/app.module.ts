@@ -14,6 +14,7 @@ import { AccessGrantsModule } from './access-grants/access-grants.module';
 import { ForceSyncController } from './sync/force-sync.controller';
 import { HealthController } from './health/health.controller';
 import { LeaveModule } from './leave/leave.module';
+import { BillingModule } from './billing/billing.module';
 
 /**
  * Alyson Pulse backend — minimal Lambda-friendly API surface.
@@ -23,7 +24,7 @@ import { LeaveModule } from './leave/leave.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env', '../.env'],
     }),
 
     ThrottlerModule.forRoot([
@@ -39,6 +40,7 @@ import { LeaveModule } from './leave/leave.module';
     TimeDoctorModule,
     UsersModule,
     AccessGrantsModule,
+    BillingModule,
   ],
   controllers: [ForceSyncController, HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

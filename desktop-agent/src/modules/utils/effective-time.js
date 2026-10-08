@@ -20,6 +20,35 @@ function computeEffectiveSeconds(totalSeconds, lowSeconds, idleSeconds) {
 }
 
 /**
+ * Product rule: the big clock and the Effective / Non-effective cards are live.
+ * They already classify time as it happens. Stop / Pause must not rewrite them.
+ *
+ * While tracking, Pulse + in-session idle both move the cards in real time.
+ * After Stop, keep the last painted split — a late Pulse read is the jump.
+ */
+const MIN_IDLE_REPORT_SECONDS = 5 * 60;
+
+function resolveLiveNonEffectiveSeconds({
+  pulseNonEffective = 0,
+  nonEffectiveAtLiveStart = 0,
+  sessionIdleSeconds = 0,
+  lastDisplayed = 0,
+  isLive = false,
+  minIdleReportSeconds = MIN_IDLE_REPORT_SECONDS,
+} = {}) {
+  const pulse = Math.max(0, Math.floor(Number(pulseNonEffective) || 0));
+  const atStart = Math.max(0, Math.floor(Number(nonEffectiveAtLiveStart) || 0));
+  const sessionIdle = Math.max(0, Math.floor(Number(sessionIdleSeconds) || 0));
+  const painted = Math.max(0, Math.floor(Number(lastDisplayed) || 0));
+  const reportable = sessionIdle >= minIdleReportSeconds ? sessionIdle : 0;
+  const liveSplit = atStart + reportable;
+  if (!isLive) {
+    return Math.max(painted, liveSplit);
+  }
+  return Math.max(pulse, liveSplit, painted);
+}
+
+/**
  * Exact screenshot interval in seconds from the live capturer.
  * Must be identical for Today cards and Month at a Glance — minute rounding
  * previously caused ~3× non-effective mismatches (34m vs 1h 42m).
@@ -79,6 +108,8 @@ function resolveScreenshotIntervalMinutes(config = global.config) {
 
 module.exports = {
   computeEffectiveSeconds,
+  resolveLiveNonEffectiveSeconds,
+  MIN_IDLE_REPORT_SECONDS,
   resolveScreenshotIntervalSeconds,
   resolveScreenshotIntervalMinutes,
 };

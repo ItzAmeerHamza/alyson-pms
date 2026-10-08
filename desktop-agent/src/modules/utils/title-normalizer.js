@@ -42,7 +42,7 @@ const DOMAIN_PATTERNS = [
   { pattern: /.*confluence\..*/i, normalized: 'Confluence' },
   { pattern: /.*salesforce\.com.*/i, normalized: 'Salesforce' },
   { pattern: /.*hubspot\.com.*/i, normalized: 'HubSpot' },
-  { pattern: /.*worktime\.ebdaadt\.com.*|.*alyson-pms\.vercel\.app.*/i, normalized: 'Alyson PM' },
+  { pattern: /.*worktime\.ebdaadt\.com.*|.*alyson-pms\.vercel\.app.*/i, normalized: 'Tavilo Time' },
   { pattern: /.*reddit\.com.*/i, normalized: 'Reddit' },
   { pattern: /.*amazon\.com.*/i, normalized: 'Amazon' },
   { pattern: /.*netflix\.com.*/i, normalized: 'Netflix' },

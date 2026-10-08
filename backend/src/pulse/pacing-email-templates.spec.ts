@@ -30,10 +30,10 @@ describe('pacing digest email / CSV', () => {
     expect(mail.subject).toBe(
       'Alyson Pulse · Weekly pacing · 2026-08-10 → 2026-08-14 (1 employees)',
     );
-    expect(mail.html).toContain('Leave credit 8h/weekday');
+    expect(mail.html).toContain('Leave credit 8 hours/weekday');
     expect(mail.html).toContain('America/Chicago');
     expect(mail.html).toContain('1 employee selected');
-    expect(mail.text).toContain('Ada <script>: worked 28.00 / target 35.00');
+    expect(mail.text).toContain('Ada <script>: worked 28 hours / target 35 hours');
   });
 
   it('escapes employee names in HTML so a script tag cannot run', () => {
@@ -54,9 +54,9 @@ describe('pacing digest email / CSV', () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     expect(csv).toContain('Leave credit');
     expect(csv).toContain('Ada <script>');
-    expect(csv).toContain('20.00');
-    expect(csv).toContain('8.00');
-    expect(csv).toContain('28.00');
+    expect(csv).toContain('20 hours');
+    expect(csv).toContain('8 hours');
+    expect(csv).toContain('28 hours');
     expect(csv).toContain('On Track');
     expect(csv).not.toContain('Progress %');
   });
@@ -68,5 +68,20 @@ describe('pacing digest email / CSV', () => {
     expect(csv).toContain('Progress %');
     expect(csv).toContain('50.50');
     expect(csv).toContain('Behind');
+  });
+
+  it('formats fractional hours as hour + min, not decimals', () => {
+    const mail = buildPacingDigestEmail({
+      mode: 'weekly',
+      periodLabel: 'week',
+      rollupDay: '2026-08-13',
+      timezone: 'America/Chicago',
+      leaveHoursPerDay: 8,
+      rows: [{ ...row, hoursWorked: 1 + 40 / 60, targetHours: 7, paceDelta: -0.5 }],
+    });
+    expect(mail.html).toContain('1 hour 40 min');
+    expect(mail.html).toContain('30 min');
+    expect(mail.html).not.toContain('1.67');
+    expect(mail.text).not.toContain('1.67');
   });
 });

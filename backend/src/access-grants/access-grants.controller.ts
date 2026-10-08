@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
-import { isPulseOrgAdmin } from '../database/time-doctor-sql';
+import { isPulseOrgAdmin, pulseTenantForbiddenMessage } from '../database/time-doctor-sql';
 import { AccessGrantsService } from './access-grants.service';
 import { CreateAccessGrantDto, UpdateAccessGrantDto } from './dto/upsert-access-grant.dto';
 
@@ -22,7 +22,15 @@ import { CreateAccessGrantDto, UpdateAccessGrantDto } from './dto/upsert-access-
 export class AccessGrantsController {
   constructor(private readonly grants: AccessGrantsService) {}
 
-  private ensureAdmin(user: { role?: string; is_super_admin?: boolean }) {
+  private ensureAdmin(user: {
+    role?: string;
+    is_super_admin?: boolean;
+    organization_id?: string | null;
+  }) {
+    const tenantMsg = pulseTenantForbiddenMessage(user);
+    if (tenantMsg) {
+      throw new ForbiddenException(tenantMsg);
+    }
     if (!isPulseOrgAdmin(user)) {
       throw new ForbiddenException('Admin role required');
     }

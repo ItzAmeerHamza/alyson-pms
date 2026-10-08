@@ -1,5 +1,5 @@
 /**
- * Pulse assistant (Alyson Coach) — Cognito JWT to /pulse/assistant/*.
+ * Pulse assistant (Tavilo Coach) — Cognito JWT to /pulse/assistant/*.
  */
 
 const { getApiBase } = require('./backend-auth-fetch');
@@ -20,8 +20,8 @@ function normalizeDate(date) {
 
 function genericError(status) {
   if (status === 401) return 'Please sign in again.';
-  if (status === 429) return 'Alyson is busy. Try again in a minute.';
-  return 'Could not load Alyson Coach right now.';
+  if (status === 429) return 'Tavilo Time is busy. Try again in a minute.';
+  return 'Could not load Tavilo Coach right now.';
 }
 
 function workspaceIdFrom(authConfig, payload) {
@@ -74,22 +74,48 @@ async function assistantFetch(authConfig, method, pathname, body, payload = {}) 
   return { success: true, data };
 }
 
+const briefingCache = new Map();
+const BRIEFING_TTL_MS = 10 * 60 * 1000;
+
+function briefingCacheKey(authConfig, payload = {}) {
+  const date = payload?.date || 'today';
+  const org =
+    payload?.organizationId ||
+    payload?.organization_id ||
+    authConfig?.organization_id ||
+    '';
+  return `${org}|${date}`;
+}
+
+function resetBriefingCacheForTests() {
+  briefingCache.clear();
+}
+
 async function fetchAssistantBriefing(authConfig, payload = {}) {
   try {
     const date = normalizeDate(payload?.date);
+    const key = briefingCacheKey(authConfig, { ...payload, date });
+    const hit = briefingCache.get(key);
+    if (!payload?.force && hit && Date.now() - hit.at < BRIEFING_TTL_MS) {
+      return { success: true, data: hit.data, cached: true };
+    }
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
-    return await assistantFetch(
+    const result = await assistantFetch(
       authConfig,
       'GET',
       `/pulse/assistant/briefing${query}`,
       undefined,
       payload,
     );
+    if (result?.success) {
+      briefingCache.set(key, { at: Date.now(), data: result.data });
+    }
+    return result;
   } catch (err) {
     if (err?.code === 'INVALID_DATE') {
       return { success: false, error: 'Pick a valid day.' };
     }
-    return { success: false, error: 'Could not load Alyson Coach right now.' };
+    return { success: false, error: 'Could not load Tavilo Coach right now.' };
   }
 }
 
@@ -116,7 +142,7 @@ async function fetchAssistantChat(authConfig, payload = {}) {
     if (err?.code === 'INVALID_DATE') {
       return { success: false, error: 'Pick a valid day.' };
     }
-    return { success: false, error: 'Could not reach Alyson Coach right now.' };
+    return { success: false, error: 'Could not reach Tavilo Coach right now.' };
   }
 }
 
@@ -126,4 +152,5 @@ module.exports = {
   genericError,
   fetchAssistantBriefing,
   fetchAssistantChat,
+  resetBriefingCacheForTests,
 };

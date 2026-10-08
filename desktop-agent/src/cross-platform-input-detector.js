@@ -114,7 +114,7 @@ class CrossPlatformInputDetector extends EventEmitter {
   async startMacOSDetection() {
     console.log('🍎 Initializing macOS input detection...');
 
-    // PRIMARY: in-process uiohook — same Accessibility grant as Alyson PM (production UX)
+    // PRIMARY: in-process uiohook — same Accessibility grant as Tavilo Time (production UX)
     const inProcessStarted = await this.startMacOSInProcessInput();
     if (inProcessStarted) {
       if (this.electronModules.powerMonitor) {
@@ -314,7 +314,7 @@ class CrossPlatformInputDetector extends EventEmitter {
           if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
           global.pythonDiagnostics.permissionDenied = true;
           this._notifyInputHelperPermissionNeeded({
-            fix: 'System Settings → Privacy & Security → Accessibility → enable Alyson PM and macos-input-helper',
+            fix: 'System Settings → Privacy & Security → Accessibility → enable Tavilo Time and macos-input-helper',
           });
           return;
         }
@@ -886,11 +886,11 @@ class CrossPlatformInputDetector extends EventEmitter {
     try {
       const { dialog, shell } = require('electron');
       const detail = [
-        'Enable Accessibility for Alyson PM only:',
+        'Enable Accessibility for Tavilo Time only:',
         '',
-        'System Settings → Privacy & Security → Accessibility → Alyson PM ✓',
+        'System Settings → Privacy & Security → Accessibility → Tavilo Time ✓',
         '',
-        'Quit Alyson PM completely, then reopen and start tracking again.',
+        'Quit Tavilo Time completely, then reopen and start tracking again.',
         event.fix || '',
       ].filter(Boolean).join('\n');
       dialog.showMessageBox({

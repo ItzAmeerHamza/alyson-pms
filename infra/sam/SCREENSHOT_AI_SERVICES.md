@@ -61,7 +61,7 @@ New upload / backfill (VPC Lambda, RDS + SQS endpoint)
 cd infra/sam && ./deploy.sh
 ```
 
-Requires in `deploy.env`: `DEEPSEEK_API_KEY`, `SCREENSHOT_AI_ENABLED=true`.
+Requires in `deploy.env`: `OPENROUTER_API_KEY`, `SCREENSHOT_AI_ENABLED=true`.
 
 ## Verify
 

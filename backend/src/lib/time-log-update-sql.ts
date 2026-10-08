@@ -40,6 +40,7 @@ export function provenExtensionSql(): string {
   return `GREATEST(t.end_time, LEAST(${PROPOSED_END_SQL}, COALESCE(t.last_alive_at, ${LAST_PROOF_OF_LIFE_SQL}), ${LAST_PROOF_OF_LIFE_SQL}))`;
 }
 
+/** authorized_idle_cut or frozen_end: bill the client's end, never raise to last_alive. */
 export function updateTimeLogEndSql(authorizedIdleCut: boolean): string {
   if (authorizedIdleCut) {
     return `CASE

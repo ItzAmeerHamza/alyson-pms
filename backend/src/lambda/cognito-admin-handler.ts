@@ -3,6 +3,7 @@ import {
   adminCreateUser,
   adminDeleteUser,
   adminGetUser,
+  adminResetTemporaryPassword,
 } from '../users/cognito-admin.ops';
 
 /**
@@ -30,7 +31,12 @@ type DeleteEvent = {
   username: string;
 };
 
-type CognitoAdminEvent = CreateEvent | GetEvent | DeleteEvent;
+type ResetPasswordEvent = {
+  action: 'reset-password';
+  username: string;
+};
+
+type CognitoAdminEvent = CreateEvent | GetEvent | DeleteEvent | ResetPasswordEvent;
 
 let client: CognitoIdentityProviderClient | null = null;
 
@@ -92,6 +98,21 @@ export const handler = async (event: CognitoAdminEvent) => {
     const result = await adminDeleteUser(cognito, userPoolId, username);
     if (result.ok === false) {
       console.error(`cognito-admin delete failed for ${username}: ${result.message}`);
+    }
+    return result;
+  }
+
+  if (event?.action === 'reset-password') {
+    const username = String(event.username || '').trim().toLowerCase();
+    if (!username) {
+      return { ok: false, code: 'ERROR', message: 'username is required' };
+    }
+    console.log(`cognito-admin reset-password starting for ${username}`);
+    const result = await adminResetTemporaryPassword(cognito, userPoolId, username);
+    if (result.ok === false) {
+      console.error(`cognito-admin reset-password failed for ${username}: ${result.code} ${result.message}`);
+    } else {
+      console.log(`cognito-admin reset-password ok for ${username}`);
     }
     return result;
   }

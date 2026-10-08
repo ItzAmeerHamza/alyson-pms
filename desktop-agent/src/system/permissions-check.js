@@ -307,8 +307,8 @@ async function showMacScreenRecordingBlocker() {
     title: 'Enable Screen Recording',
     message: 'This app needs Screen Recording to capture activity metrics.',
     detail:
-      'Open the right pane below and enable Alyson PM (or Electron when developing), then tap Re-check.\n\n' +
-      'If macOS asked to control System Events, use Automation and allow Alyson PM.',
+      'Open the right pane below and enable Tavilo Time (or Electron when developing), then tap Re-check.\n\n' +
+      'If macOS asked to control System Events, use Automation and allow Tavilo Time.',
     buttons: ['Screen Recording…', 'Accessibility…', 'Automation…', 'Re-check', 'Quit'],
     defaultId: 0,
     cancelId: 4,
@@ -624,7 +624,7 @@ async function ensureMacOSAccessibilityPermission() {
     const choice = await showBlocker({
       title: 'Enable Accessibility',
       message: 'This app needs Accessibility to detect input activity.',
-      detail: 'System Settings → Privacy & Security → Accessibility → enable **Alyson PM** only (one checkbox). Then quit and reopen the app if you already granted Screen Recording.'
+      detail: 'System Settings → Privacy & Security → Accessibility → enable **Tavilo Time** only (one checkbox). Then quit and reopen the app if you already granted Screen Recording.'
     });
 
     if (choice === 0) {

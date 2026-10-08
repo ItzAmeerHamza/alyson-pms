@@ -31,9 +31,15 @@ export class ScreenshotAiBackfillService {
     }
 
     const limit = options.limit ?? this.defaultBatchSize;
-    const resetProcessing = await this.repo.resetStaleProcessing(Math.min(limit, 50));
+    const resetProcessing = await this.repo.resetStaleProcessing(
+      Math.min(limit, 50),
+      options.workspaceId,
+    );
 
-    const orphanedQueued = await this.repo.findQueuedForReenqueue(limit);
+    const orphanedQueued = await this.repo.findQueuedForReenqueue(
+      limit,
+      options.workspaceId,
+    );
     const reenqueued = await this.queue.enqueueMany(
       orphanedQueued.map((row) => this.analyzer.buildJob(row, 'backfill')),
     );

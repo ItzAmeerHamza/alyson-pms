@@ -9,8 +9,9 @@ import { LeaveScanWorkerService } from '../leave/leave-scan-worker.service';
 import type { LeaveScanJob } from '../leave/leave-scan.types';
 
 /**
- * Non-VPC Lambda: Gmail DWD + DeepSeek leave intake.
- * API Lambda (VPC, no NAT) Event-invokes this, then this POSTs ingest-batch back.
+ * Non-VPC Lambda: Gmail DWD leave intake.
+ * Classification goes to the OpenRouter Lambda. API Lambda (VPC, no NAT) Event-invokes this,
+ * then this POSTs ingest-batch back.
  */
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), CommonModule, ScreenshotAiModule],

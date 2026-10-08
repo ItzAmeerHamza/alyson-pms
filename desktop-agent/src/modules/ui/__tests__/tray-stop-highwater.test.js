@@ -50,6 +50,9 @@ describe('tray high-water must freeze at the Stop click', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     global.isStopping = false;
+    global.isTracking = true;
+    global.currentTimeLogId = 'live-session';
+    global.userExplicitlyStopped = false;
     global._trayTodayHighWaterSeconds = 0;
     elapsed = { value: 0 };
     tray = trayAt(8954, elapsed);
@@ -59,7 +62,15 @@ describe('tray high-water must freeze at the Stop click', () => {
     tray.stopTrayTimer();
     jest.useRealTimers();
     delete global.isStopping;
+    delete global.isTracking;
+    delete global.currentTimeLogId;
+    delete global.userExplicitlyStopped;
+    delete global.trackingManager;
     delete global._trayTodayHighWaterSeconds;
+    delete global._lastExplicitStopEndIso;
+    delete global._stopEndTimeOverride;
+    delete global._lastStopEndAtMs;
+    delete global._lastWakeAtMs;
   });
 
   const tickSeconds = (n) => {
@@ -97,6 +108,26 @@ describe('tray high-water must freeze at the Stop click', () => {
     tickSeconds(1);
 
     expect(global._trayTodayHighWaterSeconds).toBe(8984);
+  });
+
+  it('stops the orphan menu-bar clock when the session is gone', () => {
+    tray.startTrayTimer();
+    tickSeconds(2);
+    expect(tray._timerInterval).not.toBeNull();
+
+    global.isTracking = false;
+    global.currentTimeLogId = null;
+    tickSeconds(1);
+
+    expect(tray._timerInterval).toBeNull();
+  });
+
+  it('heals a false Stop so the menu bar and app stay on the same clock', () => {
+    global.isTracking = false;
+    global.currentTimeLogId = 'live-session';
+    tray.startTrayTimer();
+    expect(global.isTracking).toBe(true);
+    expect(tray._timerInterval).not.toBeNull();
   });
 
   it('new Start replaces leftover jam base instead of stacking it', () => {
@@ -140,5 +171,20 @@ describe('tray high-water must freeze at the Stop click', () => {
 
     expect(leftover._cumulativeBaseSeconds).toBe(400);
     expect(leftover.startTrayTimer).toHaveBeenCalled();
+  });
+
+  it('does not paint idle Stop floor plus recovered live (Hamza 30 Sep)', () => {
+    const start = new Date('2026-09-30T08:48:00.000Z');
+    const idleEnd = '2026-09-30T11:36:00.000Z';
+    const now = new Date('2026-09-30T11:56:00.000Z').getTime();
+    const recovered = Object.create(TrayManager.prototype);
+    recovered._cumulativeBaseSeconds = 10607;
+    recovered._trackingStartTime = start;
+    global._lastExplicitStopEndIso = idleEnd;
+
+    const live = recovered._resolveLiveClock(now);
+    expect(live.cumulative).toBeLessThan(4 * 3600);
+    expect(live.cumulative).not.toBe(10607 + live.elapsed);
+    expect(10607 + live.elapsed).toBeGreaterThan(5 * 3600);
   });
 });
