@@ -1754,6 +1754,16 @@ fi
 # Strip quarantine only — do not touch the code signature.
 xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
 xattr -cr "$TARGET" 2>/dev/null || true
+# Dock shows the .app folder name. Rename on the same volume so the inode,
+# bundle id, and signature stay put and macOS permissions are kept.
+PARENT="$(dirname "$TARGET")"
+DEST="$PARENT/Tavilo Time.app"
+if [ "$(basename "$TARGET")" != "Tavilo Time.app" ] && [ ! -e "$DEST" ]; then
+  mv "$TARGET" "$DEST"
+  TARGET="$DEST"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
+  killall Dock 2>/dev/null || true
+fi
 rm -rf "$WORKDIR" 2>/dev/null || true
 open "$TARGET"
 `;

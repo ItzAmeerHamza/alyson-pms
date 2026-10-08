@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.245",
+  "version": "1.0.246",
   "description": "Tavilo Time — desktop time tracking",
   "main": "src/main.js",
   "author": "RevCloud",

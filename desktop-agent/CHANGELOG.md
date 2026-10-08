@@ -2,6 +2,11 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.246] - 2026-10-09
+
+### Fixed
+- The Mac Dock and Finder now show **Tavilo Time** and the new icon. The app folder is renamed in place, so Screen Recording and Accessibility stay granted.
+
 ## [1.0.245] - 2026-10-09
 
 ### Changed

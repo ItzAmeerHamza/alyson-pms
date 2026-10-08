@@ -71,7 +71,7 @@ function writePreference(enabled) {
  * Apply Electron login-item settings to match preference.
  * Only registers the OS login item for packaged builds (dev would register Electron).
  */
-function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
+function applyLoginItemSettings(enabled, { forceDev = false, exePath: exePathOverride = null } = {}) {
   let app;
   try {
     ({ app } = require('electron'));
@@ -95,10 +95,11 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
   try {
     // Electron login items work on both macOS (Launch Agents) and Windows
     // (HKCU\\...\\Run). Pass execPath so the login item points at Tavilo Time.exe.
+    const exePath = exePathOverride || process.execPath;
     const settings = {
       openAtLogin: want,
       openAsHidden: true,
-      path: process.execPath,
+      path: exePath,
       args: [],
     };
     if (process.platform === 'win32') {
@@ -111,7 +112,7 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
     try {
       if (typeof app.getLoginItemSettings === 'function') {
         const current = app.getLoginItemSettings({
-          path: process.execPath,
+          path: exePath,
           args: [],
         });
         verified = !!current?.openAtLogin;
@@ -140,46 +141,131 @@ function applyLoginItemSettings(enabled, { forceDev = false } = {}) {
   }
 }
 
+const DOCK_DISPLAY_NAME = 'Tavilo Time';
+const LSREGISTER =
+  '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
+
 /**
- * Ask Launch Services to reread the installed bundle so the Dock, Login Items,
- * and Privacy lists show CFBundleDisplayName ("Tavilo Time"). The .app path is
- * left unchanged — moving it would drop Screen Recording and Accessibility.
+ * Dock and Finder show the .app folder name, not CFBundleDisplayName.
+ * Rename Alyson PM.app → Tavilo Time.app on the same volume (same inode,
+ * same bundle id, same signature) so Screen Recording and Accessibility stay.
+ * Returns the bundle path to use after the rename.
  */
-function refreshMacDisplayName() {
-  if (process.platform !== 'darwin') return;
+function renameMacBundleForDock(bundlePath) {
+  if (!bundlePath) return bundlePath;
+  const desiredName = `${DOCK_DISPLAY_NAME}.app`;
+  if (path.basename(bundlePath) === desiredName) return bundlePath;
+  const dest = path.join(path.dirname(bundlePath), desiredName);
+  if (fs.existsSync(dest)) {
+    console.warn('⚠️ [AUTO-LAUNCH] Leaving app path unchanged; already exists:', dest);
+    return bundlePath;
+  }
+  try {
+    fs.renameSync(bundlePath, dest);
+    console.log('✅ [AUTO-LAUNCH] Renamed app for the Dock:', dest);
+    return dest;
+  } catch (err) {
+    console.warn('⚠️ [AUTO-LAUNCH] Could not rename app for the Dock:', err?.message || err);
+    return bundlePath;
+  }
+}
+
+function macBundlePathFromExe(exePath) {
+  if (!exePath) return null;
+  const marker = '/Contents/MacOS/';
+  const idx = exePath.indexOf(marker);
+  return idx === -1 ? null : exePath.slice(0, idx);
+}
+
+function resolveMacExePath() {
+  if (process.platform !== 'darwin') return process.execPath;
+  const bundle = macBundlePathFromExe(process.execPath);
+  const direct = macExecutableInBundle(bundle);
+  if (direct) return direct;
+  if (!bundle) return process.execPath;
+  return (
+    macExecutableInBundle(path.join(path.dirname(bundle), `${DOCK_DISPLAY_NAME}.app`)) ||
+    process.execPath
+  );
+}
+
+function macExecutableInBundle(bundlePath) {
+  if (!bundlePath) return null;
+  const exe = path.join(bundlePath, 'Contents', 'MacOS', DOCK_DISPLAY_NAME);
+  return fs.existsSync(exe) ? exe : null;
+}
+
+/**
+ * Ask Launch Services to reread the bundle, point the running Dock tile at
+ * the new icon, and restart the Dock once so the cached Alyson name and
+ * logo are dropped.
+ */
+function refreshMacDisplayName(bundlePath) {
+  if (process.platform !== 'darwin' || !bundlePath) return;
   let app;
   try {
     ({ app } = require('electron'));
   } catch {
     return;
   }
-  if (!app?.isPackaged || typeof app.getPath !== 'function') return;
+  if (!app?.isPackaged) return;
 
-  let bundlePath = null;
   try {
-    const exe = app.getPath('exe');
-    const marker = '/Contents/MacOS/';
-    const idx = exe.indexOf(marker);
-    bundlePath = idx === -1 ? null : exe.slice(0, idx);
-  } catch {
-    bundlePath = null;
+    const { nativeImage } = require('electron');
+    const iconPath = path.join(bundlePath, 'Contents', 'Resources', 'icon.icns');
+    if (fs.existsSync(iconPath) && app.dock && typeof app.dock.setIcon === 'function') {
+      const image = nativeImage.createFromPath(iconPath);
+      if (image && !image.isEmpty()) app.dock.setIcon(image);
+    }
+  } catch (err) {
+    console.warn('⚠️ [AUTO-LAUNCH] Could not set Dock icon:', err?.message || err);
   }
-  if (!bundlePath) return;
 
-  const lsregister =
-    '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
   try {
     const { execFile } = require('child_process');
-    execFile(lsregister, ['-f', bundlePath], { timeout: 15000 }, (err) => {
+    execFile(LSREGISTER, ['-f', bundlePath], { timeout: 15000 }, (err) => {
       if (err) {
         console.warn('⚠️ [AUTO-LAUNCH] Could not refresh app display name:', err.message);
         return;
       }
       console.log('✅ [AUTO-LAUNCH] Refreshed installed app display name to Tavilo Time');
+      restartDockOnce(bundlePath);
     });
   } catch (err) {
     console.warn('⚠️ [AUTO-LAUNCH] Could not refresh app display name:', err?.message || err);
   }
+}
+
+function restartDockOnce(bundlePath) {
+  const markerPath = path.join(prefDir(), 'dock-display.json');
+  try {
+    const raw = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    if (raw && raw.bundlePath === bundlePath) return;
+  } catch {
+    // No marker yet — refresh once.
+  }
+  const { execFile } = require('child_process');
+  execFile('killall', ['Dock'], { timeout: 10000 }, (err) => {
+    if (err) {
+      console.warn('⚠️ [AUTO-LAUNCH] Could not refresh Dock:', err.message);
+      return;
+    }
+    try {
+      const dir = prefDir();
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        markerPath,
+        JSON.stringify({
+          bundlePath,
+          displayName: DOCK_DISPLAY_NAME,
+          refreshedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (writeErr) {
+      console.warn('⚠️ [AUTO-LAUNCH] Could not record Dock refresh:', writeErr?.message || writeErr);
+    }
+    console.log('✅ [AUTO-LAUNCH] Restarted Dock so it shows Tavilo Time');
+  });
 }
 
 /** Read preference (default ON), persist if missing, apply OS login item. */
@@ -193,8 +279,27 @@ function initAutoLaunch() {
       console.warn('⚠️ [AUTO-LAUNCH] Could not persist default preference:', err?.message || err);
     }
   }
-  const result = applyLoginItemSettings(pref.enabled);
-  refreshMacDisplayName();
+  let exePath = null;
+  if (process.platform === 'darwin') {
+    let app;
+    try {
+      ({ app } = require('electron'));
+    } catch {
+      app = null;
+    }
+    if (app?.isPackaged && typeof app.getPath === 'function') {
+      let bundlePath = null;
+      try {
+        bundlePath = macBundlePathFromExe(app.getPath('exe'));
+      } catch {
+        bundlePath = null;
+      }
+      bundlePath = renameMacBundleForDock(bundlePath);
+      exePath = macExecutableInBundle(bundlePath);
+      refreshMacDisplayName(bundlePath);
+    }
+  }
+  const result = applyLoginItemSettings(pref.enabled, exePath ? { exePath } : {});
   global.autoLaunchEnabled = pref.enabled;
   return { ...pref, ...result };
 }
@@ -214,7 +319,7 @@ function setAutoLaunchEnabled(enabled) {
   } catch (err) {
     console.warn('⚠️ [AUTO-LAUNCH] Persist failed:', err?.message || err);
   }
-  const apply = applyLoginItemSettings(want);
+  const apply = applyLoginItemSettings(want, { exePath: resolveMacExePath() });
   return { success: true, enabled: want, ...apply };
 }
 
