@@ -238,11 +238,18 @@ function refreshMacDisplayName(bundlePath) {
 
 function restartDockOnce(bundlePath) {
   const markerPath = path.join(prefDir(), 'dock-display.json');
+  let appVersion = '';
+  try {
+    const { app } = require('electron');
+    appVersion = typeof app?.getVersion === 'function' ? app.getVersion() : '';
+  } catch {
+    appVersion = '';
+  }
   try {
     const raw = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    if (raw && raw.bundlePath === bundlePath) return;
+    if (raw && raw.bundlePath === bundlePath && raw.version === appVersion) return;
   } catch {
-    // No marker yet — refresh once.
+    // No marker yet — refresh once for this version.
   }
   const { execFile } = require('child_process');
   execFile('killall', ['Dock'], { timeout: 10000 }, (err) => {
@@ -257,6 +264,7 @@ function restartDockOnce(bundlePath) {
         markerPath,
         JSON.stringify({
           bundlePath,
+          version: appVersion,
           displayName: DOCK_DISPLAY_NAME,
           refreshedAt: new Date().toISOString(),
         }),

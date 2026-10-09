@@ -2,6 +2,11 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.247] - 2026-10-09
+
+### Changed
+- The app logo now sits on a white rounded square, matching the menu bar icon. The Dock refreshes once after this update so the new mark shows up.
+
 ## [1.0.246] - 2026-10-09
 
 ### Fixed
