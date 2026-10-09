@@ -170,6 +170,27 @@ function renameMacBundleForDock(bundlePath) {
   }
 }
 
+/**
+ * An in-place rename can leave a second "Alyson PM.app" if a later update
+ * still targets the old path. Drop that leftover only when this process is
+ * the Tavilo Time.app copy, so we never delete the app that is running.
+ */
+function removeLegacyMacDuplicate(bundlePath) {
+  if (!bundlePath || path.basename(bundlePath) !== `${DOCK_DISPLAY_NAME}.app`) return;
+  const legacy = path.join(path.dirname(bundlePath), 'Alyson PM.app');
+  if (!fs.existsSync(legacy)) return;
+  try {
+    const { execFile } = require('child_process');
+    execFile(LSREGISTER, ['-u', legacy], { timeout: 15000 }, () => {});
+  } catch { /* unregister is best-effort */ }
+  try {
+    fs.rmSync(legacy, { recursive: true, force: true });
+    console.log('✅ [AUTO-LAUNCH] Removed leftover Alyson PM.app');
+  } catch (err) {
+    console.warn('⚠️ [AUTO-LAUNCH] Could not remove leftover Alyson PM.app:', err?.message || err);
+  }
+}
+
 function macBundlePathFromExe(exePath) {
   if (!exePath) return null;
   const marker = '/Contents/MacOS/';
@@ -303,6 +324,7 @@ function initAutoLaunch() {
         bundlePath = null;
       }
       bundlePath = renameMacBundleForDock(bundlePath);
+      removeLegacyMacDuplicate(bundlePath);
       exePath = macExecutableInBundle(bundlePath);
       refreshMacDisplayName(bundlePath);
     }

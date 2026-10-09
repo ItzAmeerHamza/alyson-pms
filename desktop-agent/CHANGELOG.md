@@ -2,6 +2,11 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [1.0.248] - 2026-10-09
+
+### Fixed
+- Auto-update no longer leaves a second **Alyson PM** app next to **Tavilo Time**. A leftover copy is removed, and later updates stay on the Tavilo Time app.
+
 ## [1.0.247] - 2026-10-09
 
 ### Changed

@@ -1740,6 +1740,16 @@ for i in $(seq 1 60); do
   sleep 0.5
 done
 sleep 1
+PARENT="$(dirname "$TARGET")"
+CANONICAL="$PARENT/Tavilo Time.app"
+LEGACY="$PARENT/Alyson PM.app"
+# Update the renamed app when it already exists. Creating the old folder
+# again leaves two Dock icons.
+if [ -d "$CANONICAL" ]; then
+  TARGET="$CANONICAL"
+elif [ ! -d "$TARGET" ] && [ -d "$LEGACY" ]; then
+  TARGET="$LEGACY"
+fi
 if [ -d "$TARGET" ]; then
   # Keep the destination bundle directory; sync contents from the staged update.
   if command -v rsync >/dev/null 2>&1; then
@@ -1756,14 +1766,17 @@ xattr -d com.apple.quarantine "$TARGET" 2>/dev/null || true
 xattr -cr "$TARGET" 2>/dev/null || true
 # Dock shows the .app folder name. Rename on the same volume so the inode,
 # bundle id, and signature stay put and macOS permissions are kept.
-PARENT="$(dirname "$TARGET")"
-DEST="$PARENT/Tavilo Time.app"
-if [ "$(basename "$TARGET")" != "Tavilo Time.app" ] && [ ! -e "$DEST" ]; then
-  mv "$TARGET" "$DEST"
-  TARGET="$DEST"
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
-  killall Dock 2>/dev/null || true
+if [ "$(basename "$TARGET")" != "Tavilo Time.app" ] && [ ! -e "$CANONICAL" ]; then
+  mv "$TARGET" "$CANONICAL"
+  TARGET="$CANONICAL"
 fi
+# Leftover copy from the pre-rename path. Only after the canonical app exists.
+if [ -d "$CANONICAL" ] && [ -d "$LEGACY" ]; then
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$LEGACY" 2>/dev/null || true
+  rm -rf "$LEGACY"
+fi
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
+killall Dock 2>/dev/null || true
 rm -rf "$WORKDIR" 2>/dev/null || true
 open "$TARGET"
 `;
