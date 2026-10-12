@@ -65,12 +65,23 @@ class AppLifecycleManager {
 
     console.log('🪟 [APP-LIFECYCLE] Creating main window...');
 
-    // Ensure Dock icon is set on macOS
+    // Dock icon: prefer Contents/Resources/icon.icns (outside asar). Paths
+    // inside app.asar/assets/*.icns often fail nativeImage / setIcon.
     try {
-      if (process.platform === 'darwin' && app && app.dock && typeof app.dock.setIcon === 'function') {
-        const path = require('path');
-        const icnsPath = path.join(__dirname, '../../../assets/icon.icns');
-        app.dock.setIcon(icnsPath);
+      if (process.platform === 'darwin') {
+        const { setMacDockIcon } = require('../utils/resolve-app-icon');
+        const { nativeImage } = this.electronModules || {};
+        const result = setMacDockIcon(app, nativeImage, {
+          resourcesPath: typeof process.resourcesPath === 'string' ? process.resourcesPath : null,
+          appPath: typeof app?.getAppPath === 'function' ? app.getAppPath() : null,
+        });
+        if (!result.ok) {
+          console.log(
+            '⚠️ [APP-LIFECYCLE] Failed to set Dock icon:',
+            result.reason || 'unknown',
+            result.path ? `(${result.path})` : '',
+          );
+        }
       }
     } catch (e) {
       console.log('⚠️ [APP-LIFECYCLE] Failed to set Dock icon:', e?.message || e);

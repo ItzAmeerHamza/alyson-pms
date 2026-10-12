@@ -2,6 +2,7 @@ const {
   jitteredBackoffMs,
   reconnectSpreadMs,
   isTransientDbOrNetworkError,
+  isInfraUnavailableError,
 } = require('../sync-backoff');
 
 describe('sync-backoff', () => {
@@ -24,5 +25,12 @@ describe('sync-backoff', () => {
     expect(isTransientDbOrNetworkError('Database temporarily unavailable')).toBe(true);
     expect(isTransientDbOrNetworkError('Internal server error')).toBe(true);
     expect(isTransientDbOrNetworkError('missing project')).toBe(false);
+  });
+
+  it('does not treat app Internal server error as infra-wide unavailable', () => {
+    expect(isInfraUnavailableError('Internal server error')).toBe(false);
+    expect(isInfraUnavailableError('too many connections')).toBe(true);
+    expect(isInfraUnavailableError('Database temporarily unavailable')).toBe(true);
+    expect(isInfraUnavailableError('Backend sync timeout after 12000ms')).toBe(true);
   });
 });

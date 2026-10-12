@@ -2990,6 +2990,77 @@
             font-weight: 500;
         }
 
+        .report-issue-form {
+            max-width: 640px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .report-issue-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .report-issue-field label,
+        .report-issue-check {
+            color: var(--text-2);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .report-issue-form textarea {
+            width: 100%;
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            background: var(--bg-input);
+            color: var(--text);
+            font: inherit;
+            font-size: 14px;
+            padding: 10px 12px;
+            min-height: 140px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .report-issue-form textarea:focus {
+            outline: none;
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+        }
+
+        #report-issuePage .project-dd-trigger {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        #report-issuePage .project-dd-menu {
+            z-index: 60;
+        }
+
+        .report-issue-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .report-issue-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .report-issue-status.is-error { color: #b91c1c; }
+        .report-issue-status.is-ok { color: #166534; }
+        html[data-theme="dark"] .report-issue-status.is-error { color: #fca5a5; }
+        html[data-theme="dark"] .report-issue-status.is-ok { color: #86efac; }
+
         .button-group {
             display: flex;
             gap: 12px;
@@ -7121,6 +7192,11 @@
                         <span>FAQ</span>
                     </div>
 
+                    <div class="nav-item" data-page="report-issue">
+                        <i data-lucide="flag" class="nav-icon"></i>
+                        <span>Report an issue</span>
+                    </div>
+
                     <div class="nav-item" data-page="updates">
                         <i data-lucide="download-cloud" class="nav-icon"></i>
                         <span>App Updates</span>
@@ -7579,7 +7655,7 @@
                                 <i data-lucide="camera" style="width: 18px; height: 18px; color: #0369a1;"></i>
                                 Recent Screenshots
                             </div>
-                            <div class="tracker-screenshots-subtitle">Your latest captured screenshots · Company work day</div>
+                            <div class="tracker-screenshots-subtitle" id="trackerScreenshotsSubtitle">Your latest captured screenshots · Pacific Time</div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="tracker-screenshots-date-nav">
@@ -7669,6 +7745,10 @@
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">In the web portal, administrators may run AI-assisted reporting (for example AI Insights) on data that was already collected—such as summarizing patterns from screenshots and activity. It analyzes existing records; it is not a separate hidden recorder. Ask your admin for the official policy that applies to your organization.</p>
                         </details>
                         <details>
+                            <summary>How do I report a problem with the app?</summary>
+                            <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">Open <strong style="color: #0f172a;">Report an issue</strong> in the sidebar, choose what went wrong, and describe it. You can include recent diagnostic logs. No screenshots are attached. Your company admins see the report in Pulse, and they also get an email when mail is configured.</p>
+                        </details>
+                        <details>
                             <summary>What is Tavilo Coach?</summary>
                             <p style="margin: 12px 0 0; color: #475569; line-height: 1.55; font-size: 14px;">Tavilo Coach is a personal assistant in this app. When you open it, it loads your recorded hours and starts with a month-to-date summary. You can then ask about today, effective vs non-effective time, screenshots, or how to catch up. It cannot see other employees. The numbers come from Pulse after your sessions sync.</p>
                         </details>
@@ -7688,6 +7768,43 @@
                             </div>
                         </details>
                     </div>
+                </div>
+            </div>
+
+            <div id="report-issuePage" class="page-section">
+                <div class="control-section">
+                    <div class="control-header">
+                        <div class="control-title">Report an issue</div>
+                        <div class="control-subtitle">Tell your team what went wrong in Tavilo Time</div>
+                    </div>
+                    <form id="reportIssueForm" class="report-issue-form">
+                        <div class="report-issue-field">
+                            <label for="reportIssueCategory">What is this about?</label>
+                            <select id="reportIssueCategory" name="category" class="screenshot-filter-control">
+                                <option value="tracking">Time tracking</option>
+                                <option value="screenshots">Screenshots</option>
+                                <option value="login">Sign-in or password</option>
+                                <option value="permissions">Permissions</option>
+                                <option value="updates">App update</option>
+                                <option value="other">Something else</option>
+                            </select>
+                        </div>
+                        <div class="report-issue-field">
+                            <label for="reportIssueMessage">What happened?</label>
+                            <textarea id="reportIssueMessage" name="message" maxlength="4000" placeholder="What were you doing, and what did you expect to happen?"></textarea>
+                        </div>
+                        <label class="report-issue-check">
+                            <input id="reportIssueDiagnostics" type="checkbox" checked>
+                            <span>Include recent diagnostic logs. No screenshots are attached.</span>
+                        </label>
+                        <div class="report-issue-meta">
+                            <div id="reportIssueStatus" class="report-issue-status" role="status"></div>
+                            <div id="reportIssueCount">0 / 4000</div>
+                        </div>
+                        <div>
+                            <button type="submit" id="reportIssueSubmit" class="btn btn-primary">Send report</button>
+                        </div>
+                    </form>
                 </div>
             </div>
 

@@ -3453,6 +3453,12 @@ if (isElectronContext && ipcMain) {
     return fetchAssistantChat(assistantAuthConfig(), payload);
   });
 
+  try { ipcMain.removeHandler('report-issue:submit'); } catch {}
+  ipcMain.handle('report-issue:submit', async (_event, payload) => {
+    const { submitIssueReport } = require('./modules/utils/issue-report');
+    return submitIssueReport(assistantAuthConfig(), payload);
+  });
+
   registerDeveloperConsoleHandlers();
 
   // Note: start-timer and start-tracking handlers are now managed by the dedicated IPCHandlers module
@@ -5264,6 +5270,24 @@ if (isElectronContext && ipcMain) {
         return;
       }
 
+      // Deferred restart update: apply in-place now that the user is quitting.
+      try {
+        if (
+          global.forceUpdater &&
+          typeof global.forceUpdater.maybeInstallWhenIdle === 'function' &&
+          global.forceUpdater._installWhenIdle &&
+          !global.isTracking &&
+          !global.trackingManager?.isTracking
+        ) {
+          if (global.forceUpdater.maybeInstallWhenIdle()) {
+            event.preventDefault();
+            return;
+          }
+        }
+      } catch (updErr) {
+        console.warn('⚠️ [LIFECYCLE] Deferred update on quit failed:', updErr?.message || updErr);
+      }
+
       // CRITICAL FIX: Prevent quit until async cleanup completes
       // Electron's before-quit doesn't wait for async operations, so we must:
       // 1. Prevent the default quit on first call
@@ -5807,7 +5831,26 @@ if (isElectronContext && ipcMain) {
    * Cached stats are only valid for the day they were captured on. Yesterday's
    * total is neither a floor for today nor a source of today's date.
    */
+  const rememberLastGoodTodayStats = (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    global._lastGoodTodayStats = payload;
+    try {
+      require('./modules/utils/today-time-log-stats').writePersistedLastGood(payload);
+    } catch (_) {
+      /* ignore */
+    }
+  };
   const lastGoodStatsForToday = () => {
+    if (!global._lastGoodHydratedFromDisk) {
+      global._lastGoodHydratedFromDisk = true;
+      if (!global._lastGoodTodayStats) {
+        try {
+          global._lastGoodTodayStats = require('./modules/utils/today-time-log-stats').readPersistedLastGood();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
     const cached = global._lastGoodTodayStats;
     if (!cached || typeof cached !== 'object') return null;
     const todayKey = buildWorkDayContext().todayKey;
@@ -5828,7 +5871,7 @@ if (isElectronContext && ipcMain) {
       const workDay = buildWorkDayContext();
       return { success: true, timezone: workDay.timezone, workDay };
     } catch (err) {
-      return { success: false, timezone: 'America/Chicago' };
+      return { success: false, timezone: 'America/Los_Angeles' };
     }
   });
   ipcMain.handle('get-work-day-context', async () => {
@@ -5836,7 +5879,7 @@ if (isElectronContext && ipcMain) {
       const workDay = buildWorkDayContext();
       return { success: true, ...workDay, workDay };
     } catch (err) {
-      return { success: false, timezone: 'America/Chicago' };
+      return { success: false, timezone: 'America/Los_Angeles' };
     }
   });
 
@@ -5918,7 +5961,7 @@ if (isElectronContext && ipcMain) {
               date: workDateKey(today),
               offlineOnly: true,
             }, { isTracking });
-            global._lastGoodTodayStats = payload;
+            rememberLastGoodTodayStats(payload);
             return withWorkDayContext(payload);
           }
         } catch (_) { /* fall through */ }
@@ -6090,7 +6133,7 @@ if (isElectronContext && ipcMain) {
       const payloadTotal = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
       const prevTotal = Math.max(0, Math.floor(Number(prevGood?.totalTime) || 0));
       if (!prevGood || payloadTotal >= prevTotal) {
-        global._lastGoodTodayStats = { ...payload, stale: false };
+        rememberLastGoodTodayStats({ ...payload, stale: false });
       }
       return withWorkDayContext(payload);
     } catch (error) {

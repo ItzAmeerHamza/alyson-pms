@@ -8,8 +8,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const assetsDir = path.resolve(root, "assets");
 const sourcePng = path.resolve(root, "../tavilo-time-logo-2048.png");
+const requiredOutputs = [
+  "icon.png",
+  "icon.ico",
+  "icon.icns",
+  "tavilo-mark.png",
+  "tray-icon.png",
+  "tray-iconTemplate.png",
+  "tray-iconTemplate@2x.png",
+];
 
 if (!fs.existsSync(sourcePng)) {
+  const haveOutputs = requiredOutputs.every((name) =>
+    fs.existsSync(path.join(assetsDir, name)),
+  );
+  if (haveOutputs) {
+    console.warn(`Missing ${sourcePng}; using existing desktop-agent/assets icons.`);
+    process.exit(0);
+  }
   console.error(`Missing Tavilo Time logo: ${sourcePng}`);
   process.exit(1);
 }

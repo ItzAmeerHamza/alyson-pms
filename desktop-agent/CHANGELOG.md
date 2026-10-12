@@ -2,6 +2,21 @@
 
 All notable changes to the desktop agent will be documented in this file.
 
+## [Unreleased]
+
+## [1.0.249] - 2026-10-12
+
+### Added
+- **Report an issue**: Sidebar form that sends category, notes, and local diagnostics to Pulse (needs backend migration `035_issue_reports`).
+
+### Fixed
+- **Auto-update after Tavilo rename**: On every restart the app checks GitHub, downloads, and installs in place (same `com.alyson.work-time-agent` bundle id and Alyson PM Code Signing) so Screen Recording / Accessibility stay granted. Install waits only while the timer is running, then applies on Stop or Quit. Mac staged ZIP path is persisted across restarts so a downloaded update is not lost.
+- **Windows `ffmpeg.dll was not found`**: After the Alyson PM → Tavilo Time rename, silent update could relaunch the new `.exe` from a half-written install folder. Setup now waits for `ffmpeg.dll` before launch, and the post-update relaunch only starts an exe that has Chromium DLLs beside it.
+- **Mac: crash + every window un-minimizes**: Rebrand startup renamed the live `.app` and ran `killall Dock`, which crashed/relaunched Tavilo and restored minimized windows across the desktop. Rename is deferred until quit; Dock is no longer killed.
+- **Mac Dock icon**: Prefer `Contents/Resources/icon.icns` (outside asar). Loading `.icns` from inside `app.asar` failed after the Tavilo rebrand.
+- **Mac python-libs packaging**: Unpack `python-libs` in the Mac build and run the PyObjC bundle step in `prebuild:mac` so system Python can import Quartz. Input still uses `macos-input-helper` when present.
+- **Poisoned offline Stop queue**: After repeated ISE/timeouts on `update_time_log`, a closed row with the same UUID is upserted via `create_time_log` (ON CONFLICT). Missing `start_time` is recovered from the time ledger / checkpoint / sibling create so Salman-style ISE storms (attempt 200+) can drain. If update and upsert both fail but RDS already has `end_time` ≥ the local billed end, the queue item is drained (never when remote end is shorter).
+
 ## [1.0.248] - 2026-10-09
 
 ### Fixed

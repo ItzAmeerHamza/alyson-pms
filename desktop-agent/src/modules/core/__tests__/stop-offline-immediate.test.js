@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 
 const TMP = path.join(os.tmpdir(), 'alyson-stop-offline-immediate');
+process.env.ALYSON_PAYROLL_APP_DATA_DIR = TMP;
 
 jest.mock('../../utils/backend-time-logs', () => ({
   isBackendTimeLogsEnabled: jest.fn(() => true),

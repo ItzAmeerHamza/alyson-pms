@@ -234,7 +234,10 @@ function loadOfflineQueuedTimeLogRows(userId, currentTimeLogId = null) {
       }
     }
 
-    return rows.filter((r) => r.start_time);
+    // Keep end-only updates so merge can attach the queued Stop onto the
+    // remote row by id. Dropping them is how a restart snapped Mohita's
+    // clock to the server total that never received those closes.
+    return rows.filter((r) => r.start_time || (r.id && r.end_time));
   } catch (err) {
     console.warn('⚠️ [TODAY-TIME-LOG-STATS] Offline queue read failed:', err?.message || err);
     return [];
@@ -256,8 +259,17 @@ function mergeRemoteAndOfflineLogs(remoteLogs, offlineLogs, currentTimeLogId) {
       byId.set(id, log);
       continue;
     }
-    if (!existing.end_time && log.end_time) {
-      byId.set(id, { ...existing, end_time: log.end_time, status: 'completed' });
+    if (log.end_time) {
+      const existingEnd = existing.end_time ? new Date(existing.end_time).getTime() : 0;
+      const offlineEnd = new Date(log.end_time).getTime();
+      if (!existing.end_time || (Number.isFinite(offlineEnd) && offlineEnd > existingEnd)) {
+        byId.set(id, {
+          ...existing,
+          start_time: existing.start_time || log.start_time,
+          end_time: log.end_time,
+          status: 'completed',
+        });
+      }
     }
   }
   // Current live session: ensure present
@@ -527,6 +539,55 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
   throw err;
 }
 
+function lastGoodTodayStatsPath() {
+  const path = require('path');
+  const { getPayrollAppDataDir } = require('./payroll-app-data-dir');
+  return path.join(getPayrollAppDataDir(), 'last-good-today-stats.json');
+}
+
+function readPersistedLastGood() {
+  try {
+    const fs = require('fs');
+    const filePath = lastGoodTodayStatsPath();
+    if (!fs.existsSync(filePath)) return null;
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object') return null;
+    const total = Math.max(0, Math.floor(Number(parsed.totalTime) || 0));
+    if (!parsed.workDate || total <= 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedLastGood(payload) {
+  try {
+    const fs = require('fs');
+    const total = Math.max(0, Math.floor(Number(payload?.totalTime) || 0));
+    if (!payload?.workDate || total <= 0) return;
+    const filePath = lastGoodTodayStatsPath();
+    const tmp = `${filePath}.tmp`;
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({
+        workDate: payload.workDate,
+        totalTime: total,
+        completedTodayBeforeCurrentSessionSeconds: Math.max(
+          0,
+          Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
+        ),
+        adjustmentSeconds: Math.trunc(Number(payload.adjustmentSeconds) || 0),
+        leaveCreditSeconds: Math.max(0, Math.trunc(Number(payload.leaveCreditSeconds) || 0)),
+        otherAdjustmentSeconds: Math.trunc(Number(payload.otherAdjustmentSeconds) || 0),
+      }),
+      'utf8',
+    );
+    fs.renameSync(tmp, filePath);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 module.exports = {
   computeTodayTimeLogSeconds,
   startOfLocalDay,
@@ -536,10 +597,13 @@ module.exports = {
   secondsWithinLocalDay,
   logsOverlappingLocalDay,
   loadOfflineQueuedTimeLogRows,
+  mergeRemoteAndOfflineLogs,
   mergeIntervalsSeconds,
   aggregateTimeLogRows,
   applyAdjustmentSeconds,
   holdLastGoodOnFailedFetch,
   statsWorkDayKey,
   shouldKeepCachedTodayStats,
+  readPersistedLastGood,
+  writePersistedLastGood,
 };

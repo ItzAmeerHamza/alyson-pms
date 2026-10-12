@@ -837,6 +837,21 @@ export class ForceSyncController {
           HttpStatus.SERVICE_UNAVAILABLE,
         );
       }
+      const pgCode =
+        error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : '';
+      if (/^[0-9A-Z]{5}$/.test(pgCode)) {
+        this.logger.error(`desktop-action ${body?.action} failed sqlstate=${pgCode}`);
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            message: 'Internal server error',
+            code: pgCode,
+          },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
       throw error;
     }
   }
@@ -997,9 +1012,19 @@ export class ForceSyncController {
         // sync into lost tracked time.
         const isLiveStart = !payload.end_time;
         if (payload.device_id && isLiveStart) {
+          // Cap at last_alive — not wall-clock newStart. Closing an abandoned
+          // overnight row at morning Start billed sleep as work (Fawad-style
+          // phantom). last_alive null → fall back to newStart (same as before).
           const closed = await this.db.query<{ id: string }>(
             `UPDATE time_doctor.time_logs t
-             SET end_time = GREATEST(t.start_time, LEAST($3::timestamptz, NOW())),
+             SET end_time = GREATEST(
+                   t.start_time,
+                   LEAST(
+                     $3::timestamptz,
+                     NOW(),
+                     COALESCE(t.last_alive_at, $3::timestamptz)
+                   )
+                 ),
                  status = 'auto_closed',
                  updated_at = NOW()
              WHERE t.user_id = $1
@@ -1124,6 +1149,37 @@ export class ForceSyncController {
         const userId = parseUserIdParam(log.user_id);
         const workspaceId = await this.resolveWorkspaceId(log.user_id, log.organization_id);
         const projectId = await this.resolveProjectId(log.project_id);
+        // Live Start: close any still-open row on this device at last proof of
+        // life (capped by this start). Agent create_time_log is the path that
+        // actually runs — upsert_time_log alone left orphans open for hours.
+        const isLiveStart = !log.end_time;
+        if (log.device_id && isLiveStart) {
+          const closed = await this.db.query<{ id: string }>(
+            `UPDATE time_doctor.time_logs t
+             SET end_time = GREATEST(
+                   t.start_time,
+                   LEAST(
+                     $3::timestamptz,
+                     NOW(),
+                     COALESCE(t.last_alive_at, $3::timestamptz)
+                   )
+                 ),
+                 status = 'auto_closed',
+                 updated_at = NOW()
+             WHERE t.user_id = $1
+               AND t.device_id = $2
+               AND t.end_time IS NULL
+               AND t.id <> $4::uuid
+               AND t.start_time <= $3::timestamptz
+             RETURNING t.id`,
+            [userId, log.device_id, log.start_time, id],
+          );
+          if (closed.rowCount > 0) {
+            this.logger.warn(
+              `create_time_log closed ${closed.rowCount} still-open session(s) for user ${userId} device ${log.device_id} at last_alive≤${log.start_time} (new session ${id})`,
+            );
+          }
+        }
         // Idempotent: client retries after RDS/API timeout must not insert a second row
         // or fail forever. Same id → return existing row (preserve completed end_time).
         const result = await this.db.query<{
@@ -1609,6 +1665,29 @@ export class ForceSyncController {
            ORDER BY start_time DESC
            LIMIT 1`,
           params,
+        );
+        return { success: true, time_log: result.rows[0] ?? null };
+      }
+      case 'get_time_log': {
+        // Desktop offline drain: confirm a queued close already landed.
+        const id = this.parseTimeLogUuid(data?.id);
+        if (!id) {
+          return { success: false, time_log: null, reason: 'no_row' };
+        }
+        const result = await this.db.query<{
+          id: string;
+          start_time: string;
+          end_time: string | null;
+          status: string;
+          user_id: string;
+          device_id: string | null;
+        }>(
+          `SELECT id, start_time, end_time, status,
+                  user_id::text AS user_id, device_id
+           FROM time_doctor.time_logs
+           WHERE id = $1
+           LIMIT 1`,
+          [id],
         );
         return { success: true, time_log: result.rows[0] ?? null };
       }

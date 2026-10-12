@@ -193,15 +193,22 @@ describe('meeting-context', () => {
     expect(isInMeetingSession()).toBe(false);
   });
 
-  test('does not floor leftover Meet tabs after 10 minutes of OS idle (sleeping / AFK)', () => {
+  test('zero activity during a live call stays at the meeting floor, even after 10+ minutes idle', () => {
     _setPresenceForTests({ active: true, label: 'Google Meet' });
     expect(
       applyMeetingActivityFloor(
         0,
         { appName: 'Google Chrome', windowTitle: 'Meet - Daily Sync - Google Chrome' },
-        10 * 60,
+        15 * 60,
       ),
-    ).toBe(0);
+    ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
+    expect(
+      applyMeetingActivityFloor(
+        0,
+        { appName: 'Microsoft Word', windowTitle: 'Notes.docx' },
+        15 * 60,
+      ),
+    ).toBe(MEETING_ACTIVITY_FLOOR_PERCENT);
     expect(
       applyMeetingActivityFloor(
         0,

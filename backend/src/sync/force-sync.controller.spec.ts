@@ -149,6 +149,52 @@ describe('ForceSyncController close_active_sessions', () => {
   });
 });
 
+describe('ForceSyncController create_time_log live start', () => {
+  it('auto-closes a prior open row at last_alive, not wall-clock newStart', async () => {
+    const { controller, query } = makeController();
+    // ensureActiveUsersForDesktopAction → paused check + signed_in update
+    query.mockResolvedValueOnce({ rows: [{ paused_at: null }] });
+    query.mockResolvedValueOnce({ rows: [] });
+    // resolveWorkspaceId
+    query.mockResolvedValueOnce({ rows: [{ workspace_id: 511 }] });
+    // prior-open auto-close
+    query.mockResolvedValueOnce({ rows: [{ id: 'old-sess' }], rowCount: 1 });
+    // insert
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'a0000000-0000-4000-8000-000000000099',
+          user_id: 1243,
+          project_id: null,
+          start_time: '2026-10-09T13:00:00.000Z',
+          end_time: null,
+          status: 'active',
+          device_id: 'dev-1',
+        },
+      ],
+    });
+
+    await controller.desktopAction({
+      action: 'create_time_log',
+      data: {
+        log: {
+          id: 'a0000000-0000-4000-8000-000000000099',
+          user_id: 1243,
+          device_id: 'dev-1',
+          start_time: '2026-10-09T13:00:00.000Z',
+          status: 'active',
+        },
+      },
+    });
+
+    const closeSql = query.mock.calls.find(([sql]) =>
+      String(sql).includes('COALESCE(t.last_alive_at'),
+    )?.[0];
+    expect(closeSql).toBeTruthy();
+    expect(String(closeSql)).toContain('COALESCE(t.last_alive_at, $3::timestamptz)');
+  });
+});
+
 describe('ForceSyncController create_time_log conflict', () => {
   it('keeps a completed billed end on insert retry', async () => {
     const { controller, query } = makeController();
@@ -212,6 +258,31 @@ describe('ForceSyncController DB unavailable', () => {
         data: {
           id: '4b2ebd54-0000-4000-8000-000000000001',
           updates: { status: 'active' },
+        },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('returns 503 when Postgres cancels the statement', async () => {
+    const query = vi.fn(async () => {
+      const err = Object.assign(new Error('canceling statement due to statement timeout'), {
+        code: '57014',
+      });
+      throw err;
+    });
+    const controller = new ForceSyncController(
+      { query } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.desktopAction({
+        action: 'update_time_log',
+        data: {
+          id: '4b2ebd54-0000-4000-8000-000000000001',
+          updates: { status: 'completed', frozen_end: true },
         },
       }),
     ).rejects.toMatchObject({ status: 503 });

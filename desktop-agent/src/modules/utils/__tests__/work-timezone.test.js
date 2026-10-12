@@ -20,13 +20,15 @@ describe('work-timezone company / Time Doctor sync', () => {
     setWorkTimezone(previousTz);
   });
 
-  it('defaults to America/Chicago when no workspace TZ is set', () => {
-    const { resolveWorkTimezone } = require('../work-timezone');
+  it('defaults to America/Los_Angeles when no workspace TZ is set', () => {
+    const { resolveWorkTimezone, formatWorkClock } = require('../work-timezone');
     const prev = process.env.WORK_TIMEZONE;
     delete process.env.WORK_TIMEZONE;
     try {
-      expect(resolveWorkTimezone({})).toBe('America/Chicago');
-      expect(resolveWorkTimezone(null)).toBe('America/Chicago');
+      expect(resolveWorkTimezone({})).toBe('America/Los_Angeles');
+      expect(resolveWorkTimezone(null)).toBe('America/Los_Angeles');
+      // 2026-10-09 15:54:54Z is 08:54:54 Pacific. The clock does not print the zone name.
+      expect(formatWorkClock('2026-10-09T15:54:54.000Z', 'America/Los_Angeles')).toBe('08:54:54');
     } finally {
       if (prev === undefined) delete process.env.WORK_TIMEZONE;
       else process.env.WORK_TIMEZONE = prev;

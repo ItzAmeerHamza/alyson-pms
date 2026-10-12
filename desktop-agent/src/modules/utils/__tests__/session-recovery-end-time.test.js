@@ -17,6 +17,10 @@ const {
   shouldPreferRecover,
 } = require('../session-recovery');
 
+afterAll(() => {
+  jest.unmock('fs');
+});
+
 describe('resolveExplicitStopEndTime', () => {
   beforeEach(() => {
     fs.existsSync.mockReturnValue(false);

@@ -439,7 +439,7 @@ class TrayManager {
   }
 
   /**
-   * Company work-day boundary (America/Chicago by default). Safe to call on
+   * Company work-day boundary (America/Los_Angeles by default). Safe to call on
    * resume/wake/start — no-ops if already on today's key. Returns true when
    * a rollover reset ran and the daily clock was zeroed.
    */
@@ -952,6 +952,22 @@ class TrayManager {
             this.updateMenu();
           } catch (err) {
             console.warn('⚠️ [TRAY] Failed to update auto-launch:', err?.message || err);
+          }
+        },
+      });
+
+      menuItems.push({
+        label: 'Report an issue',
+        click: () => {
+          if (this.onShowWindow) this.onShowWindow();
+          try {
+            const { BrowserWindow } = require('electron');
+            const windows = BrowserWindow.getAllWindows();
+            if (windows.length > 0) {
+              windows[0].webContents.send('open-report-issue');
+            }
+          } catch (err) {
+            console.warn('⚠️ [TRAY] Could not open Report an issue:', err?.message || err);
           }
         },
       });

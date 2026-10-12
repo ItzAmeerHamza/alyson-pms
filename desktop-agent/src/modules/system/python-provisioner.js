@@ -304,7 +304,18 @@ class PythonProvisioner {
         }
       }
 
-      console.warn(`⚠️ [PYTHON-PROVISION] Bundled Python missing — checked:\n  ${candidates.join('\n  ')}`);
+      // Mac input primarily uses Resources/helpers/macos-input-helper.
+      // python-macos is optional; system Python + unpacked python-libs is enough.
+      const helperPath = path.join(resourcesBase, 'helpers', 'macos-input-helper');
+      if (fs.existsSync(helperPath)) {
+        console.log(
+          `ℹ️ [PYTHON-PROVISION] No python-macos runtime in build — using system Python + helper (${helperPath})`,
+        );
+      } else {
+        console.warn(
+          `⚠️ [PYTHON-PROVISION] Bundled Python missing — checked:\n  ${candidates.join('\n  ')}`,
+        );
+      }
     } else {
       // Development mode: check local bundled (desktop-agent/python-macos/)
       const devBase = path.join(__dirname, '..', '..', '..');
@@ -323,8 +334,7 @@ class PythonProvisioner {
       }
     }
 
-    // Step 2: Fall back to system Python
-    console.warn(`⚠️ [PYTHON-PROVISION] Bundled Python not available, trying system Python as fallback...`);
+    // Step 2: Fall back to system Python (+ unpacked python-libs / helper)
     return this._ensureMacOSSystemPythonFallback();
   }
 

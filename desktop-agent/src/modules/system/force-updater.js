@@ -56,6 +56,8 @@ class ForceUpdater {
     this.macUpdateWorkDir = null;
     /** @type {string|null} Path to a Node-downloaded Windows Setup.exe ready to launch */
     this.windowsInstallerPath = null;
+    /** When true, install as soon as tracking stops or the app quits. */
+    this._installWhenIdle = false;
     this.isDevMode = !!(app && app.isPackaged === false);
     
     // Window references
@@ -104,18 +106,20 @@ class ForceUpdater {
     if (app) {
       return app.getPath('userData');
     }
-    
-    // Fallback for non-Electron context
-      const os = require('os');
+
+    // Must match main.js app.setPath('userData', …/Alyson PM) so update-state
+    // and permissions survive the Tavilo Time product rename.
+    const os = require('os');
     const platform = process.platform;
-    
+    const folder = 'Alyson PM';
+
     if (platform === 'darwin') {
-      return path.join(os.homedir(), 'Library', 'Application Support', 'alyson-work-time-agent');
-    } else if (platform === 'win32') {
-      return path.join(process.env.APPDATA || os.homedir(), 'alyson-work-time-agent');
-    } else {
-      return path.join(os.homedir(), '.config', 'alyson-work-time-agent');
+      return path.join(os.homedir(), 'Library', 'Application Support', folder);
     }
+    if (platform === 'win32') {
+      return path.join(process.env.APPDATA || os.homedir(), folder);
+    }
+    return path.join(os.homedir(), '.config', folder);
   }
 
   /**
@@ -182,6 +186,15 @@ class ForceUpdater {
         installAttempts: this.installAttempts,
         manualInstallRequired: this.manualInstallRequired,
         windowsInstallerPath: this.windowsInstallerPath || null,
+        // Persist Mac staged bundle so a restart can apply without re-download.
+        macStagedAppPath:
+          this.macStagedAppPath && fs.existsSync(this.macStagedAppPath)
+            ? this.macStagedAppPath
+            : null,
+        macUpdateWorkDir:
+          this.macUpdateWorkDir && fs.existsSync(this.macUpdateWorkDir)
+            ? this.macUpdateWorkDir
+            : null,
         savedAt: new Date().toISOString()
       };
       fs.writeFileSync(this.updateStatePath, JSON.stringify(state, null, 2));
@@ -226,7 +239,26 @@ class ForceUpdater {
         ) {
           this.windowsInstallerPath = state.windowsInstallerPath;
         }
-        
+        if (
+          state.macStagedAppPath &&
+          typeof state.macStagedAppPath === 'string' &&
+          fs.existsSync(state.macStagedAppPath)
+        ) {
+          this.macStagedAppPath = state.macStagedAppPath;
+          this.isUpdateDownloaded = true;
+        }
+        if (
+          state.macUpdateWorkDir &&
+          typeof state.macUpdateWorkDir === 'string' &&
+          fs.existsSync(state.macUpdateWorkDir)
+        ) {
+          this.macUpdateWorkDir = state.macUpdateWorkDir;
+        }
+        if (state.pendingVersion && !this.pendingVersion) {
+          this.pendingVersion = state.pendingVersion;
+          this.isUpdateAvailable = !!state.isUpdateAvailable || !!this.macStagedAppPath;
+        }
+
         return state;
       }
     } catch (error) {
@@ -359,6 +391,7 @@ class ForceUpdater {
     const candidates = [
       path.join(os.homedir(), 'Library', 'Caches', 'com.alyson.work-time-agent.ShipIt'),
       path.join(os.homedir(), 'Library', 'Caches', 'alyson-pm-desktop-agent-updater'),
+      path.join(os.homedir(), 'Library', 'Caches', 'tavilo-time-updater'),
       path.join(this.appDataPath, 'pending'),
     ];
 
@@ -1464,6 +1497,36 @@ class ForceUpdater {
    * Chains a relaunch: NSIS silent mode skips runAfterFinish, so without this
    * the app would stay closed after update.
    */
+  /**
+   * Candidate Windows install dirs after Alyson PM → Tavilo Time rename.
+   * Never relaunch process.execPath blindly — that path may still be
+   * "Alyson PM.exe" (deleted mid-update) or a half-written folder missing ffmpeg.dll.
+   */
+  getWindowsRelaunchCandidates() {
+    const localAppData =
+      process.env.LOCALAPPDATA ||
+      path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
+    const programs = path.join(localAppData, 'Programs');
+    const folders = [
+      'Alyson PM',
+      'Tavilo Time',
+      'alyson-pm-desktop-agent',
+      'Alyson Work Time',
+    ];
+    const names = ['Tavilo Time.exe', 'Alyson PM.exe'];
+    const out = [];
+    for (const folder of folders) {
+      for (const name of names) {
+        out.push(path.join(programs, folder, name));
+      }
+    }
+    // Last resort: whatever we were running, only if ffmpeg.dll sits beside it.
+    try {
+      if (process.execPath) out.push(process.execPath);
+    } catch (_) { /* ignore */ }
+    return out;
+  }
+
   launchWindowsInstaller(installerPath) {
     const { spawn } = require('child_process');
     const os = require('os');
@@ -1480,19 +1543,41 @@ class ForceUpdater {
     this.saveUpdateState();
 
     try {
-      // Batch: wait for silent Setup, then start the same exe path (per-user install).
-      // Detached so it survives app.quit().
-      const appExe = process.execPath;
+      // Batch: wait for silent Setup, then launch an exe that has ffmpeg.dll next
+      // to it. Relaunching a stale Alyson PM.exe path (or a partial Tavilo folder)
+      // is what surfaces "ffmpeg.dll was not found" after the rebrand.
+      const candidates = this.getWindowsRelaunchCandidates()
+        .map((p) => p.replace(/"/g, ''))
+        .filter(Boolean);
       const batPath = path.join(os.tmpdir(), `alyson-pm-relaunch-${Date.now()}.bat`);
-      const bat = [
+      const probeLines = [
         '@echo off',
         `start /wait "" "${exePath.replace(/"/g, '')}" /S`,
-        'timeout /t 5 /nobreak >nul',
-        `start "" "${appExe.replace(/"/g, '')}"`,
+        'set "LAUNCH="',
+        'set /a _tries=0',
+        ':wait_install',
+        'set /a _tries+=1',
+        'if %_tries% GEQ 90 goto launch_done',
+        'timeout /t 2 /nobreak >nul',
+      ];
+      for (const candidate of candidates) {
+        const dir = path.dirname(candidate);
+        probeLines.push(
+          `if exist "${candidate}" if exist "${path.join(dir, 'ffmpeg.dll')}" (set "LAUNCH=${candidate}" & goto launch_done)`,
+        );
+      }
+      probeLines.push(
+        'goto wait_install',
+        ':launch_done',
+        'if defined LAUNCH (',
+        '  start "" "%LAUNCH%"',
+        ') else (',
+        '  echo [Tavilo Time] Update finished but ffmpeg.dll was missing — reinstall from Setup.>> "%TEMP%\\tavilo-update.log"',
+        ')',
         `del "%~f0" >nul 2>&1`,
         '',
-      ].join('\r\n');
-      fs.writeFileSync(batPath, bat, 'utf8');
+      );
+      fs.writeFileSync(batPath, probeLines.join('\r\n'), 'utf8');
 
       const child = spawn('cmd.exe', ['/c', batPath], {
         detached: true,
@@ -1622,6 +1707,22 @@ class ForceUpdater {
 
       this.sendToRenderer('update-downloaded', { version });
       console.log('✅ [FORCE-UPDATER] macOS update staged for in-place install:', stagedApp);
+
+      // Restart / idle auto-apply: do not wait for a manual Install click.
+      if (!this.isTrackingActive()) {
+        this._installWhenIdle = false;
+        setTimeout(() => {
+          if (!this.isTrackingActive() && this.hasInstallablePayload()) {
+            console.log('🚀 [FORCE-UPDATER] Auto-installing staged Mac update');
+            void this.installUpdate().catch((err) => {
+              console.warn('⚠️ [FORCE-UPDATER] Auto-install after stage failed:', err?.message || err);
+            });
+          }
+        }, 1500);
+      } else {
+        this._installWhenIdle = true;
+      }
+
       return { success: true, inPlaceReady: true };
     } catch (error) {
       console.error('❌ [FORCE-UPDATER] macOS in-place download failed:', error.message);
@@ -1776,7 +1877,7 @@ if [ -d "$CANONICAL" ] && [ -d "$LEGACY" ]; then
   rm -rf "$LEGACY"
 fi
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET" 2>/dev/null || true
-killall Dock 2>/dev/null || true
+# Do not killall Dock — that un-minimizes every window on the Mac.
 rm -rf "$WORKDIR" 2>/dev/null || true
 open "$TARGET"
 `;
@@ -2065,6 +2166,121 @@ open "$TARGET"
     }
   }
 
+  /** True when a live session must not be interrupted by quit-and-swap. */
+  isTrackingActive() {
+    try {
+      if (global.isTracking) return true;
+      if (global.trackingManager?.isTracking) return true;
+    } catch (_) { /* ignore */ }
+    return false;
+  }
+
+  /** Staged Mac ZIP or Windows Setup.exe ready to apply. */
+  hasInstallablePayload() {
+    if (
+      this.isMacPackaged() &&
+      this.macStagedAppPath &&
+      fs.existsSync(this.macStagedAppPath)
+    ) {
+      return true;
+    }
+    if (
+      process.platform === 'win32' &&
+      this.windowsInstallerPath &&
+      fs.existsSync(this.windowsInstallerPath)
+    ) {
+      return true;
+    }
+    if (this.isUpdateDownloaded && !this.isMacPackaged()) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * After restart (or when download finishes while idle): check → download →
+   * install in place. Keeps TCC by swapping into the same .app (same bundle id
+   * + Alyson PM Code Signing). Defers only while the timer is running.
+   */
+  async applyUpdateOnRestart() {
+    if (this.isDevMode || !app?.isPackaged) {
+      return { applied: false, reason: 'dev_or_unpackaged' };
+    }
+    if (global.isInstallingUpdate) {
+      return { applied: false, reason: 'already_installing' };
+    }
+
+    try {
+      // Prefer a payload left from the previous session (Mac staged path on disk).
+      if (this.hasInstallablePayload()) {
+        const pending = String(this.pendingVersion || '').replace(/^v/i, '');
+        const current = String(this.currentVersion || '').replace(/^v/i, '');
+        if (pending && this.compareVersions(pending, current) > 0) {
+          if (this.isTrackingActive()) {
+            this._installWhenIdle = true;
+            console.log(
+              '⏸️ [FORCE-UPDATER] Update ready — will install when tracking stops (restart deferred)',
+            );
+            this.notifyUpdateAvailable({
+              updateAvailable: true,
+              updateDownloaded: true,
+              newVersion: pending,
+              currentVersion: current,
+            });
+            return { applied: false, reason: 'tracking_active', deferred: true };
+          }
+          console.log('🚀 [FORCE-UPDATER] Applying staged update on restart:', pending);
+          const result = await this.installUpdate();
+          return { applied: !!result?.installing || !!result?.success, result };
+        }
+      }
+
+      const check = await this.checkForUpdates();
+      if (!check?.updateAvailable) {
+        return { applied: false, reason: 'up_to_date', check };
+      }
+
+      this.notifyUpdateAvailable(check);
+
+      if (!check.updateDownloaded && !this.isDownloading) {
+        const dl = await this.downloadUpdate();
+        if (!dl?.success && !this.hasInstallablePayload()) {
+          return { applied: false, reason: 'download_failed', dl };
+        }
+      }
+
+      if (this.isTrackingActive()) {
+        this._installWhenIdle = true;
+        console.log(
+          '⏸️ [FORCE-UPDATER] Downloaded on restart — install deferred until Stop/Quit',
+        );
+        return { applied: false, reason: 'tracking_active', deferred: true };
+      }
+
+      console.log('🚀 [FORCE-UPDATER] Installing update after restart check');
+      const result = await this.installUpdate();
+      return { applied: !!result?.installing || !!result?.success, result };
+    } catch (err) {
+      console.warn('⚠️ [FORCE-UPDATER] applyUpdateOnRestart failed:', err?.message || err);
+      return { applied: false, reason: 'error', error: err?.message || String(err) };
+    }
+  }
+
+  /**
+   * Call from Stop / before-quit when a restart install was deferred.
+   */
+  maybeInstallWhenIdle() {
+    if (!this._installWhenIdle) return false;
+    if (this.isTrackingActive()) return false;
+    if (!this.hasInstallablePayload() && !this.isUpdateAvailable) return false;
+    this._installWhenIdle = false;
+    console.log('🚀 [FORCE-UPDATER] Tracking idle — applying deferred update');
+    void this.installUpdate().catch((err) => {
+      console.warn('⚠️ [FORCE-UPDATER] Deferred install failed:', err?.message || err);
+    });
+    return true;
+  }
+
   /**
    * Start periodic background update checks (every 6 hours)
    */
@@ -2081,33 +2297,30 @@ open "$TARGET"
     
     console.log('⏰ [FORCE-UPDATER] Starting periodic update checks (every 6 hours)');
 
-    const runStartupCheck = () => {
-      this.checkForUpdates().then((result) => {
-        if (result?.updateAvailable) {
-          this.notifyUpdateAvailable(result);
-          if (!result.updateDownloaded && !this.isDownloading) {
-            void this.downloadUpdate().catch((err) => {
-              console.warn('⚠️ [FORCE-UPDATER] Auto-download after startup check failed:', err?.message || err);
-            });
-          }
-        }
-      }).catch((err) => {
-        console.warn('⚠️ [FORCE-UPDATER] Startup update check failed:', err?.message || err);
+    // On every restart: check, download, and install (permissions-safe in-place).
+    // Slight delay so the window can paint and auto-launch rename can finish.
+    setTimeout(() => {
+      void this.applyUpdateOnRestart().then((outcome) => {
+        console.log('🔁 [FORCE-UPDATER] Restart update outcome:', outcome?.reason || outcome);
       });
-    };
-
-    // Check immediately and again after 3s (login screen should block before sign-in).
-    runStartupCheck();
-    setTimeout(runStartupCheck, 3000);
+    }, 4000);
     
-    // Then check every 6 hours — download in background when a newer build exists
+    // Then check every 6 hours — download in background; install when idle.
     setInterval(() => {
-      this.checkForUpdates().then((result) => {
-        if (result?.updateAvailable && !result.updateDownloaded && !this.isDownloading) {
-          this.notifyUpdateAvailable(result);
-          void this.downloadUpdate().catch((err) => {
+      this.checkForUpdates().then(async (result) => {
+        if (!result?.updateAvailable) return;
+        this.notifyUpdateAvailable(result);
+        if (!result.updateDownloaded && !this.isDownloading) {
+          await this.downloadUpdate().catch((err) => {
             console.warn('⚠️ [FORCE-UPDATER] Periodic auto-download failed:', err?.message || err);
           });
+        }
+        if (this.hasInstallablePayload() && !this.isTrackingActive()) {
+          void this.installUpdate().catch((err) => {
+            console.warn('⚠️ [FORCE-UPDATER] Periodic auto-install failed:', err?.message || err);
+          });
+        } else if (this.hasInstallablePayload()) {
+          this._installWhenIdle = true;
         }
       }).catch((err) => {
         console.warn('⚠️ [FORCE-UPDATER] Periodic update check failed:', err?.message || err);

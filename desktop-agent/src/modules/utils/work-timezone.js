@@ -9,9 +9,12 @@
  * 4. Overnight / odd-hour shifts are normal: clamp session elapsed to
  *    company midnight; do not invent wall-clock-since-wrong-midnight.
  *
- * Default fallback: America/Chicago (company / Time Doctor Central).
- * Override: WORK_TIMEZONE env or config.work_timezone / WORK_TIMEZONE.
+ * Default fallback: America/Los_Angeles (company Pacific).
+ * A saved workspace timezone still wins. Override: WORK_TIMEZONE env
+ * or config.work_timezone / WORK_TIMEZONE.
  */
+
+const DEFAULT_WORK_TIMEZONE = 'America/Los_Angeles';
 
 function isValidIanaTimezone(tz) {
   if (!tz || typeof tz !== 'string') return false;
@@ -28,14 +31,14 @@ function resolveWorkTimezone(config = global?.config) {
     config?.work_timezone ||
     config?.WORK_TIMEZONE ||
     process.env.WORK_TIMEZONE ||
-    'America/Chicago';
-  return isValidIanaTimezone(candidate) ? String(candidate).trim() : 'America/Chicago';
+    DEFAULT_WORK_TIMEZONE;
+  return isValidIanaTimezone(candidate) ? String(candidate).trim() : DEFAULT_WORK_TIMEZONE;
 }
 
-let _tz = 'America/Chicago';
+let _tz = DEFAULT_WORK_TIMEZONE;
 
 function setWorkTimezone(tz) {
-  _tz = isValidIanaTimezone(tz) ? String(tz).trim() : 'America/Chicago';
+  _tz = isValidIanaTimezone(tz) ? String(tz).trim() : DEFAULT_WORK_TIMEZONE;
   return _tz;
 }
 
@@ -137,6 +140,21 @@ function formatWorkTimezoneLabel(tz = _tz) {
   return tz.replace(/_/g, ' ');
 }
 
+/** Screenshot clock in the company zone, e.g. "08:54:54". */
+function formatWorkClock(value, tz = _tz) {
+  if (value == null || value === '') return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const zone = isValidIanaTimezone(tz) ? String(tz).trim() : _tz;
+  return date.toLocaleTimeString('en-US', {
+    timeZone: zone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 /** Wall-clock time in work TZ, e.g. "17:46" (24h) or "5:46 PM". */
 function formatWorkTime(value, { hour12 = false } = {}, tz = _tz) {
   if (value == null || value === '') return '';
@@ -218,6 +236,7 @@ module.exports = {
   secondsWithinWorkDay,
   elapsedSecondsSinceWorkMidnight,
   formatWorkTimezoneLabel,
+  formatWorkClock,
   formatWorkTime,
   formatWorkDateShort,
   nextWorkDayMidnight,

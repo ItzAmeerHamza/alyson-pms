@@ -12,6 +12,7 @@ const { uploadScreenshotBuffer } = require('../utils/screenshot-storage');
 const {
   MEETING_ACTIVITY_FLOOR_PERCENT,
   osIdleExceedsMeetingShield,
+  applyMeetingActivityFloor,
   noteMeetingContext,
   getRecentMeetingLabel,
   isInMeetingSession,
@@ -2091,10 +2092,10 @@ if (uploadResult?.id) {
     let meetingLabel = noteMeetingContext(context);
 
     const osIdleSeconds = Number(global.unifiedInputManager?.getIdleTime?.() || 0);
-    const leftoverAfk = osIdleExceedsMeetingShield(osIdleSeconds);
 
-    // AFK ≥ 10 min: do not AppleScript every Chrome tab. Leftover Meet is not extra time.
-    if (!meetingLabel && !leftoverAfk) {
+    // Skip the tab probe once the machine has been still for 10 minutes.
+    // A call already in progress still keeps the activity floor below.
+    if (!meetingLabel && !osIdleExceedsMeetingShield(osIdleSeconds)) {
       try {
         meetingLabel = await refreshMeetingPresence({
           needBackgroundTabs: isInMeetingSession(),
@@ -2103,11 +2104,9 @@ if (uploadResult?.id) {
         meetingLabel = getRecentMeetingLabel();
       }
     }
-    const inMeeting = !leftoverAfk && (Boolean(meetingLabel) || isInMeetingSession());
+    const inMeeting = Boolean(meetingLabel) || isInMeetingSession();
 
-    const activityPercent = inMeeting
-      ? Math.max(Number(focusPercent) || 0, MEETING_ACTIVITY_FLOOR_PERCENT)
-      : focusPercent;
+    const activityPercent = applyMeetingActivityFloor(focusPercent, context, osIdleSeconds);
 
     if (inMeeting && activityPercent !== focusPercent) {
       console.log(
@@ -2115,16 +2114,12 @@ if (uploadResult?.id) {
       );
     } else if (inMeeting) {
       console.log(`📹 [MEETING-ACTIVITY] ${meetingLabel || 'meeting'} — activity ${activityPercent}%`);
-    } else if (leftoverAfk && (meetingLabel || isInMeetingSession())) {
-      console.log(
-        `📹 [MEETING-ACTIVITY] leftover ${meetingLabel || 'meeting'} tab after ${Math.round(osIdleSeconds)}s idle — keeping ${focusPercent}% (not extra meeting time)`
-      );
     }
 
     return {
       activityPercent,
-      focusPercent: leftoverAfk ? focusPercent : activityPercent,
-      meetingLabel: leftoverAfk ? null : (meetingLabel || (inMeeting ? getRecentMeetingLabel() : null)),
+      focusPercent: inMeeting ? activityPercent : focusPercent,
+      meetingLabel: inMeeting ? (meetingLabel || getRecentMeetingLabel()) : null,
     };
   }
 

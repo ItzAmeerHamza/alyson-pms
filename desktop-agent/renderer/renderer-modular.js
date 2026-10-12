@@ -16,6 +16,7 @@ const {
   elapsedSecondsSinceWorkMidnight,
   nextWorkDayMidnight,
   formatWorkTimezoneLabel,
+  formatWorkClock,
   getWorkTimezone,
 } = require('../src/modules/utils/work-timezone');
 const {
@@ -1596,7 +1597,7 @@ function scheduleNextWorkDayRollover() {
 }
 
 /**
- * Force company work-day alignment (America/Chicago by default). Call on
+ * Force company work-day alignment (America/Los_Angeles by default). Call on
  * resume/wake/focus/Start so a laptop that slept through midnight still
  * shows 0 for the new day.
  * @returns {boolean} true when a rollover reset ran
@@ -4067,13 +4068,7 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
         
         console.log('🔍 [SCREENSHOT-DEBUG] All screenshot URLs:', screenshots.map(s => ({ id: s.id, url: s.image_url, time: s.captured_at })));
         screenshots.forEach((screenshot, index) => {
-            const capturedAt = new Date(screenshot.captured_at);
-            const timeString = capturedAt.toLocaleTimeString('en-US', { 
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit', 
-                second: '2-digit' 
-            });
+            const timeString = formatWorkClock(screenshot.captured_at);
             
             const activityPercent = screenshot.activity_percent || 0;
             const focusPercent = screenshot.focus_percent || 0;
@@ -4916,7 +4911,7 @@ async function requestDeleteScreenshot(screenshotId) {
     const formatted = formatDeductionTime(result.deductedSeconds);
     if (result.capturedAt) {
       const dt = new Date(result.capturedAt);
-      timeEl.textContent = `Screenshot from ${dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      timeEl.textContent = `Screenshot from ${formatWorkClock(dt)}`;
     }
     deductionEl.textContent = `This will deduct ${formatted} from your tracked time today.`;
     confirmBtn.disabled = false;

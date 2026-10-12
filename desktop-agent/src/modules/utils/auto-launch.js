@@ -147,9 +147,10 @@ const LSREGISTER =
 
 /**
  * Dock and Finder show the .app folder name, not CFBundleDisplayName.
- * Rename Alyson PM.app → Tavilo Time.app on the same volume (same inode,
- * same bundle id, same signature) so Screen Recording and Accessibility stay.
- * Returns the bundle path to use after the rename.
+ * NEVER rename the live bundle while Tavilo is running — that tears the
+ * executable path out from under the process (crash + auto-relaunch loop) and
+ * was paired with killall Dock, which un-minimizes every app window.
+ * Rename only after quit (detached script) or via the in-place updater.
  */
 function renameMacBundleForDock(bundlePath) {
   if (!bundlePath) return bundlePath;
@@ -160,14 +161,48 @@ function renameMacBundleForDock(bundlePath) {
     console.warn('⚠️ [AUTO-LAUNCH] Leaving app path unchanged; already exists:', dest);
     return bundlePath;
   }
+  scheduleMacBundleRenameAfterQuit(bundlePath, dest);
+  return bundlePath;
+}
+
+/**
+ * After the process exits, rename Alyson PM.app → Tavilo Time.app on the same
+ * volume (permissions stay). Do not reopen the app — login item / user will.
+ */
+function scheduleMacBundleRenameAfterQuit(fromPath, toPath) {
+  if (global.__taviloBundleRenameScheduled) return;
+  global.__taviloBundleRenameScheduled = true;
+  let appRef;
   try {
-    fs.renameSync(bundlePath, dest);
-    console.log('✅ [AUTO-LAUNCH] Renamed app for the Dock:', dest);
-    return dest;
-  } catch (err) {
-    console.warn('⚠️ [AUTO-LAUNCH] Could not rename app for the Dock:', err?.message || err);
-    return bundlePath;
+    ({ app: appRef } = require('electron'));
+  } catch {
+    return;
   }
+  if (!appRef || typeof appRef.once !== 'function') return;
+
+  appRef.once('will-quit', () => {
+    try {
+      const os = require('os');
+      const { spawn } = require('child_process');
+      const scriptPath = path.join(os.tmpdir(), `tavilo-rename-bundle-${Date.now()}.sh`);
+      const script = `#!/bin/bash
+sleep 2
+FROM="${String(fromPath).replace(/"/g, '\\"')}"
+TO="${String(toPath).replace(/"/g, '\\"')}"
+if [ -d "$FROM" ] && [ ! -e "$TO" ]; then
+  mv "$FROM" "$TO"
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TO" 2>/dev/null || true
+fi
+rm -f "$0"
+`;
+      fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+      const child = spawn('bash', [scriptPath], { detached: true, stdio: 'ignore' });
+      child.unref();
+      console.log('✅ [AUTO-LAUNCH] Scheduled post-quit rename to Tavilo Time.app');
+    } catch (err) {
+      console.warn('⚠️ [AUTO-LAUNCH] Could not schedule post-quit rename:', err?.message || err);
+    }
+  });
 }
 
 /**
@@ -212,14 +247,26 @@ function resolveMacExePath() {
 
 function macExecutableInBundle(bundlePath) {
   if (!bundlePath) return null;
-  const exe = path.join(bundlePath, 'Contents', 'MacOS', DOCK_DISPLAY_NAME);
-  return fs.existsSync(exe) ? exe : null;
+  // New builds: "Tavilo Time". Pre-rebrand: "Alyson PM". Prefer the new name.
+  const candidates = [DOCK_DISPLAY_NAME, 'Alyson PM', 'alyson-pm-desktop-agent'];
+  for (const name of candidates) {
+    const exe = path.join(bundlePath, 'Contents', 'MacOS', name);
+    if (fs.existsSync(exe)) return exe;
+  }
+  try {
+    const dir = path.join(bundlePath, 'Contents', 'MacOS');
+    if (!fs.existsSync(dir)) return null;
+    const first = fs.readdirSync(dir).find((n) => !n.startsWith('.'));
+    return first ? path.join(dir, first) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Ask Launch Services to reread the bundle, point the running Dock tile at
- * the new icon, and restart the Dock once so the cached Alyson name and
- * logo are dropped.
+ * Ask Launch Services to reread the bundle and refresh the Dock tile icon.
+ * Do NOT killall Dock — that un-minimizes every window on the Mac and looks
+ * like "Tavilo crashed and opened all my apps".
  */
 function refreshMacDisplayName(bundlePath) {
   if (process.platform !== 'darwin' || !bundlePath) return;
@@ -233,11 +280,9 @@ function refreshMacDisplayName(bundlePath) {
 
   try {
     const { nativeImage } = require('electron');
-    const iconPath = path.join(bundlePath, 'Contents', 'Resources', 'icon.icns');
-    if (fs.existsSync(iconPath) && app.dock && typeof app.dock.setIcon === 'function') {
-      const image = nativeImage.createFromPath(iconPath);
-      if (image && !image.isEmpty()) app.dock.setIcon(image);
-    }
+    const { setMacDockIcon } = require('./resolve-app-icon');
+    const resourcesPath = path.join(bundlePath, 'Contents', 'Resources');
+    setMacDockIcon(app, nativeImage, { resourcesPath, preferIcns: true });
   } catch (err) {
     console.warn('⚠️ [AUTO-LAUNCH] Could not set Dock icon:', err?.message || err);
   }
@@ -250,14 +295,19 @@ function refreshMacDisplayName(bundlePath) {
         return;
       }
       console.log('✅ [AUTO-LAUNCH] Refreshed installed app display name to Tavilo Time');
-      restartDockOnce(bundlePath);
+      recordDockDisplayMarker(bundlePath);
     });
   } catch (err) {
     console.warn('⚠️ [AUTO-LAUNCH] Could not refresh app display name:', err?.message || err);
   }
 }
 
+/** @deprecated Kept for tests/callers — never kills Dock. */
 function restartDockOnce(bundlePath) {
+  recordDockDisplayMarker(bundlePath);
+}
+
+function recordDockDisplayMarker(bundlePath) {
   const markerPath = path.join(prefDir(), 'dock-display.json');
   let appVersion = '';
   try {
@@ -267,34 +317,21 @@ function restartDockOnce(bundlePath) {
     appVersion = '';
   }
   try {
-    const raw = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    if (raw && raw.bundlePath === bundlePath && raw.version === appVersion) return;
-  } catch {
-    // No marker yet — refresh once for this version.
+    const dir = prefDir();
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      markerPath,
+      JSON.stringify({
+        bundlePath,
+        version: appVersion,
+        displayName: DOCK_DISPLAY_NAME,
+        refreshedAt: new Date().toISOString(),
+        dockKill: false,
+      }),
+    );
+  } catch (writeErr) {
+    console.warn('⚠️ [AUTO-LAUNCH] Could not record Dock display marker:', writeErr?.message || writeErr);
   }
-  const { execFile } = require('child_process');
-  execFile('killall', ['Dock'], { timeout: 10000 }, (err) => {
-    if (err) {
-      console.warn('⚠️ [AUTO-LAUNCH] Could not refresh Dock:', err.message);
-      return;
-    }
-    try {
-      const dir = prefDir();
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(
-        markerPath,
-        JSON.stringify({
-          bundlePath,
-          version: appVersion,
-          displayName: DOCK_DISPLAY_NAME,
-          refreshedAt: new Date().toISOString(),
-        }),
-      );
-    } catch (writeErr) {
-      console.warn('⚠️ [AUTO-LAUNCH] Could not record Dock refresh:', writeErr?.message || writeErr);
-    }
-    console.log('✅ [AUTO-LAUNCH] Restarted Dock so it shows Tavilo Time');
-  });
 }
 
 /** Read preference (default ON), persist if missing, apply OS login item. */
@@ -359,6 +396,8 @@ module.exports = {
   writePreference,
   applyLoginItemSettings,
   refreshMacDisplayName,
+  renameMacBundleForDock,
+  restartDockOnce,
   initAutoLaunch,
   getAutoLaunchEnabled,
   setAutoLaunchEnabled,

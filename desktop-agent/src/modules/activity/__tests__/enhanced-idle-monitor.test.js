@@ -483,7 +483,7 @@ describe('EnhancedIdleMonitor', () => {
       expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
     });
 
-    test('leftover meeting tab after 10 min of no input is recorded as idle', async () => {
+    test('a live call after 10 min of no input stays effective and is not written as idle', async () => {
       monitor = new EnhancedIdleMonitor({ user_id: '1195' });
       global.currentUserId = '1195';
       global.trackingManager = { sessionStartTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() };
@@ -494,7 +494,8 @@ describe('EnhancedIdleMonitor', () => {
       const duration = 12 * 60 * 1000;
       await monitor.logIdlePeriod(end - duration, end, duration);
 
-      expect(backendTimeLogs.upsertIdleLog).toHaveBeenCalled();
+      expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
+      expect(backendTimeLogs.insertIdleLog).not.toHaveBeenCalled();
     });
 
     test('OS idle during a meeting still starts idle and still evaluates the prompt', async () => {
@@ -585,6 +586,21 @@ describe('EnhancedIdleMonitor', () => {
       await monitor._evaluateIdleState();
 
       expect(monitor._resolveIdlePrompt).toHaveBeenCalledWith('working');
+    });
+
+    test('still-working prompt still fires during a meeting after 10 min with no input', () => {
+      monitor = new EnhancedIdleMonitor({ ...mockConfig, idle_threshold_minutes: 10 });
+      monitor.isTracking = true;
+      global.isTracking = true;
+      const start = Date.now() - 11 * 60 * 1000;
+      monitor._idleArmedAt = start;
+      global.trackingManager = { sessionStartTime: new Date(start).toISOString() };
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+      monitor._showIdlePrompt = jest.fn();
+
+      monitor._evaluateIdlePrompt(11 * 60, 11 * 60);
+
+      expect(monitor._showIdlePrompt).toHaveBeenCalled();
     });
 
     test('Windows Zoom window presence also blocks idle writes', async () => {

@@ -303,6 +303,8 @@ if (typeof module !== 'undefined' && module.exports) {
   };
 }
 
-window.initProjectDropdown = initProjectDropdown;
-window.refreshProjectDropdown = refreshProjectDropdown;
-window.initScreenshotFilterDropdowns = initScreenshotFilterDropdowns;
+if (typeof window !== 'undefined') {
+  window.initProjectDropdown = initProjectDropdown;
+  window.refreshProjectDropdown = refreshProjectDropdown;
+  window.initScreenshotFilterDropdowns = initScreenshotFilterDropdowns;
+}

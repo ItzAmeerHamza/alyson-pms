@@ -51,6 +51,90 @@ function pendingSessionsDir() {
   return path.join(appDataDir(), 'pending_sessions');
 }
 
+/**
+ * Payroll dir first. Also scan Electron userData — 1.0.248 wrote pending
+ * closes there, and hydrate used to miss them (Vinit e05767df / Omer Friday).
+ */
+function pendingSessionsReadDirs() {
+  const path = require('path');
+  const dirs = [];
+  const seen = new Set();
+  const add = (dir) => {
+    if (!dir) return;
+    const resolved = path.resolve(dir);
+    if (seen.has(resolved)) return;
+    seen.add(resolved);
+    dirs.push(resolved);
+  };
+  add(pendingSessionsDir());
+  // Tests / ops: point at a leftover 248 userData folder without Electron.
+  if (process.env.ALYSON_LEGACY_USERDATA_PENDING_DIR) {
+    add(String(process.env.ALYSON_LEGACY_USERDATA_PENDING_DIR));
+  }
+  try {
+    const { app } = require('electron');
+    if (app && typeof app.getPath === 'function') {
+      add(path.join(app.getPath('userData'), 'pending_sessions'));
+    }
+  } catch (_) { /* tests / non-electron */ }
+  return dirs;
+}
+
+function writePendingSessionClose({
+  timeLogId,
+  endTime,
+  startTime = null,
+  userId = null,
+  projectId = null,
+  deviceId = null,
+  reason = null,
+} = {}) {
+  const fs = require('fs');
+  const path = require('path');
+  const id = timeLogId != null ? String(timeLogId) : '';
+  if (!id || !endTime) return false;
+  const dir = pendingSessionsDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const pendingFile = path.join(dir, `${id}.json`);
+  const tmpFile = `${pendingFile}.tmp`;
+  const payload = JSON.stringify({
+    timeLogId: id,
+    endTime,
+    startTime: startTime || null,
+    userId: userId || null,
+    projectId: projectId || null,
+    deviceId: deviceId || null,
+    reason: reason || null,
+    createdAt: new Date().toISOString(),
+  });
+  fs.writeFileSync(tmpFile, payload, 'utf8');
+  try {
+    const fd = fs.openSync(tmpFile, 'r');
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (_) {
+    /* fsync best-effort; rename still atomic on same volume */
+  }
+  fs.renameSync(tmpFile, pendingFile);
+  return true;
+}
+
+function clearPendingSessionClose(timeLogId) {
+  const fs = require('fs');
+  const path = require('path');
+  const id = timeLogId != null ? String(timeLogId) : '';
+  if (!id) return;
+  for (const dir of pendingSessionsReadDirs()) {
+    const pendingFile = path.join(dir, `${id}.json`);
+    try {
+      if (fs.existsSync(pendingFile)) fs.unlinkSync(pendingFile);
+    } catch (_) { /* next dir */ }
+  }
+}
+
 function parsePendingSessionFile(raw, fallbackId = null) {
   if (!raw) return null;
   const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -74,20 +158,25 @@ function listPendingSessionCloses() {
   try {
     const fs = require('fs');
     const path = require('path');
-    const dir = pendingSessionsDir();
-    if (!fs.existsSync(dir)) return [];
-    const out = [];
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith('.json')) continue;
-      try {
-        const parsed = parsePendingSessionFile(
-          fs.readFileSync(path.join(dir, file), 'utf8'),
-          file.replace(/\.json$/i, ''),
-        );
-        if (parsed?.timeLogId) out.push(parsed);
-      } catch (_) { /* skip corrupt */ }
+    const byId = new Map();
+    for (const dir of pendingSessionsReadDirs()) {
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const parsed = parsePendingSessionFile(
+            fs.readFileSync(path.join(dir, file), 'utf8'),
+            file.replace(/\.json$/i, ''),
+          );
+          if (!parsed?.timeLogId) continue;
+          const prev = byId.get(parsed.timeLogId);
+          if (!prev || Date.parse(parsed.endTime) >= Date.parse(prev.endTime)) {
+            byId.set(parsed.timeLogId, parsed);
+          }
+        } catch (_) { /* skip corrupt */ }
+      }
     }
-    return out;
+    return [...byId.values()];
   } catch (_) {
     return [];
   }
@@ -98,35 +187,43 @@ function readPendingSessionEndTime(timeLogId = null) {
   try {
     const fs = require('fs');
     const path = require('path');
-    const dir = pendingSessionsDir();
-    if (!fs.existsSync(dir)) return null;
 
     if (timeLogId) {
-      const filePath = path.join(dir, `${timeLogId}.json`);
-      if (!fs.existsSync(filePath)) return null;
-      try {
-        const parsed = parsePendingSessionFile(fs.readFileSync(filePath, 'utf8'), timeLogId);
-        return parsed?.endTime || null;
-      } catch (_) {
-        return null;
+      let best = null;
+      let bestMs = 0;
+      for (const dir of pendingSessionsReadDirs()) {
+        const filePath = path.join(dir, `${timeLogId}.json`);
+        if (!fs.existsSync(filePath)) continue;
+        try {
+          const parsed = parsePendingSessionFile(fs.readFileSync(filePath, 'utf8'), timeLogId);
+          const ms = parsed?.endTime ? Date.parse(parsed.endTime) : NaN;
+          if (Number.isFinite(ms) && ms >= bestMs) {
+            bestMs = ms;
+            best = parsed.endTime;
+          }
+        } catch (_) { /* next dir */ }
       }
+      return best;
     }
 
     // No id: newest across all pending files. Recovery sweeps only — a close
     // that targets one session must pass its id.
     let best = null;
     let bestMs = 0;
-    for (const file of fs.readdirSync(dir)) {
-      if (!file.endsWith('.json')) continue;
-      try {
-        const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
-        const end = data?.endTime || data?.end_time;
-        const ms = end ? new Date(end).getTime() : NaN;
-        if (Number.isFinite(ms) && ms >= bestMs) {
-          bestMs = ms;
-          best = new Date(ms).toISOString();
-        }
-      } catch (_) { /* skip corrupt */ }
+    for (const dir of pendingSessionsReadDirs()) {
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.json')) continue;
+        try {
+          const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+          const end = data?.endTime || data?.end_time;
+          const ms = end ? new Date(end).getTime() : NaN;
+          if (Number.isFinite(ms) && ms >= bestMs) {
+            bestMs = ms;
+            best = new Date(ms).toISOString();
+          }
+        } catch (_) { /* skip corrupt */ }
+      }
     }
     return best;
   } catch (_) {
@@ -434,10 +531,7 @@ async function flushFrozenPendingCloses(options = {}) {
       );
       flushed += 1;
       try {
-        const fs = require('fs');
-        const path = require('path');
-        const filePath = path.join(pendingSessionsDir(), `${row.timeLogId}.json`);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        clearPendingSessionClose(row.timeLogId);
       } catch (_) { /* file can retry next flush */ }
       try {
         global.trackingManager?._markTimeLogSynced?.({
@@ -1174,6 +1268,9 @@ module.exports = {
   applyRecoveredSession,
   loadUserExplicitlyStoppedFromDisk,
   listPendingSessionCloses,
+  writePendingSessionClose,
+  clearPendingSessionClose,
+  pendingSessionsReadDirs,
   readPendingSessionEndTime,
   resolveExplicitStopEndTime,
   resolveExplicitStopEnd,

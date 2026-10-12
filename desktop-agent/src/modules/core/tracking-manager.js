@@ -1591,6 +1591,17 @@ try {
 
       const notificationMessage = message || 'Time tracking stopped';
       console.log(`✅ [TRACKING-MANAGER] Tracking stopped successfully: ${notificationMessage}`);
+
+      // Restart-deferred auto-update applies once the timer is not running.
+      try {
+        if (
+          reason !== 'system_sleep' &&
+          global.forceUpdater &&
+          typeof global.forceUpdater.maybeInstallWhenIdle === 'function'
+        ) {
+          global.forceUpdater.maybeInstallWhenIdle();
+        }
+      } catch (_) { /* update must not break Stop */ }
       
       return { success: true, message: notificationMessage };
       
@@ -2745,23 +2756,8 @@ try {
    */
   _storePendingSessionClose(timeLogId, endTime, userId) {
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const { app } = require('electron');
-      
-      const pendingDir = path.join(app.getPath('userData'), 'pending_sessions');
-      if (!fs.existsSync(pendingDir)) {
-        fs.mkdirSync(pendingDir, { recursive: true });
-      }
-      
-      const pendingFile = path.join(pendingDir, `${timeLogId}.json`);
-      fs.writeFileSync(pendingFile, JSON.stringify({
-        timeLogId,
-        endTime,
-        userId,
-        createdAt: new Date().toISOString()
-      }));
-      
+      const { writePendingSessionClose } = require('../utils/session-recovery');
+      writePendingSessionClose({ timeLogId, endTime, userId });
       console.log('📁 [TRACKING-MANAGER] Stored pending session close:', timeLogId);
     } catch (error) {
       console.warn('⚠️ [TRACKING-MANAGER] Failed to store pending session:', error.message);
@@ -2773,15 +2769,9 @@ try {
    */
   _clearPendingSessionClose(timeLogId) {
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const { app } = require('electron');
-      
-      const pendingFile = path.join(app.getPath('userData'), 'pending_sessions', `${timeLogId}.json`);
-      if (fs.existsSync(pendingFile)) {
-        fs.unlinkSync(pendingFile);
-        console.log('🗑️ [TRACKING-MANAGER] Cleared pending session:', timeLogId);
-      }
+      const { clearPendingSessionClose } = require('../utils/session-recovery');
+      clearPendingSessionClose(timeLogId);
+      console.log('🗑️ [TRACKING-MANAGER] Cleared pending session:', timeLogId);
     } catch (error) {
       console.warn('⚠️ [TRACKING-MANAGER] Failed to clear pending session:', error.message);
     }
@@ -3589,6 +3579,7 @@ try {
               if (!Number.isFinite(prevEnd) || nextEnd >= prevEnd) {
                 item.data.end_time = row.end_time;
                 item.data.status = row.status || 'completed';
+                item.data.frozen_end = true;
                 if (row.start_time && !item.data.start_time) {
                   item.data.start_time = row.start_time;
                 }
@@ -3614,6 +3605,7 @@ try {
               start_time: row.start_time,
               end_time: row.end_time,
               status: row.status || 'completed',
+              frozen_end: true,
               _offline: true,
               _retryCount: 0,
               _rehydrated_from_ledger: true,
@@ -3632,6 +3624,7 @@ try {
               status: row.status || (row.end_time ? 'completed' : 'active'),
               device_id: getDeviceId(),
               is_manual: false,
+              ...(row.end_time ? { frozen_end: true } : {}),
               _offline: true,
               _retryCount: 0,
               _rehydrated_from_ledger: true,
@@ -3657,6 +3650,15 @@ try {
   _isTransientOfflineSyncError(syncMsg) {
     const { isTransientDbOrNetworkError } = require('../utils/sync-backoff');
     return isTransientDbOrNetworkError(syncMsg);
+  }
+
+  /**
+   * One generic 500 must not park every other close. Connection / timeout /
+   * 503 answers are the ones that mean "stop this flush".
+   */
+  _isFlushWideDbError(syncMsg) {
+    const { isInfraUnavailableError } = require('../utils/sync-backoff');
+    return isInfraUnavailableError(syncMsg);
   }
 
   _offlineRetryDelayMs(retryCount) {
@@ -3837,6 +3839,97 @@ try {
   }
 
   /**
+   * Recover start_time for a queued close (ledger / checkpoint / sibling create).
+   * Poison updates that lost start_time can never upsert and retry forever.
+   */
+  _resolveQueuedCloseStartTime(item, updates = {}) {
+    const fromUpdate = updates?.start_time || item?.data?.start_time || null;
+    if (fromUpdate) return fromUpdate;
+    const id = String(updates?.id || item?.data?.id || '');
+    try {
+      const checkpoint = this._readSessionCheckpoint?.();
+      if (
+        checkpoint?.startTime &&
+        (!checkpoint?.timeLogId || String(checkpoint.timeLogId) === id)
+      ) {
+        return checkpoint.startTime;
+      }
+    } catch (_) { /* ignore */ }
+    if (!id) return null;
+    try {
+      const fs = require('fs');
+      const ledgerPath = this._getTimeLedgerPath?.();
+      if (!ledgerPath || !fs.existsSync(ledgerPath)) return null;
+      const lines = fs.readFileSync(ledgerPath, 'utf8').split('\n');
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        let row;
+        try {
+          row = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (String(row?.id) !== id) continue;
+        if (row.start_time) return row.start_time;
+      }
+    } catch (_) { /* ignore */ }
+    try {
+      for (const other of this.getOfflineQueue()) {
+        if (
+          other?.type === 'create_time_log' &&
+          String(other?.data?.id) === id &&
+          other?.data?.start_time
+        ) {
+          return other.data.start_time;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+
+  /**
+   * True when RDS already has this session closed at least as late as our
+   * frozen end (2s skew). Never true when remote end is shorter — keep retrying.
+   */
+  _remoteEndSatisfiesLocal(localEnd, remoteEnd) {
+    const localMs = new Date(localEnd).getTime();
+    const remoteMs = new Date(remoteEnd).getTime();
+    if (!Number.isFinite(localMs) || !Number.isFinite(remoteMs)) return false;
+    return remoteMs + 2000 >= localMs;
+  }
+
+  async _remoteCloseAlreadySatisfied(id, localEnd, config = this.config) {
+    if (!id || !localEnd || typeof backendTimeLogs.getTimeLog !== 'function') {
+      return false;
+    }
+    const remote = await backendTimeLogs.getTimeLog(id, config, { timeoutMs: 8_000 });
+    if (!remote?.end_time) return false;
+    return this._remoteEndSatisfiesLocal(localEnd, remote.end_time);
+  }
+
+  async _upsertQueuedCloseAsCreate(id, updates, startTime, config = this.config) {
+    const orgId =
+      global.currentOrganizationId || config?.organization_id || null;
+    await backendTimeLogs.createTimeLog(
+      {
+        id,
+        user_id: updates.user_id || config?.user_id,
+        project_id: updates.project_id || this.currentProjectId || null,
+        start_time: startTime,
+        end_time: updates.end_time,
+        status: 'completed',
+        is_manual: false,
+        idle_seconds: updates.idle_seconds || 0,
+        device_id: updates.device_id || getDeviceId(),
+        organization_id: orgId,
+      },
+      config,
+      { timeoutMs: 12_000 },
+    );
+  }
+
+  /**
    * Process offline time-log queue — never drop payroll items
    */
   async processOfflineQueue() {
@@ -3852,11 +3945,18 @@ try {
       }
 
       this._clampOverlappingQueuedSessions(queue);
-      // Frozen Stop closes first — a leftover ISE retry must not delay the
-      // session the employee already ended (Hamza 21 Sep leftover vs 1f610840).
+      // Fresh frozen Stops first. A leftover ISE retry at attempt 35k must not
+      // occupy the 2-per-tick slots (Mohita 9 Oct — 68 queued closes).
       queue.sort((a, b) => {
-        const score = (item) =>
-          item?.type === 'update_time_log' && item?.data?.end_time ? 0 : 1;
+        const score = (item) => {
+          const isClose = item?.type === 'update_time_log' && item?.data?.end_time;
+          if (!isClose) return 2;
+          const attempts = Number(item?.data?._retryCount) || 0;
+          const frozen =
+            item.data.frozen_end === true || item.data.authorized_idle_cut === true;
+          if (attempts >= 50) return 3;
+          return frozen ? 0 : 1;
+        };
         return score(a) - score(b);
       });
 
@@ -3885,8 +3985,17 @@ try {
           remainingItems.push(item);
           continue;
         }
+        // Batch cap / db-down: keep the item due soon without burning retry
+        // count. Incrementing here pushed untouched closes to attempt 50+
+        // and 300s backoff (Fawad poisoned queue).
         if (dbDown || attempted >= MAX_FLUSH_PER_TICK) {
-          this._scheduleOfflineItemRetry(item, dbDown ? 'database backoff' : 'flush batch cap');
+          if (!item.data) item.data = {};
+          if (dbDown) {
+            item.data._nextRetryAt = Math.max(
+              Number(item.data._nextRetryAt) || 0,
+              Date.now() + 15_000,
+            );
+          }
           remainingItems.push(item);
           continue;
         }
@@ -3993,15 +4102,18 @@ try {
             delete updates._queued_at;
             delete updates._rehydrated_from_ledger;
             delete updates.action;
+            // Salman poison: queued closes often lose start_time; without it
+            // create upsert never runs and ISE retries forever (attempt 200+).
+            const resolvedStart = this._resolveQueuedCloseStartTime(item, updates);
+            if (resolvedStart && !updates.start_time) {
+              updates.start_time = resolvedStart;
+            }
 
             if (!id || String(id).startsWith('temp-')) {
               // Convert stranded temp updates into a completed create (stable UUID).
               const completedId =
                 id && !String(id).startsWith('temp-') ? String(id) : crypto.randomUUID();
-              const startTime =
-                updates.start_time ||
-                this._readSessionCheckpoint()?.startTime ||
-                null;
+              const startTime = updates.start_time || null;
               if (!startTime || !updates.end_time) {
                 throw new Error(
                   'Cannot sync stranded update without start_time and end_time',
@@ -4039,57 +4151,92 @@ try {
                 status: 'completed',
               });
             } else if (backendTimeLogs.isBackendTimeLogsEnabled(this.config)) {
+              let drainEvent = 'synced_update';
               try {
+                // Queued closes are billed ends from this laptop. Stamp
+                // frozen_end so a leftover ledger item cannot take the
+                // LAST_PROOF scan path (Mohita / Hamza retry storms).
+                if (updates.end_time && updates.frozen_end !== false) {
+                  updates.frozen_end = true;
+                }
                 await backendTimeLogs.updateTimeLog(id, updates, this.config, {
                   timeoutMs: 12_000,
                 });
               } catch (updErr) {
-                // Row missing (create still pending / lost) → upsert as completed create.
-                // Same UUID — ON CONFLICT updates that row. Never invent a second session.
-                // Do NOT treat Internal server error as missing: that can insert a new
-                // overlapping row when the update failed for another reason.
+                // Same UUID create is idempotent (ON CONFLICT). Safe for:
+                //   - missing row (create still pending / lost)
+                //   - repeated ISE/timeout on update for a frozen close
+                //     (Ahsan / Salman poison) — never invent a second id.
                 const msg = String(updErr?.message || updErr || '').toLowerCase();
-                const canCreate =
-                  updates.end_time &&
-                  (updates.start_time ||
-                    this._readSessionCheckpoint()?.startTime);
-                if (
+                const startTime = updates.start_time || null;
+                const canCreate = Boolean(updates.end_time && startTime);
+                const missingRow =
+                  msg.includes('not found') ||
+                  msg.includes('no rows') ||
+                  msg.includes('0 rows') ||
+                  msg.includes('no_row');
+                const transientUpd =
+                  msg.includes('internal server error') ||
+                  msg.includes('database') ||
+                  msg.includes('503') ||
+                  msg.includes('502') ||
+                  msg.includes('timeout') ||
+                  msg.includes('fetch failed');
+                const isClose = Boolean(updates.end_time);
+                const retryCount = Number(item?.data?._retryCount) || 0;
+                // Any closed end after 3 ISE/timeouts — not only frozen_end.
+                // Pre-1.0.249 queue rows lack frozen_end but still poison.
+                const shouldUpsert =
                   canCreate &&
-                  (msg.includes('not found') ||
-                    msg.includes('no rows') ||
-                    msg.includes('0 rows') ||
-                    msg.includes('no_row'))
-                ) {
-                  const startTime =
-                    updates.start_time ||
-                    this._readSessionCheckpoint()?.startTime;
-                  const orgId =
-                    global.currentOrganizationId ||
-                    this.config.organization_id ||
-                    null;
-                  await backendTimeLogs.createTimeLog(
-                    {
+                  (missingRow || (transientUpd && isClose && retryCount >= 3));
+                let upserted = false;
+                if (shouldUpsert) {
+                  if (!missingRow) {
+                    console.warn(
+                      `⚠️ [TRACKING-MANAGER] Update ISE/timeout — upserting same id ${id} (attempt ${retryCount})`,
+                    );
+                  }
+                  try {
+                    await this._upsertQueuedCloseAsCreate(
                       id,
-                      user_id: updates.user_id || this.config.user_id,
-                      project_id: updates.project_id || this.currentProjectId || null,
-                      start_time: startTime,
-                      end_time: updates.end_time,
-                      status: 'completed',
-                      is_manual: false,
-                      idle_seconds: updates.idle_seconds || 0,
-                      device_id: updates.device_id || getDeviceId(),
-                      organization_id: orgId,
-                    },
-                    this.config,
-                    { timeoutMs: 12_000 },
-                  );
-                } else {
-                  throw updErr;
+                      updates,
+                      startTime,
+                      this.config,
+                    );
+                    upserted = true;
+                    drainEvent = missingRow
+                      ? 'synced_update_as_create'
+                      : 'synced_update_via_upsert';
+                  } catch (createErr) {
+                    console.warn(
+                      `⚠️ [TRACKING-MANAGER] Same-id upsert failed for ${id}:`,
+                      createErr?.message || createErr,
+                    );
+                  }
+                }
+                if (!upserted) {
+                  // RDS may already hold this close (create landed; update
+                  // path stuck on ISE). Drain only when remote end ≥ local.
+                  if (
+                    updates.end_time &&
+                    (await this._remoteCloseAlreadySatisfied(
+                      id,
+                      updates.end_time,
+                      this.config,
+                    ))
+                  ) {
+                    console.warn(
+                      `⚠️ [TRACKING-MANAGER] Remote already closed ${id} ≥ local end — draining queue item`,
+                    );
+                    drainEvent = 'synced_update_remote_satisfied';
+                  } else {
+                    throw updErr;
+                  }
                 }
               }
               console.log('✅ [TRACKING-MANAGER] Synced offline time log update:', id);
               this._appendTimeLedger({
-                event: 'synced_update',
+                event: drainEvent,
                 id,
                 start_time: updates.start_time || null,
                 end_time: updates.end_time || null,
@@ -4106,7 +4253,7 @@ try {
           }
         } catch (error) {
           const syncMsg = error?.message || String(error);
-          if (this._isTransientOfflineSyncError(syncMsg)) {
+          if (this._isFlushWideDbError(syncMsg)) {
             dbDown = true;
             this._noteDbBackoff(error);
           }

@@ -13,11 +13,13 @@ import { AwsCostsService } from './aws-costs.service';
 import { WorkspaceAdminService } from './workspace-admin.service';
 import { AssistantController } from './assistant.controller';
 import { AssistantService } from './assistant.service';
+import { IssueReportsController } from './issue-reports.controller';
+import { IssueReportsService } from './issue-reports.service';
 import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [AuthModule, DatabaseModule, AccessGrantsModule, UsersModule, ScreenshotAiModule, BillingModule],
-  controllers: [PulseController, AssistantController],
+  controllers: [PulseController, AssistantController, IssueReportsController],
   providers: [
     PulseService,
     SesEmailService,
@@ -26,6 +28,7 @@ import { BillingModule } from '../billing/billing.module';
     AwsCostsService,
     WorkspaceAdminService,
     AssistantService,
+    IssueReportsService,
   ],
   // EffectiveTimeService is exported so the desktop agent's endpoint in
   // ForceSyncController computes effective time from the same rules the web

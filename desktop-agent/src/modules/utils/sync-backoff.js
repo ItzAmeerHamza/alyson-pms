@@ -28,10 +28,18 @@ function isTransientDbOrNetworkError(msg) {
   );
 }
 
+/** Infra / pool / gateway — safe to pause the whole flush. Not app 500 ISE. */
+function isInfraUnavailableError(msg) {
+  return /timeout|fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|offline|too many connections|remaining connection slots|53300|57P03|08006|08001|08003|connection terminated|database system is|temporarily unavailable|Backend sync timeout|502|503|504|429/i.test(
+    String(msg || ''),
+  );
+}
+
 module.exports = {
   DEFAULT_BASE_MS,
   DEFAULT_MAX_MS,
   jitteredBackoffMs,
   reconnectSpreadMs,
   isTransientDbOrNetworkError,
+  isInfraUnavailableError,
 };

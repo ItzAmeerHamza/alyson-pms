@@ -12,12 +12,14 @@
  * - Lobby / waiting room / Join now / Ask to join is not a live call.
  * - If the probe cannot list tabs (UIA/CDP failed) keep a 2-min grace only.
  *   Do not stick leftover Meet for hours.
- * - After 10 min of no keyboard/mouse, stop the 50% floor even during a call.
+ * - After 10 min with no keyboard/mouse, the still-working alert stops the
+ *   tracker (a Meet tab left open cannot keep billing). Until that stop,
+ *   the call stays effective even with no keyboard or mouse activity.
  */
 
 const MEETING_ACTIVITY_FLOOR_PERCENT = 50;
 
-/** Same gate as the still-working prompt. Listen-only calls stay shielded until then. */
+/** Still-working alert and the activity-floor cutoff. Not an idle write. */
 const MEETING_IDLE_SHIELD_MS = 10 * 60 * 1000;
 
 /** Short bridge for tab switches when presence probe is unavailable/slow. */
@@ -101,19 +103,18 @@ function osIdleExceedsMeetingShield(osIdleSeconds) {
 }
 
 /**
- * A leftover Meet tab while the user is asleep must not cancel idle.
- * Live calls still suppress idle for the first 10 minutes of no input
- * (listen-only / notes). After that the still-working prompt is the gate.
+ * A live call is effective for the whole call, including listen-only stretches.
+ * The 10-minute still-working alert is what stops a tab left open to farm time.
+ * That stop does not turn the call into non-effective idle.
  */
-function meetingShieldsIdle(osIdleSeconds) {
-  if (!isInMeetingSession()) return false;
-  return !osIdleExceedsMeetingShield(osIdleSeconds);
+function meetingShieldsIdle(_osIdleSeconds) {
+  return isInMeetingSession();
 }
 
-function applyMeetingActivityFloor(activityPercent, context, osIdleSeconds = 0) {
+function applyMeetingActivityFloor(activityPercent, context, _osIdleSeconds = 0) {
   const pct = Number(activityPercent);
   if (!Number.isFinite(pct)) return activityPercent;
-  if (osIdleExceedsMeetingShield(osIdleSeconds)) return pct;
+  // No keys, no mouse, long OS idle: a live call is still effective.
   if (isVideoMeetingContext(context) || isInMeetingSession()) {
     return Math.max(pct, MEETING_ACTIVITY_FLOOR_PERCENT);
   }

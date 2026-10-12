@@ -2,6 +2,7 @@ const {
   applyAdjustmentSeconds,
   holdLastGoodOnFailedFetch,
   shouldKeepCachedTodayStats,
+  mergeRemoteAndOfflineLogs,
 } = require('../today-time-log-stats');
 
 describe('applyAdjustmentSeconds — Pulse leave / admin credits', () => {
@@ -131,5 +132,33 @@ describe('shouldKeepCachedTodayStats — midnight reset must not paint leftover'
     );
     expect(decision.keep).toBe(true);
     expect(decision.reason).toBe('wipe-to-zero');
+  });
+});
+
+describe('mergeRemoteAndOfflineLogs — queued Stop must keep the laptop end', () => {
+  it('queued later Stop replaces a shorter remote end so restart does not snap the clock', () => {
+    const merged = mergeRemoteAndOfflineLogs(
+      [
+        {
+          id: 'ba63e449-0000-4000-8000-000000000001',
+          start_time: '2026-10-09T10:45:00.000Z',
+          end_time: '2026-10-09T10:46:00.000Z',
+          status: 'completed',
+        },
+      ],
+      [
+        {
+          id: 'ba63e449-0000-4000-8000-000000000001',
+          end_time: '2026-10-09T10:47:58.000Z',
+          status: 'completed',
+          _fromOfflineQueue: true,
+        },
+      ],
+      null,
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].end_time).toBe('2026-10-09T10:47:58.000Z');
+    expect(merged[0].start_time).toBe('2026-10-09T10:45:00.000Z');
   });
 });

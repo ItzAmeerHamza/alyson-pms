@@ -1,6 +1,8 @@
 const {
   formatWorkTime,
+  formatWorkClock,
   formatWorkDateShort,
+  formatWorkTimezoneLabel,
   getWorkTimezone,
   workDateKey,
 } = require('../../src/modules/utils/work-timezone');
@@ -55,6 +57,7 @@ class UIManager {
     
     this.setupNavigation();
     this.watchUpdateAvailability();
+    this.bindReportIssue();
     
     // Bind methods that are defined later in the class
     // Note: These methods are defined as class methods below, so binding is not necessary
@@ -86,6 +89,21 @@ class UIManager {
         'Could not open the web dashboard. Please visit app.tavilo.ai in your browser.',
         'error'
       );
+    }
+  }
+
+  bindReportIssue() {
+    try {
+      const { bindReportIssuePage } = require('./report-issue');
+      bindReportIssuePage(this.ipcRenderer, this.notificationManager);
+      if (this._reportIssueListening) return;
+      this._reportIssueListening = true;
+      this.ipcRenderer.on('open-report-issue', () => {
+        this.showPage('report-issue');
+        this.updatePageTitle('report-issue');
+      });
+    } catch (err) {
+      console.warn('⚠️ [UI-MANAGER] Could not bind Report an issue:', err?.message || err);
     }
   }
 
@@ -334,7 +352,7 @@ class UIManager {
     };
     
     // Cache all page sections
-    const pageIds = ['dashboard', 'timetracker', 'assistant', 'screenshots', 'faq', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
+    const pageIds = ['dashboard', 'timetracker', 'assistant', 'screenshots', 'faq', 'report-issue', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
     pageIds.forEach(pageId => {
       const pageElement = document.getElementById(pageId + 'Page');
       if (pageElement) {
@@ -487,6 +505,10 @@ class UIManager {
       setTimeout(() => this.initUpdatesPage(), 100);
     }
 
+    if (pageId === 'report-issue') {
+      this.bindReportIssue();
+    }
+
     if (pageId === 'assistant') {
       setTimeout(() => this.initAssistantPage(), 50);
     }
@@ -624,6 +646,7 @@ class UIManager {
       'activity-between-screenshots': 'Activity Monitor',
       'today-history': "Today's History",
       'faq': 'FAQ',
+      'report-issue': 'Report an issue',
       'updates': 'App Updates'
     };
     return pageTitles[pageId] || 'Dashboard';
@@ -4778,6 +4801,10 @@ class UIManager {
   _renderTrackerScreenshots(screenshots) {
     const gridEl = document.getElementById('trackerScreenshotsGrid');
     const emptyEl = document.getElementById('trackerScreenshotsEmpty');
+    const subtitleEl = document.getElementById('trackerScreenshotsSubtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent = `Your latest captured screenshots · ${formatWorkTimezoneLabel(getWorkTimezone())}`;
+    }
     if (!gridEl) return;
 
     if (!screenshots || screenshots.length === 0) {
@@ -4791,14 +4818,7 @@ class UIManager {
 
     let html = '';
     screenshots.forEach((screenshot, index) => {
-      const capturedAt = new Date(screenshot.captured_at);
-      const timeStr = capturedAt.toLocaleTimeString('en-US', {
-        timeZone: getWorkTimezone(),
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
+      const timeStr = formatWorkClock(screenshot.captured_at);
 
       const activityPercent = screenshot.activity_percent || 0;
       const meetingHay = `${screenshot.app_name || ''} ${screenshot.window_title || ''} ${screenshot.vision_summary || ''}`.toLowerCase();

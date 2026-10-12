@@ -641,19 +641,9 @@ class GracefulShutdownManager {
    */
   _storePendingClose(timeLogId, reason, endTime = null) {
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const { app } = require('electron');
-      
-      const pendingDir = path.join(app.getPath('userData'), 'pending_sessions');
-      if (!fs.existsSync(pendingDir)) {
-        fs.mkdirSync(pendingDir, { recursive: true });
-      }
-      
-      const pendingFile = path.join(pendingDir, `${timeLogId}.json`);
-      const tmpFile = `${pendingFile}.tmp`;
+      const { writePendingSessionClose } = require('../utils/session-recovery');
       const meta = this._capturedSessionMeta || {};
-      const payload = JSON.stringify({
+      const ok = writePendingSessionClose({
         timeLogId,
         endTime: endTime || new Date().toISOString(),
         startTime: meta.start_time || null,
@@ -661,13 +651,11 @@ class GracefulShutdownManager {
         deviceId: meta.device_id || null,
         userId: meta.user_id || global.config?.user_id || global.currentUserId,
         reason,
-        createdAt: new Date().toISOString()
       });
-      fs.writeFileSync(tmpFile, payload, 'utf8');
-      fs.renameSync(tmpFile, pendingFile);
-      
-      console.log('📁 [GRACEFUL-SHUTDOWN] Stored pending session close:', timeLogId);
-      return true;
+      if (ok) {
+        console.log('📁 [GRACEFUL-SHUTDOWN] Stored pending session close:', timeLogId);
+      }
+      return ok;
     } catch (error) {
       console.warn('⚠️ [GRACEFUL-SHUTDOWN] Failed to store pending session:', error.message);
       return false;
@@ -679,15 +667,9 @@ class GracefulShutdownManager {
    */
   _clearPendingClose(timeLogId) {
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const { app } = require('electron');
-      
-      const pendingFile = path.join(app.getPath('userData'), 'pending_sessions', `${timeLogId}.json`);
-      if (fs.existsSync(pendingFile)) {
-        fs.unlinkSync(pendingFile);
-        console.log('🗑️ [GRACEFUL-SHUTDOWN] Cleared pending session:', timeLogId);
-      }
+      const { clearPendingSessionClose } = require('../utils/session-recovery');
+      clearPendingSessionClose(timeLogId);
+      console.log('🗑️ [GRACEFUL-SHUTDOWN] Cleared pending session:', timeLogId);
     } catch (error) {
       console.warn('⚠️ [GRACEFUL-SHUTDOWN] Failed to clear pending session:', error.message);
     }
@@ -1017,32 +999,34 @@ class GracefulShutdownManager {
     try {
       const fs = require('fs');
       const path = require('path');
-      const { app } = require('electron');
-      
-      const pendingDir = path.join(app.getPath('userData'), 'pending_sessions');
-      
-      const files = fs.existsSync(pendingDir)
-        ? fs.readdirSync(pendingDir).filter(f => f.endsWith('.json'))
-        : [];
-      const backendTimeLogs = require('../utils/backend-time-logs');
       const {
         closeOpenSessionsAfterExplicitStop,
         hasLiveSessionToProtect,
         liveTimeLogId,
+        pendingSessionsReadDirs,
+        clearPendingSessionClose,
       } = require('../utils/session-recovery');
+      const fileEntries = [];
+      for (const pendingDir of pendingSessionsReadDirs()) {
+        if (!fs.existsSync(pendingDir)) continue;
+        for (const file of fs.readdirSync(pendingDir).filter((f) => f.endsWith('.json'))) {
+          fileEntries.push({ pendingDir, file });
+        }
+      }
+      const backendTimeLogs = require('../utils/backend-time-logs');
       const useBackend = backendTimeLogs.isBackendTimeLogsEnabled();
 
-      if (files.length === 0) {
+      if (fileEntries.length === 0) {
         console.log('✅ [GRACEFUL-SHUTDOWN] No pending session files');
       } else {
-        console.log(`🔄 [GRACEFUL-SHUTDOWN] Found ${files.length} pending session(s) to close`);
+        console.log(`🔄 [GRACEFUL-SHUTDOWN] Found ${fileEntries.length} pending session(s) to close`);
 
         if (!useBackend) {
           console.warn('⚠️ [GRACEFUL-SHUTDOWN] Backend not configured - will retry later');
           return;
         }
 
-        for (const file of files) {
+        for (const { pendingDir, file } of fileEntries) {
         try {
           const filePath = path.join(pendingDir, file);
           const raw = fs.readFileSync(filePath, 'utf8').trim();
@@ -1092,7 +1076,7 @@ class GracefulShutdownManager {
           );
 
           console.log(`✅ [GRACEFUL-SHUTDOWN] Closed pending session: ${data.timeLogId}`);
-          fs.unlinkSync(filePath);
+          clearPendingSessionClose(data.timeLogId);
           
         } catch (e) {
           console.error('❌ [GRACEFUL-SHUTDOWN] Error processing pending file:', e.message);

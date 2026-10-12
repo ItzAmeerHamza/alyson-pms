@@ -65,15 +65,24 @@ function noteNetworkResult(ok, detail) {
     _offlineHintMs = OFFLINE_HINT_MS;
     return;
   }
-  _lastNetworkFailureAt = Date.now();
   const status = Number(detail?.status) || 0;
   const msg = String(detail?.message || '');
-  const { isTransientDbOrNetworkError } = require('./sync-backoff');
-  if (status === 503 || status === 429 || isTransientDbOrNetworkError(msg) || status >= 500) {
-    _offlineHintMs = DB_UNAVAILABLE_HINT_MS;
-  } else {
-    _offlineHintMs = OFFLINE_HINT_MS;
+  const { isInfraUnavailableError } = require('./sync-backoff');
+  // Only park the whole agent on infra blips (503 / pool / timeout / network).
+  // A generic 500 Internal server error is per-item — treating it as
+  // "offline for 60s" starved Fawad/Vinit's frozen Stop queue (attempt 30k+).
+  const infra =
+    status === 503 ||
+    status === 429 ||
+    status === 502 ||
+    status === 504 ||
+    (!status && !msg) ||
+    isInfraUnavailableError(msg);
+  if (!infra && status >= 500) {
+    return;
   }
+  _lastNetworkFailureAt = Date.now();
+  _offlineHintMs = infra ? DB_UNAVAILABLE_HINT_MS : OFFLINE_HINT_MS;
 }
 
 async function callDesktopAction(action, data, config = global.config, options = {}) {
@@ -127,8 +136,9 @@ async function callDesktopAction(action, data, config = global.config, options =
 
   if (!response.ok) {
     const message = body?.message || body?.error || `Backend sync failed (${response.status})`;
-    noteNetworkResult(false, { status: response.status, message });
-    throw new Error(message);
+    const code = body?.code ? ` [${body.code}]` : '';
+    noteNetworkResult(false, { status: response.status, message: `${message}${code}` });
+    throw new Error(`${message}${code}`);
   }
 
   noteNetworkResult(true);
@@ -308,6 +318,17 @@ async function getActiveTimeLog(userId, deviceId = null, config = global.config)
   return result.time_log || null;
 }
 
+/** Single-row lookup for offline-queue drain (already closed on server?). */
+async function getTimeLog(id, config = global.config, options = {}) {
+  const result = await callDesktopAction(
+    'get_time_log',
+    { id },
+    config,
+    { timeoutMs: options.timeoutMs || 8_000 },
+  );
+  return result.time_log || null;
+}
+
 async function listUserProjects(userId, config = global.config) {
   const result = await callDesktopAction(
     'list_user_projects',
@@ -451,6 +472,7 @@ module.exports = {
   getTodayTimeLogs,
   getTodayTimeLogsPayload,
   getActiveTimeLog,
+  getTimeLog,
   listUserProjects,
   insertAppLogsBatch,
   insertUrlLogsBatch,

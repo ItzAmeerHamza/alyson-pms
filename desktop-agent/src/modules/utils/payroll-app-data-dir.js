@@ -12,6 +12,13 @@ function getPayrollAppDataDir() {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
+  if (process.env.ALYSON_PAYROLL_APP_DATA_DIR) {
+    const override = String(process.env.ALYSON_PAYROLL_APP_DATA_DIR);
+    try {
+      if (!fs.existsSync(override)) fs.mkdirSync(override, { recursive: true });
+    } catch (_) { /* tests / read-only */ }
+    return override;
+  }
   const userDataDir =
     process.env.APPDATA ||
     (process.platform === 'darwin'
