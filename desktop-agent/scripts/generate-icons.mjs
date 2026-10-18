@@ -39,17 +39,38 @@ if (!fs.existsSync(sourceSvg)) {
 
 fs.mkdirSync(assetsDir, { recursive: true });
 
-// The SVG viewBox carries empty padding around the mark; trim it so small sizes stay legible.
-const sourcePng = await sharp(sourceSvg).trim().png().toBuffer();
+// Rasterize the SVG at the exact pixel size. Downscaling a big bitmap softens the mark.
+const svgMeta = await sharp(sourceSvg).metadata();
+const trimmed = await sharp(sourceSvg).trim().toBuffer({ resolveWithObject: true });
+const trim = {
+  fullW: svgMeta.width,
+  fullH: svgMeta.height,
+  width: trimmed.info.width,
+  height: trimmed.info.height,
+  left: -trimmed.info.trimOffsetLeft,
+  top: -trimmed.info.trimOffsetTop,
+};
+
+async function renderMark(width, height) {
+  const scale = width / trim.width;
+  const renderW = Math.max(width, Math.round(trim.fullW * scale));
+  const renderH = Math.max(height, Math.round(trim.fullH * scale));
+  const rendered = await sharp(sourceSvg)
+    .resize(renderW, renderH, { fit: "fill" })
+    .png()
+    .toBuffer();
+  const meta = await sharp(rendered).metadata();
+  let left = Math.round(trim.left * scale);
+  let top = Math.round(trim.top * scale);
+  if (left + width > meta.width) left = meta.width - width;
+  if (top + height > meta.height) top = meta.height - height;
+  left = Math.max(0, left);
+  top = Math.max(0, top);
+  return sharp(rendered).extract({ left, top, width, height }).png().toBuffer();
+}
 
 async function renderPng(size, outPath) {
-  await sharp(sourcePng)
-    .resize(size, size, {
-      fit: "contain",
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png({ compressionLevel: 9 })
-    .toFile(outPath);
+  fs.writeFileSync(outPath, await renderMark(size, size));
   console.log("Wrote:", outPath);
 }
 
@@ -63,10 +84,9 @@ async function renderOnPlateBuffer(size, { square = false } = {}) {
   const canvas = Math.max(16, Math.floor(size));
   const inset = Math.max(1, Math.round(canvas * (square ? 0.03 : 0.04)));
   const corner = square ? 0 : Math.max(2, Math.round(canvas * 0.18));
-  const meta = await sharp(sourcePng).metadata();
   const logoW = Math.max(8, canvas - inset * 2);
-  const logoH = Math.max(1, Math.round(logoW * meta.height / meta.width));
-  const logo = await sharp(sourcePng).resize(logoW, logoH).png().toBuffer();
+  const logoH = Math.max(1, Math.round(logoW * trim.height / trim.width));
+  const logo = await renderMark(logoW, logoH);
   const top = Math.max(0, Math.round((canvas - logoH) / 2));
   const left = Math.max(0, Math.round((canvas - logoW) / 2));
   const plate = Buffer.from(
@@ -111,11 +131,7 @@ function buildIco(images) {
 
 /** macOS menu-bar template fallback: black silhouette on transparent. */
 async function renderTemplateIcon(size, outPath) {
-  const { data, info } = await sharp(sourcePng)
-    .resize(size, size, {
-      fit: "contain",
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
+  const { data, info } = await sharp(await renderMark(size, size))
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -143,18 +159,19 @@ async function renderTemplateIcon(size, outPath) {
 
 await renderOnPlate(1024, path.join(assetsDir, "icon.png"));
 await renderOnPlate(256, path.join(assetsDir, "tavilo-mark.png"));
-await sharp(sourcePng)
-  .resize({ height: 256, fit: "inside" })
-  .png({ compressionLevel: 9 })
-  .toFile(path.join(assetsDir, "tavilo-logo-wide.png"));
+await renderOnPlate(32, path.join(assetsDir, "icon-32.png"));
+await renderOnPlate(48, path.join(assetsDir, "icon-48.png"));
+await renderOnPlate(64, path.join(assetsDir, "icon-64.png"));
+const wideH = 256;
+const wideW = Math.max(1, Math.round(wideH * trim.width / trim.height));
+fs.writeFileSync(path.join(assetsDir, "tavilo-logo-wide.png"), await renderMark(wideW, wideH));
 console.log("Wrote:", path.join(assetsDir, "tavilo-logo-wide.png"));
 /** macOS menu bar: the colored mark only. A white chip reads as a sticker next to the clock. */
 async function renderMenuBar(height, outPath) {
   const pad = Math.max(1, Math.round(height * 0.04));
-  const logo = await sharp(sourcePng)
-    .resize({ height: Math.max(8, height - pad * 2) })
-    .png()
-    .toBuffer();
+  const logoH = Math.max(8, height - pad * 2);
+  const logoW = Math.max(1, Math.round(logoH * trim.width / trim.height));
+  const logo = await renderMark(logoW, logoH);
   const meta = await sharp(logo).metadata();
   await sharp({
     create: {
@@ -179,8 +196,9 @@ await renderTemplateIcon(44, path.join(assetsDir, "tray-iconTemplate@2x.png"));
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
 const icoImages = [];
 for (const size of icoSizes) {
-  // Windows paints transparent taskbar pixels black, so the .ico plate is a solid square.
-  icoImages.push({ size, buffer: await renderOnPlateBuffer(size, { square: true }) });
+  // Same rounded ink tile as the macOS Dock icon. The frames are 32-bit PNGs with
+  // alpha, which Windows (Vista+) draws transparent — the corners do not turn black.
+  icoImages.push({ size, buffer: await renderOnPlateBuffer(size) });
 }
 const icoPath = path.join(assetsDir, "icon.ico");
 fs.writeFileSync(icoPath, buildIco(icoImages));

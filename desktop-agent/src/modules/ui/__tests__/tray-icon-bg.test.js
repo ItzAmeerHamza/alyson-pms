@@ -44,7 +44,7 @@ describe('menu-bar tray icon plate background', () => {
     expect(inRoundedRect(0, 11, 22, 6)).toBe(true);
   });
 
-  it('paints a white plate behind the mark', () => {
+  it('paints the same dark Dock plate behind the mark', () => {
     const source = solidIcon(18, 255, 169, 25);
     const badged = composeTrayIconWithBackground(source, {
       size: 22,

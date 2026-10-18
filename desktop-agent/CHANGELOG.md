@@ -7,11 +7,12 @@ All notable changes to the desktop agent will be documented in this file.
 ## [1.0.250] - 2026-10-19
 
 ### Changed
-- New Tavilo logo in the Dock, menu bar, tray, and window.
+- New Tavilo logo in the Dock, menu bar, tray, and window. Mac and Windows use the same rounded color tile, drawn at each size so the mark stays sharp.
 
 ### Fixed
 - Intel Mac builds now include x64 native modules. 1.0.249 shipped Apple Silicon binaries in the Intel app, which broke input detection and image stitching on Intel Macs.
 - Auto-update still replaces the app in place. The bundle id stays `com.alyson.work-time-agent` and the build is signed with Alyson PM Code Signing, so Screen Recording and Accessibility stay granted.
+- Windows auto-update no longer starts a second installer or replaces files while the app is quitting. The update installs on the next launch.
 - Sleep, idle, and stop handling so a closed session does not keep billing, and today's totals stay aligned with what was actually tracked.
 
 ## [1.0.249] - 2026-10-12

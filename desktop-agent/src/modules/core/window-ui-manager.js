@@ -112,7 +112,9 @@ class WindowUIManager {
           console.error('❌ [TRAY] Failed to load Tavilo Time tray icon from:', trayIconPath);
           return null;
         }
-        this.tray = new Tray(icon.resize({ width: 22, height: 22 }));
+        const menuBarPath = path.join(__dirname, '../../../assets', 'tavilo-menubar.png');
+        const menuBar = nativeImage.createFromPath(menuBarPath);
+        this.tray = new Tray(menuBar && !menuBar.isEmpty() ? menuBar : icon);
         console.log('✅ [TRAY] Created macOS colored Tavilo Time tray icon');
       } else {
         this.tray = new Tray(trayIconPath);

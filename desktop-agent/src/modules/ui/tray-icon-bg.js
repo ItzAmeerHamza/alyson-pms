@@ -2,8 +2,10 @@
 
 const { nativeImage } = require('electron');
 
-/** Matches PLATE_FILL in scripts/generate-icons.mjs. */
-const PLATE_RGB = { r: 255, g: 255, b: 255 };
+/** Same ink as PLATE_FILL in scripts/generate-icons.mjs (#14172b). */
+const PLATE_RGB = { r: 0x14, g: 0x17, b: 0x2b };
+/** Same corner as the Dock / Windows icon tile. */
+const PLATE_CORNER_RATIO = 0.18;
 
 function inRoundedRect(x, y, width, height, radius) {
   const w = Math.floor(width);
@@ -26,8 +28,8 @@ function sourceAspect(source) {
 }
 
 /**
- * Sit the Tavilo mark on a white plate. A square `size` keeps the Windows
- * taskbar icon opaque. A `height` lets the menu bar follow the wide mark.
+ * Sit the Tavilo mark on the same dark tile as the Dock and the Windows .ico.
+ * A `height` lets the menu bar follow the wide mark.
  */
 function composeTrayIconWithBackground(source, { size, height, inset = 2, radius = 6 } = {}) {
   if (!source || typeof source.isEmpty === 'function' && source.isEmpty()) return null;
@@ -150,6 +152,7 @@ function macTrayIconWithBackground(source) {
 
 module.exports = {
   PLATE_RGB,
+  PLATE_CORNER_RATIO,
   inRoundedRect,
   composeTrayIconWithBackground,
   macTrayIconWithBackground,

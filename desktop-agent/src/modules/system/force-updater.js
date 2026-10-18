@@ -39,6 +39,39 @@ if (isElectronMain) {
 const path = require('path');
 const fs = require('fs');
 
+/**
+ * Start of the Windows update .bat: run Setup silently, then wait until Setup AND
+ * the old-version uninstaller NSIS copies to %TEMP% (Au_.exe) have exited.
+ * `start /wait` alone returns early when Setup hands off, which relaunched the old
+ * exe mid-install. If the installer already relaunched the app, launch nothing.
+ */
+function buildWindowsRelaunchBatHead(setupPath) {
+  const setup = String(setupPath || '').replace(/"/g, '');
+  const setupName = path.win32.basename(setup);
+  return [
+    '@echo off',
+    `start /wait "" "${setup}" /S`,
+    'set /a _busy=0',
+    ':wait_setup',
+    'set /a _busy+=1',
+    'if %_busy% GEQ 90 goto setup_done',
+    'timeout /t 2 /nobreak >nul',
+    `tasklist /FI "IMAGENAME eq ${setupName}" 2>nul | find /I "${setupName}" >nul && goto wait_setup`,
+    'tasklist /FI "IMAGENAME eq Au_.exe" 2>nul | find /I "Au_.exe" >nul && goto wait_setup',
+    ':setup_done',
+    'timeout /t 3 /nobreak >nul',
+    'tasklist /FI "IMAGENAME eq Tavilo Time.exe" 2>nul | find /I "Tavilo Time.exe" >nul && goto launch_skip',
+    'set "LAUNCH="',
+    'set /a _tries=0',
+    ':wait_install',
+    'set /a _tries+=1',
+    'if %_tries% GEQ 30 goto launch_done',
+  ];
+}
+
+/** How long a started Windows install blocks another one (NSIS + old uninstaller finish well inside this). */
+const INSTALL_LOCK_MS = 5 * 60 * 1000;
+
 class ForceUpdater {
   constructor() {
     // Update state
@@ -290,6 +323,7 @@ class ForceUpdater {
    * able to retry in-app (GitHub NSIS / Mac ZIP). Manual download is secondary.
    */
   recoverFromInstallLoop() {
+    this.releaseInstallLockIfDone();
     const saved = this.loadUpdateState();
     if (!saved?.pendingVersion || !this.currentVersion) return;
 
@@ -312,6 +346,60 @@ class ForceUpdater {
       this.isUpdateDownloaded = false;
       this.windowsInstallerPath = null;
       this.saveUpdateState();
+    }
+  }
+
+  /**
+   * Cross-process Windows install lock. Oct 9 (Mohita): the relaunch bat started
+   * the old exe mid-install, it saw "prior install did not apply" and launched a
+   * second Setup over the first — two installers and a running app in one folder.
+   * While a recent lock exists, no other install starts.
+   */
+  getInstallLockPath() {
+    return path.join(this.appDataPath || this.getAppDataPath(), 'update-install.lock');
+  }
+
+  readInstallLock() {
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.getInstallLockPath(), 'utf8'));
+      return raw && typeof raw === 'object' ? raw : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  isInstallLockActive(now = Date.now()) {
+    const lock = this.readInstallLock();
+    if (!lock?.at) return false;
+    const age = now - Date.parse(lock.at);
+    return Number.isFinite(age) && age >= 0 && age < INSTALL_LOCK_MS;
+  }
+
+  acquireInstallLock(version) {
+    if (this.isInstallLockActive()) return false;
+    try {
+      this.ensureAppDataDir();
+      fs.writeFileSync(
+        this.getInstallLockPath(),
+        JSON.stringify({ at: new Date().toISOString(), pid: process.pid, version: version || null }),
+      );
+    } catch (err) {
+      console.warn('⚠️ [FORCE-UPDATER] Could not write install lock:', err?.message || err);
+    }
+    return true;
+  }
+
+  /** The lock's job is done once this process runs the version it was installing (or it expired). */
+  releaseInstallLockIfDone() {
+    const lock = this.readInstallLock();
+    if (!lock) return;
+    const target = String(lock.version || '').replace(/^v/i, '');
+    const current = String(this.currentVersion || '').replace(/^v/i, '');
+    const reached = target && current && this.compareVersions(current, target) >= 0;
+    if (reached || !this.isInstallLockActive()) {
+      try {
+        fs.unlinkSync(this.getInstallLockPath());
+      } catch (_) { /* ignore */ }
     }
   }
 
@@ -556,8 +644,14 @@ class ForceUpdater {
       console.log('🍎 [FORCE-UPDATER] macOS packaged build — using custom in-place updater (unsigned builds)');
     }
     // On macOS we download/install manually (Squirrel cannot apply unsigned updates).
-    autoUpdater.autoDownload = !macInPlace;
-    autoUpdater.autoInstallOnAppQuit = !macInPlace;
+    // Windows downloads Setup.exe via Node (downloadUpdate). electron-updater
+    // auto-downloading the same installer in parallel wrote two copies at once.
+    autoUpdater.autoDownload = !macInPlace && process.platform !== 'win32';
+    // Windows: never install on quit. A user quit must just quit — electron-updater's
+    // quit-time installer raced our own Setup.exe, deleted ffmpeg.dll mid-launch and
+    // showed "ffmpeg.dll was not found". The payload installs on next launch instead
+    // (applyUpdateOnRestart), which relaunches only after Setup has finished.
+    autoUpdater.autoInstallOnAppQuit = !macInPlace && process.platform !== 'win32';
     // Differential downloads hit GitHub CDN with many range requests and fail often
     // on corporate/VPN networks (net::ERR_ADDRESS_UNREACHABLE). Prefer one full file.
     try {
@@ -1548,6 +1642,10 @@ class ForceUpdater {
       return { success: false, error: 'Windows installer file not found' };
     }
 
+    if (!this.acquireInstallLock(this.pendingVersion)) {
+      console.warn('⏸️ [FORCE-UPDATER] Another install started in the last few minutes — not launching a second Setup');
+      return { success: false, installing: false, error: 'install_in_progress' };
+    }
     console.log(`🚀 [FORCE-UPDATER] Launching Windows silent installer: ${exePath}`);
     global.isInstallingUpdate = true;
     this.recordInstallAttempt();
@@ -1563,16 +1661,7 @@ class ForceUpdater {
         .map((p) => p.replace(/"/g, ''))
         .filter(Boolean);
       const batPath = path.join(os.tmpdir(), `alyson-pm-relaunch-${Date.now()}.bat`);
-      const probeLines = [
-        '@echo off',
-        `start /wait "" "${exePath.replace(/"/g, '')}" /S`,
-        'set "LAUNCH="',
-        'set /a _tries=0',
-        ':wait_install',
-        'set /a _tries+=1',
-        'if %_tries% GEQ 90 goto launch_done',
-        'timeout /t 2 /nobreak >nul',
-      ];
+      const probeLines = buildWindowsRelaunchBatHead(exePath);
       for (const candidate of candidates) {
         const dir = path.dirname(candidate);
         probeLines.push(
@@ -1580,6 +1669,7 @@ class ForceUpdater {
         );
       }
       probeLines.push(
+        'timeout /t 2 /nobreak >nul',
         'goto wait_install',
         ':launch_done',
         'if defined LAUNCH (',
@@ -1587,6 +1677,7 @@ class ForceUpdater {
         ') else (',
         '  echo [Tavilo Time] Update finished but ffmpeg.dll was missing — reinstall from Setup.>> "%TEMP%\\tavilo-update.log"',
         ')',
+        ':launch_skip',
         `del "%~f0" >nul 2>&1`,
         '',
       );
@@ -2054,6 +2145,10 @@ open "$TARGET"
       }
     }
 
+    if (process.platform === 'win32' && !this.acquireInstallLock(this.pendingVersion)) {
+      console.warn('⏸️ [FORCE-UPDATER] Another install started in the last few minutes — not starting a second one');
+      return { success: false, installing: false, error: 'install_in_progress' };
+    }
     console.log('🔄 [FORCE-UPDATER] Installing update and restarting...');
     global.isInstallingUpdate = true;
     this.recordInstallAttempt();
@@ -2222,6 +2317,10 @@ open "$TARGET"
     if (global.isInstallingUpdate) {
       return { applied: false, reason: 'already_installing' };
     }
+    if (process.platform === 'win32' && this.isInstallLockActive()) {
+      console.log('⏸️ [FORCE-UPDATER] An install started in the last few minutes — not retrying yet');
+      return { applied: false, reason: 'install_in_progress' };
+    }
 
     try {
       // Prefer a payload left from the previous session (Mac staged path on disk).
@@ -2342,4 +2441,6 @@ open "$TARGET"
   }
 }
 
-module.exports = ForceUpdater; 
+module.exports = ForceUpdater;
+module.exports.buildWindowsRelaunchBatHead = buildWindowsRelaunchBatHead;
+module.exports.INSTALL_LOCK_MS = INSTALL_LOCK_MS; 

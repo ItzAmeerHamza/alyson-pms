@@ -230,24 +230,47 @@ class TrayManager {
         const alysonIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
         const widePath = this._resolveAssetPath('tavilo-logo-wide.png');
         const trayPngPath = this._resolveAssetPath('tray-icon.png');
+        // Same rounded ink tile as the app / Dock icon, so Windows and macOS match.
+        const tile48Path = this._resolveAssetPath('icon-48.png');
+        const tile48 = fs.existsSync(tile48Path) ? nativeImage.createFromPath(tile48Path) : null;
+        const { imageFromScaleFiles } = require('./tray-icon-bg');
+        const scales = [];
+        for (const [file, scaleFactor] of [['icon-32.png', 1], ['icon-64.png', 2]]) {
+          const filePath = this._resolveAssetPath(file);
+          if (!fs.existsSync(filePath)) continue;
+          const loaded = nativeImage.createFromPath(filePath);
+          if (loaded && !loaded.isEmpty()) scales.push({ loaded, scaleFactor });
+        }
+        const crispTile = scales.length ? imageFromScaleFiles(scales) : null;
         let rawIcon = null;
-        if (fs.existsSync(widePath)) {
+        if (crispTile) {
+          this._logoIsTile = true;
+          this._logoIcon = tile48 && !tile48.isEmpty() ? tile48 : crispTile;
+          trayIcon = crispTile;
+          this.tray = new this.Tray(trayIcon);
+          console.log('✅ [TRAY] Windows tray created with the app tile icon');
+        } else if (fs.existsSync(widePath)) {
           rawIcon = nativeImage.createFromPath(widePath);
         } else if (fs.existsSync(trayPngPath)) {
           rawIcon = nativeImage.createFromPath(trayPngPath);
         } else if (fs.existsSync(alysonIconPath)) {
           rawIcon = nativeImage.createFromPath(alysonIconPath);
         }
-        if (!rawIcon || rawIcon.isEmpty()) {
-          throw new Error('No tray icon assets found — run npm run generate:icons');
+        if (!this.tray) {
+          if (!rawIcon || rawIcon.isEmpty()) {
+            throw new Error('No tray icon assets found — run npm run generate:icons');
+          }
+          // Fallback when icon.png is missing: plate the unplated mark once.
+          this._logoIcon = rawIcon;
+          const { composeTrayIconWithBackground, PLATE_CORNER_RATIO } = require('./tray-icon-bg');
+          trayIcon = composeTrayIconWithBackground(rawIcon, {
+            size: 32,
+            inset: 1,
+            radius: Math.round(32 * PLATE_CORNER_RATIO),
+          }) || rawIcon;
+          this.tray = new this.Tray(trayIcon);
+          console.log('✅ [TRAY] Windows tray created with the Dock tile');
         }
-        // Keep the unplated mark so the taskbar status icons can plate it once.
-        this._logoIcon = rawIcon;
-        const { composeTrayIconWithBackground } = require('./tray-icon-bg');
-        // Opaque square: Windows paints transparent taskbar pixels black.
-        trayIcon = composeTrayIconWithBackground(rawIcon, { size: 32, inset: 1, radius: 0 }) || rawIcon;
-        this.tray = new this.Tray(trayIcon);
-        console.log('✅ [TRAY] Windows tray created with white plate');
       }
     } catch (error) {
       console.error('❌ [TRAY] Error creating tray icon:', error?.message);
@@ -294,7 +317,7 @@ class TrayManager {
   /**
    * Generate tray icons with colored status dots for Windows/Linux.
    * Large, bold dot at bottom-right of the icon with a dark outline so it
-   * stays visible on the white taskbar plate.
+   * stays visible on the dark Dock tile.
    * macOS uses template images and setTitle, so we skip icon overlays there.
    */
   _generateStatusIcons() {
@@ -307,9 +330,17 @@ class TrayManager {
         return;
       }
       const size = 48; // Larger for clarity on high-DPI and taskbar
-      const { composeTrayIconWithBackground } = require('./tray-icon-bg');
-      const plated = composeTrayIconWithBackground(logoIcon, { size, inset: 2, radius: 0 });
-      const resized = plated || logoIcon.resize({ width: size, height: size });
+      const { composeTrayIconWithBackground, PLATE_CORNER_RATIO } = require('./tray-icon-bg');
+      const plated = this._logoIsTile
+        ? null
+        : composeTrayIconWithBackground(logoIcon, {
+            size,
+            inset: 2,
+            radius: Math.round(size * PLATE_CORNER_RATIO),
+          });
+      const current = logoIcon.getSize ? logoIcon.getSize() : null;
+      const alreadySized = current && current.width === size && current.height === size;
+      const resized = plated || (alreadySized ? logoIcon : logoIcon.resize({ width: size, height: size }));
       
       // Store the default icon
       this._defaultIcon = resized;

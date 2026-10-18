@@ -5225,8 +5225,11 @@ if (isElectronContext && ipcMain) {
       }
 
       // Deferred restart update: apply in-place now that the user is quitting.
+      // Not on Windows: a quit there must only quit (the update installs on the
+      // next launch), or Setup replaces files while the user reopens the app.
       try {
         if (
+          process.platform !== 'win32' &&
           global.forceUpdater &&
           typeof global.forceUpdater.maybeInstallWhenIdle === 'function' &&
           global.forceUpdater._installWhenIdle &&
