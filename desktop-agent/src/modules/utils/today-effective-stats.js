@@ -13,6 +13,7 @@ const {
 const { normalizeTenantUserId } = require('./tenant-user-id');
 const { overlapSeconds, screenshotOwnedRangeMs } = require('./screenshot-owned-interval');
 const { mergeIntervalsSeconds } = require('./today-time-log-stats');
+const { MEETING_ACTIVITY_FLOOR_PERCENT } = require('../../lib/meeting-context');
 
 const LOW_ACTIVITY_PERCENT = 10;
 // Same floor Pulse uses. The agent records idle after 60s so the raw periods
@@ -75,15 +76,37 @@ function mergeMeetingShotIntervals(timesMs, coverageMs, joinMs = MEETING_INTERVA
   return out.map((iv) => ({ startMs: iv.startMs, endMs: iv.endMs + join }));
 }
 
-function meetingIntervalsFromScreenshots(screenshots, intervalSeconds) {
+function meetingIntervalsFromScreenshots(screenshots, intervalSeconds, { participatingOnly = false } = {}) {
   const times = [];
   for (const shot of screenshots || []) {
     if (!isMeetingScreenshotRow(shot)) continue;
+    if (participatingOnly) {
+      const raw = shot.activity_percent;
+      const pct = raw == null || raw === '' ? MEETING_ACTIVITY_FLOOR_PERCENT : Number(raw);
+      if (!(pct >= MEETING_ACTIVITY_FLOOR_PERCENT)) continue;
+    }
     const capturedAt = shot.captured_at || shot.capturedAt;
     const ms = capturedAt ? new Date(capturedAt).getTime() : NaN;
     if (Number.isFinite(ms)) times.push(ms);
   }
   return mergeMeetingShotIntervals(times, Math.max(10, Number(intervalSeconds) || 60) * 1000);
+}
+
+function subtractIntervals(source, cuts) {
+  let pieces = [source];
+  for (const cut of cuts || []) {
+    const next = [];
+    for (const piece of pieces) {
+      if (cut.endMs <= piece.startMs || cut.startMs >= piece.endMs) {
+        next.push(piece);
+        continue;
+      }
+      if (piece.startMs < cut.startMs) next.push({ startMs: piece.startMs, endMs: cut.startMs });
+      if (piece.endMs > cut.endMs) next.push({ startMs: cut.endMs, endMs: piece.endMs });
+    }
+    pieces = next.filter((p) => p.endMs > p.startMs);
+  }
+  return pieces;
 }
 
 function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
@@ -105,6 +128,17 @@ function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
   return idle;
 }
 
+/** Closed session end times by time_log id. */
+function sessionEndsById(timeLogs) {
+  const ends = new Map();
+  for (const log of timeLogs || []) {
+    if (!log?.id || !log.end_time) continue;
+    const endMs = new Date(log.end_time).getTime();
+    if (Number.isFinite(endMs)) ends.set(String(log.id), endMs);
+  }
+  return ends;
+}
+
 /**
  * @param {object[]} screenshots
  * @param {number} intervalSeconds — exact capture interval in seconds
@@ -115,6 +149,8 @@ function sumIdleSecondsFromLogs(timeLogs, dayStartMs, dayEndMs) {
  * @param {Array<{startMs:number,endMs:number}>} idleIntervals — periods already
  *   counted as idle. A low-activity screenshot inside one of these is the SAME
  *   non-effective time, not additional non-effective time.
+ * @param {Map<string, number>} [sessionEnds] — shots taken after their session's
+ *   end (the minutes an unanswered still-working alert cuts) are not tracked time.
  */
 function sumLowActivitySecondsFromScreenshots(
   screenshots,
@@ -122,6 +158,7 @@ function sumLowActivitySecondsFromScreenshots(
   dayStartMs,
   dayEndMs,
   idleIntervals = [],
+  sessionEnds = new Map(),
 ) {
   const capMs = Math.max(10_000, Math.floor(Number(intervalSeconds) || 60) * 1000);
   const minRunSeconds = SUSTAINED_LOW_MINUTES * 60;
@@ -136,13 +173,16 @@ function sumLowActivitySecondsFromScreenshots(
     const capturedAt = shot.captured_at || shot.capturedAt;
     const ms = capturedAt ? new Date(capturedAt).getTime() : NaN;
     if (Number.isFinite(ms) && !(ms >= dayStartMs && ms < dayEndMs)) continue;
-    const pct = Number(shot.activity_percent);
+    const pct = shot.activity_percent == null || shot.activity_percent === '' ? NaN : Number(shot.activity_percent);
     const inMeeting =
       isMeetingScreenshotRow(shot) || (Number.isFinite(ms) && insideMeeting(ms));
+    const sessionEndMs = shot.time_log_id ? sessionEnds.get(String(shot.time_log_id)) : undefined;
+    const afterSession = sessionEndMs !== undefined && ms > sessionEndMs;
     const isLow =
       Number.isFinite(pct) &&
       pct < LOW_ACTIVITY_PERCENT &&
       !inMeeting &&
+      !afterSession &&
       !(Number.isFinite(ms) && insideIdle(ms));
     flags.push({ ms: Number.isFinite(ms) ? ms : 0, isLow, ownedSeconds: 0 });
   }
@@ -176,8 +216,11 @@ function sumLowActivitySecondsFromScreenshots(
   return low;
 }
 
-/** Idle periods as intervals, clipped to the work day. Sub-5-minute pauses are ignored. */
-function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs) {
+/**
+ * Idle periods as intervals, clipped to the work day. Same order as Pulse:
+ * remove live-call time first, then drop what is left under five minutes.
+ */
+function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, meetingIntervals = []) {
   const out = [];
   for (const log of idleLogs || []) {
     const startMs = new Date(log.idle_start || log.start_time).getTime();
@@ -187,16 +230,18 @@ function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs) {
       ? new Date(rawEnd).getTime()
       : startMs + Math.max(0, Number(log.duration_seconds) || 0) * 1000;
     if (!Number.isFinite(endMs) || endMs <= startMs) continue;
-    if ((endMs - startMs) / 1000 < MIN_IDLE_REPORT_SECONDS) continue;
-    const lo = Math.max(startMs, dayStartMs);
-    const hi = Math.min(endMs, dayEndMs);
-    if (hi > lo) out.push({ startMs: lo, endMs: hi });
+    for (const piece of subtractIntervals({ startMs, endMs }, meetingIntervals)) {
+      if ((piece.endMs - piece.startMs) / 1000 < MIN_IDLE_REPORT_SECONDS) continue;
+      const lo = Math.max(piece.startMs, dayStartMs);
+      const hi = Math.min(piece.endMs, dayEndMs);
+      if (hi > lo) out.push({ startMs: lo, endMs: hi });
+    }
   }
   return out;
 }
 
 /**
- * @param {{ userId: string|number, totalSeconds: number, config?: object }} opts
+ * @param {{ userId: string|number, totalSeconds: number, config?: object, screenshots?: object[], timeLogs?: object[] }} opts
  */
 async function computeTodayEffectiveStats(opts = {}) {
   const config = opts.config || global.config;
@@ -291,6 +336,32 @@ async function computeTodayEffectiveStats(opts = {}) {
 
   // Offline / older-backend fallback. Same floors as Pulse so a network drop
   // does not suddenly inflate non-effective.
+  // Prefer screenshots already loaded by the caller (monthly report) so Today
+  // and Month never diverge from different fetch/limit results.
+  let screenshots = Array.isArray(opts.screenshots) ? opts.screenshots : null;
+  if (screenshots) {
+    lowActivityMeasured = true;
+  } else {
+    screenshots = [];
+    try {
+      const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('./backend-screenshots');
+      const { isBackendRdsEnabled } = require('./backend-rds-reads');
+      if (usesBackendScreenshots(config) || isBackendRdsEnabled(config)) {
+        screenshots = await fetchScreenshotsFromBackend(userId, config, {
+          startIso: dayStartIso,
+          endIso: dayEndIso,
+          limit: 500,
+        }) || [];
+        lowActivityMeasured = true;
+      }
+    } catch (err) {
+      console.warn('⚠️ [TODAY-EFFECTIVE] Screenshot fetch failed:', err?.message || err);
+    }
+  }
+  const callIntervals = meetingIntervalsFromScreenshots(screenshots, intervalSeconds, {
+    participatingOnly: true,
+  });
+
   let idleIntervals = [];
   try {
     const { isBackendRdsEnabled, listIdleLogs } = require('./backend-rds-reads');
@@ -301,7 +372,7 @@ async function computeTodayEffectiveStats(opts = {}) {
           { start: dayStartIso, end: dayEndIso, limit: 2000 },
           config,
         );
-        idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs);
+        idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, callIntervals);
         idleSeconds = mergeIntervalsSeconds(idleIntervals);
         idleMeasured = true;
       } catch (idleErr) {
@@ -315,30 +386,13 @@ async function computeTodayEffectiveStats(opts = {}) {
   }
 
   try {
-    // Prefer screenshots already loaded by the caller (monthly report) so Today
-    // and Month never diverge from different fetch/limit results.
-    let screenshots = Array.isArray(opts.screenshots) ? opts.screenshots : null;
-    if (screenshots) {
-      lowActivityMeasured = true;
-    } else {
-      const { fetchScreenshotsFromBackend, usesBackendScreenshots } = require('./backend-screenshots');
-      const { isBackendRdsEnabled } = require('./backend-rds-reads');
-      screenshots = [];
-      if (usesBackendScreenshots(config) || isBackendRdsEnabled(config)) {
-        screenshots = await fetchScreenshotsFromBackend(userId, config, {
-          startIso: dayStartIso,
-          endIso: dayEndIso,
-          limit: 500,
-        }) || [];
-        lowActivityMeasured = true;
-      }
-    }
     lowActivitySeconds = sumLowActivitySecondsFromScreenshots(
       screenshots,
       intervalSeconds,
       dayStartMs,
       dayEndMs,
       idleIntervals,
+      sessionEndsById(opts.timeLogs),
     );
   } catch (err) {
     console.warn('⚠️ [TODAY-EFFECTIVE] Low-activity fetch failed:', err?.message || err);
@@ -361,6 +415,8 @@ module.exports = {
   computeTodayEffectiveStats,
   sumIdleSecondsFromLogs,
   sumLowActivitySecondsFromScreenshots,
+  idleIntervalsFromLogs,
+  meetingIntervalsFromScreenshots,
   isMeetingScreenshotRow,
   LOW_ACTIVITY_PERCENT,
   resolveScreenshotIntervalMinutes,

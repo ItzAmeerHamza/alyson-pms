@@ -27,6 +27,221 @@ function hoursLabel(hours) {
   return `${sign}${hourPart} ${minPart}`;
 }
 
+function hoursToSeconds(hours) {
+  const value = Number(hours);
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.round(value * 3600));
+}
+
+function formatClock(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+function formatCompact(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+/** Same seconds the tray clock and Time Tracker use for today. */
+function readLiveTodaySplit() {
+  if (typeof window === 'undefined' || !window.__effectiveStatsReady) return null;
+  const total = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+  if (total <= 0) return null;
+  const raw =
+    typeof window.resolveDisplayedNonEffectiveSeconds === 'function'
+      ? window.resolveDisplayedNonEffectiveSeconds()
+      : window.__todayNonEffectiveSeconds;
+  const nonEffective = Math.min(total, Math.max(0, Math.floor(Number(raw) || 0)));
+  return { total, effective: total - nonEffective, nonEffective };
+}
+
+/**
+ * Week and month already include today's Pulse hours. Swap that slice for the
+ * live tray total so Coach cannot show a different today than the menu bar.
+ */
+function periodSplit(coaching, prefix, delta) {
+  const source = coaching || {};
+  const total = Math.max(0, hoursToSeconds(source[`${prefix}_hours_worked`]) + (delta?.total || 0));
+  const nonField = source[`${prefix}_non_effective_hours`];
+  const nonBase =
+    nonField == null
+      ? Math.max(0, hoursToSeconds(source[`${prefix}_hours_worked`]) - hoursToSeconds(source[`${prefix}_effective_hours`]))
+      : hoursToSeconds(nonField);
+  const nonEffective = Math.min(total, Math.max(0, nonBase + (delta?.nonEffective || 0)));
+  return { total, effective: Math.max(0, total - nonEffective), nonEffective };
+}
+
+const OFF_TOPIC_COACH_REPLY =
+  'I am your work coach, so I stick to your work: your time and targets, focus, breaks, distractions, planning your day, and quick work updates. Ask me anything about those.';
+
+/** Plain arithmetic is the only thing refused locally; Tavilo Coach decides the rest. */
+function coachQuestionIsInContext(message) {
+  const q = String(message || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s+-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!q) return true;
+  return !/^(what is |whats )?-?\d+(?:\.\d+)?\s*[+\-*/x]\s*-?\d+(?:\.\d+)?$/.test(q);
+}
+
+/** Asking for advice, a plan, a comparison or a "why" needs Tavilo Coach, not a number readout. */
+const COACH_REASONING_RE =
+  /\b(why|how (can|do|should|could|would) i|should|tips?|advice|advise|improve|better|worse|plan|focus(ed)?|compare[ds]?|vs|versus|need|left|remaining|until|reach|hit|target|goal|help|write|draft|best|worst|most|least|distract\w*|suggest\w*|reduce|lower|cut|explain|mean|tomorrow|tired|burn\w*|breaks?(?!\s+down)|morning|afternoon|yesterday|trend|standup|stand-up|update)\b/;
+
+function spokenDuration(totalSec) {
+  const sec = Math.max(0, Math.floor(Number(totalSec) || 0));
+  const whole = Math.floor(sec / 3600);
+  const minutes = Math.floor((sec % 3600) / 60);
+  const hourPart = whole === 0 ? null : `${whole} ${whole === 1 ? 'hour' : 'hours'}`;
+  const minPart = minutes === 0 ? null : `${minutes} min`;
+  if (!hourPart && !minPart) return '0 min';
+  if (!hourPart) return minPart;
+  if (!minPart) return hourPart;
+  return `${hourPart} ${minPart}`;
+}
+
+/** Same today / week / month split the tracker cards use. */
+function recordedSnapshot(stats, live) {
+  const source = stats || {};
+  const today = live || {
+    total: hoursToSeconds(source.tracked_hours ?? source.hours_worked),
+    nonEffective: hoursToSeconds(source.non_effective_hours),
+  };
+  const total = Math.max(0, Math.floor(Number(today.total) || 0));
+  const nonEffective = Math.min(total, Math.max(0, Math.floor(Number(today.nonEffective) || 0)));
+  const effective = Math.max(0, total - nonEffective);
+  const delta = live ? liveDelta(source, { total, nonEffective }) : null;
+  const coaching = source.coaching || {};
+  return {
+    total,
+    effective,
+    nonEffective,
+    week: periodSplit(coaching, 'week', delta),
+    month: periodSplit(coaching, 'month', delta),
+    coaching,
+    dailyHours: Number(source.hours_threshold) || 0,
+  };
+}
+
+/**
+ * Instant, live-tray answer for plain "what is my X" lookups. Returns null for
+ * everything else so Tavilo Coach (the backend model) answers it.
+ */
+function instantCoachReply(stats, message, live) {
+  if (!coachQuestionIsInContext(message)) return OFF_TOPIC_COACH_REPLY;
+  if (!stats && !live) return null;
+  const q = String(message || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!q || COACH_REASONING_RE.test(q)) return null;
+  const snap = recordedSnapshot(stats, live);
+  const total = spokenDuration(snap.total);
+  const effective = spokenDuration(snap.effective);
+  const nonEff = spokenDuration(snap.nonEffective);
+  const today = `Total time is ${total}. Effective time is ${effective}. Non-effective time is ${nonEff}.`;
+  if (/\b(screenshot|screen shot)\b/.test(q) && stats) {
+    const shot = stats.screenshots || {};
+    const totalShots = Number(shot.total) || 0;
+    if (!totalShots) return 'No screenshots of your screen have synced for this day yet.';
+    const analyzed = Number(shot.analyzed) || 0;
+    if (!analyzed) return `You have ${totalShots} screenshot${totalShots === 1 ? '' : 's'} today; analysis is still running.`;
+    return `I looked at ${analyzed} of your ${totalShots} screenshots: ${Number(shot.productive) || 0} on-task, ${Number(shot.neutral) || 0} mixed, ${Number(shot.distraction) || 0} off-task, ${Number(shot.meeting) || 0} video-meeting.`;
+  }
+  if (/\bthis week\b/.test(q) || (/\bweek\b/.test(q) && !/\btoday\b/.test(q))) {
+    return `This week: ${spokenDuration(snap.week.total)} total time, ${spokenDuration(snap.week.effective)} effective time, ${spokenDuration(snap.week.nonEffective)} non-effective time.`;
+  }
+  if (/\bmonth\b/.test(q)) {
+    return `This month: ${spokenDuration(snap.month.total)} total time, ${spokenDuration(snap.month.effective)} effective time, ${spokenDuration(snap.month.nonEffective)} non-effective time. Today: ${today}`;
+  }
+  if (/\b(break down|breakdown|summarize|summary|total time|effective|non-?effective|how much time|how long)\b/.test(q)) {
+    return today;
+  }
+  return null;
+}
+
+function paceCopy({ effectiveSeconds, expectedHours, targetHours, finishedWeekdays, dailyHours, periodLabel }) {
+  const effective = Math.max(0, Number(effectiveSeconds) || 0);
+  const expected = Math.max(0, Number(expectedHours) || 0);
+  const target = Math.max(0, Number(targetHours) || 0);
+  const finished = Math.max(0, Math.floor(Number(finishedWeekdays) || 0));
+  const daily = Math.max(0, Number(dailyHours) || 0);
+  const effectiveHours = effective / 3600;
+  const gapHours = effectiveHours - expected;
+  let tone = 'even';
+  let status = 'On pace for this point';
+  if (expected <= 0 && effective <= 0) {
+    status = 'No effective time yet';
+  } else if (expected <= 0) {
+    status = 'Pace starts after the first finished weekday';
+  } else if (gapHours > 0.25) {
+    tone = 'ahead';
+    status = `Ahead by ${formatCompact(gapHours * 3600)}`;
+  } else if (gapHours < -0.25) {
+    tone = 'behind';
+    status = `Behind by ${formatCompact(Math.abs(gapHours) * 3600)}`;
+  }
+  const towardTarget = target > 0 ? Math.max(0, Math.min(100, (effectiveHours / target) * 100)) : 0;
+  const dayWord = finished === 1 ? 'finished weekday' : 'finished weekdays';
+  const dailyLabel = daily > 0 ? hoursLabel(daily) : 'the daily goal';
+  const detail = expected > 0
+    ? `Expected by now: ${formatCompact(expected * 3600)}. That is ${dailyLabel} for each of ${finished} ${dayWord}. Today is not counted in that expectation until the day is over. The bar is ${formatCompact(effective)} of the ${formatCompact(target * 3600)} ${periodLabel} target.`
+    : `The bar is progress toward the ${formatCompact(target * 3600)} ${periodLabel} target.`;
+  return { status, detail, tone, percent: towardTarget };
+}
+
+/**
+ * Opening chat line. Uses the same seconds as the tracker clock.
+ */
+function liveOpening(stats, { live } = {}) {
+  const snap = recordedSnapshot(stats, live);
+  const { total, effective, nonEffective, week, month, coaching } = snap;
+  const dailyHours = snap.dailyHours;
+  const weekPace = paceCopy({
+    effectiveSeconds: week.effective,
+    expectedHours: coaching.week_expected_hours,
+    targetHours: coaching.weekly_target_hours,
+    finishedWeekdays: coaching.completed_weekdays,
+    dailyHours,
+    periodLabel: 'week',
+  });
+  const monthPace = paceCopy({
+    effectiveSeconds: month.effective,
+    expectedHours: coaching.month_expected_hours,
+    targetHours: coaching.month_target_hours,
+    finishedWeekdays: coaching.month_completed_weekdays,
+    dailyHours,
+    periodLabel: 'month',
+  });
+  const todayLine = total > 0
+    ? `Today: ${spokenDuration(total)} total time, ${spokenDuration(effective)} effective time, ${spokenDuration(nonEffective)} non-effective time.`
+    : 'Nothing is recorded for today yet.';
+  return [
+    'Here is your recorded time.',
+    `This month: ${spokenDuration(month.total)} total time, ${spokenDuration(month.effective)} effective time, ${spokenDuration(month.nonEffective)} non-effective time. ${monthPace.status}.`,
+    `This week: ${spokenDuration(week.total)} total time, ${spokenDuration(week.effective)} effective time, ${spokenDuration(week.nonEffective)} non-effective time. ${weekPace.status}.`,
+    todayLine,
+  ].join('\n\n');
+}
+
+function liveDelta(stats, live) {
+  if (!live) return null;
+  return {
+    total: live.total - hoursToSeconds(stats?.tracked_hours ?? stats?.hours_worked),
+    nonEffective: live.nonEffective - hoursToSeconds(stats?.non_effective_hours),
+  };
+}
+
 function shiftDateKey(dateKey, deltaDays) {
   const [y, m, d] = String(dateKey).split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -239,8 +454,15 @@ class AssistantCoach {
       const pageOpen = Boolean(this._openWhenReady) || this.isCoachPageOpen();
       const paintOpening = !keepChat || (this.history.length === 0 && pageOpen);
       if (opts.prefetch && this.hasPaintedBriefing()) return;
-      this.renderPayload(result.data, { resetChat: paintOpening && this.history.length === 0 });
-      if (!paintOpening) this.restoreChatFromHistory();
+      const resetChat = paintOpening && this.history.length === 0;
+      this.renderPayload(result.data, { resetChat });
+      if (opts.force && !resetChat) {
+        this.replaceFirstAssistantMessage(liveOpening(result.data?.stats, {
+          live: dateKey === this.todayKey() ? readLiveTodaySplit() : null,
+        }));
+      } else if (!paintOpening) {
+        this.restoreChatFromHistory();
+      }
       this._openWhenReady = false;
     } catch (err) {
       if (loadId !== this._loadGen || this.dateKey !== dateKey) return;
@@ -259,6 +481,13 @@ class AssistantCoach {
     if (!message || this.loading) return;
     if (input) input.value = '';
     this.appendChat('user', message);
+    const recordedReply = this.recordedReply(message);
+    if (recordedReply) {
+      this.history.push({ role: 'user', content: message }, { role: 'assistant', content: recordedReply });
+      this.appendChat('assistant', recordedReply);
+      this.setStatus('');
+      return;
+    }
     this.loading = true;
     this.setBusy(true, { typing: true });
     this.setStatus('Tavilo Coach is thinking…', 'busy');
@@ -299,23 +528,10 @@ class AssistantCoach {
     const tz = document.getElementById('assistantTimezone');
     if (tz) tz.textContent = stats.timezone ? `Company day · ${stats.timezone}` : 'Company work day';
 
-    this.setChip('assistantTracked', hoursLabel(stats.hours_worked ?? stats.tracked_hours));
-    this.setChip('assistantEffective', hoursLabel(stats.effective_hours));
-    this.setChip('assistantNonEffective', hoursLabel(stats.non_effective_hours));
-    this.setChip('assistantIdle', hoursLabel(stats.idle_hours));
-    this.setChip('assistantLow', hoursLabel(stats.low_activity_hours));
-    this.setChip(
-      'assistantShots',
-      `${Number(stats.screenshots?.analyzed) || 0}/${Number(stats.screenshots?.total) || 0} analyzed`,
-    );
-    this.setChip('assistantWeekEffective', hoursLabel(stats.coaching?.week_effective_hours));
-    this.setChip('assistantWeekExpected', hoursLabel(stats.coaching?.week_expected_hours));
-    this.setChip('assistantMonthEffective', hoursLabel(stats.coaching?.month_effective_hours));
-    this.setChip('assistantMonthExpected', hoursLabel(stats.coaching?.month_expected_hours));
+    this.paintTimes(stats);
+    this.paintRecordedCopy(stats);
 
     const copy = data?.briefing || {};
-    this.setCard('assistantSummary', copy.summary);
-    this.setCard('assistantEffectiveCopy', copy.effective_breakdown);
     this.setCard('assistantScreenshotCopy', copy.screenshot_insights);
     this.setCard('assistantCoachingHeadline', stats.coaching?.headline || copy.greeting);
     const list = document.getElementById('assistantSuggestions');
@@ -328,9 +544,9 @@ class AssistantCoach {
 
     if (resetChat) {
       this.clearChat();
-      const opening =
-        String(data?.opening || '').trim() ||
-        [copy.greeting, copy.summary].filter(Boolean).join('\n\n');
+      const opening = liveOpening(stats, {
+        live: this.dateKey === this.todayKey() ? readLiveTodaySplit() : null,
+      });
       if (opening) this.appendChat('assistant', opening);
       this.history = opening ? [{ role: 'assistant', content: opening }] : [];
     }
@@ -338,14 +554,110 @@ class AssistantCoach {
     const next = document.getElementById('assistantNextDay');
     if (next) next.disabled = this.dateKey >= this.todayKey();
 
-    const worked = Number(stats.hours_worked ?? stats.tracked_hours) || 0;
-    const monthEff = hoursLabel(stats.coaching?.month_effective_hours);
+    this.paintStatus(stats);
+  }
+
+  recordedReply(message) {
+    const stats = this._lastPayload?.date === this.dateKey ? this._lastPayload.stats : null;
+    const live = this.dateKey === this.todayKey() ? readLiveTodaySplit() : null;
+    return instantCoachReply(stats, message, live);
+  }
+
+  syncLiveToday() {
+    if (!this._lastPayload || this.dateKey !== this.todayKey()) return;
+    const stats = this._lastPayload.stats || {};
+    this.paintTimes(stats);
+    this.paintRecordedCopy(stats);
+    this.paintStatus(stats);
+    const onlyOpening = this.history.length === 1 && this.history[0]?.role === 'assistant';
+    const ownedOpening = String(this.history[0]?.content || '').startsWith('Here is your recorded time.');
+    if (!onlyOpening && !ownedOpening) return;
+    const opening = liveOpening(stats, { live: readLiveTodaySplit() });
+    if (opening && opening !== this.history[0]?.content) this.replaceFirstAssistantMessage(opening);
+  }
+
+  paintRecordedCopy(stats) {
+    const live = this.dateKey === this.todayKey() ? readLiveTodaySplit() : null;
+    const snap = recordedSnapshot(stats, live);
+    this.setCard('assistantSummary', liveOpening(stats, { live }));
+    this.setCard(
+      'assistantEffectiveCopy',
+      `Total time is ${spokenDuration(snap.total)}. Effective time is ${spokenDuration(snap.effective)}. Non-effective time is ${spokenDuration(snap.nonEffective)}.`,
+    );
+  }
+
+  paintTimes(stats) {
+    const live = this.dateKey === this.todayKey() ? readLiveTodaySplit() : null;
+    const today = live || {
+      total: hoursToSeconds(stats.tracked_hours ?? stats.hours_worked),
+      effective: hoursToSeconds(stats.effective_hours),
+      nonEffective: hoursToSeconds(stats.non_effective_hours),
+    };
+    const safeNon = Math.min(today.total, Math.max(0, today.nonEffective));
+    this.setChip('assistantTracked', live ? formatClock(today.total) : formatCompact(today.total));
+    this.setChip('assistantEffective', formatCompact(Math.max(0, today.total - safeNon)));
+    this.setChip('assistantNonEffective', formatCompact(safeNon));
+
+    const delta = live ? liveDelta(stats, { total: today.total, nonEffective: safeNon }) : null;
+    const week = periodSplit(stats.coaching, 'week', delta);
+    const month = periodSplit(stats.coaching, 'month', delta);
+    this.setChip('assistantWeekTotal', formatCompact(week.total));
+    this.setChip('assistantWeekEffective', formatCompact(week.effective));
+    this.setChip('assistantWeekNonEffective', formatCompact(week.nonEffective));
+    this.setChip('assistantMonthTotal', formatCompact(month.total));
+    this.setChip('assistantMonthEffective', formatCompact(month.effective));
+    this.setChip('assistantMonthNonEffective', formatCompact(month.nonEffective));
+    const coaching = stats.coaching || {};
+    const dailyHours = Number(stats.hours_threshold) || 0;
+    this.paintPace('Week', paceCopy({
+      effectiveSeconds: week.effective,
+      expectedHours: coaching.week_expected_hours,
+      targetHours: coaching.weekly_target_hours,
+      finishedWeekdays: coaching.completed_weekdays,
+      dailyHours,
+      periodLabel: 'week',
+    }));
+    this.paintPace('Month', paceCopy({
+      effectiveSeconds: month.effective,
+      expectedHours: coaching.month_expected_hours,
+      targetHours: coaching.month_target_hours,
+      finishedWeekdays: coaching.month_completed_weekdays,
+      dailyHours,
+      periodLabel: 'month',
+    }));
+  }
+
+  paintPace(which, pace) {
+    const status = document.getElementById(`assistant${which}PaceStatus`);
+    const detail = document.getElementById(`assistant${which}PaceDetail`);
+    const bar = document.getElementById(`assistant${which}PaceBar`);
+    if (status) {
+      status.textContent = pace.status;
+      status.classList.toggle('is-ahead', pace.tone === 'ahead');
+      status.classList.toggle('is-behind', pace.tone === 'behind');
+    }
+    if (detail) detail.textContent = pace.detail;
+    if (bar) {
+      bar.style.width = `${pace.percent}%`;
+      bar.classList.toggle('is-ahead', pace.tone === 'ahead');
+      bar.classList.toggle('is-behind', pace.tone === 'behind');
+    }
+  }
+
+  paintStatus(stats) {
+    const live = this.dateKey === this.todayKey() ? readLiveTodaySplit() : null;
+    const total = live ? live.total : hoursToSeconds(stats.tracked_hours ?? stats.hours_worked);
+    const nonEffective = Math.min(
+      total,
+      live ? live.nonEffective : hoursToSeconds(stats.non_effective_hours),
+    );
+    const effective = Math.max(0, total - nonEffective);
+    const month = periodSplit(stats.coaching, 'month', live ? liveDelta(stats, live) : null);
+    const hasTime = total > 0 || month.total > 0;
     this.setStatus(
-      worked > 0 || Number(stats.coaching?.month_hours_worked) > 0
-        ? `This month: ${monthEff} effective · today ${hoursLabel(worked)} worked · ${hoursLabel(stats.effective_hours)} effective${
-            stats.coaching?.headline ? ` · ${stats.coaching.headline}` : ''
-          }`
-        : 'No tracked time synced for this month yet.',
+      hasTime
+        ? `Today ${live ? formatClock(total) : formatCompact(total)} total time · ${formatCompact(effective)} effective time · ${formatCompact(nonEffective)} non-effective time`
+        : 'No time synced for this day yet.',
     );
   }
 
@@ -419,6 +731,24 @@ class AssistantCoach {
     this.syncEmpty();
   }
 
+  replaceFirstAssistantMessage(text) {
+    const copy = String(text || '').trim();
+    if (!copy) return;
+    try {
+      const log = document.getElementById('assistantChatLog');
+      const body = log?.querySelector('.assistant-msg-assistant:not(.is-typing) .assistant-msg-body');
+      if (body) body.innerHTML = renderSafeText(copy);
+      else if (log) this.appendChat('assistant', copy);
+    } catch {
+      /* document is absent in unit tests */
+    }
+    if (this.history[0]?.role === 'assistant') {
+      this.history[0] = { role: 'assistant', content: copy };
+    } else {
+      this.history.unshift({ role: 'assistant', content: copy });
+    }
+  }
+
   appendChat(role, text) {
     this.hideTyping();
     const log = document.getElementById('assistantChatLog');
@@ -440,5 +770,15 @@ module.exports.hoursLabel = hoursLabel;
 module.exports.shiftDateKey = shiftDateKey;
 module.exports.renderSafeText = renderSafeText;
 module.exports.formatDateLabel = formatDateLabel;
+module.exports.hoursToSeconds = hoursToSeconds;
+module.exports.formatClock = formatClock;
+module.exports.formatCompact = formatCompact;
+module.exports.periodSplit = periodSplit;
+module.exports.liveDelta = liveDelta;
+module.exports.readLiveTodaySplit = readLiveTodaySplit;
+module.exports.instantCoachReply = instantCoachReply;
+module.exports.paceCopy = paceCopy;
+module.exports.liveOpening = liveOpening;
+module.exports.recordedSnapshot = recordedSnapshot;
 module.exports.resolveCoachIdToken = resolveCoachIdToken;
 module.exports.resetCoachAuthCacheForTests = resetCoachAuthCacheForTests;

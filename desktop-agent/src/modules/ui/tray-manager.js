@@ -112,11 +112,33 @@ class TrayManager {
 
   /**
    * Build the macOS menu-bar tray image.
-   * Prefer the full-color Tavilo Time logo. Template (monochrome) icons turn the
-   * logo's solid orange disc into a blank white circle in the menu bar.
+   * Prefer the full-color Tavilo Time logo. Template (monochrome) icons lose the
+   * lime/periwinkle split that keeps the mark readable at menu-bar size.
    */
   _loadMacTrayImage() {
-    const coloredTrayPath = this._resolveAssetPath('tray-icon.png');
+    const menuBarPath = this._resolveAssetPath('tavilo-menubar.png');
+    const menuBar2xPath = this._resolveAssetPath('tavilo-menubar@2x.png');
+    const { imageFromScaleFiles } = require('./tray-icon-bg');
+    const scales = [];
+    if (fs.existsSync(menuBarPath)) {
+      const loaded = nativeImage.createFromPath(menuBarPath);
+      if (loaded && !loaded.isEmpty()) scales.push({ loaded, scaleFactor: 1 });
+    }
+    if (fs.existsSync(menuBar2xPath)) {
+      const loaded = nativeImage.createFromPath(menuBar2xPath);
+      if (loaded && !loaded.isEmpty()) scales.push({ loaded, scaleFactor: 2 });
+    }
+    if (scales.length) {
+      const image = imageFromScaleFiles(scales);
+      if (image) {
+        console.log('✅ [TRAY] Loaded SVG menu-bar mark');
+        return image;
+      }
+    }
+    const wideTrayPath = this._resolveAssetPath('tavilo-logo-wide.png');
+    const coloredTrayPath = fs.existsSync(wideTrayPath)
+      ? wideTrayPath
+      : this._resolveAssetPath('tray-icon.png');
     const appIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
     const templatePath = this._resolveAssetPath('tray-iconTemplate.png');
     const template2xPath = this._resolveAssetPath('tray-iconTemplate@2x.png');
@@ -131,11 +153,11 @@ class TrayManager {
       return image;
     };
 
-    const { macTrayIconWithWhiteBackground } = require('./tray-icon-bg');
-    const withWhiteBg = (image, label) => {
-      const badged = macTrayIconWithWhiteBackground(image);
+    const { macTrayIconWithBackground } = require('./tray-icon-bg');
+    const withPlate = (image, label) => {
+      const badged = macTrayIconWithBackground(image);
       if (badged) {
-        console.log(`✅ [TRAY] ${label} with white menu-bar background`);
+        console.log(`✅ [TRAY] ${label} with white menu-bar plate`);
         return badged;
       }
       return image.resize({ width: 22, height: 22 });
@@ -143,12 +165,12 @@ class TrayManager {
 
     const colored = tryImage(coloredTrayPath, false);
     if (colored) {
-      return withWhiteBg(colored, 'Loaded colored Tavilo Time tray icon');
+      return withPlate(colored, 'Loaded colored Tavilo Time tray icon');
     }
 
     const appIcon = tryImage(appIconPath, false);
     if (appIcon) {
-      return withWhiteBg(appIcon, 'Using app icon fallback');
+      return withPlate(appIcon, 'Using app icon fallback');
     }
 
     // Last resort: monochrome template (often looks like a filled circle)
@@ -206,17 +228,26 @@ class TrayManager {
         console.log('✅ [TRAY] macOS tray created with colored Tavilo Time icon');
       } else {
         const alysonIconPath = global.__alysonIconPath || this._resolveAssetPath('icon.png');
+        const widePath = this._resolveAssetPath('tavilo-logo-wide.png');
         const trayPngPath = this._resolveAssetPath('tray-icon.png');
-        if (fs.existsSync(trayPngPath)) {
-          trayIcon = nativeImage.createFromPath(trayPngPath);
+        let rawIcon = null;
+        if (fs.existsSync(widePath)) {
+          rawIcon = nativeImage.createFromPath(widePath);
+        } else if (fs.existsSync(trayPngPath)) {
+          rawIcon = nativeImage.createFromPath(trayPngPath);
         } else if (fs.existsSync(alysonIconPath)) {
-          trayIcon = nativeImage.createFromPath(alysonIconPath);
+          rawIcon = nativeImage.createFromPath(alysonIconPath);
         }
-        if (!trayIcon || trayIcon.isEmpty()) {
+        if (!rawIcon || rawIcon.isEmpty()) {
           throw new Error('No tray icon assets found — run npm run generate:icons');
         }
+        // Keep the unplated mark so the taskbar status icons can plate it once.
+        this._logoIcon = rawIcon;
+        const { composeTrayIconWithBackground } = require('./tray-icon-bg');
+        // Opaque square: Windows paints transparent taskbar pixels black.
+        trayIcon = composeTrayIconWithBackground(rawIcon, { size: 32, inset: 1, radius: 0 }) || rawIcon;
         this.tray = new this.Tray(trayIcon);
-        console.log('✅ [TRAY] Standard tray created');
+        console.log('✅ [TRAY] Windows tray created with white plate');
       }
     } catch (error) {
       console.error('❌ [TRAY] Error creating tray icon:', error?.message);
@@ -262,20 +293,23 @@ class TrayManager {
 
   /**
    * Generate tray icons with colored status dots for Windows/Linux.
-   * Large, bold dot at bottom-right of the icon with white outline for visibility.
+   * Large, bold dot at bottom-right of the icon with a dark outline so it
+   * stays visible on the white taskbar plate.
    * macOS uses template images and setTitle, so we skip icon overlays there.
    */
   _generateStatusIcons() {
     if (process.platform === 'darwin') return; // macOS uses title text instead
 
     try {
-      const baseIcon = this._baseIcon;
-      if (!baseIcon || baseIcon.isEmpty()) {
+      const logoIcon = this._logoIcon || this._baseIcon;
+      if (!logoIcon || logoIcon.isEmpty()) {
         console.log('⚠️ [TRAY] Base icon is empty — skipping status icons');
         return;
       }
       const size = 48; // Larger for clarity on high-DPI and taskbar
-      const resized = baseIcon.resize({ width: size, height: size });
+      const { composeTrayIconWithBackground } = require('./tray-icon-bg');
+      const plated = composeTrayIconWithBackground(logoIcon, { size, inset: 2, radius: 0 });
+      const resized = plated || logoIcon.resize({ width: size, height: size });
       
       // Store the default icon
       this._defaultIcon = resized;
@@ -303,7 +337,7 @@ class TrayManager {
   }
 
   /**
-   * Overlay a large colored dot with white outline on a base icon.
+   * Overlay a large colored dot with a dark outline on a base icon.
    * Uses raw pixel manipulation on the BGRA bitmap buffer.
    */
   _overlayStatusDot(baseIcon, size, cx, cy, radius, rgba) {
@@ -323,9 +357,9 @@ class TrayManager {
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
           const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-          // White outline ring (2px thick)
+          // Dark outline ring (2px thick) so the dot reads on the white plate
           if (dist <= radius + 2 && dist > radius) {
-            setPixel(x, y, 255, 255, 255, 255);
+            setPixel(x, y, 15, 23, 42, 255);
           }
           // Colored dot fill
           if (dist <= radius) {
@@ -462,6 +496,7 @@ class TrayManager {
     this._lastCumulativeSeconds = 0;
     this._persistWorkDayKey(todayKey);
     if (typeof global !== 'undefined') {
+      if (global._lastTodayTotalAtStop) console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop}s: tray day rollover`);
       global._lastTodayTotalAtStop = null;
       global._rendererFrozenTotalAtStop = null;
       global._frozenTotalDate = todayKey;
@@ -584,8 +619,8 @@ class TrayManager {
   }
 
   /**
-   * Push one tray tick to the renderer. Cheap no-op when nothing changed and
-   * the window is hidden (except periodic heartbeat / force on show).
+   * Push one tray tick to the renderer. One push per displayed second,
+   * including while the window is minimized, so both clocks stay on the same second.
    */
   _pushRendererTick({ force = false, display, cumulativeDisplay, elapsed, cumulativeSeconds } = {}) {
     const live = this._resolveLiveClock();
@@ -599,21 +634,9 @@ class TrayManager {
     const win = this._getMainTrackerWindow();
     if (!win || win.webContents.isDestroyed()) return;
 
-    const visible = win.isVisible() && !win.isMinimized();
     const now = Date.now();
     const sameSecond = cum === this._lastPushedCumulative;
-    // Windows/Linux: in-app clock is the only clock — always push 1Hz while tracking.
-    // macOS: hidden window may heartbeat every 15s (menu bar still updates via setTitle).
-    const win32OrLinux = process.platform === 'win32' || process.platform === 'linux';
-    if (!force) {
-      if (win32OrLinux) {
-        if (sameSecond && now - (this._lastRendererPushAt || 0) < 900) return;
-      } else if (!visible) {
-        if (now - (this._lastRendererPushAt || 0) < 15000) return;
-      } else if (sameSecond && now - (this._lastRendererPushAt || 0) < 900) {
-        return;
-      }
-    }
+    if (!force && sameSecond && now - (this._lastRendererPushAt || 0) < 900) return;
 
     this._lastRendererPushAt = now;
     this._lastPushedCumulative = cum;
@@ -664,11 +687,38 @@ class TrayManager {
       sessionStart: this._trackingStartTime,
       lastStopAt,
     });
+    const deducted = require('../utils/time-deductions').liveDeductionSeconds(
+      global.trackingManager?.currentTimeLogId || global.currentTimeLogId || null,
+    );
     return {
       elapsed,
       base,
-      cumulative: Math.max(0, base + elapsed),
+      cumulative: Math.max(0, base + elapsed - deducted),
     };
+  }
+
+  /**
+   * Repaint the menu-bar total after a screenshot deduction.
+   * Does not stop or restart the timer — the next tick continues from here.
+   */
+  paintLiveTotal() {
+    if (!this.tray || this.tray.isDestroyed?.()) return;
+    const live = this._resolveLiveClock();
+    const cumulativeDisplay = this._formatElapsed(live.cumulative);
+    this._lastCumulativeSeconds = live.cumulative;
+    if (process.platform === 'darwin' && typeof this.tray.setTitle === 'function') {
+      try {
+        this.tray.setTitle(cumulativeDisplay, { fontType: 'monospacedDigit' });
+        this._lastTrayTitle = cumulativeDisplay;
+      } catch (_) { /* next tick paints it */ }
+    }
+    this._pushRendererTick?.({
+      force: true,
+      display: this._formatElapsed(live.elapsed),
+      cumulativeDisplay,
+      elapsed: live.elapsed,
+      cumulativeSeconds: live.cumulative,
+    });
   }
 
   _hasLiveSession() {
@@ -720,6 +770,46 @@ class TrayManager {
   }
 
   /**
+   * The awake clock spans timer restarts within one session: resume handlers
+   * restart the timer exactly when tracking survived a sleep, and resetting
+   * here would hide that nap.
+   */
+  _resetAwakeClockForSession() {
+    const key = String(
+      global.currentTimeLogId ||
+        global.trackingManager?.currentTimeLogId ||
+        this._trackingStartTime?.getTime?.() ||
+        '',
+    );
+    if (key && key === this._awakeClockSessionKey) return;
+    this._awakeClockSessionKey = key;
+    this._sleepGapHold = false;
+    require('../utils/sleep-aware-elapsed').resetAwakeClock();
+  }
+
+  /**
+   * After a freeze the live clock (now − Start) spans the nap. Hold the clock —
+   * no paint, no high-water — until this session is closed at the last
+   * pre-nap tick (suspend may not have fired yet, or arrives after wake).
+   * @returns {boolean} true while the clock must hold
+   */
+  _holdForSleepGap() {
+    const awake = require('../utils/sleep-aware-elapsed').noteAwakeTick();
+    if (awake.slept && !this._sleepGapHold && !global.isStopping) {
+      this._sleepGapHold = true;
+      console.warn(
+        `😴 [TRAY] ${Math.round((Date.now() - awake.lastAwakeMs) / 1000)}s clock gap — ` +
+          'machine slept; holding the clock and closing at last awake tick',
+      );
+      try {
+        const p = global.trackingManager?.noteMachineSlept?.(awake.lastAwakeMs);
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (_) { /* best-effort; the idle monitor also stops on the gap */ }
+    }
+    return this._sleepGapHold === true;
+  }
+
+  /**
    * Start the 1-second tray timer that updates the status bar title (macOS)
    * or tooltip (Windows/Linux)
    */
@@ -741,6 +831,8 @@ class TrayManager {
     }
 
     this._maybeRolloverLocalDay();
+    this._resetAwakeClockForSession();
+    const initialHold = this._holdForSleepGap();
 
     // Set initial display based on actual elapsed time (not always 00:00:00)
     const initialLive = this._resolveLiveClock();
@@ -749,7 +841,7 @@ class TrayManager {
     const initialDisplay = this._formatElapsed(initialElapsed);
     const initialCumulativeDisplay = this._formatElapsed(initialCumulative);
 
-    if (process.platform === 'darwin' && this.tray && !this.tray.isDestroyed()) {
+    if (!initialHold && process.platform === 'darwin' && this.tray && !this.tray.isDestroyed()) {
       const hasSetTitle = typeof this.tray.setTitle === 'function';
       if (hasSetTitle) {
         try {
@@ -765,12 +857,14 @@ class TrayManager {
     const tick = () => {
       try {
         if (!this.tray || this.tray.isDestroyed()) return;
+        const sleptHold = this._holdForSleepGap();
         // Stop was clicked — the total is frozen at that instant. The tray is
         // only torn down in Phase 3, ~2s later, and every tick in between both
         // paints and raises the high-water that the next Start seeds its base
         // from. Offline that is the whole ~2s stop round-trip, billed once per
         // stop/start cycle and never rewound (the base is forward-only).
         if (global.isStopping) return;
+        if (sleptHold) return;
         if (!this._ensureLiveSessionForTick()) {
           console.warn('⏱️ [TRAY] No live session — stopping orphan menu-bar clock');
           this.stopTrayTimer();
@@ -815,19 +909,45 @@ class TrayManager {
         if (tickCount <= 3) {
           const readBack = (process.platform === 'darwin' && typeof this.tray.getTitle === 'function')
             ? this.tray.getTitle() : '(n/a)';
-          console.log(`⏱️ [TRAY] Tick #${tickCount}: set="${cumulativeDisplay}" (session ${display}) readBack="${readBack}" (project: ${projectLabel})`);
+          console.log(`⏱️ [TRAY] Tick #${tickCount}: set="${cumulativeDisplay}" (session ${display}) readBack="${readBack}" (project: ${projectLabel}) base=${live.base} rawBase=${this._cumulativeBaseSeconds}`);
         }
       } catch (e) {
         console.error('❌ [TRAY] Tick error:', e?.message);
       }
     };
 
-    tick(); // immediate first tick
+    this._holdClockAwake();
+    tick();
+    // Do not unref. macOS coalesces an unref'd timer while the window is
+    // minimized, so the menu bar sits still and then jumps 3–5 seconds.
     this._timerInterval = setInterval(tick, 1000);
-    if (typeof this._timerInterval.unref === 'function') {
-      this._timerInterval.unref();
-    }
     console.log('⏱️ [TRAY] Timer started');
+  }
+
+  _holdClockAwake() {
+    try {
+      const { powerSaveBlocker } = require('electron');
+      if (
+        this._clockBlockerId != null &&
+        powerSaveBlocker.isStarted(this._clockBlockerId)
+      ) {
+        return;
+      }
+      this._clockBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    } catch (_) { /* clock still runs; it may jump if the OS naps the process */ }
+  }
+
+  _releaseClockAwake() {
+    try {
+      const { powerSaveBlocker } = require('electron');
+      if (
+        this._clockBlockerId != null &&
+        powerSaveBlocker.isStarted(this._clockBlockerId)
+      ) {
+        powerSaveBlocker.stop(this._clockBlockerId);
+      }
+    } catch (_) { /* already stopped */ }
+    this._clockBlockerId = null;
   }
 
   /**
@@ -838,6 +958,7 @@ class TrayManager {
       clearInterval(this._timerInterval);
       this._timerInterval = null;
     }
+    this._releaseClockAwake();
     this._lastTrayTitle = null;
     this._lastTrayTooltip = null;
     this._lastPushedCumulative = -1;
@@ -922,7 +1043,7 @@ class TrayManager {
         click: () => {
           try {
             const { shell } = require('electron');
-            shell.openExternal('https://app.alyson.ai');
+            shell.openExternal('https://app.tavilo.ai/');
           } catch (e) {
             console.warn('⚠️ [TRAY] Failed to open web dashboard:', e?.message);
           }
@@ -1086,10 +1207,14 @@ class TrayManager {
       const agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
       const prevBase = Math.max(0, Math.floor(Number(this._cumulativeBaseSeconds) || 0));
       const nextBase = Math.max(0, Math.floor(Number(agg.completedClosedSeconds) || 0));
-      // Forward-only base — never rewind tray cumulative on the same work day.
-      if (nextBase > 0 || prevBase <= 0) {
-        this._cumulativeBaseSeconds = Math.max(prevBase, nextBase);
-      }
+      const { reconcileForwardBase } = require('../utils/time-deductions');
+      const reconciled = reconcileForwardBase(
+        prevBase,
+        nextBase,
+        global._authorizedClosedDropSeconds,
+      );
+      global._authorizedClosedDropSeconds = reconciled.pending;
+      this._cumulativeBaseSeconds = reconciled.base;
       console.log('⏱️ [TRAY] Cumulative base synced from DB+offline:', this._cumulativeBaseSeconds, 's');
     } catch (e) {
       console.warn('⚠️ [TRAY] ensureCumulativeBaseFromDb failed:', e?.message || e);

@@ -464,7 +464,32 @@ class DataStatsManager {
         const { deleteScreenshotViaBackend } = require('../utils/backend-screenshots');
         const res = await deleteScreenshotViaBackend(effectiveUserId, screenshotId, this.config);
         if (res && res.success) {
-          return { success: true, deductedSeconds: res.deductedSeconds, timeLogId: res.timeLogId };
+          let clockAdjusted = false;
+          let onLive = false;
+          try {
+            const { applyAuthorizedDeduction } = require('../utils/time-deductions');
+            const applied = applyAuthorizedDeduction({
+              seconds: res.deductedSeconds,
+              timeLogId: res.timeLogId,
+              timeLogStartTime: res.timeLogStartTime || null,
+            });
+            clockAdjusted = applied.applied > 0;
+            onLive = applied.onLive === true;
+            console.log(
+              `✂️ [DELETE] Screenshot ${screenshotId}: ${res.deductedSeconds}s off session ${res.timeLogId}` +
+                ` — ${applied.otherDay ? 'other work day, today unchanged' : clockAdjusted ? `applied to today (${onLive ? 'running session' : 'closed session'})` : 'not applied'}`,
+            );
+            if (!(global.isTracking || global.trackingManager?.isTracking)) {
+              require('../utils/settled-reconcile').scheduleSettledReconcile();
+            }
+          } catch (_) { /* next stats read still subtracts it */ }
+          return {
+            success: true,
+            deductedSeconds: res.deductedSeconds,
+            timeLogId: res.timeLogId,
+            clockAdjusted,
+            onLive,
+          };
         }
         return { success: false, error: res?.error || 'Failed to delete screenshot' };
       } catch (error) {

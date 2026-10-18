@@ -72,8 +72,8 @@ class UIManager {
     }, 150);
   }
 
-  /** Open the Alyson web dashboard in the system browser. */
-  async openExternalDashboard(url = 'https://app.alyson.ai') {
+  /** Open the Tavilo web dashboard in the system browser. */
+  async openExternalDashboard(url = 'https://app.tavilo.ai/') {
     try {
       const result = await this.ipcRenderer.invoke('open-external-url', { url });
       if (!result?.success) {
@@ -1097,7 +1097,7 @@ class UIManager {
     const logItems = logs.logs.slice(0, 10).map(log => `
       <div class="log-item">
         <div class="log-timestamp">${new Date(log.timestamp).toLocaleString()}</div>
-        <div class="log-type" style="font-weight: 500; color: #2563eb;">${log.type || 'Activity'}</div>
+        <div class="log-type" style="font-weight: 500; color: var(--accent-text);">${log.type || 'Activity'}</div>
         <div class="log-description">${log.description || 'No description'}</div>
       </div>
     `).join('');
@@ -1390,7 +1390,7 @@ class UIManager {
       const typeColors = {
         'App Switch': '#3b82f6',
         'Web Activity': '#10b981',
-        'Screenshot': '#8b5cf6',
+        'Screenshot': '#0284c7',
         'Input Activity': '#f59e0b',
         'Idle Start': '#6b7280',
         'Idle End': '#10b981',
@@ -1780,10 +1780,10 @@ class UIManager {
             : '';
       metaEl.textContent =
         nonEff > 0
-          ? `Effective · Tracked ${this.formatDuration(tracked)} (−${this.formatDuration(nonEff)} non-effective)${adjNote}`
+          ? `Total time ${this.formatDuration(tracked)} · Non-effective time ${this.formatDuration(nonEff)}${adjNote}`
           : adjNote
-            ? `Effective working time${adjNote}`
-            : 'Effective working time';
+            ? `Effective time${adjNote}`
+            : 'Effective time';
     }
   }
 
@@ -1876,7 +1876,10 @@ class UIManager {
                   window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: false });
                 }
               } else if (typeof window.applyAuthoritativeStoppedTotal === 'function') {
-                window.applyAuthoritativeStoppedTotal(dbTotal, { reason: 'ui-stopped-refresh' });
+                window.applyAuthoritativeStoppedTotal(dbTotal, {
+                  reason: 'ui-stopped-refresh',
+                  settled: today.settled === true,
+                });
               } else if (typeof window.setTrackerDisplaySeconds === 'function') {
                 window.setTrackerDisplaySeconds(dbTotal, { allowDecrease: true });
               }
@@ -2708,7 +2711,7 @@ class UIManager {
       <div class="onboarding-modal">
         <div class="onboarding-header">
           <div class="onboarding-logo">
-            <div class="logo-icon">⏱️</div>
+            <img class="logo-icon" src="../assets/tavilo-logo.svg" alt="" width="46" height="28">
             <h2>Welcome to TimeFlow</h2>
           </div>
           <div class="onboarding-step">Step 1 of 3</div>
@@ -2819,7 +2822,9 @@ class UIManager {
         gap: 12px !important;
       }
       .logo-icon {
-        font-size: 24px !important;
+        width: 46px !important;
+        height: auto !important;
+        display: block !important;
       }
       .onboarding-logo h2 {
         margin: 0 !important;
@@ -3731,6 +3736,7 @@ class UIManager {
             // PLATFORM RULE: stopped clock = DB/portal total. Never local HW.
             const trackedDisplay = window.applyAuthoritativeStoppedTotal(totalSec, {
               reason: 'ui-load-today',
+              settled: todayStats.settled === true,
             });
             console.log('✅ [TODAY-TIME] Authoritative stopped clock', trackedDisplay, 's');
           } else {
@@ -4116,7 +4122,10 @@ class UIManager {
                       window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: false });
                     }
                   } else if (typeof window.applyAuthoritativeStoppedTotal === 'function') {
-                    window.applyAuthoritativeStoppedTotal(dbTotal, { reason: 'ui-timer-refresh' });
+                    window.applyAuthoritativeStoppedTotal(dbTotal, {
+                      reason: 'ui-timer-refresh',
+                      settled: today.settled === true,
+                    });
                   } else if (typeof window.setTrackerDisplaySeconds === 'function') {
                     window.setTrackerDisplaySeconds(dbTotal, { allowDecrease: true });
                   }
@@ -5217,10 +5226,9 @@ class UIManager {
       const avgSecondsPerDay = activeDays > 0 ? Math.floor(effectiveSeconds / activeDays) : 0;
       avgPerDayEl.textContent = this.formatReportDuration(avgSecondsPerDay);
     }
-
-    // Tracked floor only — never overwrite Today's effective split from Month
-    // (Month historically used a 3× interval and would corrupt the cards).
-    this._raiseTodayTrackedFloorFromMonthly(reportData);
+    // Month never paints the big clock. Main's today stats are the clock
+    // (= Pulse); a Month row that missed a screenshot delete was raising it
+    // by the deleted time on every Stop / Start / refresh.
   }
 
   /**
@@ -5246,11 +5254,8 @@ class UIManager {
       if (todayRow) {
         const rowTotal = Math.max(0, Math.floor(Number(todayRow.totalSeconds) || 0));
         const rowNonEff = Math.max(0, Math.floor(Number(todayRow.nonEffectiveSeconds) || 0));
-        const liveTracked = Math.max(
-          0,
-          Math.floor(Number(window.__todayTrackedSeconds) || 0),
-          Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-        );
+        // The clock as shown. The high water can still hold deleted time.
+        const liveTracked = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
         const liveNonEff = Math.max(0, Math.floor(Number(window.__todayNonEffectiveSeconds) || 0));
         const liveReady = !!window.__effectiveStatsReady;
         const reallyTracking = !!(
@@ -5291,40 +5296,6 @@ class UIManager {
     nonEffectiveSeconds = Math.min(totalSeconds, nonEffectiveSeconds);
     const effectiveSeconds = Math.max(0, totalSeconds - nonEffectiveSeconds);
     return { totalSeconds, nonEffectiveSeconds, effectiveSeconds };
-  }
-
-  /**
-   * Month/DB may raise Today's tracked floor; never lower the clock or overwrite
-   * Today's effective / non-effective split.
-   */
-  _raiseTodayTrackedFloorFromMonthly(reportData) {
-    try {
-      const { shouldPaintLiveTodayOntoMonthlyReport } = require('../../src/modules/utils/monthly-report-month');
-      if (!shouldPaintLiveTodayOntoMonthlyReport(this._monthlyReportMonthOffset || 0)) return;
-      const todayStr = typeof this._localDateStr === 'function' ? this._localDateStr() : null;
-      if (!todayStr || !Array.isArray(reportData?.dailyBreakdown)) return;
-      const todayRow = reportData.dailyBreakdown.find((d) => d && d.date === todayStr);
-      if (!todayRow || typeof todayRow.totalSeconds !== 'number') return;
-
-      const rowTotal = Math.max(0, Math.floor(Number(todayRow.totalSeconds) || 0));
-      const reallyTracking = !!(
-        window.__isTracking ||
-        (typeof window.isRendererActivelyTracking === 'function' &&
-          window.isRendererActivelyTracking())
-      );
-      if (
-        !reallyTracking &&
-        typeof window.isInflatedWorkDayCapHighWater === 'function' &&
-        window.isInflatedWorkDayCapHighWater(rowTotal, 0)
-      ) {
-        return;
-      }
-      if (rowTotal > 0 && typeof window.setTrackerDisplaySeconds === 'function') {
-        window.setTrackerDisplaySeconds(rowTotal);
-      }
-    } catch (err) {
-      console.warn('⚠️ [MONTHLY-REPORT] Could not raise today tracked floor:', err?.message || err);
-    }
   }
 
   /** Render the daily activity bar chart */

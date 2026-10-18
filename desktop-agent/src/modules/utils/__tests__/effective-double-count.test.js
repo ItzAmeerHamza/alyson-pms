@@ -67,6 +67,24 @@ describe('low-activity counting excludes idle periods', () => {
     expect(low).toBe(3 * INTERVAL);
   });
 
+  it('does not count shots taken after their session ended (alert cut), same as Pulse', () => {
+    const session = { id: 'tl-1', end_time: '2026-08-17T11:00:30Z' };
+    const screenshots = [
+      '2026-08-17T11:01:00Z',
+      '2026-08-17T11:02:00Z',
+      '2026-08-17T11:03:00Z',
+      '2026-08-17T11:04:00Z',
+    ].map((iso) => ({ ...shot(iso, 0), time_log_id: session.id }));
+    const sessionEnds = new Map([[session.id, T(session.end_time)]]);
+
+    expect(
+      sumLowActivitySecondsFromScreenshots(screenshots, INTERVAL, DAY_START, DAY_END, []),
+    ).toBe(4 * INTERVAL);
+    expect(
+      sumLowActivitySecondsFromScreenshots(screenshots, INTERVAL, DAY_START, DAY_END, [], sessionEnds),
+    ).toBe(0);
+  });
+
   it('ignores an isolated low-activity screenshot the way the web does', () => {
     const screenshots = [
       shot('2026-08-17T11:00:00Z', 2),
@@ -260,6 +278,76 @@ describe('computeTodayEffectiveStats prefers Pulse numbers', () => {
     expect(result.totalSeconds).toBe(5400);
     expect(rds.getEffectiveStats).not.toHaveBeenCalled();
     expect(rds.listIdleLogs).not.toHaveBeenCalled();
+  });
+
+  describe('local fallback removes live-call time from idle (same as Pulse)', () => {
+    const { startOfWorkDay } = require('../work-timezone');
+    const base = startOfWorkDay().getTime() + 2 * 3600 * 1000;
+    const iso = (ms) => new Date(ms).toISOString();
+    const meetShots = (fromMin, toMin, activityPercent) => {
+      const out = [];
+      for (let m = fromMin; m <= toMin; m += 1) {
+        out.push({
+          captured_at: iso(base + m * 60000),
+          activity_percent: activityPercent,
+          app_name: 'Google Chrome',
+          window_title: 'Meet - abc-defg-hij - Google Chrome',
+        });
+      }
+      return out;
+    };
+    const idleLog = (fromMin, toMin) => ({
+      idle_start: iso(base + fromMin * 60000),
+      idle_end: iso(base + toMin * 60000),
+      duration_seconds: (toMin - fromMin) * 60,
+    });
+
+    beforeEach(() => {
+      rds.getEffectiveStats.mockRejectedValue(new Error('Unsupported action'));
+    });
+
+    it('20 min with no input inside a live Meet is not non-effective', async () => {
+      rds.listIdleLogs.mockResolvedValue([idleLog(0, 20)]);
+
+      const result = await computeTodayEffectiveStats({
+        userId: 1195,
+        totalSeconds: 3600,
+        screenshots: meetShots(-5, 20, 50),
+        config: {},
+      });
+
+      expect(result.source).toBe('local');
+      expect(result.idleSeconds).toBe(0);
+      expect(result.nonEffectiveSeconds).toBe(0);
+    });
+
+    it('a leftover Meet tab while away (0% activity) does not hide idle', async () => {
+      rds.listIdleLogs.mockResolvedValue([idleLog(0, 20)]);
+
+      const result = await computeTodayEffectiveStats({
+        userId: 1195,
+        totalSeconds: 3600,
+        screenshots: meetShots(-5, 20, 0),
+        config: {},
+      });
+
+      expect(result.idleSeconds).toBe(1200);
+    });
+
+    it('idle left over after the call ends counts only when it reaches 5 min', async () => {
+      // Call covers 0–8 min, plus 1 min capture and 10 min join → idle cut until 19 min.
+      rds.listIdleLogs.mockResolvedValue([idleLog(0, 22), idleLog(30, 49)]);
+
+      const result = await computeTodayEffectiveStats({
+        userId: 1195,
+        totalSeconds: 3600,
+        screenshots: [...meetShots(0, 8, 60), ...meetShots(30, 33, 60)],
+        config: {},
+      });
+
+      // 19–22 is 3 min (dropped). Second call covers 30–44, leaving 44–49 = 5 min.
+      expect(result.idleSeconds).toBe(300);
+    });
   });
 
   it('does not pile on idle fetches after a Pulse timeout', async () => {

@@ -325,9 +325,18 @@ describe('idle periods stay inside the session (bounds)', () => {
     global.trackingManager = { sessionStartTime: '2026-08-17T05:50:59.005Z' };
     const m = boundsMonitor();
     const start = Date.parse('2026-08-16T17:53:22Z');
+    const end = Date.parse('2026-08-17T05:56:59Z');
+    await m.logIdlePeriod(start, end, end - start);
+    assert.equal(m._sessionIdleSeconds, 360);
+  });
+
+  it('a clamped tail under five minutes is not counted as idle', async () => {
+    global.trackingManager = { sessionStartTime: '2026-08-17T05:50:59.005Z' };
+    const m = boundsMonitor();
+    const start = Date.parse('2026-08-16T17:53:22Z');
     const end = Date.parse('2026-08-17T05:52:59Z');
     await m.logIdlePeriod(start, end, end - start);
-    assert.equal(m._sessionIdleSeconds, 120);
+    assert.equal(m._sessionIdleSeconds, 0);
   });
 
   it('cannot make idle exceed the tracked day after clamp', async () => {

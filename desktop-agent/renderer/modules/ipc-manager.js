@@ -386,14 +386,27 @@ class IPCManager {
                 window.applyTodayEffectiveStats(s);
               }
               const dbSec = Math.max(0, Math.floor(s.totalTime));
+              // Server has every second of today — its total is the clock (= Pulse).
+              if (s.settled === true && typeof window.applyAuthoritativeStoppedTotal === 'function') {
+                window.applyAuthoritativeStoppedTotal(dbSec, {
+                  reason: 'session-data-settled',
+                  settled: true,
+                });
+                return;
+              }
               const liveSec = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
-              // Non-effective never lowers the clock. Only authorized idle-prompt cut may.
+              // Non-effective never lowers the clock. A Stop snapshot that is
+              // minutes under the window is a screenshot deduction — keep it.
               const trackedSec = authorizedCut
                 ? Math.max(dbSec, frozenFloor)
-                : Math.max(dbSec, frozenFloor, liveSec);
+                : frozenFloor > 0 && (liveSec > frozenFloor + 5 || dbSec > frozenFloor + 5)
+                  ? frozenFloor
+                  : Math.max(dbSec, frozenFloor, liveSec);
               window.__todayBaseAtLastStop = trackedSec;
               if (typeof window.setTrackerDisplaySeconds === 'function') {
-                window.setTrackerDisplaySeconds(trackedSec, { allowDecrease: authorizedCut });
+                window.setTrackerDisplaySeconds(trackedSec, {
+                  allowDecrease: authorizedCut || trackedSec + 5 < liveSec,
+                });
               }
             }
           });
@@ -1197,18 +1210,17 @@ class IPCManager {
       // to run backward on the next Start when it settled on the real end time.
       window.__stopInProgress = true;
 
-      // Freeze TRACKED total at click time (big clock shows effective derived from it)
-      const frozenTracked = Math.max(
-        0,
-        Math.floor(Number(window.__todayTrackedSeconds) || 0),
-        typeof window.readLocalTrackingCumulativeSeconds === 'function'
-          ? window.readLocalTrackingCumulativeSeconds()
-          : 0,
-      );
+      // Freeze at the total on screen (it follows the menu-bar clock). Rebuilding
+      // it from this window's own base put deleted screenshot time back, and
+      // sending that to main made it the floor for the next Start. Main takes
+      // its own Stop snapshot.
+      const frozenTracked =
+        typeof window.readTrackerDisplaySeconds === 'function'
+          ? Math.max(0, Math.floor(Number(window.readTrackerDisplaySeconds()) || 0))
+          : 0;
       if (frozenTracked > 0) {
         window.__todayBaseAtLastStop = frozenTracked;
-        window.setTrackerDisplaySeconds?.(frozenTracked);
-        void this.ipcRenderer.invoke('set-frozen-total-at-stop', frozenTracked).catch(() => {});
+        window.setTrackerDisplaySeconds?.(frozenTracked, { allowDecrease: true });
       }
       this.stopSessionTimer();
       window.clearAllTimers?.();
@@ -2088,7 +2100,7 @@ class IPCManager {
           ${guidanceHTML}
         </div>
         <div class="permission-modal-footer">
-          <button class="permission-btn-copy" id="modalCopyLogsBtn" style="background: #1e3a5f; border: 1px solid #2563eb; color: #93c5fd;">
+          <button class="permission-btn-copy" id="modalCopyLogsBtn" style="background: #0284c7; border: 1px solid #0369a1; color: #f8fafc;">
             📋 Copy Logs
           </button>
           ${!isInputDetectionFailure ? this._permissionSettingsButtonsHtml() : ''}
@@ -2112,7 +2124,7 @@ class IPCManager {
         setTimeout(() => {
           modalCopyBtn.textContent = '📋 Copy Logs';
           modalCopyBtn.style.background = '#1e3a5f';
-          modalCopyBtn.style.borderColor = '#2563eb';
+          modalCopyBtn.style.borderColor = '#0369a1';
           modalCopyBtn.style.color = '#93c5fd';
         }, 2500);
       });
@@ -2461,7 +2473,7 @@ class IPCManager {
       }
       
       .permission-btn-settings {
-        background: #3b82f6;
+        background: #0284c7;
         color: white;
         border: none;
         padding: 10px 20px;
@@ -2479,7 +2491,7 @@ class IPCManager {
       }
       
       .permission-btn-settings:hover {
-        background: #2563eb;
+        background: #0369a1;
       }
       
       .permission-btn-close {
@@ -2496,7 +2508,7 @@ class IPCManager {
       }
       
       .permission-btn-copy {
-        background: #6366f1;
+        background: #0284c7;
         color: white;
         border: none;
         padding: 10px 20px;
@@ -2507,7 +2519,7 @@ class IPCManager {
       }
       
       .permission-btn-copy:hover {
-        background: #4f46e5;
+        background: #0369a1;
       }
     `;
     document.head.appendChild(styles);

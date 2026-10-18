@@ -45,54 +45,6 @@ const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']); // Use Google and Cloudflare DNS
 
-// Enhanced DNS resolution with fallback
-const originalLookup = dns.lookup;
-dns.lookup = function (hostname, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-
-  originalLookup.call(this, hostname, options, (err, address, family) => {
-    if (err && err.code === 'ENOTFOUND') {
-      console.log(`🔄 DNS lookup failed for ${hostname}, trying alternative resolution...`);
-      // Try alternative DNS servers
-      const alternativeServers = ['1.1.1.1', '8.8.8.8'];
-      let attempts = 0;
-
-      const tryAlternative = () => {
-        if (attempts >= alternativeServers.length) {
-          callback(err, address, family);
-          return;
-        }
-
-        const server = alternativeServers[attempts];
-        attempts++;
-
-        // Use a different approach for resolution
-        require('child_process').exec(`nslookup ${hostname} ${server}`, (execErr, stdout) => {
-          if (execErr) {
-            tryAlternative();
-          } else {
-            const match = stdout.match(/Address:\s*(\d+\.\d+\.\d+\.\d+)/);
-            if (match) {
-              callback(null, match[1], 4);
-            } else {
-              tryAlternative();
-            }
-          }
-        });
-      };
-
-      tryAlternative();
-    } else {
-      callback(err, address, family);
-    }
-  });
-};
-
-console.log('🔧 Enhanced DNS resolver configured for Electron app');
-
 // 🔧 URL POLLING FIX - Apply fixes to UrlCaptureManager when it's created
 function applyUrlPollingFixes() {
   console.log('🔧 [URL-FIX] Setting up URL polling fixes...');
@@ -818,7 +770,8 @@ if (isElectronMain) {
     } else {
       global._stopAuthorizedIdleCut = false;
       global._idlePromptTimeCutSeconds = 0;
-      global._stopEndTimeOverride = null;
+      // A sleep arm already froze the last-awake end; wake-time now bills the nap.
+      require('./modules/utils/sleep-aware-elapsed').resetStopEndOverride();
       gracefulShutdownManager.captureStopMoment();
     }
 
@@ -3226,6 +3179,7 @@ function registerDeveloperConsoleHandlers() {
 
   if (!global.consoleLogBuffer) {
     const maxLogs = 1000;
+    const { stringifyConsoleArgs } = require('./modules/utils/logger');
     global.consoleLogBuffer = [];
 
     const originalLog = console.log;
@@ -3238,7 +3192,7 @@ function registerDeveloperConsoleHandlers() {
       global.consoleLogBuffer.push({
         level: 'log',
         timestamp: new Date().toISOString(),
-        message: args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        message: stringifyConsoleArgs(args)
       });
       if (global.consoleLogBuffer.length > maxLogs) {
         global.consoleLogBuffer.shift();
@@ -3250,7 +3204,7 @@ function registerDeveloperConsoleHandlers() {
       global.consoleLogBuffer.push({
         level: 'error',
         timestamp: new Date().toISOString(),
-        message: args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        message: stringifyConsoleArgs(args)
       });
       if (global.consoleLogBuffer.length > maxLogs) {
         global.consoleLogBuffer.shift();
@@ -3262,7 +3216,7 @@ function registerDeveloperConsoleHandlers() {
       global.consoleLogBuffer.push({
         level: 'warn',
         timestamp: new Date().toISOString(),
-        message: args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        message: stringifyConsoleArgs(args)
       });
       if (global.consoleLogBuffer.length > maxLogs) {
         global.consoleLogBuffer.shift();
@@ -3274,7 +3228,7 @@ function registerDeveloperConsoleHandlers() {
       global.consoleLogBuffer.push({
         level: 'info',
         timestamp: new Date().toISOString(),
-        message: args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        message: stringifyConsoleArgs(args)
       });
       if (global.consoleLogBuffer.length > maxLogs) {
         global.consoleLogBuffer.shift();
@@ -3286,7 +3240,7 @@ function registerDeveloperConsoleHandlers() {
       global.consoleLogBuffer.push({
         level: 'debug',
         timestamp: new Date().toISOString(),
-        message: args.map(arg => (typeof arg === 'object' ? JSON.stringify(arg) : String(arg))).join(' ')
+        message: stringifyConsoleArgs(args)
       });
       if (global.consoleLogBuffer.length > maxLogs) {
         global.consoleLogBuffer.shift();
@@ -5595,6 +5549,7 @@ if (isElectronContext && ipcMain) {
   const getFrozenTotalFloor = () => {
     const todayKey = getLocalDateKey();
     if (global._frozenTotalDate !== todayKey) {
+      if (global._lastTodayTotalAtStop) console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop}s: day key ${global._frozenTotalDate} → ${todayKey}`);
       global._lastTodayTotalAtStop = null;
       global._rendererFrozenTotalAtStop = null;
       global._frozenTotalDate = todayKey;
@@ -5621,10 +5576,21 @@ if (isElectronContext && ipcMain) {
   /**
    * Sync / network / partial remote must never reduce recorded time on-device.
    * Same work-day totals only move forward, except the authorized idle-prompt cut.
-   * Impossible totals (exceeding wall-clock since work midnight) are always clamped.
+   * A total longer than today has lasted is yesterday's leftover session.
+   * Before Start, drop it. Do not paint "time since midnight" as tracked time.
    */
-  const holdTodayTrackedFloor = (payload, { isTracking } = {}) => {
+  const holdTodayTrackedFloor = (payload, { isTracking, settled = false } = {}) => {
     if (!payload || typeof payload !== 'object') return payload;
+    const withSplit = (next) => {
+      if (typeof next.nonEffectiveSeconds === 'number') {
+        next.nonEffectiveSeconds = Math.min(next.totalTime, Math.max(0, Math.floor(next.nonEffectiveSeconds)));
+        next.effectiveSeconds = Math.max(0, next.totalTime - next.nonEffectiveSeconds);
+      } else if (next.effectiveStatsComputed !== true) {
+        next.effectiveSeconds = next.totalTime;
+      }
+      return next;
+    };
+    const serverIsTruth = settled === true && !isTracking;
     // Day-scoped: yesterday's total is not a floor for today.
     const last = lastGoodStatsForToday();
     const workDate = payload.workDate || getLocalDateKey();
@@ -5634,6 +5600,28 @@ if (isElectronContext && ipcMain) {
       0,
       Math.floor(Number(payload.completedTodayBeforeCurrentSessionSeconds) || 0),
     );
+    const timeDeductions = require('./modules/utils/time-deductions');
+    const known = timeDeductions.applyKnownDeductionsToRead({
+      totalTime: total,
+      closedSeconds: closed,
+      deductedSeconds: payload.deductedSeconds,
+      liveDeductedSeconds: payload.liveDeductedSeconds,
+      isTracking,
+      liveId: global.trackingManager?.currentTimeLogId || global.currentTimeLogId || null,
+      workDate,
+    });
+    if (known.totalTime < total) {
+      console.warn(
+        `⚠️ [TODAY-TIME-STATS] Read predates a screenshot delete — ${total}s → ${known.totalTime}s`,
+      );
+    }
+    total = known.totalTime;
+    closed = known.closedSeconds;
+    payload = {
+      ...payload,
+      deductedSeconds: known.deductedSeconds,
+      liveDeductedSeconds: known.liveDeductedSeconds,
+    };
 
     let liveElapsed = 0;
     if (isTracking) {
@@ -5653,7 +5641,7 @@ if (isElectronContext && ipcMain) {
       const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
       const trayHwMatchesToday =
         trayHwDate === workDate || trayHwDate === new Date().toDateString();
-      if (trayHw > 0 && trayHwMatchesToday) {
+      if (trayHw > 0 && trayHwMatchesToday && !serverIsTruth) {
         const honestMax = closed + liveElapsed + 5;
         if (trayHw > honestMax && trayHw > total + 5) {
           console.warn(
@@ -5666,25 +5654,51 @@ if (isElectronContext && ipcMain) {
       }
     } catch (_) { /* ignore */ }
 
-    const { applyAdjustmentSeconds } = require('./modules/utils/today-time-log-stats');
     const otherSeconds = Math.trunc(Number(payload.otherAdjustmentSeconds) || 0);
     const leaveSeconds = Math.max(0, Math.trunc(Number(payload.leaveCreditSeconds) || 0));
     const adjustmentSeconds = Math.trunc(Number(payload.adjustmentSeconds) || 0);
     if (cap != null) {
-      // Leave / admin credits are not wall-clock. Cap session time only.
+      const { dropImpossibleSessionSeconds } = require('./modules/utils/today-time-log-stats');
       const sessionTracked = Math.max(
         0,
         Math.floor(
           Number(payload.trackedSessionSeconds != null ? payload.trackedSessionSeconds : total - adjustmentSeconds) || 0,
         ),
       );
-      if (sessionTracked > cap) {
+      const dropped = dropImpossibleSessionSeconds({
+        totalSeconds: total,
+        closedSeconds: closed,
+        sessionTrackedSeconds: sessionTracked,
+        capSeconds: cap,
+        isTracking,
+        liveElapsedSeconds: liveElapsed,
+        otherSeconds,
+        leaveSeconds,
+      });
+      if (dropped.dropped) {
         console.warn(
-          `⚠️ [TODAY-TIME-STATS] Clamping impossible session ${sessionTracked}s → ${cap}s (since work midnight)`,
+          `⚠️ [TODAY-TIME-STATS] Dropping impossible session ${sessionTracked}s → ${dropped.totalSeconds}s (cap ${cap}s)`,
         );
-        total = applyAdjustmentSeconds(cap, otherSeconds, leaveSeconds).totalTime;
       }
-      if (closed > cap) closed = cap;
+      total = dropped.totalSeconds;
+      closed = dropped.closedSeconds;
+    }
+
+    // Stopped and fully synced: the server total is what Pulse shows and the
+    // only correct clock. Stop floors and last-good can only add phantom here.
+    if (serverIsTruth) {
+      if (global._lastTodayTotalAtStop) console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop}s: settled read ${total}s`);
+      global._lastTodayTotalAtStop = null;
+      global._rendererFrozenTotalAtStop = null;
+      global._frozenTotalDate = workDate;
+      return withSplit({
+        ...payload,
+        totalTime: total,
+        completedTodayBeforeCurrentSessionSeconds: closed,
+        workDate,
+        settled: true,
+        floorHeld: false,
+      });
     }
 
     // Never sit below an explicit stop-floor — unless that floor is itself impossible today.
@@ -5694,27 +5708,31 @@ if (isElectronContext && ipcMain) {
     }
 
     if (!last || last.workDate !== workDate) {
-      const next = { ...payload, totalTime: total, completedTodayBeforeCurrentSessionSeconds: closed, workDate };
-      if (typeof next.nonEffectiveSeconds === 'number') {
-        next.nonEffectiveSeconds = Math.min(total, Math.max(0, Math.floor(next.nonEffectiveSeconds)));
-        next.effectiveSeconds = Math.max(0, total - next.nonEffectiveSeconds);
-      } else if (next.effectiveStatsComputed !== true) {
-        next.effectiveSeconds = total;
-      }
-      return next;
+      return withSplit({ ...payload, totalTime: total, completedTodayBeforeCurrentSessionSeconds: closed, workDate });
     }
 
-    let lastTotal = Math.max(0, Math.floor(Number(last.totalTime) || 0));
-    let lastClosed = Math.max(
-      0,
-      Math.floor(Number(last.completedTodayBeforeCurrentSessionSeconds) || 0),
+    // Last-good was saved under the deductions known then. Restate it under
+    // today's: a delete lowers it, and so does a Stop that moved the live
+    // session's deduction into the closed total. Without this the old closed
+    // floor held the deducted seconds on screen after every Stop.
+    const lastDeducted = Math.max(0, Math.floor(Number(last.deductedSeconds) || 0));
+    const lastLiveDeducted = Math.max(0, Math.floor(Number(last.liveDeductedSeconds) || 0));
+    let lastTotal = timeDeductions.floorUnderCurrentDeductions(
+      last.totalTime,
+      lastDeducted,
+      payload.deductedSeconds,
+    );
+    let lastClosed = timeDeductions.floorUnderCurrentDeductions(
+      last.completedTodayBeforeCurrentSessionSeconds,
+      Math.max(0, lastDeducted - lastLiveDeducted),
+      Math.max(0, payload.deductedSeconds - payload.liveDeductedSeconds),
     );
     // Don't reinflate from a stale impossible last-good (missed day rollover).
     // Leave credit is not wall-clock — only session time is capped.
     const lastAdj = Math.trunc(Number(last.adjustmentSeconds) || 0);
     if (cap != null) {
-      if (lastTotal - lastAdj > cap) lastTotal = Math.max(0, cap + lastAdj);
-      if (lastClosed > cap) lastClosed = cap;
+      if (lastTotal - lastAdj > cap) lastTotal = Math.max(0, lastAdj);
+      if (lastClosed > cap) lastClosed = 0;
     }
     // Stale jam / leftover session in last-good must not keep billing.
     {
@@ -5768,22 +5786,40 @@ if (isElectronContext && ipcMain) {
       closed = Math.min(closed, cap);
     }
 
-    const next = {
+    return withSplit({
       ...payload,
       totalTime: total,
       completedTodayBeforeCurrentSessionSeconds: closed,
       workDate,
       floorHeld: floorHeld || !!payload.floorHeld,
-    };
-    if (typeof next.nonEffectiveSeconds === 'number') {
-      next.nonEffectiveSeconds = Math.min(total, Math.max(0, Math.floor(next.nonEffectiveSeconds)));
-      next.effectiveSeconds = Math.max(0, total - next.nonEffectiveSeconds);
-    } else if (next.effectiveStatsComputed !== true) {
-      next.effectiveSeconds = total;
-    }
-    return next;
+    });
+  };
+  /** Server already has every second of today and nothing changed mid-read. */
+  const isTodayReadSettled = (agg, queueGenAtStart) => {
+    const { isSettledTodayRead } = require('./modules/utils/today-time-log-stats');
+    let pendingCloseCount = 1;
+    try {
+      const { listPendingSessionCloses } = require('./modules/utils/session-recovery');
+      const { startOfWorkDay } = require('./modules/utils/work-timezone');
+      const dayStart = startOfWorkDay().getTime();
+      pendingCloseCount = listPendingSessionCloses().filter(
+        (p) => !(Date.parse(p.endTime) < dayStart),
+      ).length;
+    } catch (_) { /* unknown → not settled */ }
+    const tm = global.trackingManager;
+    return isSettledTodayRead({
+      backendFetchFailed: !!agg?.backendFetchFailed,
+      timeLogsCount: agg?.timeLogsCount,
+      offlinePendingCount: agg?.offlinePendingCount,
+      pendingCloseCount,
+      queueGenAtStart,
+      queueGenAtEnd: tm ? tm._offlineQueueWriteGen || 0 : null,
+      graceUntilMs: global._postOfflineSyncGraceUntil,
+      stopInProgress: !!(global.isStopping || global._isStoppingTracking),
+    });
   };
   ipcMain.handle('clear-frozen-total-at-stop', async () => {
+    console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop || 0}s + last-good: window day rollover`);
     global._lastTodayTotalAtStop = null;
     global._rendererFrozenTotalAtStop = null;
     global._frozenTotalDate = getLocalDateKey();
@@ -5795,10 +5831,9 @@ if (isElectronContext && ipcMain) {
     if (sec > 0) {
       global._frozenTotalDate = getLocalDateKey();
       global._rendererFrozenTotalAtStop = sec;
-      global._lastTodayTotalAtStop = Math.max(
-        global._lastTodayTotalAtStop || 0,
-        sec,
-      );
+      // Exact stop total. Math.max kept the pre-deduction snapshot, so the
+      // next Start opened at 04:53:48 after the clock had already dropped.
+      global._lastTodayTotalAtStop = sec;
     }
     return { success: true, totalSeconds: sec };
   });
@@ -5935,13 +5970,14 @@ if (isElectronContext && ipcMain) {
             try {
               if (global.trayManager && isTracking) {
                 const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
-                // Forward-only closed base — never rewind tray cumulative mid-day.
-                if (completedClosedSeconds > 0 || prevBase <= 0) {
-                  global.trayManager._cumulativeBaseSeconds = Math.max(
-                    prevBase,
-                    completedClosedSeconds,
-                  );
-                }
+                const { reconcileForwardBase } = require('./modules/utils/time-deductions');
+                const reconciled = reconcileForwardBase(
+                  prevBase,
+                  completedClosedSeconds,
+                  global._authorizedClosedDropSeconds,
+                );
+                global._authorizedClosedDropSeconds = reconciled.pending;
+                global.trayManager._cumulativeBaseSeconds = reconciled.base;
               }
             } catch (_) { /* ignore */ }
             const today = new Date();
@@ -5974,7 +6010,41 @@ if (isElectronContext && ipcMain) {
         });
       }
 
+      const queueGenAtStart = global.trackingManager
+        ? global.trackingManager._offlineQueueWriteGen || 0
+        : null;
       let agg = await computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking);
+      const settled = isTodayReadSettled(agg, queueGenAtStart);
+      if (!agg.backendFetchFailed && agg.reportsDeductions) {
+        global._backendReportsDeductions = true;
+        const timeDeductions = require('./modules/utils/time-deductions');
+        if (isTracking && currentTimeLogId) {
+          const liveGrowth = timeDeductions.noteLiveDeductionFromServer(
+            currentTimeLogId,
+            agg.liveDeductedSeconds,
+          );
+          if (liveGrowth > 0) {
+            console.log(`✂️ [TODAY-TIME-STATS] ${liveGrowth}s deducted from this session on the server, not by this device`);
+            timeDeductions.applyServerClosedDeduction(liveGrowth, global, { onLive: true });
+          }
+        }
+        // A delete made in Pulse or on another device: lower the floors by
+        // exactly that now, or they hold the deleted time on screen.
+        const { closedGrowth } = timeDeductions.noteServerLogDeductions(agg.timeLogs, {
+          liveId: currentTimeLogId,
+          isTracking,
+        });
+        if (closedGrowth > 0) {
+          console.log(`✂️ [TODAY-TIME-STATS] ${closedGrowth}s deducted on the server, not by this device`);
+          timeDeductions.applyServerClosedDeduction(closedGrowth);
+          try {
+            global.mainWindow?.webContents?.send('today-deduction-applied', {
+              seconds: closedGrowth,
+              onLive: false,
+            });
+          } catch (_) { /* the next stats read repaints the window */ }
+        }
+      }
       const lastGoodBefore = lastGoodStatsForToday();
       if (agg.backendFetchFailed) {
         agg = holdLastGoodOnFailedFetch(agg, lastGoodBefore, { isTracking });
@@ -5996,8 +6066,15 @@ if (isElectronContext && ipcMain) {
       ) {
         // Keep the Stop snapshot while idle — the next Start needs it.
         // Clearing it here is what let the tray seed 00:00:00 after a break.
-        global._lastTodayTotalAtStop = null;
-        global._rendererFrozenTotalAtStop = null;
+        // isTracking was read when this request began. A Stop while it was in
+        // flight set a new floor; clearing that with this pre-Stop total put
+        // the next quick Start on the older total (16 Oct 13:09, 14:00).
+        const stillTracking = !!(global.isTracking || global.trackingManager?.isTracking);
+        if (stillTracking) {
+          if (global._lastTodayTotalAtStop) console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop}s: tracking read, closed ${completedClosedSeconds}s`);
+          global._lastTodayTotalAtStop = null;
+          global._rendererFrozenTotalAtStop = null;
+        }
       }
 
       const today = new Date();
@@ -6015,7 +6092,9 @@ if (isElectronContext && ipcMain) {
         Math.trunc(Number(creditSrc?.leaveCreditSeconds) || 0),
       );
       let sessionTotal = isTracking
-        ? completedClosedSeconds + agg.ongoingCurrentSessionSeconds
+        ? completedClosedSeconds +
+          agg.ongoingCurrentSessionSeconds -
+          Math.max(0, Math.floor(Number(agg.liveDeductionExcessSeconds) || 0))
         : completedClosedSeconds;
       sessionTotal = Math.max(0, Math.floor(Number(sessionTotal) || 0));
       const appliedAdj = applyAdjustmentSeconds(sessionTotal, otherSeconds, leaveSeconds);
@@ -6027,12 +6106,14 @@ if (isElectronContext && ipcMain) {
         if (global.trayManager && isTracking) {
           const prevBase = Math.max(0, Math.floor(Number(global.trayManager._cumulativeBaseSeconds) || 0));
           const trayBase = completedClosedSeconds + adjustmentSeconds;
-          if (trayBase > 0 || prevBase <= 0) {
-            global.trayManager._cumulativeBaseSeconds = Math.max(
-              prevBase,
-              trayBase,
-            );
-          }
+          const { reconcileForwardBase } = require('./modules/utils/time-deductions');
+          const reconciled = reconcileForwardBase(
+            prevBase,
+            trayBase,
+            global._authorizedClosedDropSeconds,
+          );
+          global._authorizedClosedDropSeconds = reconciled.pending;
+          global.trayManager._cumulativeBaseSeconds = reconciled.base;
         }
       } catch (_) { /* ignore */ }
 
@@ -6066,6 +6147,7 @@ if (isElectronContext && ipcMain) {
             userId,
             totalSeconds: totalTime,
             config,
+            timeLogs: agg.timeLogs,
           });
           effectiveSeconds = eff.effectiveSeconds;
           nonEffectiveSeconds = eff.nonEffectiveSeconds;
@@ -6106,6 +6188,8 @@ if (isElectronContext && ipcMain) {
         otherAdjustmentSeconds: otherSeconds,
         completedTodayBeforeCurrentSessionSeconds: completedClosedSeconds,
         ongoingCurrentSessionSeconds: agg.ongoingCurrentSessionSeconds,
+        liveDeductedSeconds: Math.max(0, Math.floor(Number(agg.liveDeductedSeconds) || 0)),
+        deductedSeconds: Math.max(0, Math.floor(Number(agg.deductedSeconds) || 0)),
         timeLogsCount: agg.timeLogsCount,
         offlinePendingCount: agg.offlinePendingCount || 0,
         effectiveSeconds,
@@ -6124,15 +6208,15 @@ if (isElectronContext && ipcMain) {
 
       // Monotonic same-day floor: partial sync after offline must not lower the clock.
       // Only the authorized idle-prompt cut may drop totals (once).
-      payload = holdTodayTrackedFloor(payload, { isTracking });
+      payload = holdTodayTrackedFloor(payload, { isTracking, settled });
       if (agg.backendFetchFailed) {
         payload = { ...payload, stale: true, backendFetchFailed: true };
       }
-      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: payload.totalTime, completed_closed: payload.completedTodayBeforeCurrentSessionSeconds, backend_fetch_failed: !!agg.backendFetchFailed, stale: !!payload.stale } }); } catch { }
+      try { const { logger } = require('./modules/utils/logger'); logger && logger.debug({ category: 'SCREEN', screen: 'Dashboard', step: 'DATA LOAD END', ctx: { source: 'get-today-time-stats', total_seconds: payload.totalTime, completed_closed: payload.completedTodayBeforeCurrentSessionSeconds, backend_fetch_failed: !!agg.backendFetchFailed, stale: !!payload.stale, settled: payload.settled === true } }); } catch { }
       const prevGood = lastGoodStatsForToday();
       const payloadTotal = Math.max(0, Math.floor(Number(payload.totalTime) || 0));
       const prevTotal = Math.max(0, Math.floor(Number(prevGood?.totalTime) || 0));
-      if (!prevGood || payloadTotal >= prevTotal) {
+      if (!prevGood || payloadTotal >= prevTotal || payload.settled === true) {
         rememberLastGoodTodayStats({ ...payload, stale: false });
       }
       return withWorkDayContext(payload);

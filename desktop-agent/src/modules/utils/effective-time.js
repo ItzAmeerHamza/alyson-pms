@@ -20,32 +20,20 @@ function computeEffectiveSeconds(totalSeconds, lowSeconds, idleSeconds) {
 }
 
 /**
- * Product rule: the big clock and the Effective / Non-effective cards are live.
- * They already classify time as it happens. Stop / Pause must not rewrite them.
+ * The Non-effective card matches Pulse.
+ * Pulse already drops pauses under 5 minutes, requires a 3-minute low-activity
+ * streak, and removes time inside a live call.
  *
- * While tracking, Pulse + in-session idle both move the cards in real time.
- * After Stop, keep the last painted split — a late Pulse read is the jump.
+ * Adding this session's own idle on top, then keeping the larger number,
+ * is what left the card at 1h 26m while Pulse showed 18m (Hamza, 12 Oct)
+ * and what left Mohita's card up after Pulse removed Meet idle.
  */
 const MIN_IDLE_REPORT_SECONDS = 5 * 60;
 
 function resolveLiveNonEffectiveSeconds({
   pulseNonEffective = 0,
-  nonEffectiveAtLiveStart = 0,
-  sessionIdleSeconds = 0,
-  lastDisplayed = 0,
-  isLive = false,
-  minIdleReportSeconds = MIN_IDLE_REPORT_SECONDS,
 } = {}) {
-  const pulse = Math.max(0, Math.floor(Number(pulseNonEffective) || 0));
-  const atStart = Math.max(0, Math.floor(Number(nonEffectiveAtLiveStart) || 0));
-  const sessionIdle = Math.max(0, Math.floor(Number(sessionIdleSeconds) || 0));
-  const painted = Math.max(0, Math.floor(Number(lastDisplayed) || 0));
-  const reportable = sessionIdle >= minIdleReportSeconds ? sessionIdle : 0;
-  const liveSplit = atStart + reportable;
-  if (!isLive) {
-    return Math.max(painted, liveSplit);
-  }
-  return Math.max(pulse, liveSplit, painted);
+  return Math.max(0, Math.floor(Number(pulseNonEffective) || 0));
 }
 
 /**

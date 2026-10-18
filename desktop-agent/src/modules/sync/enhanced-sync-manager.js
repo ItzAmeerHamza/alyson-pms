@@ -9,8 +9,14 @@ const {
   isBackendTimeLogsEnabled,
   insertAppLogsBatch,
   insertUrlLogsBatch,
+  getLastAllAppLogsClosedAt,
 } = require('../utils/backend-time-logs');
 const { flushIdleLogQueue } = require('../utils/idle-log-write');
+const { jitteredBackoffMs } = require('../utils/sync-backoff');
+
+// Backend insert_app_logs reads at most 8 rows per request and ignores the rest.
+const APP_LOG_REQUEST_SIZE = 8;
+const MAX_PENDING_APP_LOGS = 500;
 
 class EnhancedSyncManager {
   constructor(config) {
@@ -59,6 +65,8 @@ class EnhancedSyncManager {
     
     // Flush timers
     this.flushTimers = new Map();
+
+    this.appLogRetry = { inFlight: false, failures: 0, nextAttemptAt: 0 };
     
     // Register for cleanup
     cleanupRegistry.registerResource({
@@ -677,6 +685,7 @@ class EnhancedSyncManager {
    * Flush batch queue for a specific type
    */
   async flushBatchQueue(type) {
+    if (type === 'appLogs') return this._flushAppLogs();
     let batch = []; // CRITICAL FIX: Initialize at function scope to prevent "batch is not defined" error in catch block
     try {
       // Skip DB inserts while screen is locked to prevent bad data (lock screen apps/URLs)
@@ -701,9 +710,6 @@ class EnhancedSyncManager {
       if (type === 'urlLogs') {
         await this._insertUrlBatch(batch);
         console.log(`✅ [BATCH-FLUSH] Flushed ${batch.length} URL logs`);
-      } else if (type === 'appLogs') {
-        await this._insertAppBatch(batch);
-        console.log(`✅ [BATCH-FLUSH] Flushed ${batch.length} app logs`);
       }
       try { if (global.performanceMonitor && perfBatch) { global.performanceMonitor.endTimer(perfBatch); } } catch {}
       
@@ -719,6 +725,85 @@ class EnhancedSyncManager {
         })));
       }
     }
+  }
+
+  /**
+   * App rows must reach the backend in the order they happened: each insert
+   * closes the apps opened before it, so an older row arriving after a newer
+   * one would stay open next to it. Failed rows go back to the front of the
+   * queue and are retried, with backoff, before anything newer is sent.
+   */
+  async _flushAppLogs() {
+    const queue = this.batchQueues.appLogs;
+    if (global.isScreenLocked) {
+      console.log('🔒 [SYNC] Deferring appLogs flush - screen is locked');
+      return;
+    }
+    if (this.appLogRetry.inFlight || queue.length === 0) return;
+    if (Date.now() < this.appLogRetry.nextAttemptAt) {
+      this._scheduleAppLogFlush();
+      return;
+    }
+
+    this.appLogRetry.inFlight = true;
+    let batch = [];
+    try {
+      batch = this._dropAppLogsBeforeLastClose(queue.splice(0));
+      if (batch.length > 0) {
+        await this._insertAppBatch(batch);
+        this.appLogRetry.failures = 0;
+        this.appLogRetry.nextAttemptAt = 0;
+        console.log(`✅ [BATCH-FLUSH] Flushed ${batch.length} app logs`);
+      }
+    } catch (error) {
+      console.error('❌ [BATCH-FLUSH] Error flushing appLogs:', error);
+      this._requeueAppLogs(Array.isArray(error?.unsentAppLogs) ? error.unsentAppLogs : batch);
+    } finally {
+      this.appLogRetry.inFlight = false;
+    }
+    if (queue.length > 0) this._scheduleAppLogFlush();
+  }
+
+  _requeueAppLogs(items) {
+    const queue = this.batchQueues.appLogs;
+    queue.unshift(...items.map((item) => ({ ...item, attempts: (item.attempts || 0) + 1 })));
+    if (queue.length > MAX_PENDING_APP_LOGS) {
+      const dropped = queue.splice(0, queue.length - MAX_PENDING_APP_LOGS);
+      console.warn(`⚠️ [BATCH-FLUSH] Dropped ${dropped.length} oldest unsent app logs (cap ${MAX_PENDING_APP_LOGS})`);
+    }
+    this.appLogRetry.failures += 1;
+    const delayMs = jitteredBackoffMs(this.appLogRetry.failures);
+    this.appLogRetry.nextAttemptAt = Date.now() + delayMs;
+    console.warn(`⚠️ [BATCH-FLUSH] ${queue.length} app log(s) kept for retry in ${Math.round(delayMs / 1000)}s`);
+  }
+
+  _dropAppLogsBeforeLastClose(items) {
+    const closedAt = getLastAllAppLogsClosedAt();
+    if (!closedAt) return items;
+    const kept = items.filter((item) => {
+      const ts = Date.parse(item?.timestamp || item?.started_at || '');
+      return !Number.isFinite(ts) || ts > closedAt;
+    });
+    if (kept.length < items.length) {
+      console.warn(
+        `⚠️ [BATCH-FLUSH] Skipped ${items.length - kept.length} app log(s) from before the last Stop (would stay open)`,
+      );
+    }
+    return kept;
+  }
+
+  _scheduleAppLogFlush() {
+    if (this.flushTimers.has('appLogs')) return;
+    const delayMs = Math.max(
+      this.appLogRetry.nextAttemptAt - Date.now(),
+      this.appLogRetry.failures > 0 ? 0 : this.batchConfig.flushIntervalMs,
+    );
+    const timer = setTimeout(() => {
+      this.flushTimers.delete('appLogs');
+      this.flushBatchQueue('appLogs');
+    }, delayMs);
+    if (timer.unref) timer.unref();
+    this.flushTimers.set('appLogs', timer);
   }
   
   async processIdleQueue() {
@@ -764,10 +849,10 @@ class EnhancedSyncManager {
   async _insertAppBatch(appLogs) {
     const items = Array.isArray(appLogs) ? appLogs : [appLogs];
     if (!items || items.length === 0) return;
-    
-    try {
-      console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
 
+    console.log(`📱 [SYNC] Inserting ${items.length} app logs to database`);
+    let sent = 0;
+    try {
       // RDS is the only backend — throwing lets the caller re-queue the batch.
       if (!isBackendTimeLogsEnabled(this.config)) {
         throw new Error('Backend not configured for app log sync');
@@ -775,11 +860,15 @@ class EnhancedSyncManager {
 
       // Backend forceAppInsert closes *other* open apps and skips when the same
       // app_name is already open — avoid close-all+reinsert spam here.
-      await insertAppLogsBatch(items, this.config);
+      for (; sent < items.length; sent += APP_LOG_REQUEST_SIZE) {
+        await insertAppLogsBatch(items.slice(sent, sent + APP_LOG_REQUEST_SIZE), this.config);
+      }
       console.log(`✅ [SYNC] Successfully synced ${items.length} app session(s) via backend RDS`);
     } catch (error) {
       console.error('❌ [SYNC] App logs batch insert failed:', error);
-      throw error;
+      const failure = error instanceof Error ? error : new Error(String(error));
+      failure.unsentAppLogs = items.slice(sent);
+      throw failure;
     }
   }
   

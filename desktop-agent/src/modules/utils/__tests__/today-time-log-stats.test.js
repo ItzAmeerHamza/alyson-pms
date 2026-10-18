@@ -1,5 +1,6 @@
 const {
   applyAdjustmentSeconds,
+  dropImpossibleSessionSeconds,
   holdLastGoodOnFailedFetch,
   shouldKeepCachedTodayStats,
   mergeRemoteAndOfflineLogs,
@@ -28,6 +29,67 @@ describe('applyAdjustmentSeconds — Pulse leave / admin credits', () => {
   it('never goes below zero when admin removes time', () => {
     const applied = applyAdjustmentSeconds(1800, -3600);
     expect(applied.totalTime).toBe(0);
+  });
+});
+
+describe('dropImpossibleSessionSeconds — leftover session is not today', () => {
+  const CAP = 5877; // seconds since Chicago midnight when Hamza opened the app
+
+  it('Hamza 14 Oct: 7h leftover is not shown as 1h 37m before Start', () => {
+    const result = dropImpossibleSessionSeconds({
+      totalSeconds: 25884,
+      closedSeconds: 25884,
+      sessionTrackedSeconds: 25884,
+      capSeconds: CAP,
+      isTracking: false,
+    });
+
+    expect(result.dropped).toBe(true);
+    expect(result.totalSeconds).toBe(0);
+    expect(result.closedSeconds).toBe(0);
+    expect(result.totalSeconds).not.toBe(CAP);
+  });
+
+  it('after Start, only the live session counts, not time since midnight', () => {
+    const result = dropImpossibleSessionSeconds({
+      totalSeconds: 25884,
+      closedSeconds: 25884,
+      sessionTrackedSeconds: 25884,
+      capSeconds: CAP,
+      isTracking: true,
+      liveElapsedSeconds: 2,
+    });
+
+    expect(result.totalSeconds).toBe(2);
+    expect(result.closedSeconds).toBe(0);
+  });
+
+  it('keeps a real 30 minute day that fits under the cap', () => {
+    const result = dropImpossibleSessionSeconds({
+      totalSeconds: 1800,
+      closedSeconds: 1800,
+      sessionTrackedSeconds: 1800,
+      capSeconds: CAP,
+      isTracking: false,
+    });
+
+    expect(result.dropped).toBe(false);
+    expect(result.totalSeconds).toBe(1800);
+    expect(result.closedSeconds).toBe(1800);
+  });
+
+  it('still applies a leave credit when the leftover session is dropped', () => {
+    const result = dropImpossibleSessionSeconds({
+      totalSeconds: 25884,
+      closedSeconds: 25884,
+      sessionTrackedSeconds: 25884,
+      capSeconds: CAP,
+      isTracking: false,
+      leaveSeconds: 7 * 3600,
+    });
+
+    expect(result.totalSeconds).toBe(7 * 3600);
+    expect(result.closedSeconds).toBe(0);
   });
 });
 

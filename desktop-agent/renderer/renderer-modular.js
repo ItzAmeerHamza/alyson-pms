@@ -483,16 +483,9 @@ function hydrateNonEffectiveFromCache() {
       raw = localStorage.getItem(_nonEffectiveStorageKey(todayKey));
     }
     if (raw == null || raw === '') return;
-    const n = Math.max(0, Math.floor(Number(raw) || 0));
-    const cap = maxPlausibleTrackedSecondsToday();
-    if (Number.isFinite(cap) && n > cap) {
-      clearNonEffectiveStorage(todayKey);
-      return;
-    }
-    // Cache may be 0 for a fully-effective day — still treat as hydrated.
-    window.__todayNonEffectiveSeconds = n;
-    window.__todayPulseNonEffectiveSeconds = n;
-    window.__effectiveStatsReady = true;
+    // Cached value is the last painted card. It used to be a local idle
+    // high-water (1h 26m vs Pulse 18m). Do not show it as Pulse.
+    clearNonEffectiveStorage(todayKey);
   } catch (_) {}
 }
 
@@ -568,15 +561,22 @@ function applyTodayEffectiveStats(stats) {
         if (isInflatedWorkDayCapHighWater(window.__todayTrackedHighWaterSeconds, liveAuth)) {
           discardInflatedHighWater(liveAuth, 'partial-live-stats');
         }
+        if (typeof stats.liveDeductedSeconds === 'number') {
+          noteRendererLiveDeduction(stats.liveDeductedSeconds);
+        }
         applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
-        window.__todayTrackedSeconds =
-          Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
-          getTodayElapsedSeconds(window.__lastTrackingStartTime);
+        window.__todayTrackedSeconds = liveClockSeconds(
+          window.__completedTodayBaseSeconds,
+          getTodayElapsedSeconds(window.__lastTrackingStartTime),
+        );
         // Monotonic: this is a PARTIAL payload (idle/low-activity still loading),
         // so it is the least trustworthy input there is to move the clock down.
         setTrackerDisplaySeconds(window.__todayTrackedSeconds);
       } else if (!isRendererActivelyTracking() || !window.__lastTrackingStartTime) {
-        applyAuthoritativeStoppedTotal(incoming, { reason: 'partial-stopped-stats' });
+        applyAuthoritativeStoppedTotal(incoming, {
+          reason: 'partial-stopped-stats',
+          settled: stats.settled === true,
+        });
       }
     }
     updateTrackerEffectiveMeta();
@@ -625,6 +625,9 @@ function applyTodayEffectiveStats(stats) {
       ) {
         discardInflatedHighWater(liveAuth, 'live-db-stats');
       }
+      if (typeof stats.liveDeductedSeconds === 'number') {
+        noteRendererLiveDeduction(stats.liveDeductedSeconds);
+      }
       applyClosedBaseFromStats(stats.completedTodayBeforeCurrentSessionSeconds, { live: true });
       // The base is NOT snapped down to the server total when the two diverge.
       // Work recorded while offline lives in the local queue, so the server is
@@ -632,15 +635,19 @@ function applyTodayEffectiveStats(stats) {
       // the lower number rewound the visible clock by the exact divergence the
       // moment connectivity returned. Genuine inflation is still caught above by
       // discardInflatedHighWater and by the work-day cap in setTrackerDisplaySeconds.
-      window.__todayTrackedSeconds =
-        Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)) +
-        getTodayElapsedSeconds(window.__lastTrackingStartTime);
+      window.__todayTrackedSeconds = liveClockSeconds(
+        window.__completedTodayBaseSeconds,
+        getTodayElapsedSeconds(window.__lastTrackingStartTime),
+      );
       setTrackerDisplaySeconds(window.__todayTrackedSeconds);
       // Keep the restart cache current mid-session too, so a crash while
       // tracking still repaints real time rather than zero.
       persistAuthoritativeTotal(window.__todayTrackedSeconds);
     } else {
-      applyAuthoritativeStoppedTotal(incoming, { reason: 'stopped-db-stats' });
+      applyAuthoritativeStoppedTotal(incoming, {
+        reason: 'stopped-db-stats',
+        settled: stats.settled === true,
+      });
     }
   }
   if (Number.isFinite(cap) && window.__todayTrackedSeconds > cap) {
@@ -724,6 +731,13 @@ function updateTrackerEffectiveMeta() {
 
   if (nonEffEl) nonEffEl.textContent = formatHmsCompact(nonEff);
   if (effectiveEl) effectiveEl.textContent = formatHmsCompact(effective);
+  try {
+    const coach =
+      (typeof moduleInstances !== 'undefined' && moduleInstances?.uiManager?.assistantCoachInstance) ||
+      window.uiManager?.assistantCoachInstance ||
+      null;
+    if (coach && typeof coach.syncLiveToday === 'function') coach.syncLiveToday();
+  } catch (_) { /* coach page may not be open */ }
 }
 
 window.applyTodayEffectiveStats = applyTodayEffectiveStats;
@@ -765,6 +779,24 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
 
   const cap = maxPlausibleTrackedSecondsToday();
   let incomingTracked = Math.max(0, Math.floor(Number(trackedSeconds) || 0));
+  const stoppedCeiling = Math.floor(Number(window.__authoritativeStoppedSeconds) || 0);
+  if (!isRendererActivelyTracking() && stoppedCeiling > 0 && incomingTracked > stoppedCeiling + 5) {
+    incomingTracked = stoppedCeiling;
+    allowDecrease = true;
+  }
+  // Menu bar is the total while it is ticking. Other paints were keeping the
+  // old pre-deduction number and leaping the window ahead of it.
+  const trayAge = Date.now() - (window.__lastTrayTimerTickAt || 0);
+  const trayCum = Math.floor(Number(window.__lastTrayIpcCumulativeSeconds) || 0);
+  if (
+    isRendererActivelyTracking() &&
+    window.__trayTimerActive &&
+    trayAge < 2500 &&
+    trayCum > 0
+  ) {
+    incomingTracked = trayCum;
+    allowDecrease = true;
+  }
   const prevTracked = Math.max(
     0,
     Math.floor(Number(window.__todayTrackedSeconds) || 0),
@@ -810,6 +842,28 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
     persistTrackedHighWater(window.__todayTrackedHighWaterSeconds, { force: allowDecrease });
   } else {
     clearTrackedHighWaterStorage(todayKey);
+  }
+
+  // Diagnostic: the clock should only ever step up by a second or two. A
+  // bigger jump is some stale input winning; log every input and the caller.
+  const shownBefore = parseHmsToSeconds(el.textContent);
+  const jump = shownBefore > 0 ? tracked - shownBefore : 0;
+  if (Math.abs(jump) > 60) {
+    logTrackerDiagnostic('warn', `⚠️ [TRACKER] Clock ${jump > 0 ? 'jumped up' : 'dropped'} ${shownBefore}s → ${tracked}s`, {
+      requested: Math.max(0, Math.floor(Number(trackedSeconds) || 0)),
+      incomingTracked,
+      allowDecrease,
+      prevTracked,
+      highWater: Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
+      trayCum,
+      trayAge,
+      stoppedCeiling,
+      tracking: isRendererActivelyTracking(),
+      stopFloor: window.__todayBaseAtLastStop,
+      closedBase: window.__completedTodayBaseSeconds,
+      liveDeduction: rendererLiveDeductionSeconds(),
+      caller: String(new Error().stack || '').split('\n').slice(2, 8).map((l) => l.trim()).join(' | '),
+    });
   }
 
   // Skip DOM write when the displayed second did not change (cuts layout thrash).
@@ -895,7 +949,7 @@ function hydrateAuthoritativeFromCache() {
  * Local high-water / stop floors must never invent time the portal does not have.
  * Call this on every successful non-stale stopped stats load.
  */
-function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {}) {
+function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats', settled = false } = {}) {
   const db = Math.max(0, Math.floor(Number(dbSeconds) || 0));
   const cap = maxPlausibleTrackedSecondsToday();
   let clamped = Number.isFinite(cap) ? Math.min(db, cap) : db;
@@ -920,11 +974,20 @@ function applyAuthoritativeStoppedTotal(dbSeconds, { reason = 'db-stats' } = {})
   // A stats read that lands before the just-closed session has been written
   // comes back short by that session. Applying it rewound the clock in front of
   // the employee moments after they pressed Stop. Hold the click total until the
-  // database catches up; it is released below once the DB reaches it.
-  const frozenStop = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
-  const frozenUsable = frozenStop > clamped && (!Number.isFinite(cap) || frozenStop <= cap);
-  if (frozenUsable) {
-    clamped = frozenStop;
+  // database catches up. A settled read (server has every second) ends the
+  // hold — past that point it could only keep phantom time on screen.
+  const { resolveStoppedClockSeconds } = require('../src/modules/utils/sleep-aware-elapsed');
+  clamped = resolveStoppedClockSeconds({
+    dbSeconds: clamped,
+    stopFloorSeconds: window.__todayBaseAtLastStop,
+    settled,
+    capSeconds: Number.isFinite(cap) ? cap : null,
+  });
+  if (settled) {
+    window.__todayBaseAtLastStop = clamped;
+    // Last server total while stopped. Later paints must not put the
+    // pre-delete high water back on top of this.
+    window.__authoritativeStoppedSeconds = clamped;
   }
 
   const prev = Math.max(
@@ -1036,8 +1099,17 @@ function applyClosedBaseFromStats(rawBase, { live = false } = {}) {
     prev = incoming;
   }
   window.__todayBaseHydratedOnce = true;
-  // Forward-only for normal lag — but never keep an orphan-cap floor.
-  window.__completedTodayBaseSeconds = Math.max(prev, incoming);
+  // Forward-only for normal lag. A screenshot delete may move the base down
+  // by exactly the deducted seconds; a read from before that delete must not
+  // put them back or the menu bar stays a deduction behind the in-app clock.
+  const { reconcileForwardBase } = require('../src/modules/utils/time-deductions');
+  const reconciledBase = reconcileForwardBase(
+    prev,
+    incoming,
+    window.__authorizedClosedDropSeconds,
+  );
+  window.__authorizedClosedDropSeconds = reconciledBase.pending;
+  window.__completedTodayBaseSeconds = reconciledBase.base;
   if (Number.isFinite(cap)) {
     window.__completedTodayBaseSeconds = Math.min(window.__completedTodayBaseSeconds, cap);
   }
@@ -1048,12 +1120,45 @@ function applyClosedBaseFromStats(rawBase, { live = false } = {}) {
 }
 window.applyClosedBaseFromStats = applyClosedBaseFromStats;
 
+function rendererLiveDeductionSeconds() {
+  return Math.max(0, Math.floor(Number(window.__liveDeductionSeconds) || 0));
+}
+
+/** Closed base + elapsed, minus screenshot time already taken off this live session. */
+function liveClockSeconds(baseSeconds, elapsedSeconds) {
+  return Math.max(
+    0,
+    Math.floor(Number(baseSeconds) || 0) +
+      Math.floor(Number(elapsedSeconds) || 0) -
+      rendererLiveDeductionSeconds(),
+  );
+}
+
+/**
+ * Tray cumulative already has the live deduction taken off. Put that back
+ * when recovering the closed-today base, or the next tick subtracts it twice
+ * and a stats refresh puts the old total back.
+ */
+function closedBaseFromTrayCumulative(cumulativeSeconds, elapsedSeconds) {
+  return Math.max(
+    0,
+    Math.floor(Number(cumulativeSeconds) || 0) -
+      Math.floor(Number(elapsedSeconds) || 0) +
+      rendererLiveDeductionSeconds(),
+  );
+}
+
+function noteRendererLiveDeduction(seconds) {
+  const next = Math.max(0, Math.floor(Number(seconds) || 0));
+  window.__liveDeductionSeconds = Math.max(rendererLiveDeductionSeconds(), next);
+}
+
 function readLocalTrackingCumulativeSeconds() {
   const start = window.__lastTrackingStartTime;
   if (!start) return 0;
   const elapsed = getTodayElapsedSeconds(start);
   const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-  return base + elapsed;
+  return liveClockSeconds(base, elapsed);
 }
 
 /**
@@ -1103,6 +1208,7 @@ function beginLocalTrackingClock(startTime, lastStopAt) {
   } catch (_) { /* ignore */ }
   const priorStart = window.__lastTrackingStartTime;
   window.__lastTrackingStartTime = startTime;
+  window.__authoritativeStoppedSeconds = 0;
   window.__localTrackingClockActive = true;
   window.__trayTimerActive = false;
   window.__lastTrayTimerTickAt = 0;
@@ -1110,6 +1216,7 @@ function beginLocalTrackingClock(startTime, lastStopAt) {
   window.__clearedSecondaryForTray = false;
   window.__holdLiveNonEffectiveUntilPulse = false;
   window.__liveSessionIdleSeconds = 0;
+  window.__liveDeductionSeconds = 0;
   window.__nonEffectiveAtLiveStart = Math.max(
     0,
     Math.floor(Number(window.__todayPulseNonEffectiveSeconds) || 0),
@@ -1125,13 +1232,19 @@ function beginLocalTrackingClock(startTime, lastStopAt) {
     excludeOwnSessionFromClosedBase,
   } = require('../src/modules/utils/sleep-aware-elapsed');
   const liveElapsed = priorStart ? getTodayElapsedSeconds(priorStart) : 0;
-  const lastPainted = Math.max(
+  const stopFloorSeconds = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
+  let lastPainted = Math.max(
     0,
     Math.floor(Number(window.__todayTrackedSeconds) || 0),
     Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-    Math.floor(Number(window.__todayBaseAtLastStop) || 0),
+    stopFloorSeconds,
     readTrackerDisplaySeconds(),
   );
+  // High water can still be the pre-deduction total. Start must continue
+  // from the stop total (the DB figure), not climb back to 04:53:48.
+  if (stopFloorSeconds > 60 && lastPainted > stopFloorSeconds + 5) {
+    lastPainted = stopFloorSeconds;
+  }
   let closedKnown = resolveClosedBaseForStart({
     closedBase: Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0)),
     stopFloor: Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0)),
@@ -1155,11 +1268,7 @@ function beginLocalTrackingClock(startTime, lastStopAt) {
     liveElapsed,
   });
   const liveStart = closedKnown + getTodayElapsedSeconds(startTime);
-  window.__todayTrackedHighWaterSeconds = Math.max(
-    Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-    liveStart,
-    closedKnown,
-  );
+  window.__todayTrackedHighWaterSeconds = Math.max(liveStart, closedKnown);
   persistTrackedHighWater(window.__todayTrackedHighWaterSeconds, { force: true });
   window.__completedTodayBaseSeconds = closedKnown;
   // Never rewind today's last-good to 00:00:00 on Start. allowDecrease only
@@ -1197,22 +1306,20 @@ function updateRendererTrackingClock() {
   // LIVE ACCURACY: wall-clock only — other sessions + seconds since Start.
   // Never add this session's own idle/Stop snapshot (phantom 3h then snap).
   // Never Math.max with high-water (that caused phantom totals / sticky lag).
-  let cumulativeSec = resolveTrackingDisplaySeconds(base + elapsed);
-  if (trayAge < 5000 && window.__trayTimerActive && trayCumFromIpc > 0) {
-    if (trayCumFromIpc > cumulativeSec + 120) {
-      // Tray still includes this session's idle/Stop floor (recover phantom).
-    } else if (cumulativeSec > trayCumFromIpc + 120) {
-      // Main/tray owns company TZ — snap down when renderer invents time.
-      cumulativeSec = trayCumFromIpc;
-    } else if (Math.abs(trayCumFromIpc - cumulativeSec) <= 2) {
-      cumulativeSec = Math.max(trayCumFromIpc, cumulativeSec);
+  let cumulativeSec = resolveTrackingDisplaySeconds(liveClockSeconds(base, elapsed));
+  // A fresh menu-bar total wins, including after a deduction. Painting
+  // base+elapsed here is what made the window stride ahead of the tray.
+  if (trayAge < 2500 && window.__trayTimerActive && trayCumFromIpc > 0) {
+    cumulativeSec = trayCumFromIpc;
+    if (elapsed >= 0 && trayCumFromIpc + rendererLiveDeductionSeconds() >= elapsed) {
+      window.__completedTodayBaseSeconds = closedBaseFromTrayCumulative(trayCumFromIpc, elapsed);
     }
   }
   const cap = maxPlausibleTrackedSecondsToday();
   if (Number.isFinite(cap) && cumulativeSec > cap) cumulativeSec = cap;
   window.__lastTrayCumulativeSeconds = cumulativeSec;
   const sessionStr = formatSecondsAsHMS(
-    Math.abs(trayCumFromIpc - (base + elapsed)) > 120 && trayAge < 5000
+    Math.abs(trayCumFromIpc - liveClockSeconds(base, elapsed)) > 120 && trayAge < 5000
       ? Math.max(0, trayCumFromIpc - base)
       : elapsed,
   );
@@ -1220,9 +1327,8 @@ function updateRendererTrackingClock() {
   // Stop was clicked — the total is already frozen at that instant. Painting
   // again here would add the wind-down time to the visible clock.
   if (window.__stopInProgress) return;
-  // High-water is released at Start (beginLocalTrackingClock). Live ticks stay
-  // forward-only so a noisy base refresh cannot rewind 2h30 to 2h20.
-  setTrackerDisplaySeconds(cumulativeSec);
+  const trayOwnsTotal = trayAge < 2500 && window.__trayTimerActive && trayCumFromIpc > 0;
+  setTrackerDisplaySeconds(cumulativeSec, { allowDecrease: trayOwnsTotal });
   refreshLiveSessionIdleOverlay();
 }
 
@@ -2093,7 +2199,7 @@ function setupModuleCommunication() {
       const { excludeOwnSessionFromClosedBase } = require('../src/modules/utils/sleep-aware-elapsed');
       // Align closed base to tray so failover matches menu-bar time.
       if (trayElapsed >= 0) {
-        const trayBase = Math.max(0, trayCumulative - trayElapsed);
+        const trayBase = closedBaseFromTrayCumulative(trayCumulative, trayElapsed);
         const knownClosed = Math.max(
           0,
           Math.floor(Number(window.__completedTodayBaseSeconds) || 0),
@@ -2105,8 +2211,15 @@ function setupModuleCommunication() {
         if (trayCumulative === 0 && trayElapsed < 120 && knownClosed <= 60) {
           window.__completedTodayBaseSeconds = 0;
         } else if (trayCumulative > 0) {
+          const { reconcileForwardBase } = require('../src/modules/utils/time-deductions');
+          const reconciledBase = reconcileForwardBase(
+            knownClosed,
+            trayBase,
+            window.__authorizedClosedDropSeconds,
+          );
+          window.__authorizedClosedDropSeconds = reconciledBase.pending;
           window.__completedTodayBaseSeconds = excludeOwnSessionFromClosedBase({
-            closedBase: Math.max(knownClosed, trayBase),
+            closedBase: reconciledBase.base,
             sessionStart: start,
             lastStopAt: window.__lastStopAtMs,
           });
@@ -2119,7 +2232,9 @@ function setupModuleCommunication() {
       });
       // LIVE ACCURACY: closed base + wall-clock elapsed (same as tray formula).
       // Do not Math.max with high-water — that invents time / freezes the second.
-      let liveCumulative = start ? base + getTodayElapsedSeconds(start) : trayCumulative;
+      let liveCumulative = start
+        ? liveClockSeconds(base, getTodayElapsedSeconds(start))
+        : trayCumulative;
       let cumulativeSec = liveCumulative;
       window.__lastTrayIpcCumulativeSeconds = trayCumulative;
       if (start && trayCumulative > liveCumulative + 120) {
@@ -2134,15 +2249,28 @@ function setupModuleCommunication() {
       if (Number.isFinite(cap) && cumulativeSec > cap) {
         cumulativeSec = cap;
       }
-      window.__lastTrayCumulativeSeconds = cumulativeSec;
+      window.__lastTrayCumulativeSeconds = trayCumulative;
       if (dashboardTimer && dashboardTimer.textContent !== sessionStr) {
         dashboardTimer.textContent = sessionStr;
       }
-      // A tray tick still in flight when Stop was clicked must not extend the
-      // clock past the click.
-      if (window.__stopInProgress) return;
-      setTrackerDisplaySeconds(cumulativeSec);
+      // The menu bar is the total. Paint that number, including the step down
+      // when screenshots are deleted, then keep the same 1-second steps.
+      // A higher local base was leaping the window ahead in strides.
+      if (window.__stopInProgress || !(trayCumulative > 0)) return;
+      if (start) {
+        const elapsedForBase = getTodayElapsedSeconds(start);
+        if (elapsedForBase >= 0 && trayCumulative + rendererLiveDeductionSeconds() >= elapsedForBase) {
+          window.__completedTodayBaseSeconds = closedBaseFromTrayCumulative(trayCumulative, elapsedForBase);
+        }
+      }
+      setTrackerDisplaySeconds(trayCumulative, { allowDecrease: true });
     }
+  });
+
+  // A delete made in Pulse or on another device. Main already lowered its
+  // floors; drop this window's Stop floor and base by the same seconds.
+  ipcRenderer.on('today-deduction-applied', (_event, data) => {
+    applyTodayDeduction(data?.seconds, { onLive: data?.onLive === true });
   });
 
   ipcRenderer.on('offline-time-logs-synced', (_event, data) => {
@@ -2159,6 +2287,16 @@ function setupModuleCommunication() {
         void moduleInstances.uiManager.loadTodaysTotalTime();
       }
     });
+  });
+
+  // Main: the server should now have every second of today. Re-read so a
+  // settled total replaces the Stop floor (clock = Pulse).
+  ipcRenderer.on('today-stats-settle', () => {
+    if (window.__lastTrackingStartTime || isRendererActivelyTracking()) return;
+    try {
+      moduleInstances?.uiManager?.invalidateTodayTimeStatsCache?.();
+    } catch (_) { /* ignore */ }
+    void moduleInstances?.uiManager?.loadTodaysTotalTime?.();
   });
 
   ipcRenderer.on('tracking-stopped', (_event, data) => {
@@ -2186,21 +2324,36 @@ function setupModuleCommunication() {
     const cutSec = Math.max(0, Math.floor(Number(data?.timeCutSeconds) || 0));
     // Only the shown-idle-prompt timeout may lower tracked time (exactly 10m).
     const authorizedCut = data?.reason === 'idle_timeout' && cutSec > 0;
-    const frozen = Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0));
-    let liveHigh = Math.max(
-      0,
-      Math.floor(Number(window.__todayTrackedSeconds) || 0),
-      Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0),
-    );
+    const shownAtStop = readTrackerDisplaySeconds();
+    let frozen = Math.max(0, Math.floor(Number(data?.frozenTotalSeconds) || 0));
+    // The running clock is the deducted DB total. The stop snapshot is often
+    // the raw session (04:53:48) and was replacing 04:34:18 on Stop.
+    if (shownAtStop > 60 && frozen > shownAtStop + 5) frozen = shownAtStop;
+    // Main's Stop total already has screenshot deductions, the idle cut and the
+    // sleep end in it. This window's own high water can still hold deleted
+    // time, so it only stands in when main sent nothing.
+    let liveHigh = frozen;
+    if (!(frozen > 0)) {
+      liveHigh = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0), shownAtStop);
+      const highWater = Math.floor(Number(window.__todayTrackedHighWaterSeconds) || 0);
+      if (!(shownAtStop > 60 && highWater > shownAtStop + 5)) {
+        liveHigh = Math.max(liveHigh, highWater);
+      }
+    }
     // Overnight leftover ≈ wall-clock since midnight. Do not pass auth=0 —
     // that flagged every real Stop today as tracking-stopped-orphan-cap.
     if (!authorizedCut && isInflatedWorkDayCapHighWater(liveHigh, frozen)) {
       discardInflatedHighWater(frozen, 'tracking-stopped-orphan-cap');
       liveHigh = frozen;
     }
-    const hint = authorizedCut
-      ? Math.max(frozen, Math.max(0, liveHigh - cutSec))
-      : Math.max(liveHigh, frozen);
+    const { resolveStopHintSeconds, isSleepStopReason } = require('../src/modules/utils/sleep-aware-elapsed');
+    const sleepStop = isSleepStopReason(data?.reason) && frozen > 0;
+    const hint = resolveStopHintSeconds({
+      reason: data?.reason,
+      frozenSeconds: frozen,
+      liveHighSeconds: liveHigh,
+      cutSeconds: authorizedCut ? cutSec : 0,
+    });
     const endMs = data?.endTime ? new Date(data.endTime).getTime() : NaN;
     window.__lastStopAtMs = Number.isFinite(endMs)
       ? endMs
@@ -2208,20 +2361,45 @@ function setupModuleCommunication() {
         ? Date.now() - cutSec * 1000
         : Date.now();
 
+    const dropToSnapshot = frozen > 0 && hint + 5 < liveHigh;
     if (hint > 0 || authorizedCut) {
       window.__todayBaseAtLastStop = hint;
-      // allowDecrease only for the authorized 10m idle-prompt cut.
-      setTrackerDisplaySeconds(hint, { allowDecrease: authorizedCut });
+      window.__todayTrackedHighWaterSeconds = hint;
+      // Stopped, everything today is closed. Start seeds from this base, so it
+      // must be main's total, not a leftover that still holds deleted time.
+      if (frozen > 0) window.__completedTodayBaseSeconds = hint;
+      // Screenshot deletes already lowered the menu bar. Stop must stay there,
+      // not climb back to the pre-delete high water.
+      setTrackerDisplaySeconds(hint, {
+        allowDecrease: frozen > 0 || authorizedCut || sleepStop || dropToSnapshot,
+      });
       flushPendingHighWaterPersist();
+      // The restart cache was only written mid-session, so reopening the app
+      // right after Stop painted a total up to 30s+ short until stats loaded.
+      if (frozen > 0) persistAuthoritativeTotal(hint);
       void ipcRenderer.invoke('set-frozen-total-at-stop', hint).catch(() => {});
     }
     void refreshTodayCompletedBaseSeconds().then(() => {
       const dbTracked = Math.max(0, Math.floor(Number(window.__todayTrackedSeconds) || 0));
+      const frozenShown = Math.max(0, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
+      if (
+        frozenShown > 60 &&
+        dbTracked > frozenShown + 5 &&
+        shownAtStop > 60 &&
+        Math.abs(shownAtStop - frozenShown) <= 5
+      ) {
+        window.__todayTrackedHighWaterSeconds = frozenShown;
+        setTrackerDisplaySeconds(frozenShown, { allowDecrease: true });
+        return;
+      }
       if (authorizedCut) {
         // After idle cut, trust DB / frozen (may be 10m below prior live high-water).
         const afterCut = Math.max(dbTracked, frozen, hint);
         window.__todayBaseAtLastStop = afterCut;
         setTrackerDisplaySeconds(afterCut, { allowDecrease: true });
+      } else if (dropToSnapshot) {
+        window.__todayBaseAtLastStop = hint;
+        setTrackerDisplaySeconds(hint, { allowDecrease: true });
       } else {
         // Forward-only: never rewind for normal stops / sync lag.
         const kept = Math.max(dbTracked, hint, Math.floor(Number(window.__todayBaseAtLastStop) || 0));
@@ -2445,7 +2623,10 @@ function setupModuleCommunication() {
                     { allowDecrease: false },
                   );
                 } else {
-                  applyAuthoritativeStoppedTotal(s.totalTime, { reason: 'timer-verify-stopped' });
+                  applyAuthoritativeStoppedTotal(s.totalTime, {
+                    reason: 'timer-verify-stopped',
+                    settled: s.settled === true,
+                  });
                 }
               }
             }).catch(() => {
@@ -2493,7 +2674,10 @@ function setupModuleCommunication() {
                   { allowDecrease: false },
                 );
               } else {
-                applyAuthoritativeStoppedTotal(s.totalTime, { reason: 'timer-verify-error-stopped' });
+                applyAuthoritativeStoppedTotal(s.totalTime, {
+                  reason: 'timer-verify-error-stopped',
+                  settled: s.settled === true,
+                });
               }
             }
           }).catch(() => {
@@ -2554,7 +2738,7 @@ function setupModuleCommunication() {
         if (data.timer.elapsed !== undefined && data.timer.elapsed !== null) {
           const elapsed = Math.floor(data.timer.elapsed / 1000);
           const base = Math.max(0, Math.floor(Number(window.__completedTodayBaseSeconds) || 0));
-          setTrackerDisplaySeconds(base + elapsed);
+          setTrackerDisplaySeconds(liveClockSeconds(base, elapsed));
         }
       }
       
@@ -2795,6 +2979,47 @@ async function handleLogout() {
 }
 
 // === PROJECT SELECTION HANDLER ===
+function resolveSelectedProjectId() {
+  const projectSelect = document.getElementById('projectSelect');
+  const apply = (id) => {
+    const value = String(id || '').trim();
+    if (!value) return '';
+    if (projectSelect && projectSelect.value !== value) {
+      const exists = Array.from(projectSelect.options || []).some((opt) => opt.value === value);
+      if (exists) projectSelect.value = value;
+    }
+    window.__lastSelectedProjectId = value;
+    return value;
+  };
+
+  const fromSelect = apply(projectSelect?.value);
+  if (fromSelect) return fromSelect;
+
+  const selectedBtn = document.querySelector('.project-dd-option.is-selected');
+  const fromButton = apply(selectedBtn?.dataset?.value);
+  if (fromButton) return fromButton;
+
+  const label = (document.querySelector('.project-dd-trigger-label')?.textContent || '').trim();
+  if (projectSelect && label && !/choose a project/i.test(label)) {
+    const match = Array.from(projectSelect.options).find(
+      (opt) => opt.value && (opt.textContent || '').trim() === label,
+    );
+    const fromLabel = apply(match?.value);
+    if (fromLabel) return fromLabel;
+  }
+
+  const remembered = apply(window.__lastSelectedProjectId);
+  if (remembered && projectSelect && Array.from(projectSelect.options).some((opt) => opt.value === remembered)) {
+    return apply(remembered);
+  }
+
+  const options = projectSelect
+    ? Array.from(projectSelect.options).filter((opt) => opt.value)
+    : [];
+  if (options.length === 1) return apply(options[0].value);
+  return '';
+}
+
 async function handleProjectSelection() {
   const projectSelect = document.getElementById('projectSelect');
   const trackerStartBtn = document.getElementById('trackerStartBtn');
@@ -2806,6 +3031,7 @@ async function handleProjectSelection() {
   if (!projectSelect) return;
   
   const selectedProjectId = projectSelect.value;
+  if (selectedProjectId) window.__lastSelectedProjectId = selectedProjectId;
   const selectedOption = projectSelect.selectedOptions[0];
   const projectName = selectedOption ? (selectedOption.textContent || '').trim() : '';
   
@@ -3548,8 +3774,7 @@ function setupLegacyEventListeners() {
       // T0: Click handler invocation
       console.time('T0-T2: Total renderer time');
       console.log('🚀 [RENDERER] Start button clicked! T0:', new Date().toISOString());
-      const projectSelect = document.getElementById('projectSelect');
-      const projectId = projectSelect ? projectSelect.value : null;
+      const projectId = resolveSelectedProjectId();
       console.log('📋 [RENDERER] Selected project ID:', projectId);
 
       if (!projectId) {
@@ -4054,11 +4279,11 @@ function displayEnhancedScreenshots(screenshots, duplicates = []) {
         // Build screenshot grid with enhanced details
         screenshotHTML += `
             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;">
-                <div style="display: flex; justify-between; align-items: center; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; margin-bottom: 20px;">
                     <h3 style="margin: 0; color: #374151; font-size: 16px; font-weight: 600;">
                         Activity Screenshots (${screenshots.length} found)
                     </h3>
-                    <div style="font-size: 14px; color: #6b7280;">
+                    <div style="font-size: 14px; color: #6b7280; white-space: nowrap; flex-shrink: 0;">
                         Average Activity: ${Math.round(screenshots.reduce((sum, s) => sum + (s.activity_percent || 0), 0) / screenshots.length)}%
                     </div>
                 </div>
@@ -4924,6 +5149,41 @@ async function requestDeleteScreenshot(screenshotId) {
   }
 }
 
+/** Main already lowered its floors by the deducted seconds; follow it now. */
+function applyTodayDeduction(seconds, { onLive = false } = {}) {
+  const d = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (d <= 0) return;
+  const lower = (v) => Math.max(0, Math.floor(Number(v) || 0) - d);
+  if (onLive) {
+    // Live deduction comes off elapsed, not the closed-today base. Lowering
+    // the base as well made the next stats refresh paint the old total, then
+    // the tray paint the deducted one, over and over.
+    noteRendererLiveDeduction(rendererLiveDeductionSeconds() + d);
+  } else {
+    window.__authorizedClosedDropSeconds =
+      Math.max(0, Math.floor(Number(window.__authorizedClosedDropSeconds) || 0)) + d;
+    window.__completedTodayBaseSeconds = lower(window.__completedTodayBaseSeconds);
+    if (window.__todayBaseAtLastStop != null) {
+      window.__todayBaseAtLastStop = lower(window.__todayBaseAtLastStop);
+    }
+  }
+  // From the number on screen: the high water can still hold deleted time,
+  // and lowering that by d leaves the rest of it as phantom time.
+  const shown =
+    readTrackerDisplaySeconds() || Math.floor(Number(window.__todayTrackedSeconds) || 0);
+  if (window.__authoritativeStoppedSeconds != null) {
+    window.__authoritativeStoppedSeconds = lower(window.__authoritativeStoppedSeconds);
+  }
+  setTrackerDisplaySeconds(lower(shown), { allowDecrease: true });
+  // Next tray tick may still be the pre-delete total. Ignore that one,
+  // then follow the lowered tray total and keep counting.
+  window.__followTrayAfterDeduction = true;
+  flushPendingHighWaterPersist();
+  try {
+    moduleInstances?.uiManager?.invalidateTodayTimeStatsCache?.();
+  } catch (_) { /* ignore */ }
+}
+
 async function confirmDeleteScreenshot() {
   if (!pendingDeleteScreenshotId) return;
 
@@ -4940,6 +5200,9 @@ async function confirmDeleteScreenshot() {
     if (result.success) {
       const formatted = formatDeductionTime(result.deductedSeconds);
       showToast(`Screenshot deleted. ${formatted} deducted from your time.`, 'success');
+      if (result.clockAdjusted === true) {
+        applyTodayDeduction(result.deductedSeconds, { onLive: result.onLive === true });
+      }
       loadRecentScreenshots({ force: true });
     } else {
       showToast(result.error || 'Failed to delete screenshot', 'error');
@@ -5002,22 +5265,22 @@ function showToast(message, type = 'info') {
         -webkit-user-select: none; user-select: none;
       }
       #idle-prompt-overlay .idle-card {
-        position: relative; width: 380px; max-width: 88vw; background: #ffffff; color: #1e293b;
+        position: relative; width: 380px; max-width: 88vw; background: var(--bg-surface); color: var(--text);
         border: 1px solid #e9ecf5; border-radius: 18px; padding: 30px 26px 22px;
         text-align: center; box-shadow: 0 24px 60px rgba(102, 126, 234, 0.28);
         overflow: hidden;
       }
       #idle-prompt-overlay .idle-card::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
-        background: linear-gradient(90deg, #667eea, #764ba2);
+        background: var(--accent);
       }
-      #idle-prompt-overlay .idle-title { font-size: 19px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
-      #idle-prompt-overlay .idle-sub { font-size: 13px; line-height: 1.45; color: #64748b; margin-bottom: 20px; }
+      #idle-prompt-overlay .idle-title { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+      #idle-prompt-overlay .idle-sub { font-size: 13px; line-height: 1.45; color: var(--text-muted); margin-bottom: 20px; }
       #idle-prompt-overlay .idle-ring { position: relative; width: 96px; height: 96px; margin: 0 auto 22px; }
       #idle-prompt-overlay .idle-ring svg { transform: rotate(-90deg); }
       #idle-prompt-overlay .idle-track { stroke: #eef1f8; }
-      #idle-prompt-overlay .idle-bar { stroke: #667eea; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s linear; }
-      #idle-prompt-overlay .idle-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; color: #1e293b; font-variant-numeric: tabular-nums; }
+      #idle-prompt-overlay .idle-bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.3s linear; }
+      #idle-prompt-overlay .idle-count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
       #idle-prompt-overlay .idle-buttons { display: flex; flex-direction: column; gap: 10px; }
       #idle-prompt-overlay button { width: 100%; border: none; border-radius: 12px; padding: 13px 16px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease, background 0.15s ease; }
       #idle-prompt-overlay button:active:not(:disabled) { transform: translateY(1px); }
@@ -5065,7 +5328,7 @@ function showToast(message, type = 'info') {
     countEl.textContent = String(Math.max(0, remaining));
     const frac = total > 0 ? remaining / total : 0;
     ringBar.style.strokeDashoffset = String(CIRC * (1 - frac));
-    ringBar.style.stroke = remaining <= 10 ? '#ef4444' : '#667eea';
+    ringBar.style.stroke = remaining <= 10 ? '#ef4444' : 'var(--accent)';
   }
 
   function stopTimer() {
@@ -5131,21 +5394,21 @@ function showToast(message, type = 'info') {
         -webkit-user-select: none; user-select: none;
       }
       #start-reminder-overlay .start-card {
-        position: relative; width: 380px; max-width: 88vw; background: #ffffff; color: #1e293b;
+        position: relative; width: 380px; max-width: 88vw; background: var(--bg-surface); color: var(--text);
         border: 1px solid #e9ecf5; border-radius: 18px; padding: 30px 26px 22px;
         text-align: center; box-shadow: 0 24px 60px rgba(102, 126, 234, 0.28);
         overflow: hidden;
       }
       #start-reminder-overlay .start-card::before {
         content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
-        background: linear-gradient(90deg, #667eea, #764ba2);
+        background: var(--accent);
       }
-      #start-reminder-overlay .start-title { font-size: 19px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
-      #start-reminder-overlay .start-sub { font-size: 13px; line-height: 1.45; color: #64748b; margin-bottom: 22px; }
+      #start-reminder-overlay .start-title { font-size: 19px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+      #start-reminder-overlay .start-sub { font-size: 13px; line-height: 1.45; color: var(--text-muted); margin-bottom: 22px; }
       #start-reminder-overlay .start-buttons { display: flex; flex-direction: column; gap: 10px; }
       #start-reminder-overlay button { width: 100%; border: none; border-radius: 12px; padding: 13px 16px; font-size: 15px; font-weight: 600; cursor: pointer; }
       #start-reminder-overlay .start-go { background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32); }
-      #start-reminder-overlay .start-later { background: #f8fafc; color: #475569; border: 1px solid #e2e8f0; }
+      #start-reminder-overlay .start-later { background: var(--bg-surface-2); color: var(--text-2); border: 1px solid var(--border); }
     `;
     document.head.appendChild(style);
     overlay = document.createElement('div');
@@ -5156,26 +5419,45 @@ function showToast(message, type = 'info') {
         <div class="start-sub">Tavilo Time is running, but the timer is stopped. Start tracking so this time is recorded.</div>
         <div class="start-buttons">
           <button class="start-go" id="start-reminder-go">Start tracking</button>
-          <button class="start-later" id="start-reminder-later">Not now</button>
+          <button class="start-later" id="start-reminder-later">I am on break</button>
         </div>
       </div>
     `;
     document.body.appendChild(overlay);
     overlay.querySelector('#start-reminder-go').addEventListener('click', () => {
       hide();
-      const startBtn = document.getElementById('startBtn');
-      if (startBtn && !startBtn.disabled) {
-        startBtn.click();
-        return;
-      }
-      try {
-        moduleInstances?.ipcManager?.startTracking?.();
-      } catch (_) { /* ignore */ }
+      void startTrackingFromReminder();
     });
     overlay.querySelector('#start-reminder-later').addEventListener('click', () => {
       hide();
       try { ipcRenderer.invoke('start-reminder-later'); } catch (_) { /* ignore */ }
     });
+  }
+
+  function resolveReminderProjectId() {
+    return resolveSelectedProjectId();
+  }
+
+  async function startTrackingFromReminder() {
+    try { moduleInstances?.uiManager?.showPage?.('timetracker'); } catch (_) { /* ignore */ }
+    const projectId = resolveReminderProjectId();
+    if (!projectId) {
+      moduleInstances?.notificationManager?.showNotification?.(
+        'Please select a project before starting the timer',
+        'warning',
+      );
+      try { document.getElementById('projectSelect')?.focus(); } catch (_) { /* ignore */ }
+      return;
+    }
+    if (!moduleInstances?.ipcManager?.startTracking) {
+      moduleInstances?.notificationManager?.showNotification?.('Failed to start tracking', 'error');
+      return;
+    }
+    try {
+      await moduleInstances.ipcManager.startTracking(projectId);
+    } catch (_) {
+      moduleInstances?.notificationManager?.showNotification?.('Failed to start tracking', 'error');
+    }
   }
 
   function hide() {

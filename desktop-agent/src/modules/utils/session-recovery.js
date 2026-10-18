@@ -484,6 +484,33 @@ function hasLiveSessionToProtect(state = global) {
   );
 }
 
+// Start's own budget: 5s pre-insert inspect + 8s create.
+const START_IN_FLIGHT_WAIT_MS = 15000;
+
+async function waitForStartInFlight(state = global, timeoutMs = START_IN_FLIGHT_WAIT_MS) {
+  const pending = state.trackingManager?._startInFlight;
+  if (!pending || typeof pending.then !== 'function') return false;
+  let timer;
+  try {
+    await Promise.race([
+      Promise.resolve(pending).catch(() => {}),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+  return true;
+}
+
+/** A Start's start_time is never earlier than the moment that Start began. */
+function sweepStartedBeforeIso(state = global, nowMs = Date.now()) {
+  const since = Number(state.trackingManager?._startInFlightSinceMs);
+  const bound = Number.isFinite(since) && since > 0 ? Math.min(since, nowMs) : nowMs;
+  return new Date(bound).toISOString();
+}
+
 /**
  * Close all still-open sessions on this device after an intentional Stop.
  *
@@ -620,10 +647,17 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
   // Leftover / startup sweeps must never close a session the employee just
   // started (Ameer 31 Aug a402c6b3, Aryan 090c3598). Intentional stop / lid /
   // wake / logout pass protectLive: false.
-  const exceptTimeLogId =
-    options.protectLive === false || targetsOneSession
-      ? null
-      : liveTimeLogId();
+  //
+  // A Start still in flight has no id to except yet — Ahsan Zafar 12 Oct
+  // d63a2160 was killed 230ms after its insert. Wait for it, and have the
+  // server spare anything started since that Start began. Sweeps that run
+  // inside Start pass insideStart so they do not wait on themselves.
+  const protectLive = options.protectLive !== false && !targetsOneSession;
+  if (protectLive && !options.insideStart) {
+    await waitForStartInFlight();
+  }
+  const exceptTimeLogId = protectLive ? liveTimeLogId() : null;
+  const startedBefore = protectLive ? sweepStartedBeforeIso() : null;
   if (!targetsOneSession && backendTimeLogs.isBackendTimeLogsEnabled(options.config || global.config)) {
     try {
       const killed = await backendTimeLogs.killAllSessions(
@@ -634,12 +668,19 @@ async function closeOpenSessionsAfterExplicitStop(options = {}) {
           reason: options.reason || 'explicit_stop',
           timeoutMs: options.timeoutMs,
           exceptTimeLogId,
+          startedBefore,
         },
       );
       log.info({
         step: 'EXPLICIT_STOP_CLOSED',
         message: 'Killed all open sessions at their own last proof-of-life',
-        ctx: { closed: killed?.closed ?? 0, closed_ids: killed?.closed_ids || [], deviceId },
+        ctx: {
+          closed: killed?.closed ?? 0,
+          closed_ids: killed?.closed_ids || [],
+          deviceId,
+          exceptTimeLogId,
+          startedBefore,
+        },
       });
       return killed;
     } catch (killErr) {

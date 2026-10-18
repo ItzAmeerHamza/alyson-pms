@@ -71,6 +71,10 @@ class CrossPlatformInputDetector extends EventEmitter {
     };
     
     this.pythonProcess = null;
+
+    // 'uiohook' | 'swift-helper' | 'python' while one is delivering clicks/keys;
+    // null means counts read 0 whatever the user does, so activity is unknown.
+    this.inputSource = null;
     
     console.log(`🌍 Cross-Platform Input Detector initialized for ${this.platform}`);
   }
@@ -149,6 +153,7 @@ class CrossPlatformInputDetector extends EventEmitter {
       });
       this.uiohookMonitor.start();
       this.monitors.push({ type: 'uiohook', stop: () => this.uiohookMonitor?.stop() });
+      this.inputSource = 'uiohook';
 
       if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
       global.pythonDiagnostics.inputMode = 'uiohook-in-process';
@@ -246,6 +251,7 @@ class CrossPlatformInputDetector extends EventEmitter {
 
       // Store process reference for cleanup (reuse existing pythonProcess field for compat)
       this.pythonProcess = helperProcess;
+      this.inputSource = 'swift-helper';
 
       // Process stdout — same JSON format as old Python script
       let isProcessingData = false;
@@ -297,11 +303,13 @@ class CrossPlatformInputDetector extends EventEmitter {
 
       helperProcess.on('error', (error) => {
         console.error('❌ Failed to spawn Swift helper:', error.message);
+        this.inputSource = null;
         this._handlePythonFailure(null, `swift spawn error: ${error.message}`);
       });
 
       helperProcess.on('exit', (code) => {
         console.log(`🍎 Swift helper exited with code: ${code}`);
+        this.inputSource = null;
 
         if (this.pythonDisabled) {
           console.log('⏹️  [SWIFT] Monitor disabled - NOT restarting');
@@ -571,6 +579,7 @@ class CrossPlatformInputDetector extends EventEmitter {
 
       // CRITICAL FIX: Store Python process reference for proper cleanup on stop
       this.pythonProcess = pythonProcess;
+      this.inputSource = 'python';
 
       // 🧠 Optimization: Add processing flag to prevent queue overflow
       let isProcessingPythonData = false;
@@ -676,6 +685,7 @@ class CrossPlatformInputDetector extends EventEmitter {
 
       pythonProcess.on('error', (error) => {
         console.error('❌ Failed to spawn Python process:', error.message);
+        this.inputSource = null;
         
         if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
         if (!global.pythonDiagnostics.spawnErrors) global.pythonDiagnostics.spawnErrors = [];
@@ -690,6 +700,7 @@ class CrossPlatformInputDetector extends EventEmitter {
 
       pythonProcess.on('exit', (code) => {
         console.log(`🐍 External Python monitor exited with code: ${code}`);
+        this.inputSource = null;
         
         if (!global.pythonDiagnostics) global.pythonDiagnostics = {};
         if (!global.pythonDiagnostics.exitCodes) global.pythonDiagnostics.exitCodes = [];
@@ -860,6 +871,7 @@ class CrossPlatformInputDetector extends EventEmitter {
         global.pythonDiagnostics.permissionMessage = event.message;
         if (event.type === 'permission_denied') {
           this.pythonDisabled = true;
+          this.inputSource = null;
           this._notifyInputHelperPermissionNeeded(event);
         }
         break;
@@ -1142,6 +1154,7 @@ class CrossPlatformInputDetector extends EventEmitter {
 
   async stop() {
     this.isActive = false;
+    this.inputSource = null;
     
     // ============================================================
     // CRITICAL FIX: Remove event listeners and destroy streams FIRST

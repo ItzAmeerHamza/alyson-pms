@@ -92,3 +92,179 @@ describe('lid close / display-sleep halt', () => {
     },
   );
 });
+
+describe('short suspend (Windows suspend/resume blip) restarts tracking', () => {
+  let handlers;
+  let startTracking;
+  let trayManager;
+  let mgr;
+  let nowMs;
+  let nowSpy;
+  let g;
+
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 150));
+
+  const suspend = () => handlers.suspend();
+  const resume = async () => {
+    await handlers.resume();
+    await flush();
+  };
+
+  beforeEach(() => {
+    handlers = {};
+    nowMs = Date.parse('2026-10-15T07:49:21.724Z');
+    nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    startTracking = jest.fn(async () => ({ success: true }));
+    trayManager = {
+      onSystemSleep: jest.fn(),
+      onSystemResume: jest.fn(),
+      showAutoStopNotification: jest.fn(),
+      _pendingAutoStopReason: 'system_sleep',
+      _pendingAutoStopMessage: null,
+    };
+    g = {
+      isTracking: true,
+      currentTimeLogId: 'open-row',
+      currentProjectId: 'proj-1',
+      trackingManager: {
+        isTracking: true,
+        currentTimeLogId: 'open-row',
+        haltBackgroundProcesses: jest.fn(),
+        armDurableSleepStop: jest.fn(),
+        _readSessionCheckpoint: () => ({ checkpointAt: '2026-10-15T07:49:16.000Z' }),
+      },
+      trayManager,
+      loadDesktopAgentSession: jest.fn(async () => ({ id: 'u1', email: 'garima@example.com' })),
+      showTrayNotification: jest.fn(),
+      // The real stop flips tracking off; resume then sees it stopped.
+      stopTracking: jest.fn(() => {
+        g.isTracking = false;
+        g.currentTimeLogId = null;
+        g.trackingManager.isTracking = false;
+        g.trackingManager.currentTimeLogId = null;
+      }),
+      startTracking,
+    };
+    mgr = new EventHandlerManager({
+      global: g,
+      console: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      powerMonitor: { on: (event, fn) => { handlers[event] = fn; } },
+    });
+    mgr.setupPowerMonitoring();
+  });
+
+  afterEach(() => {
+    nowSpy.mockRestore();
+    global._lidDownArmed = false;
+    global._lidLastProofIso = null;
+    global._resumeTrackingAfterWake = null;
+  });
+
+  it('restarts on the same project when resume follows within a second', async () => {
+    suspend();
+    nowMs += 200;
+    await resume();
+
+    expect(g.stopTracking).toHaveBeenCalledWith('system_sleep');
+    expect(startTracking).toHaveBeenCalledTimes(1);
+    expect(startTracking).toHaveBeenCalledWith('proj-1');
+    expect(trayManager._pendingAutoStopReason).toBeNull();
+    expect(trayManager.showAutoStopNotification).not.toHaveBeenCalled();
+    expect(g.showTrayNotification).not.toHaveBeenCalled();
+  });
+
+  it('still restarts at 46s, the longest blip seen in the logs', async () => {
+    suspend();
+    nowMs += 46_000;
+    await resume();
+    expect(startTracking).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays stopped after a real sleep and keeps the sleep notification', async () => {
+    suspend();
+    nowMs += 30 * 60 * 1000;
+    await resume();
+
+    expect(startTracking).not.toHaveBeenCalled();
+    expect(trayManager._pendingAutoStopReason).toBe('system_sleep');
+  });
+
+  it('does not restart when nothing was tracking at suspend', async () => {
+    g.isTracking = false;
+    g.currentTimeLogId = null;
+    g.trackingManager.isTracking = false;
+    g.trackingManager.currentTimeLogId = null;
+    suspend();
+    nowMs += 200;
+    await resume();
+
+    expect(startTracking).not.toHaveBeenCalled();
+  });
+
+  it('does not reuse one suspend for a second resume', async () => {
+    suspend();
+    nowMs += 200;
+    await resume();
+    startTracking.mockClear();
+    g.isTracking = false;
+    g.trackingManager.isTracking = false;
+
+    nowMs += 5000;
+    await resume();
+    expect(startTracking).not.toHaveBeenCalled();
+  });
+
+  it('does not restart when the employee has no saved login', async () => {
+    g.loadDesktopAgentSession = jest.fn(async () => null);
+    suspend();
+    nowMs += 200;
+    await resume();
+
+    expect(startTracking).not.toHaveBeenCalled();
+    expect(trayManager.showAutoStopNotification).toHaveBeenCalledWith('system_sleep');
+  });
+
+  it('shows the sleep notification if the restart itself fails', async () => {
+    startTracking.mockRejectedValueOnce(new Error('boom'));
+    suspend();
+    nowMs += 200;
+    await resume();
+
+    expect(trayManager.showAutoStopNotification).toHaveBeenCalledWith('system_sleep');
+  });
+
+  it('does not restart when the employee already started tracking again', async () => {
+    suspend();
+    nowMs += 200;
+    g.stopTracking.mockImplementation(() => {});
+    g.isTracking = true;
+    await resume();
+
+    expect(startTracking).not.toHaveBeenCalled();
+  });
+
+  it('caps restarts so a machine looping suspend/resume cannot thrash', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      g.isTracking = true;
+      g.currentTimeLogId = `row-${i}`;
+      g.trackingManager.isTracking = true;
+      suspend();
+      nowMs += 300;
+      await resume();
+      nowMs += 1000;
+    }
+    expect(startTracking).toHaveBeenCalledTimes(5);
+
+    g.isTracking = true;
+    g.currentTimeLogId = 'row-6';
+    g.trackingManager.isTracking = true;
+    trayManager._pendingAutoStopReason = 'system_sleep';
+    suspend();
+    nowMs += 300;
+    await resume();
+
+    expect(startTracking).toHaveBeenCalledTimes(5);
+    // Left for the tray's own onSystemResume to fire.
+    expect(trayManager._pendingAutoStopReason).toBe('system_sleep');
+  });
+});

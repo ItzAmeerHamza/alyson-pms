@@ -56,11 +56,22 @@ describe('idle periods are bounded by their session', () => {
     const monitor = makeMonitor();
 
     const start = T('2026-08-16T17:53:22Z');
+    const end = T('2026-08-17T05:56:59Z');
+    await monitor.logIdlePeriod(start, end, end - start);
+
+    // Twelve hours offered, 360s accepted — only the part inside the session.
+    expect(monitor._sessionIdleSeconds).toBe(360);
+  });
+
+  it('a clamped tail under five minutes is not counted as idle', async () => {
+    global.trackingManager = { sessionStartTime: '2026-08-17T05:50:59.005Z' };
+    const monitor = makeMonitor();
+
+    const start = T('2026-08-16T17:53:22Z');
     const end = T('2026-08-17T05:52:59Z');
     await monitor.logIdlePeriod(start, end, end - start);
 
-    // Twelve hours offered, 120s accepted — only the part inside the session.
-    expect(monitor._sessionIdleSeconds).toBe(120);
+    expect(monitor._sessionIdleSeconds).toBe(0);
   });
 
   it('leaves an ordinary idle period untouched', async () => {

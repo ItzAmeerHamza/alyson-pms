@@ -227,6 +227,15 @@ function restoreMeetingAfterBriefStop(now = Date.now()) {
   return _presenceLabel;
 }
 
+/**
+ * Stop clears the meeting before the open idle period is flushed. That flush
+ * is still call time when a call was live at the moment of Stop.
+ */
+function meetingWasLiveAtLastStop(now = Date.now()) {
+  if (!_clearedMeetingLabel || !_clearedMeetingAt) return false;
+  return now - _clearedMeetingAt <= BRIEF_STOP_RESTORE_MS;
+}
+
 async function primeMeetingPresenceOnStart() {
   const restored = restoreMeetingAfterBriefStop();
   if (restored) return restored;
@@ -268,6 +277,7 @@ module.exports = {
   isInMeetingSession,
   refreshMeetingPresence,
   restoreMeetingAfterBriefStop,
+  meetingWasLiveAtLastStop,
   primeMeetingPresenceOnStart,
   BRIEF_STOP_RESTORE_MS,
   clearMeetingSession,

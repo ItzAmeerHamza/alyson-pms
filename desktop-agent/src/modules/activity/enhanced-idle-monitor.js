@@ -19,6 +19,10 @@ class EnhancedIdleMonitor {
     this._consecutiveZeroActivityShots = 0;
     /** End timestamp of the last idle chunk persisted to idle_logs (ms). */
     this._lastIdleCheckpointTime = null;
+    /** Session end after an alert cut. Idle past it is not tracked time. */
+    this._idleEndCapMs = null;
+    /** Last check that still saw idle (ms). */
+    this._lastIdleSeenAt = null;
     /**
      * Idle seconds accrued in the CURRENT session. We already compute every idle
      * chunk here — keeping the running total means the stop path can write
@@ -254,6 +258,8 @@ class EnhancedIdleMonitor {
     this._lastHighActivityAt = now;
     this.currentIdleStartTime = null;
     this._lastIdleCheckpointTime = null;
+    this._idleEndCapMs = null;
+    this._lastIdleSeenAt = null;
     this.wasIdleLastCheck = false;
     this.idleThresholdExceeded = false;
     
@@ -310,6 +316,7 @@ class EnhancedIdleMonitor {
       this._lastEvaluationAt = null;
       console.log('🛑 [IDLE-MONITOR] Idle monitoring stopped');
     }
+    this._idleEndCapMs = null;
   }
 
   /**
@@ -447,6 +454,27 @@ class EnhancedIdleMonitor {
   }
 
   /**
+   * A live call is effective, including listen-only time.
+   * A failed tab probe must not clear a meeting we already know about.
+   * A probe that finds a call starts the shield before the idle row is written.
+   */
+  async _idleIsInsideMeeting() {
+    try {
+      const {
+        meetingShieldsIdle,
+        meetingWasLiveAtLastStop,
+        refreshMeetingPresence,
+      } = require('../../lib/meeting-context');
+      if (this._isInMeetingSession() && meetingShieldsIdle()) return true;
+      if (meetingWasLiveAtLastStop()) return true;
+      const label = await refreshMeetingPresence({ needBackgroundTabs: true });
+      return Boolean(label) && this._isInMeetingSession() && meetingShieldsIdle();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Core idle loop — OS idle ≥ threshold starts an idle period for idle_logs.
    * The 10-min "still working?" prompt always runs, including during a call.
    */
@@ -495,6 +523,7 @@ class EnhancedIdleMonitor {
         } catch {}
       })();
     }
+    if (isIdle) this._lastIdleSeenAt = Date.now();
 
     if (!isIdle && this.wasIdleLastCheck) {
       // Input resumed. If the confirmation prompt is showing, resuming keyboard/
@@ -505,7 +534,14 @@ class EnhancedIdleMonitor {
       } else {
         console.log('▶️ [IDLE-MONITOR] User became active');
         // A short idle period that ended on its own — persist it as idle.
-        await this._flushIdleCheckpoint();
+        // Input came back somewhere after the last check that still saw idle.
+        // Ending at this check would add up to a full check interval and can
+        // push a 4-minute pause past Pulse's 5-minute floor.
+        const seenIdleUntil =
+          Number.isFinite(this._lastIdleSeenAt) && this._lastIdleSeenAt > this.currentIdleStartTime
+            ? this._lastIdleSeenAt
+            : Date.now();
+        await this._flushIdleCheckpoint(seenIdleUntil);
         this.currentIdleStartTime = null;
         this._lastIdleCheckpointTime = null;
         this.wasIdleLastCheck = false;
@@ -746,6 +782,9 @@ class EnhancedIdleMonitor {
     try {
       global.trackingManager?._stopTimeLogCheckpoint?.();
     } catch (_) { /* ignore */ }
+    // The cut 10 minutes are removed from tracked time. Writing them as idle too
+    // charged ~11m non-effective per unanswered alert against a 1m session tail.
+    this._idleEndCapMs = endMs;
     global.stopTracking?.(reason, null, {
       endTimeOverride,
       timeCutSeconds,
@@ -760,6 +799,9 @@ class EnhancedIdleMonitor {
   async _flushIdleCheckpoint(endTime = Date.now()) {
     if (!this.currentIdleStartTime || !this.wasIdleLastCheck) return;
 
+    if (Number.isFinite(this._idleEndCapMs) && endTime > this._idleEndCapMs) {
+      endTime = this._idleEndCapMs;
+    }
     const startTime = this.currentIdleStartTime;
     const duration = endTime - startTime;
     if (duration < this.MIN_IDLE_CHUNK_MS) return;
@@ -789,14 +831,11 @@ class EnhancedIdleMonitor {
         return;
       }
 
-      if (this._isInMeetingSession()) {
-        const { meetingShieldsIdle } = require('../../lib/meeting-context');
-        if (meetingShieldsIdle()) {
-          console.log(
-            `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting (effective)`,
-          );
-          return;
-        }
+      if (await this._idleIsInsideMeeting()) {
+        console.log(
+          `📹 [IDLE-LOG] Discarding ${Math.round(duration / 1000)}s idle — in a video meeting (effective)`,
+        );
+        return;
       }
 
       if (startTime < sessionStartMs) {
@@ -825,15 +864,20 @@ class EnhancedIdleMonitor {
           })
         : '';
       const creditKey = idleId || idleStartIso;
+      // Pulse ignores a pause under 5 minutes. Keep the raw idle_log so the
+      // period can grow into one row, but do not count it as non-effective
+      // until the whole stretch reaches 5 minutes.
+      const { MIN_IDLE_REPORT_SECONDS } = require('../utils/effective-time');
+      const countableSeconds = durationSeconds >= MIN_IDLE_REPORT_SECONDS ? durationSeconds : 0;
       const previouslyCredited = this._creditedIdleSecondsByKey.get(creditKey) || 0;
-      const deltaSeconds = Math.max(0, durationSeconds - previouslyCredited);
-      if (deltaSeconds === 0 && previouslyCredited > 0) {
+      const deltaSeconds = Math.max(0, countableSeconds - previouslyCredited);
+      if (countableSeconds > 0 && deltaSeconds === 0 && previouslyCredited > 0) {
         console.log(`⏭️ [IDLE-LOG] Skipping retry of already-recorded period ${durationSeconds}s`);
         return;
       }
 
       this._sessionIdleSeconds += deltaSeconds;
-      this._creditedIdleSecondsByKey.set(creditKey, durationSeconds);
+      this._creditedIdleSecondsByKey.set(creditKey, countableSeconds);
 
       if (!userId) {
         console.warn('⚠️ [IDLE-LOG] No valid tenant user_id, skipping idle log');
@@ -916,6 +960,7 @@ class EnhancedIdleMonitor {
    * unifiedInputManager is unavailable.
    */
   onScreenshotActivity(activityPercent) {
+    if (activityPercent == null) return;
     const pct = Number(activityPercent);
     if (!Number.isFinite(pct)) return;
 

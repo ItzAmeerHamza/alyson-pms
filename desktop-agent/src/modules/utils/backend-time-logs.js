@@ -122,6 +122,7 @@ async function callDesktopAction(action, data, config = global.config, options =
       aborted
         ? `Backend sync timeout after ${timeoutMs}ms (${action})`
         : err?.message || `Backend sync network error (${action})`,
+      { cause: err },
     );
   } finally {
     clearTimeout(timer);
@@ -138,7 +139,7 @@ async function callDesktopAction(action, data, config = global.config, options =
     const message = body?.message || body?.error || `Backend sync failed (${response.status})`;
     const code = body?.code ? ` [${body.code}]` : '';
     noteNetworkResult(false, { status: response.status, message: `${message}${code}` });
-    throw new Error(`${message}${code}`);
+    throw Object.assign(new Error(`${message}${code}`), { status: response.status });
   }
 
   noteNetworkResult(true);
@@ -193,6 +194,7 @@ async function killAllSessions(userId, deviceId = null, config = global.config, 
       close_at_own_liveness: true,
       reason: options.reason || 'kill_all',
       except_time_log_id: options.exceptTimeLogId || null,
+      started_before: options.startedBefore || null,
     },
     config,
     { timeoutMs: options.timeoutMs || 8000 },
@@ -382,18 +384,37 @@ async function insertUrlLogsBatch(logs, config = global.config) {
   return callDesktopAction('insert_url_logs', { logs: rows }, config);
 }
 
+let lastAllAppLogsClosedAtMs = 0;
+
 /** Close open app focus session(s) — session model (not per-minute snapshots). */
 async function closeOpenAppLogs({ user_id, ended_at, app_name } = {}, config = global.config) {
   const userId = requireTenantUserId(user_id);
-  return callDesktopAction(
+  const endedAt = ended_at || new Date().toISOString();
+  const result = await callDesktopAction(
     'close_open_app_logs',
     {
       user_id: userId,
-      ended_at: ended_at || new Date().toISOString(),
+      ended_at: endedAt,
       app_name: app_name || null,
     },
     config,
   );
+  if (!app_name) {
+    const closedAtMs = Date.parse(endedAt);
+    if (Number.isFinite(closedAtMs)) {
+      lastAllAppLogsClosedAtMs = Math.max(lastAllAppLogsClosedAtMs, closedAtMs);
+    }
+  }
+  return result;
+}
+
+/**
+ * When Stop/shutdown last closed every open app row. An app row stamped before
+ * this and sent afterwards would be inserted open and stay open until the next
+ * session's first app switch.
+ */
+function getLastAllAppLogsClosedAt() {
+  return lastAllAppLogsClosedAtMs;
 }
 
 /** Close open URL visit session(s). */
@@ -477,6 +498,7 @@ module.exports = {
   insertAppLogsBatch,
   insertUrlLogsBatch,
   closeOpenAppLogs,
+  getLastAllAppLogsClosedAt,
   closeOpenUrlLogs,
   insertIdleLog,
   upsertIdleLog,

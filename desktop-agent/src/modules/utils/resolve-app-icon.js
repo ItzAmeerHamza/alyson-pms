@@ -42,12 +42,26 @@ function resolveAppIconPath(opts = {}) {
   return null;
 }
 
+/** Electron often returns an empty image for .icns. The PNG is the same white plate. */
+function imagePathForDock(iconPath) {
+  if (!iconPath) return null;
+  if (iconPath.toLowerCase().endsWith('.png')) return iconPath;
+  const png = path.join(path.dirname(iconPath), 'icon.png');
+  try {
+    if (fs.existsSync(png)) return png;
+  } catch {
+    /* use the icns path */
+  }
+  return iconPath;
+}
+
 function setMacDockIcon(app, nativeImage, opts = {}) {
   if (process.platform !== 'darwin') return { ok: false, reason: 'not_darwin' };
   if (!app?.dock || typeof app.dock.setIcon !== 'function') {
     return { ok: false, reason: 'no_dock' };
   }
-  const iconPath = resolveAppIconPath({ ...opts, preferIcns: true });
+  const resolved = resolveAppIconPath({ ...opts, preferIcns: true });
+  const iconPath = imagePathForDock(resolved);
   if (!iconPath) return { ok: false, reason: 'missing' };
 
   try {
@@ -68,5 +82,6 @@ function setMacDockIcon(app, nativeImage, opts = {}) {
 
 module.exports = {
   resolveAppIconPath,
+  imagePathForDock,
   setMacDockIcon,
 };

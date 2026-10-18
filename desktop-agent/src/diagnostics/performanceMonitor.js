@@ -147,6 +147,8 @@ class PerformanceMonitor {
         `  procs=${sample.processCount ?? 'n/a'}` +
         `  rss=${sample.rssMb}MB` +
         `  heap=${sample.heapMb}MB` +
+        `  external=${sample.externalMb ?? 'n/a'}MB` +
+        `  arrayBuffers=${sample.arrayBuffersMb ?? 'n/a'}MB` +
         `  tracking=${sample.isTracking ? 'yes' : 'no'}\n`;
       fs.appendFileSync(this.cpuTextFile, textLine);
     } catch (err) {
@@ -404,6 +406,10 @@ class PerformanceMonitor {
       systemMs: Math.round(diff.system / 1000),
       rssMb: Math.round((mem.rss / (1024 * 1024)) * 10) / 10,
       heapMb: Math.round((mem.heapUsed / (1024 * 1024)) * 10) / 10,
+      // Buffers (screenshots, image encode) live outside the JS heap; RSS
+      // growth with a flat heap shows up here.
+      externalMb: Math.round(((mem.external || 0) / (1024 * 1024)) * 10) / 10,
+      arrayBuffersMb: Math.round(((mem.arrayBuffers || 0) / (1024 * 1024)) * 10) / 10,
       isTracking: !!(typeof global !== 'undefined' && global.isTracking),
     };
 

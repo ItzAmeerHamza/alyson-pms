@@ -266,6 +266,20 @@ class GracefulShutdownManager {
       this._updateLocalState();
       results.localState = true;
 
+      // Menu bar shows Stopped at the click. It used to wait for the whole
+      // wind-down (DB close, idle-log save, managers — 4s+ on a slow link) and
+      // sat frozen on the last total meanwhile. The Stop total is already
+      // captured, so nothing here changes what is recorded.
+      try {
+        global.trayManager?.updateState?.(false, false, {
+          projectName: null,
+          projectId: null,
+          startTime: null,
+        });
+      } catch (trayErr) {
+        console.warn('⚠️ [GRACEFUL-SHUTDOWN] Tray stop failed:', trayErr?.message || trayErr);
+      }
+
       // STEP 2: Kill screenshot capture IMMEDIATELY (sync, ~1ms)
       // Must happen before async DB work to prevent captures during shutdown.
       // The heartbeat, window timers, and all screenshot state are killed here.
@@ -296,7 +310,20 @@ class GracefulShutdownManager {
       // disk; syncing is a separate, retryable concern. Treating an unreachable
       // API as a failed stop left the UI tracking with the clock still running.
       const allSuccess = results.database;
-      const synced = this._lastStopSynced !== false;
+      // A Stop writes to the server in the background, so it is often not
+      // confirmed yet when this returns. Only say "offline" when we are —
+      // online Stops were telling the employee their time would sync later.
+      let offline = false;
+      if (this._lastStopSynced === false) {
+        try {
+          const { net } = require('electron');
+          offline = typeof net?.isOnline === 'function' && net.isOnline() === false;
+        } catch (_) { /* not in Electron */ }
+        try {
+          offline = offline || require('../utils/backend-time-logs').isLikelyOffline() === true;
+        } catch (_) { /* keep */ }
+      }
+      const synced = !offline;
       return {
         success: allSuccess,
         synced,
@@ -392,14 +419,16 @@ class GracefulShutdownManager {
         // captureStopMoment() freezes that instant for exactly this reason; using
         // wall-clock here charged every stop for its own database round-trip
         // (~1-3s of unworked time per session) and made the clock tick past the
-        // click before settling back. Ignore a stale or future-dated override.
-        const nowMs = Date.now();
-        const frozenMs = global._stopEndTimeOverride
-          ? new Date(global._stopEndTimeOverride).getTime()
-          : NaN;
-        const usableFrozen =
-          Number.isFinite(frozenMs) && frozenMs <= nowMs && nowMs - frozenMs <= 5 * 60 * 1000;
-        endTime = new Date(usableFrozen ? frozenMs : nowMs).toISOString();
+        // click before settling back. Ignore a stale or future-dated override,
+        // except a sleep stop's last-awake mark — that one is old by design.
+        const { hasSleepSafeStopEnd, resolveStopEndMs } = require('../utils/sleep-aware-elapsed');
+        endTime = new Date(
+          resolveStopEndMs({
+            frozenEnd: global._stopEndTimeOverride,
+            sessionStart: this._capturedSessionMeta?.start_time || null,
+            sleepSafe: hasSleepSafeStopEnd(),
+          }),
+        ).toISOString();
       }
       const idleCutFlag = authorizedIdleCut;
       const endMs = new Date(endTime).getTime();
@@ -550,6 +579,9 @@ class GracefulShutdownManager {
 
       console.log('✅ [GRACEFUL-SHUTDOWN] Database updated successfully');
       this._lastStopSynced = true;
+      try {
+        require('../utils/settled-reconcile').scheduleSettledReconcile();
+      } catch (_) { /* best-effort UI refresh */ }
 
       try {
         require('../utils/session-audit').sessionClosed({
@@ -877,6 +909,25 @@ class GracefulShutdownManager {
           frozenTotalSeconds = Math.max(0, frozenTotalSeconds - timeCutSeconds);
           global._idlePromptTimeCutAppliedPending = true;
           global._idlePromptTimeCutSecondsForFloor = timeCutSeconds;
+          // The cut total is today's total now. Offline, stats reads fall back
+          // to last-good and the Stop floor; both still held the pre-cut
+          // total and put the 10 minutes back on screen until the next
+          // successful read (16 Oct: 7797s shown as 8397s for 7 minutes).
+          global._lastTodayTotalAtStop = frozenTotalSeconds;
+          const lastGood = global._lastGoodTodayStats;
+          if (lastGood && typeof lastGood === 'object' && Number(lastGood.totalTime) > frozenTotalSeconds) {
+            global._lastGoodTodayStats = {
+              ...lastGood,
+              totalTime: frozenTotalSeconds,
+              completedTodayBeforeCurrentSessionSeconds: Math.min(
+                Math.max(0, Math.floor(Number(lastGood.completedTodayBeforeCurrentSessionSeconds) || 0)),
+                frozenTotalSeconds,
+              ),
+            };
+            try {
+              require('../utils/today-time-log-stats').writePersistedLastGood(global._lastGoodTodayStats);
+            } catch (_) { /* in-memory value is already lowered */ }
+          }
         } else {
           global._idlePromptTimeCutAppliedPending = false;
           global._idlePromptTimeCutSecondsForFloor = 0;

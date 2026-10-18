@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tavilo Time</title>
     <script>
@@ -33,7 +34,7 @@
             transition: opacity 0.3s ease-out;
         }
         .startup-overlay-inner { text-align: center; }
-        .brand-mark { display: block; margin: 0 auto 12px; }
+        .brand-mark { display: block; width: 132px; height: auto; margin: 0 auto 12px; }
         .startup-overlay-title {
             font-size: 32px;
             font-weight: 800;
@@ -316,8 +317,8 @@
         }
 
         .login-header .brand-mark {
-            width: 72px;
-            height: 72px;
+            width: 148px;
+            height: auto;
             margin-bottom: 12px;
         }
 
@@ -411,9 +412,9 @@
 
         .form-input:focus {
             outline: none;
-            border-color: #0369a1;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--accent);
+            background: var(--bg-input);
+            box-shadow: 0 0 0 3px var(--accent-soft);
         }
 
         .login-btn {
@@ -753,8 +754,8 @@
         }
 
         .app-logo .brand-mark {
-            width: 22px;
-            height: 22px;
+            width: 54px;
+            height: auto;
             margin: 0;
             flex: 0 0 auto;
         }
@@ -968,14 +969,14 @@
             font-size: 16px;
         }
 
-        .url-card-content .url-display {
-            background: #0f172a;
-            border: 1px solid #334155;
+        .url-card-content         .url-display {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
             border-radius: 6px;
             padding: 12px;
             font-family: 'SF Mono', Monaco, 'Consolas', monospace;
             font-size: 14px;
-            color: #60a5fa;
+            color: var(--accent-text);
             margin-bottom: 12px;
             word-break: break-all;
         }
@@ -994,8 +995,8 @@
         }
 
         .stat-item {
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 16px;
             text-align: center;
@@ -1004,7 +1005,7 @@
         .stat-value {
             font-size: 24px;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--text);
             margin-bottom: 4px;
         }
 
@@ -1024,8 +1025,8 @@
 
         .tab-navigation {
             display: flex;
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
             border-radius: 8px;
             padding: 4px;
             gap: 4px;
@@ -1039,7 +1040,7 @@
             background: transparent;
             border: none;
             border-radius: 6px;
-            color: #94a3b8;
+            color: var(--text-muted);
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
@@ -1049,13 +1050,13 @@
         }
 
         .tab-button:hover {
-            background: #334155;
-            color: #ffffff;
+            background: var(--bg-hover);
+            color: var(--text);
         }
 
         .tab-button.active {
-            background: #3b82f6;
-            color: #ffffff;
+            background: var(--accent);
+            color: #0f172a;
         }
 
         .tab-content {
@@ -1135,7 +1136,7 @@
         }
 
         .filter-select:focus, .date-input:focus {
-            border-color: #3b82f6;
+            border-color: var(--accent);
         }
 
         .clear-filters-btn, .refresh-history-btn {
@@ -1153,8 +1154,9 @@
         }
 
         .refresh-history-btn {
-            background: #3b82f6;
-            border-color: #2563eb;
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #0f172a;
         }
 
         .clear-filters-btn:hover {
@@ -1162,13 +1164,13 @@
         }
 
         .refresh-history-btn:hover {
-            background: #2563eb;
+            background: var(--accent-text);
         }
 
         /* URL History Card */
         .url-history-card {
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
             border-radius: 8px;
             margin-bottom: 20px;
         }
@@ -1178,7 +1180,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 16px 20px;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid var(--border);
         }
 
         .header-left {
@@ -1190,8 +1192,8 @@
         }
 
         .history-count {
-            background: #374151;
-            color: #d1d5db;
+            background: var(--bg-hover);
+            color: var(--text-2);
             padding: 4px 8px;
             border-radius: 4px;
             font-size: 12px;
@@ -1214,7 +1216,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid var(--border);
             transition: background-color 0.2s ease;
         }
 
@@ -1223,7 +1225,7 @@
         }
 
         .history-item:hover {
-            background: #374151;
+            background: var(--bg-hover);
             margin: 0 -20px;
             padding: 12px 20px;
             border-radius: 4px;
@@ -1244,7 +1246,7 @@
 
         .history-domain {
             font-weight: 500;
-            color: #ffffff;
+            color: var(--text);
             font-size: 14px;
             margin-bottom: 4px;
             truncate: true;
@@ -1330,8 +1332,8 @@
         }
 
         .status-badge.saved {
-            background: #3b82f6;
-            color: #ffffff;
+            background: var(--accent);
+            color: #0f172a;
         }
 
         @keyframes pulse {
@@ -1352,7 +1354,7 @@
             height: 20px;
             border: 2px solid #374151;
             border-radius: 50%;
-            border-top-color: #3b82f6;
+            border-top-color: var(--accent);
             animation: spin 1s ease-in-out infinite;
         }
 
@@ -1442,7 +1444,7 @@
         }
 
         .toggle-tab.active {
-            background: #3b82f6;
+            background: var(--accent);
             color: white;
             box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
         }
@@ -1487,7 +1489,7 @@
             align-items: center;
             gap: 6px;
             padding: 8px 12px;
-            background: #3b82f6;
+            background: var(--accent);
             color: white;
             border: none;
             border-radius: 6px;
@@ -1497,7 +1499,7 @@
         }
 
         .refresh-history-btn:hover {
-            background: #2563eb;
+            background: var(--accent-text);
         }
 
         /* App List Actions */
@@ -1669,12 +1671,13 @@
         }
 
         .metric-card {
-            background: linear-gradient(145deg, #1a2744 0%, #0d1829 100%);
+            background: var(--bg-surface);
             border-radius: 16px;
             padding: 24px 16px;
             text-align: center;
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
             position: relative;
             overflow: hidden;
         }
@@ -1686,13 +1689,12 @@
             left: 0;
             right: 0;
             height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+            background: var(--accent);
         }
 
         .metric-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(59, 130, 246, 0.6);
-            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+            border-color: var(--accent-border);
+            box-shadow: var(--shadow);
         }
 
         .metric-card .metric-icon {
@@ -1703,19 +1705,19 @@
             align-items: center;
             justify-content: center;
             border-radius: 12px;
-            background: rgba(59, 130, 246, 0.15);
+            background: var(--accent-soft);
         }
 
         .metric-card .metric-icon svg {
             width: 24px;
             height: 24px;
-            color: #60a5fa;
+            color: var(--accent-text);
         }
 
         .metric-card .metric-value {
             font-size: 42px;
             font-weight: 800;
-            color: #ffffff;
+            color: var(--text);
             line-height: 1;
             margin-bottom: 8px;
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
@@ -1723,7 +1725,7 @@
 
         .metric-card .metric-label {
             font-size: 12px;
-            color: #94a3b8;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 1.5px;
             font-weight: 600;
@@ -1731,27 +1733,26 @@
 
         .metric-card .metric-rate {
             font-size: 11px;
-            color: #10b981;
+            color: #059669;
             margin-top: 8px;
             font-weight: 600;
         }
 
-        .metric-card.clicks .metric-icon { background: rgba(59, 130, 246, 0.2); }
-        .metric-card.clicks .metric-icon svg { color: #3b82f6; }
-        .metric-card.clicks .metric-value { color: #60a5fa; }
-
-        .metric-card.keys .metric-icon { background: rgba(139, 92, 246, 0.2); }
-        .metric-card.keys .metric-icon svg { color: #8b5cf6; }
-        .metric-card.keys .metric-value { color: #a78bfa; }
-
-        .metric-card.moves .metric-icon { background: rgba(236, 72, 153, 0.2); }
-        .metric-card.moves .metric-icon svg { color: #ec4899; }
-        .metric-card.moves .metric-value { color: #f472b6; }
+        .metric-card.clicks .metric-icon,
+        .metric-card.keys .metric-icon,
+        .metric-card.moves .metric-icon { background: var(--accent-soft); }
+        .metric-card.clicks .metric-icon svg,
+        .metric-card.keys .metric-icon svg,
+        .metric-card.moves .metric-icon svg { color: var(--accent-text); }
+        .metric-card.clicks .metric-value,
+        .metric-card.keys .metric-value,
+        .metric-card.moves .metric-value { color: var(--text); }
 
         /* ====== NEXT SCREENSHOT TIMER ====== */
         .next-screenshot-card {
-            background: linear-gradient(145deg, #1a2744 0%, #0d1829 100%);
-            border: 1px solid rgba(251, 191, 36, 0.3);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
             border-radius: 16px;
             padding: 20px;
             margin-bottom: 0;
@@ -1767,7 +1768,7 @@
             gap: 10px;
             margin-bottom: 16px;
             font-size: 14px;
-            color: #fbbf24;
+            color: var(--accent-text);
             font-weight: 600;
         }
 
@@ -1787,7 +1788,7 @@
         .timer-value {
             font-size: 48px;
             font-weight: 800;
-            color: #ffffff;
+            color: var(--text);
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
             letter-spacing: 2px;
         }
@@ -1802,7 +1803,7 @@
 
         .activity-since-screenshot {
             flex: 1;
-            background: rgba(0, 0, 0, 0.2);
+            background: var(--bg-surface-2);
             border-radius: 12px;
             padding: 16px;
         }
@@ -1835,14 +1836,15 @@
         .count-value {
             font-size: 18px;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--text);
             font-family: 'SF Mono', monospace;
         }
 
         /* ====== RECENT SCREENSHOTS SECTION ====== */
         .recent-screenshots-card {
-            background: linear-gradient(145deg, #1a2744 0%, #0d1829 100%);
-            border: 1px solid rgba(100, 116, 139, 0.3);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
             border-radius: 16px;
             padding: 20px;
         }
@@ -1853,7 +1855,7 @@
             gap: 10px;
             margin-bottom: 16px;
             font-size: 14px;
-            color: #94a3b8;
+            color: var(--text-2);
             font-weight: 600;
         }
 
@@ -1868,13 +1870,13 @@
             align-items: center;
             gap: 16px;
             padding: 12px;
-            background: rgba(0, 0, 0, 0.2);
+            background: var(--bg-surface-2);
             border-radius: 10px;
-            transition: all 0.2s ease;
+            transition: background 0.15s ease;
         }
 
         .screenshot-item:hover {
-            background: rgba(59, 130, 246, 0.1);
+            background: var(--bg-hover);
         }
 
         .screenshot-item img {
@@ -2022,8 +2024,8 @@
 
         #toggleVerboseBtn {
             padding: 6px 12px;
-            background: #3b82f6;
-            color: white;
+            background: var(--accent);
+            color: #0f172a;
             border: none;
             border-radius: 6px;
             font-size: 11px;
@@ -2032,7 +2034,7 @@
         }
 
         #toggleVerboseBtn:hover {
-            background: #2563eb;
+            background: var(--accent-text);
         }
 
         #toggleVerboseBtn.active {
@@ -2089,7 +2091,7 @@
         }
 
         .save-status-badge.saving {
-            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            background: linear-gradient(135deg, #60a5fa, var(--accent));
             color: #1e3a8a;
             border: 1px solid #93c5fd;
             animation: pulse 2s infinite;
@@ -2115,7 +2117,7 @@
         .user-avatar {
             width: 36px;
             height: 36px;
-            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            background: linear-gradient(135deg, #60a5fa, var(--accent));
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -3184,7 +3186,7 @@
         }
 
         .notification.info {
-            border-left: 4px solid #3b82f6;
+            border-left: 4px solid var(--accent);
         }
 
         /* === LOADING STATES === */
@@ -3715,8 +3717,14 @@
         }
 
         .assistant-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .assistant-pace-row {
             display: grid;
-            grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
         }
 
@@ -3751,11 +3759,10 @@
 
         .assistant-chip span {
             display: block;
-            font-size: 10px;
-            font-weight: 700;
+            font-size: 11px;
+            font-weight: 650;
+            line-height: 1.3;
             color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
         }
 
         .assistant-chip strong {
@@ -3817,6 +3824,44 @@
 
         .assistant-pace-card small {
             font-weight: 550;
+            color: var(--text-muted);
+        }
+
+        .assistant-pace-status {
+            margin: 10px 0 4px;
+            font-size: 14px;
+            font-weight: 750;
+            color: var(--text);
+        }
+
+        .assistant-pace-status.is-ahead { color: #047857; }
+        .assistant-pace-status.is-behind { color: #b45309; }
+
+        html[data-theme="dark"] .assistant-pace-status.is-ahead { color: #6ee7b7; }
+        html[data-theme="dark"] .assistant-pace-status.is-behind { color: #fcd34d; }
+
+        .assistant-pace-track {
+            height: 8px;
+            border-radius: 99px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .assistant-pace-fill {
+            display: block;
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+        }
+
+        .assistant-pace-fill.is-ahead { background: #059669; }
+        .assistant-pace-fill.is-behind { background: #d97706; }
+
+        .assistant-pace-detail {
+            margin: 6px 0 0;
+            font-size: 12px;
+            line-height: 1.45;
             color: var(--text-muted);
         }
 
@@ -4129,6 +4174,7 @@
 
         @media (max-width: 820px) {
             .assistant-metrics,
+            .assistant-pace-row,
             .assistant-cards {
                 grid-template-columns: 1fr;
             }
@@ -4190,7 +4236,7 @@
             line-height: 1.3;
             cursor: pointer;
             outline: none;
-            accent-color: #3b82f6;
+            accent-color: var(--accent);
             box-shadow: var(--shadow, 0 1px 2px rgba(15, 23, 42, 0.04));
             transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
@@ -4219,8 +4265,8 @@
             align-items: center;
             justify-content: center;
             gap: 6px;
-            background: #3b82f6;
-            color: white;
+            background: var(--accent);
+            color: #0f172a;
             border: none;
             padding: 10px 12px;
             border-radius: 10px;
@@ -4232,7 +4278,7 @@
         }
 
         .screenshot-refresh-btn:hover {
-            background: #2563eb;
+            background: var(--accent-text);
         }
 
         .screenshot-refresh-btn i,
@@ -4987,7 +5033,7 @@
         }
         
         .visit-count {
-            background: #3b82f6;
+            background: var(--accent);
             color: white;
             padding: 2px 6px;
             border-radius: 10px;
@@ -5015,7 +5061,7 @@
         }
         
         .url-icon {
-            color: #3b82f6;
+            color: var(--accent);
         }
         
         .app-icon {
@@ -5120,8 +5166,8 @@
             width: 34px;
             height: 34px;
             border-radius: 8px;
-            background: #eff6ff;
-            color: #2563eb;
+            background: var(--accent-soft);
+            color: var(--accent-text);
         }
 
         .stat-icon i { width: 18px; height: 18px; }
@@ -5223,7 +5269,7 @@
 
         .log-type {
             font-size: 12px;
-            color: #3b82f6;
+            color: var(--accent);
             font-weight: 500;
         }
 
@@ -5245,7 +5291,7 @@
             width: 32px;
             height: 32px;
             border: 3px solid #e2e8f0;
-            border-top: 3px solid #3b82f6;
+            border-top: 3px solid var(--accent);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 16px;
@@ -5711,7 +5757,7 @@
     <!-- STARTUP LOADING OVERLAY - critical styles in head so first paint is never blank -->
     <div id="startupOverlay" role="status" aria-live="polite" aria-label="Loading Tavilo Time">
         <div class="startup-overlay-inner">
-            <img class="brand-mark" src="../assets/tavilo-mark.png" alt="" width="72" height="72">
+            <img class="brand-mark" src="../assets/tavilo-logo.svg" alt="" width="148" height="90">
             <h1 class="startup-overlay-title">Tavilo Time</h1>
             <div class="startup-overlay-spinner" aria-hidden="true"></div>
             <p id="startupStatus" class="startup-overlay-status">Starting…</p>
@@ -6887,7 +6933,7 @@
         <div class="login-stack">
         <div class="login-card fade-in">
             <div class="login-header">
-                <img class="brand-mark" src="../assets/tavilo-mark.png" alt="" width="72" height="72">
+                <img class="brand-mark" src="../assets/tavilo-logo.svg" alt="" width="148" height="90">
                 <h1 class="login-logo">Tavilo Time</h1>
                 <p class="login-subtitle">Time tracking</p>
                 <div class="theme-toggle" role="group" aria-label="Color theme" style="margin: 16px auto 0;">
@@ -7156,7 +7202,7 @@
         <!-- SIDEBAR -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="app-logo"><img class="brand-mark" src="../assets/tavilo-mark.png" alt="" width="22" height="22">Tavilo Time</div>
+                <div class="app-logo"><img class="brand-mark" src="../assets/tavilo-logo.svg" alt="" width="54" height="33">Tavilo Time</div>
                 <div class="app-subtitle">Time tracking</div>
                 <div class="app-version">
                     <span class="version-number" id="app-version-number">…</span>
@@ -7177,7 +7223,7 @@
                         <span>Tavilo Coach</span>
                     </div>
 
-                    <div class="nav-item nav-item-external" data-page="dashboard" data-external-url="https://app.alyson.ai">
+                    <div class="nav-item nav-item-external" data-page="dashboard" data-external-url="https://app.tavilo.ai/">
                         <i data-lucide="layout-dashboard" class="nav-icon"></i>
                         <span>Dashboard</span>
                     </div>
@@ -7339,8 +7385,8 @@
                                 <i data-lucide="clock" style="color: #0369a1; width: 24px; height: 24px;"></i>
                             </div>
                             <div>
-                                <div class="card-title">Today's Effective Time</div>
-                                <div class="card-subtitle">Tracked minus idle + low activity</div>
+                                <div class="card-title">Effective time</div>
+                                <div class="card-subtitle">Total time minus non-effective time</div>
                             </div>
                         </div>
                         <div class="metric-display">
@@ -7501,17 +7547,17 @@
                     </div>
                     
                     <div class="tracker-timer-block">
-                        <div class="metric-label tracker-clock-caption">Tracked time today</div>
+                        <div class="metric-label tracker-clock-caption">Total time</div>
                         <div class="metric-value tracker-clock" id="trackerTime">00:00:00</div>
                         <div class="metric-label" id="trackerStatus">Select a project to start tracking</div>
-                        <div id="trackerEffectiveMeta" class="tracker-time-breakdown" aria-label="Today effective time breakdown">
+                        <div id="trackerEffectiveMeta" class="tracker-time-breakdown" aria-label="Today total, effective, and non-effective time">
                             <div class="tracker-time-stat tracker-time-stat--effective">
                                 <div class="tracker-time-stat-value" id="trackerEffectiveValue">—</div>
-                                <div class="tracker-time-stat-label">Effective</div>
+                                <div class="tracker-time-stat-label">Effective time</div>
                             </div>
                             <div class="tracker-time-stat tracker-time-stat--non-effective">
                                 <div class="tracker-time-stat-value" id="trackerNonEffectiveValue">—</div>
-                                <div class="tracker-time-stat-label">Non-effective</div>
+                                <div class="tracker-time-stat-label">Non-effective time</div>
                             </div>
                         </div>
                         <div id="trackerTodayHint"></div>
@@ -7574,21 +7620,21 @@
                                     <i data-lucide="clock"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrTotalHours">0h 0m</div>
-                                <div class="mr-stat-label">Total Tracked</div>
+                                <div class="mr-stat-label">Total time</div>
                             </div>
                             <div class="mr-stat-card">
                                 <div class="mr-stat-icon mr-stat-icon--non">
                                     <i data-lucide="alert-triangle"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrNonEffectiveHours">0h 0m</div>
-                                <div class="mr-stat-label">Non-effective</div>
+                                <div class="mr-stat-label">Non-effective time</div>
                             </div>
                             <div class="mr-stat-card">
                                 <div class="mr-stat-icon mr-stat-icon--effective">
                                     <i data-lucide="check-circle"></i>
                                 </div>
                                 <div class="mr-stat-value" id="mrEffectiveHours">0h 0m</div>
-                                <div class="mr-stat-label">Effective</div>
+                                <div class="mr-stat-label">Effective time</div>
                             </div>
                             <div class="mr-stat-card">
                                 <div class="mr-stat-icon mr-stat-icon--avg">
@@ -7605,7 +7651,7 @@
                                 <i data-lucide="bar-chart-3" style="width: 16px; height: 16px;"></i>
                                 Daily Activity
                             </div>
-                            <p class="mr-card-subtitle">Effective hours per day (idle and low activity removed). Hover a bar to see effective vs tracked.</p>
+                            <p class="mr-card-subtitle">Effective time per day. Hover a bar to see effective time and total time.</p>
                             <div id="mrDailyChart" class="mr-daily-chart">
                                 <!-- Bars injected by JS -->
                             </div>
@@ -7843,27 +7889,35 @@
                             <section class="assistant-metric-group">
                                 <h3>Today</h3>
                                 <div class="assistant-chips">
-                                    <div class="assistant-chip"><span>Hours worked</span><strong id="assistantTracked">—</strong></div>
-                                    <div class="assistant-chip is-effective"><span>Effective</span><strong id="assistantEffective">—</strong></div>
-                                    <div class="assistant-chip is-watch"><span>Non-effective</span><strong id="assistantNonEffective">—</strong></div>
-                                    <div class="assistant-chip is-watch"><span>Idle</span><strong id="assistantIdle">—</strong></div>
-                                    <div class="assistant-chip is-watch"><span>Low activity</span><strong id="assistantLow">—</strong></div>
-                                    <div class="assistant-chip"><span>Screenshots</span><strong id="assistantShots">—</strong></div>
+                                    <div class="assistant-chip"><span>Total time</span><strong id="assistantTracked">—</strong></div>
+                                    <div class="assistant-chip is-effective"><span>Effective time</span><strong id="assistantEffective">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Non-effective time</span><strong id="assistantNonEffective">—</strong></div>
                                 </div>
+                            </section>
+                            <div class="assistant-pace-row">
+                            <section class="assistant-metric-group">
+                                <h3>Week pace</h3>
+                                <div class="assistant-chips">
+                                    <div class="assistant-chip"><span>Total time</span><strong id="assistantWeekTotal">—</strong></div>
+                                    <div class="assistant-chip is-effective"><span>Effective time</span><strong id="assistantWeekEffective">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Non-effective time</span><strong id="assistantWeekNonEffective">—</strong></div>
+                                </div>
+                                <p class="assistant-pace-status" id="assistantWeekPaceStatus">—</p>
+                                <div class="assistant-pace-track" aria-hidden="true"><span class="assistant-pace-fill" id="assistantWeekPaceBar"></span></div>
+                                <p class="assistant-pace-detail" id="assistantWeekPaceDetail">Pace compares effective time with the hours expected by now. The bar is progress toward the full week target.</p>
                             </section>
                             <section class="assistant-metric-group">
-                                <h3>Pace</h3>
-                                <div class="assistant-pace">
-                                    <div class="assistant-pace-card">
-                                        <span>This week</span>
-                                        <strong><span id="assistantWeekEffective">—</span> <small>of</small> <span id="assistantWeekExpected">—</span></strong>
-                                    </div>
-                                    <div class="assistant-pace-card">
-                                        <span>This month</span>
-                                        <strong><span id="assistantMonthEffective">—</span> <small>of</small> <span id="assistantMonthExpected">—</span></strong>
-                                    </div>
+                                <h3>Month pace</h3>
+                                <div class="assistant-chips">
+                                    <div class="assistant-chip"><span>Total time</span><strong id="assistantMonthTotal">—</strong></div>
+                                    <div class="assistant-chip is-effective"><span>Effective time</span><strong id="assistantMonthEffective">—</strong></div>
+                                    <div class="assistant-chip is-watch"><span>Non-effective time</span><strong id="assistantMonthNonEffective">—</strong></div>
                                 </div>
+                                <p class="assistant-pace-status" id="assistantMonthPaceStatus">—</p>
+                                <div class="assistant-pace-track" aria-hidden="true"><span class="assistant-pace-fill" id="assistantMonthPaceBar"></span></div>
+                                <p class="assistant-pace-detail" id="assistantMonthPaceDetail">Pace compares effective time with the hours expected by now. The bar is progress toward the full month target.</p>
                             </section>
+                            </div>
                         </div>
 
                         <section class="assistant-chat-shell" aria-label="Ask Tavilo Coach">
@@ -7874,12 +7928,13 @@
                             <div class="assistant-composer">
                                 <div class="assistant-prompts">
                                     <button type="button" class="assistant-prompt" data-assistant-prompt="Give me a precise summary of my recorded time today.">Summarize my day</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Break down my effective vs non-effective time, including idle and low activity.">Effective breakdown</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="What did screenshot vision analysis see, and was I on task?">Screenshot analysis</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Give me specific suggestions to improve effective time today.">Suggestions</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="If my non-effective time is high, is it mostly idle or low activity, and what should I do?">Reduce non-effective</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How is my month going versus 7 hours a weekday?">Month so far</button>
-                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How am I doing this week versus 7 hours a weekday and 35 hours?">Week pacing</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How much effective time do I still need today, this week, and this month?">What&#39;s left</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Plan the rest of my day based on my record.">Plan my day</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="When was I most focused today, and how can I focus better?">Focus tips</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="What distracted me today, and how do I avoid it?">Distractions</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="Write my daily standup update from my record.">Standup draft</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How do my total time, effective time, and non-effective time look this month?">Month so far</button>
+                                    <button type="button" class="assistant-prompt" data-assistant-prompt="How do my total time, effective time, and non-effective time look this week?">This week</button>
                                 </div>
                                 <form class="assistant-chat-form" id="assistantChatForm">
                                     <textarea id="assistantChatInput" maxlength="500" rows="1" placeholder="Message Tavilo Coach…"></textarea>
@@ -7899,7 +7954,7 @@
                                 </article>
                                 <article class="assistant-card">
                                     <h3>Effective / non-effective</h3>
-                                    <p id="assistantEffectiveCopy">Idle and low-activity breakdown will appear here.</p>
+                                    <p id="assistantEffectiveCopy">Total time, effective time, and non-effective time will appear here.</p>
                                 </article>
                                 <article class="assistant-card">
                                     <h3>Screenshot vision</h3>
@@ -8365,7 +8420,7 @@
                         <!-- Refresh Controls -->
                         <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 24px; padding: 16px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
                             <div style="display: flex; align-items: center; gap: 12px;">
-                                <button id="refreshHistoryBtn" class="btn" style="padding: 8px 16px; background: #3b82f6; color: white; border-radius: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                <button id="refreshHistoryBtn" class="btn" style="padding: 8px 16px; background: var(--accent); color: #0f172a; border-radius: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
                                     <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
                                     Refresh Data
                                 </button>
@@ -8381,7 +8436,7 @@
                         <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px;">
                             <div class="stat-card" style="background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; text-align: center;">
                                 <div class="stat-icon" style="width: 48px; height: 48px; background: #dbeafe; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                                    <i data-lucide="clock" style="width: 24px; height: 24px; color: #3b82f6;"></i>
+                                    <i data-lucide="clock" style="width: 24px; height: 24px; color: var(--accent);"></i>
                                 </div>
                                 <span class="stat-value" id="active-time" style="display: block; font-size: 28px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">0h 0m</span>
                                 <span class="stat-label" style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Active Time</span>
@@ -8405,7 +8460,7 @@
                             
                             <div class="stat-card" style="background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; text-align: center;">
                                 <div class="stat-icon" style="width: 48px; height: 48px; background: #e0e7ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                                    <i data-lucide="monitor" style="width: 24px; height: 24px; color: #6366f1;"></i>
+                                    <i data-lucide="monitor" style="width: 24px; height: 24px; color: var(--accent-text);"></i>
                                 </div>
                                 <span class="stat-value" id="app-count" style="display: block; font-size: 28px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">0</span>
                                 <span class="stat-label" style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Apps Used</span>
@@ -8413,7 +8468,7 @@
                             
                             <div class="stat-card" style="background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; text-align: center;">
                                 <div class="stat-icon" style="width: 48px; height: 48px; background: #fce7f3; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;">
-                                    <i data-lucide="mouse-pointer-click" style="width: 24px; height: 24px; color: #ec4899;"></i>
+                                    <i data-lucide="mouse-pointer-click" style="width: 24px; height: 24px; color: var(--accent-text);"></i>
                                 </div>
                                 <span class="stat-value" id="total-clicks" style="display: block; font-size: 28px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">0</span>
                                 <span class="stat-label" style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Mouse Clicks</span>
@@ -8447,7 +8502,7 @@
                         <!-- Activity Timeline -->
                         <div class="timeline-section" style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 32px; border: 1px solid #e2e8f0;">
                             <h3 style="margin: 0 0 20px 0; color: #1e293b; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                                <i data-lucide="line-chart" style="width: 20px; height: 20px; color: #6366f1;"></i>
+                                <i data-lucide="line-chart" style="width: 20px; height: 20px; color: var(--accent-text);"></i>
                                 Activity Timeline
                             </h3>
                             <div class="timeline-bar" id="activity-timeline" style="height: 60px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; position: relative; overflow: hidden;">
@@ -8533,7 +8588,7 @@
                         
                         <!-- Memory Usage Card -->
                         <div class="stats-card">
-                            <div class="stats-icon" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                            <div class="stats-icon" style="background: var(--accent);">
                                 <i data-lucide="hard-drive"></i>
                             </div>
                             <div class="stats-content">
@@ -9302,7 +9357,7 @@
             switch (level) {
                 case 'error': return '#ef4444';
                 case 'warn': return '#f59e0b';
-                case 'info': return '#3b82f6';
+                case 'info': return 'var(--accent)';
                 default: return '#10b981';
             }
         }

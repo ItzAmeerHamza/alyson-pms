@@ -7,30 +7,40 @@ import sharp from "sharp";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const assetsDir = path.resolve(root, "assets");
-const sourcePng = path.resolve(root, "../tavilo-time-logo-2048.png");
+const sourceSvg = path.resolve(assetsDir, "tavilo-logo.svg");
+/**
+ * Taskbar and Dock icons sit on a dark ink rounded square. The mark is periwinkle
+ * (#7F8EFF) and lime (#C4FF46): on white they measure 2.9:1 and 1.2:1 and the star
+ * all but vanishes at Dock size; on this plate they measure 6.1:1 and 14.9:1.
+ */
+const PLATE_FILL = "#14172b";
 const requiredOutputs = [
   "icon.png",
   "icon.ico",
   "icon.icns",
   "tavilo-mark.png",
+  "tavilo-logo-wide.png",
   "tray-icon.png",
   "tray-iconTemplate.png",
   "tray-iconTemplate@2x.png",
 ];
 
-if (!fs.existsSync(sourcePng)) {
+if (!fs.existsSync(sourceSvg)) {
   const haveOutputs = requiredOutputs.every((name) =>
     fs.existsSync(path.join(assetsDir, name)),
   );
   if (haveOutputs) {
-    console.warn(`Missing ${sourcePng}; using existing desktop-agent/assets icons.`);
+    console.warn(`Missing ${sourceSvg}; using existing desktop-agent/assets icons.`);
     process.exit(0);
   }
-  console.error(`Missing Tavilo Time logo: ${sourcePng}`);
+  console.error(`Missing Tavilo logo mark: ${sourceSvg}`);
   process.exit(1);
 }
 
 fs.mkdirSync(assetsDir, { recursive: true });
+
+// The SVG viewBox carries empty padding around the mark; trim it so small sizes stay legible.
+const sourcePng = await sharp(sourceSvg).trim().png().toBuffer();
 
 async function renderPng(size, outPath) {
   await sharp(sourcePng)
@@ -43,35 +53,33 @@ async function renderPng(size, outPath) {
   console.log("Wrote:", outPath);
 }
 
-/** Same proportions as the menu-bar icon: white rounded square, mark inset. */
-function whitePlateMetrics(size) {
+/**
+ * Dark plate with the wide mark filling the width and centered vertically.
+ * A square plate (Windows .ico) stays opaque. Rounded plates (dock) use a
+ * modest corner so the star is not clipped. The mark is wider than tall, so a
+ * small inset matters: every point of inset shrinks it twice as much in height.
+ */
+async function renderOnPlateBuffer(size, { square = false } = {}) {
   const canvas = Math.max(16, Math.floor(size));
-  const pad = Math.max(1, Math.round(canvas * 2 / 22));
-  const radius = Math.max(2, Math.round(canvas * 6 / 22));
-  const logoSize = Math.max(8, canvas - pad * 2);
-  return { canvas, pad, radius, logoSize };
-}
-
-async function renderOnWhiteBuffer(size) {
-  const { canvas, pad, radius, logoSize } = whitePlateMetrics(size);
-  const logo = await sharp(sourcePng)
-    .resize(logoSize, logoSize, {
-      fit: "contain",
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png()
-    .toBuffer();
+  const inset = Math.max(1, Math.round(canvas * (square ? 0.03 : 0.04)));
+  const corner = square ? 0 : Math.max(2, Math.round(canvas * 0.18));
+  const meta = await sharp(sourcePng).metadata();
+  const logoW = Math.max(8, canvas - inset * 2);
+  const logoH = Math.max(1, Math.round(logoW * meta.height / meta.width));
+  const logo = await sharp(sourcePng).resize(logoW, logoH).png().toBuffer();
+  const top = Math.max(0, Math.round((canvas - logoH) / 2));
+  const left = Math.max(0, Math.round((canvas - logoW) / 2));
   const plate = Buffer.from(
-    `<svg width="${canvas}" height="${canvas}" xmlns="http://www.w3.org/2000/svg"><rect width="${canvas}" height="${canvas}" rx="${radius}" ry="${radius}" fill="#ffffff"/></svg>`,
+    `<svg width="${canvas}" height="${canvas}" xmlns="http://www.w3.org/2000/svg"><rect width="${canvas}" height="${canvas}" rx="${corner}" ry="${corner}" fill="${PLATE_FILL}"/></svg>`,
   );
   return sharp(plate)
-    .composite([{ input: logo, top: pad, left: pad }])
+    .composite([{ input: logo, top, left }])
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
 
-async function renderOnWhite(size, outPath) {
-  fs.writeFileSync(outPath, await renderOnWhiteBuffer(size));
+async function renderOnPlate(size, outPath) {
+  fs.writeFileSync(outPath, await renderOnPlateBuffer(size));
   console.log("Wrote:", outPath);
 }
 
@@ -133,8 +141,37 @@ async function renderTemplateIcon(size, outPath) {
   console.log("Wrote:", outPath);
 }
 
-await renderOnWhite(1024, path.join(assetsDir, "icon.png"));
-await renderOnWhite(256, path.join(assetsDir, "tavilo-mark.png"));
+await renderOnPlate(1024, path.join(assetsDir, "icon.png"));
+await renderOnPlate(256, path.join(assetsDir, "tavilo-mark.png"));
+await sharp(sourcePng)
+  .resize({ height: 256, fit: "inside" })
+  .png({ compressionLevel: 9 })
+  .toFile(path.join(assetsDir, "tavilo-logo-wide.png"));
+console.log("Wrote:", path.join(assetsDir, "tavilo-logo-wide.png"));
+/** macOS menu bar: the colored mark only. A white chip reads as a sticker next to the clock. */
+async function renderMenuBar(height, outPath) {
+  const pad = Math.max(1, Math.round(height * 0.04));
+  const logo = await sharp(sourcePng)
+    .resize({ height: Math.max(8, height - pad * 2) })
+    .png()
+    .toBuffer();
+  const meta = await sharp(logo).metadata();
+  await sharp({
+    create: {
+      width: meta.width + pad * 2,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: logo, top: pad, left: pad }])
+    .png({ compressionLevel: 9 })
+    .toFile(outPath);
+  console.log("Wrote:", outPath);
+}
+
+await renderMenuBar(22, path.join(assetsDir, "tavilo-menubar.png"));
+await renderMenuBar(44, path.join(assetsDir, "tavilo-menubar@2x.png"));
 await renderPng(32, path.join(assetsDir, "tray-icon.png"));
 await renderTemplateIcon(22, path.join(assetsDir, "tray-iconTemplate.png"));
 await renderTemplateIcon(44, path.join(assetsDir, "tray-iconTemplate@2x.png"));
@@ -142,7 +179,8 @@ await renderTemplateIcon(44, path.join(assetsDir, "tray-iconTemplate@2x.png"));
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
 const icoImages = [];
 for (const size of icoSizes) {
-  icoImages.push({ size, buffer: await renderOnWhiteBuffer(size) });
+  // Windows paints transparent taskbar pixels black, so the .ico plate is a solid square.
+  icoImages.push({ size, buffer: await renderOnPlateBuffer(size, { square: true }) });
 }
 const icoPath = path.join(assetsDir, "icon.ico");
 fs.writeFileSync(icoPath, buildIco(icoImages));
@@ -165,7 +203,7 @@ const icnsSizes = [
 ];
 for (const [name, size] of icnsSizes) {
   const filePath = path.join(iconset, name);
-  await renderOnWhite(size, filePath);
+  await renderOnPlate(size, filePath);
   // iconutil rejects sharp PNGs; sips rewrites them into a set it accepts.
   execFileSync("sips", ["-s", "format", "png", filePath, "--out", filePath], { stdio: "ignore" });
 }

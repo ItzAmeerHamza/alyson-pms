@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { resolveAppIconPath, setMacDockIcon } = require('../resolve-app-icon');
+const { resolveAppIconPath, imagePathForDock, setMacDockIcon } = require('../resolve-app-icon');
 
 describe('resolveAppIconPath', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'icon-res-'));
@@ -40,6 +40,15 @@ describe('resolveAppIconPath', () => {
       preferIcns: true,
     });
     expect(resolved).toBe(png);
+  });
+
+  it('uses the PNG beside an icns so the Dock can draw the white plate', () => {
+    const dir = path.join(tmp, 'both');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'icon.icns'), 'fake');
+    const png = path.join(dir, 'icon.png');
+    fs.writeFileSync(png, 'png');
+    expect(imagePathForDock(path.join(dir, 'icon.icns'))).toBe(png);
   });
 
   it('setMacDockIcon uses nativeImage when provided', () => {

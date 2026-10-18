@@ -110,11 +110,14 @@ class TrackingManager extends EventEmitter {
       return this._startInFlight;
     }
 
+    // Read by leftover sweeps: anything started at or after this is this Start.
+    this._startInFlightSinceMs = Date.now();
     this._startInFlight = (async () => {
       try {
         return await this._startTrackingInner(projectId);
       } finally {
         this._startInFlight = null;
+        this._startInFlightSinceMs = null;
       }
     })();
 
@@ -451,6 +454,7 @@ try {
                 end_time: suggested || undefined,
                 config: this.config,
                 timeoutMs: 5000,
+                insideStart: true,
               });
               // Those rows are finished, so drop every local handle to them:
               // the id, the checkpoint interval and the checkpoint file. Left
@@ -733,7 +737,7 @@ try {
                 Number(
                   global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds,
                 ) || 0,
-              ),
+              ) + Math.trunc(Number(global._lastGoodTodayStats?.adjustmentSeconds) || 0),
             )
           : this._resolveStartClosedBaseSeconds(startAfterSleep);
         if (startAfterSleep) {
@@ -762,6 +766,9 @@ try {
                   setTimeout(() => reject(new Error('today stats timeout')), 8000),
                 ),
               ]);
+              // A short session can Stop before this read lands. Its result
+              // then predates that Stop and must not touch the Stop floor.
+              if (!global.isTracking || String(this.currentTimeLogId || '') !== String(timeLog.id)) return;
               const nextBase = this._resolveTodayBaseSeconds(agg.completedClosedSeconds);
               if (global.trayManager && global.isTracking && nextBase > 0) {
                 const prev = Math.max(
@@ -2042,17 +2049,38 @@ try {
   _captureStopTodayTotalSnapshot() {
     try {
       const { elapsedSecondsSinceLocalMidnight } = require('../utils/today-time-log-stats');
+      const { hasSleepSafeStopEnd, resolveStopEndMs } = require('../utils/sleep-aware-elapsed');
       const tray = global.trayManager;
       const base = Math.max(0, Math.floor(Number(tray?._cumulativeBaseSeconds) || 0));
       const start = this.sessionStartTime || global.sessionStartTime;
+      // Measure to the end the DB bills. Idle-alert cuts are subtracted later
+      // in _notifyRenderer, so they still measure to now.
+      const endMs = global._stopAuthorizedIdleCut
+        ? Date.now()
+        : resolveStopEndMs({
+            frozenEnd: global._stopEndTimeOverride,
+            sessionStart: start,
+            sleepSafe: hasSleepSafeStopEnd(),
+          });
       const elapsed = start
-        ? elapsedSecondsSinceLocalMidnight(start)
+        ? elapsedSecondsSinceLocalMidnight(start, endMs)
         : 0;
+      const deducted = require('../utils/time-deductions').liveDeductionSeconds(
+        this.currentTimeLogId || global.currentTimeLogId || null,
+      );
       // Hint only for empty DB reads — must not permanently outrank real DB totals.
-      const total = base + elapsed;
+      let total = Math.max(0, base + elapsed - deducted);
+      // Menu bar already shows the deducted total. base+elapsed is the raw
+      // session (04:53) and was what Stop/Start put back on screen.
+      const painted = Math.max(0, Math.floor(Number(tray?._lastCumulativeSeconds) || 0));
+      if (painted > 60 && total > painted + 5) total = painted;
       if (total > 0) {
         global._lastTodayTotalAtStop = total;
-        console.log(`⏱️ [TRACKING-MANAGER] Stop snapshot hint: ${total}s (base=${base}, elapsed=${elapsed})`);
+        console.log(
+          `⏱️ [TRACKING-MANAGER] Stop snapshot hint: ${total}s (base=${base}, elapsed=${elapsed}` +
+            (deducted > 0 ? `, deducted=${deducted}` : '') +
+            ')',
+        );
       }
     } catch (error) {
       console.warn('⚠️ [TRACKING-MANAGER] Stop snapshot failed:', error?.message || error);
@@ -2063,6 +2091,7 @@ try {
     const { localDateKey } = require('../utils/today-time-log-stats');
     const todayKey = localDateKey();
     if (global._frozenTotalDate !== todayKey) {
+      if (global._lastTodayTotalAtStop) console.log(`🧹 [STOP-FLOOR] cleared ${global._lastTodayTotalAtStop}s: base refresh day key ${global._frozenTotalDate} → ${todayKey}`);
       global._lastTodayTotalAtStop = null;
       global._rendererFrozenTotalAtStop = null;
       global._frozenTotalDate = todayKey;
@@ -2070,7 +2099,14 @@ try {
     const db = Math.max(0, Math.floor(Number(dbCompletedSeconds) || 0));
     // DB wins whenever it has a real total. Snapshot only covers empty fetches.
     if (db > 0) {
-      global._lastTodayTotalAtStop = null;
+      // Clear the Stop floor only once the server has caught up to it. A read
+      // that predates the Stop's close would otherwise drop the floor and
+      // leave the next Start on the older total (16 Oct 13:09: 30s short).
+      const stopFloor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
+      if (stopFloor > 0 && db >= stopFloor) {
+        console.log(`🧹 [STOP-FLOOR] cleared ${stopFloor}s: base refresh db ${db}s`);
+        global._lastTodayTotalAtStop = null;
+      }
       return db;
     }
     const floor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
@@ -2087,20 +2123,36 @@ try {
    */
   _resolveStartClosedBaseSeconds(startAfterSleep = false) {
     const { closedBaseAfterSleep } = require('../utils/sleep-aware-elapsed');
+    // The menu bar's base is closed sessions + leave/admin adjustments (as the
+    // stats read sets it). Sessions alone opened Start 3h30m short of the
+    // total when an adjustment existed, then the next read snapped it back.
     const completedBefore = Math.max(
       0,
-      Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0),
+      Math.floor(Number(global._lastGoodTodayStats?.completedTodayBeforeCurrentSessionSeconds) || 0) +
+        Math.trunc(Number(global._lastGoodTodayStats?.adjustmentSeconds) || 0),
     );
     const stopFloor = Math.max(0, Math.floor(Number(global._lastTodayTotalAtStop) || 0));
+    // The window's figure only fills in when main knows nothing (fresh launch,
+    // no read yet). As a max() it outranked main's deducted totals and put
+    // deleted screenshot time back on every Start.
     const rendererFloor = Math.max(0, Math.floor(Number(global._rendererTodayFloorSeconds) || 0));
-    if (startAfterSleep) {
-      return Math.max(closedBaseAfterSleep(completedBefore), stopFloor, rendererFloor);
-    }
-    let closed = Math.max(completedBefore, stopFloor, rendererFloor);
     const trayHw = Math.max(0, Math.floor(Number(global._trayTodayHighWaterSeconds) || 0));
-    if (trayHw > 0 && closed > 0 && trayHw <= closed + 5) {
-      closed = Math.max(closed, trayHw);
+    let closed;
+    if (startAfterSleep) {
+      const known = Math.max(closedBaseAfterSleep(completedBefore), stopFloor);
+      closed = known > 0 ? known : rendererFloor;
+    } else {
+      closed = Math.max(completedBefore, stopFloor);
+      if (closed <= 0) closed = rendererFloor;
+      if (trayHw > 0 && closed > 0 && trayHw <= closed + 5) {
+        closed = Math.max(closed, trayHw);
+      }
     }
+    // Diagnostic: the menu bar's opening total comes from here.
+    console.log(
+      `▶️ [TRACKING-MANAGER] Start base ${closed}s (lastGood closed=${completedBefore}, stopFloor=${stopFloor}, ` +
+        `window=${rendererFloor}, trayHW=${trayHw}, afterSleep=${!!startAfterSleep})`,
+    );
     return closed;
   }
 
@@ -2115,22 +2167,44 @@ try {
 
       this._stopTimeLogCheckpoint();
 
-      const { sleepSafeEndIso } = require('../utils/sleep-aware-elapsed');
+      const { sleepSafeEndIso, msOf, latestAwakeProofMs } = require('../utils/sleep-aware-elapsed');
       const existingCp = this._readSessionCheckpoint?.() || null;
-      const proofIso = global._lidLastProofIso || existingCp?.checkpointAt || null;
-      const nowIso = new Date().toISOString();
-      const endTime = sleepSafeEndIso({
-        lastCheckpointAt: proofIso,
-        checkpointTimeLogId: existingCp?.timeLogId || null,
-        timeLogId,
-        nowIso,
-      });
-      global._stopEndTimeOverride = global._stopEndTimeOverride || endTime;
-      const startTime =
+      const sessionStart =
         this.sessionStartTime ||
         this.currentSession?.start_time ||
         global.sessionStartTime ||
-        endTime;
+        null;
+      const cpThisSession =
+        existingCp &&
+        (!existingCp.timeLogId || !timeLogId || String(existingCp.timeLogId) === String(timeLogId));
+      // Latest awake mark wins (1s tray tick beats a 60s checkpoint when the
+      // suspend lands after wake); a lid proof left from an earlier nap is not
+      // proof for this session.
+      const proofMs = latestAwakeProofMs({
+        candidates: [
+          global._lidLastProofIso,
+          cpThisSession ? existingCp.checkpointAt : null,
+          global._lastAwakeTickMs,
+        ],
+        sessionStart,
+        sleepWindow: global._lastSleepWindow,
+      });
+      const proofIso = Number.isFinite(proofMs) ? new Date(proofMs).toISOString() : null;
+      const nowIso = new Date().toISOString();
+      const endTime = sleepSafeEndIso({
+        lastCheckpointAt: proofIso,
+        timeLogId,
+        nowIso,
+      });
+      const startTime = sessionStart || endTime;
+      // An earlier Stop click in this session still wins; a leftover from a
+      // previous session must not displace the last-awake mark.
+      const priorMs = msOf(global._stopEndTimeOverride);
+      const keepPrior =
+        Number.isFinite(priorMs) && priorMs >= msOf(startTime) && priorMs <= msOf(endTime);
+      if (!keepPrior) global._stopEndTimeOverride = endTime;
+      // Lets the global Stop and the DB close keep this end at any age.
+      global._sleepSafeStopEndIso = global._stopEndTimeOverride;
       const userId = this.config?.user_id || global.currentUserId;
 
       if (timeLogId) {
@@ -2220,6 +2294,7 @@ try {
     try {
       if (!(this.isTracking || global.isTracking)) return { noted: true };
       global._stopEndTimeOverride = proofIso || global._stopEndTimeOverride;
+      if (proofIso) global._sleepSafeStopEndIso = proofIso;
       console.warn('💤 [TRACKING-MANAGER] Lid/sleep gap — stopping processes, not auto-starting');
       await this.stopTracking('system_sleep');
       return { split: true };
@@ -2300,6 +2375,9 @@ try {
       const { getSessionCheckpointMs } = require('../utils/power-profile');
       CHECKPOINT_MS = getSessionCheckpointMs();
     } catch (_) { /* keep 30s */ }
+    this._checkpointIntervalMs = CHECKPOINT_MS;
+    this._lastCheckpointRunMs = 0;
+    this._lastCheckpointRunMono = NaN;
     this._timeLogCheckpointInterval = setInterval(() => {
       void this._checkpointCurrentTimeLog();
     }, CHECKPOINT_MS);
@@ -2332,12 +2410,46 @@ try {
     if (!this.isTracking || !timeLogId) return;
     if (global._stopAuthorizedIdleCut) return;
 
-    const nowIso = new Date().toISOString();
     const startTime =
       this.sessionStartTime ||
       this.currentSession?.start_time ||
       global.sessionStartTime ||
       null;
+    const nowMs = Date.now();
+    const sleepClock = require('../utils/sleep-aware-elapsed');
+    const monoMs = sleepClock.monotonicMs();
+    const prevRunMs = Number(this._lastCheckpointRunMs) || 0;
+    const prevRunMono = this._lastCheckpointRunMono;
+    this._lastCheckpointRunMs = nowMs;
+    this._lastCheckpointRunMono = monoMs;
+    // Timers fire late at wake. Stamping NOW would mark the nap as alive and
+    // defeat every "last checkpoint is stale" sleep check; close instead.
+    if (
+      sleepClock.isSleepTickGap({
+        prevWallMs: prevRunMs,
+        wallMs: nowMs,
+        prevMonoMs: prevRunMono,
+        monoMs,
+        intervalMs: Number(this._checkpointIntervalMs) || 30 * 1000,
+      })
+    ) {
+      const preNap = [prevRunMs, global._lastAwakeTickMs].filter(
+        (t) => Number(t) > 0 && Number(t) <= nowMs - sleepClock.SLEEP_GAP_MS,
+      );
+      const proofMs = sleepClock.latestAwakeProofMs({
+        candidates: preNap,
+        sessionStart: startTime,
+        sleepWindow: global._lastSleepWindow,
+      });
+      console.warn(
+        `😴 [TRACKING-MANAGER] Checkpoint ${Math.round((nowMs - prevRunMs) / 1000)}s late — ` +
+          'machine slept; not stamping, closing at last awake proof',
+      );
+      void this.noteMachineSlept(Number.isFinite(proofMs) ? proofMs : prevRunMs);
+      return;
+    }
+
+    const nowIso = new Date(nowMs).toISOString();
 
     // Always write local durable floor first (connection-independent).
     this._storeSessionCheckpoint({
@@ -2551,13 +2663,16 @@ try {
       // billed each stop for its own round-trip and pushed the clock past the
       // moment the employee stopped. A checkpoint that fired after the click is
       // not work either, so it does not extend the end.
-      const nowMs = Date.now();
-      const frozenMs = global._stopEndTimeOverride
-        ? new Date(global._stopEndTimeOverride).getTime()
-        : NaN;
-      const usableFrozen =
-        Number.isFinite(frozenMs) && frozenMs <= nowMs && nowMs - frozenMs <= 5 * 60 * 1000;
-      endMs = usableFrozen ? frozenMs : nowMs;
+      const { hasSleepSafeStopEnd, resolveStopEndMs } = require('../utils/sleep-aware-elapsed');
+      endMs = resolveStopEndMs({
+        frozenEnd: global._stopEndTimeOverride,
+        sessionStart:
+          this.sessionStartTime ||
+          this.currentSession?.start_time ||
+          checkpoint?.startTime ||
+          null,
+        sleepSafe: hasSleepSafeStopEnd(),
+      });
     }
     const endTime = new Date(endMs).toISOString();
     // Authoritative end for this session — the next Start must not backdate past
@@ -2963,6 +3078,7 @@ try {
           // Pre-start orphan sweep. A live Start that already landed is excepted.
           end_time: resolveExplicitStopEndTime() || undefined,
         config: this.config,
+        insideStart: true,
       });
       console.log(
         `🔒 [TRACKING-MANAGER] Force-closed open sessions: closed=${result?.closed ?? 0}`,
@@ -3923,6 +4039,8 @@ try {
         idle_seconds: updates.idle_seconds || 0,
         device_id: updates.device_id || getDeviceId(),
         organization_id: orgId,
+        // Lets the server replace an end a sweep guessed with this Stop.
+        frozen_end: updates.frozen_end === true || updates.authorized_idle_cut === true,
       },
       config,
       { timeoutMs: 12_000 },
@@ -4292,6 +4410,7 @@ try {
         try {
           global._todayStatsInFlight = null;
           global._postOfflineSyncGraceUntil = Date.now() + 90 * 1000;
+          require('../utils/settled-reconcile').scheduleSettledReconcile();
         } catch (_) { /* ignore */ }
         try {
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {

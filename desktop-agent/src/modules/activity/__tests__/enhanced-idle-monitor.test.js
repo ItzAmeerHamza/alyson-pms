@@ -20,10 +20,19 @@ jest.mock('../../utils/backend-rds-reads', () => ({
   idleLogExists: jest.fn().mockResolvedValue(false)
 }));
 
+// The real probe reads this machine's browser tabs. A Meet tab open on the
+// dev laptop must not change test results.
+jest.mock('../../../lib/meeting-presence-probe', () => ({
+  probeMeetingStillOpen: jest.fn(),
+  clearMeetingPresenceCache: jest.fn(),
+}));
+
 const backendTimeLogs = require('../../utils/backend-time-logs');
+const { probeMeetingStillOpen } = require('../../../lib/meeting-presence-probe');
 const {
   _resetMeetingSessionForTests,
   _setPresenceForTests,
+  clearMeetingSession,
 } = require('../../../lib/meeting-context');
 
 describe('EnhancedIdleMonitor', () => {
@@ -50,6 +59,7 @@ describe('EnhancedIdleMonitor', () => {
     backendTimeLogs.isBackendTimeLogsEnabled.mockReturnValue(true);
     backendTimeLogs.insertIdleLog.mockResolvedValue({});
     backendTimeLogs.upsertIdleLog.mockResolvedValue({});
+    probeMeetingStillOpen.mockResolvedValue({ active: false, conclusive: true });
     _resetMeetingSessionForTests();
 
     jest.useFakeTimers();
@@ -218,6 +228,28 @@ describe('EnhancedIdleMonitor', () => {
       expect(endMs).toBeLessThanOrEqual(expectedMax + 5);
       expect(options.authorizedIdleCut).toBe(true);
       expect(options.timeCutSeconds).toBe(600);
+    });
+
+    test('unanswered alert: idle stops at the cut session end, not 10 minutes later', async () => {
+      global.currentUserId = '1195';
+      monitor.config.user_id = '1195';
+      global.trackingManager = {
+        sessionStartTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        _stopTimeLogCheckpoint: jest.fn(),
+      };
+      const idleStart = Date.now() - 11 * 60 * 1000 - 40 * 1000;
+      monitor.currentIdleStartTime = idleStart;
+      monitor.wasIdleLastCheck = true;
+
+      monitor._stopForIdle('idle_timeout', { allowCut: true });
+      const cutEndMs = new Date(global.stopTracking.mock.calls[0][2].endTimeOverride).getTime();
+      await monitor._flushIdleCheckpoint();
+
+      const [row] = backendTimeLogs.upsertIdleLog.mock.calls.at(-1);
+      expect(new Date(row.idle_end).getTime()).toBe(cutEndMs);
+      expect(row.duration_seconds).toBe(100);
+      // 100s is under Pulse's 5-min floor — not non-effective.
+      expect(monitor.getSessionIdleSeconds()).toBe(0);
     });
 
     test('_stopForIdle without allowCut does not subtract time', () => {
@@ -613,6 +645,62 @@ describe('EnhancedIdleMonitor', () => {
       await monitor.logIdlePeriod(Date.now() - 400000, Date.now(), 400000);
 
       expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
+    });
+
+    test.each(['Google Meet', 'Zoom', 'Microsoft Teams', 'Webex', 'Skype', 'Video meeting'])(
+      'flag dropped but the probe still sees a %s call: idle is not written',
+      async (label) => {
+        monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+        global.currentUserId = '1195';
+        global.trackingManager = { sessionStartTime: new Date(Date.now() - 3600000).toISOString() };
+        probeMeetingStillOpen.mockResolvedValue({ active: true, conclusive: true, label });
+
+        const end = Date.now();
+        await monitor.logIdlePeriod(end - 334000, end, 334000);
+
+        expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
+        expect(monitor.getSessionIdleSeconds()).toBe(0);
+      },
+    );
+
+    test('Stop during a live call: the idle flushed after Stop is not written', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 3600000).toISOString() };
+      _setPresenceForTests({ active: true, label: 'Google Meet' });
+      // Stop clears the meeting before the idle monitor flushes (Mohita 12 Oct).
+      clearMeetingSession();
+      // Windows tab probe misses the background Meet tab.
+      probeMeetingStillOpen.mockResolvedValue({ active: false, conclusive: true });
+
+      const end = Date.now();
+      await monitor.logIdlePeriod(end - 334000, end, 334000);
+
+      expect(backendTimeLogs.upsertIdleLog).not.toHaveBeenCalled();
+    });
+
+    test('a 4-min pause is saved raw but adds nothing to session idle', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 3600000).toISOString() };
+
+      const end = Date.now();
+      await monitor.logIdlePeriod(end - 240000, end, 240000);
+
+      expect(backendTimeLogs.upsertIdleLog).toHaveBeenCalledTimes(1);
+      expect(monitor.getSessionIdleSeconds()).toBe(0);
+    });
+
+    test('10 min idle with no call counts 600s', async () => {
+      monitor = new EnhancedIdleMonitor({ user_id: '1195' });
+      global.currentUserId = '1195';
+      global.trackingManager = { sessionStartTime: new Date(Date.now() - 3600000).toISOString() };
+
+      const end = Date.now();
+      await monitor.logIdlePeriod(end - 600000, end, 600000);
+
+      expect(backendTimeLogs.upsertIdleLog.mock.calls.at(-1)[0].duration_seconds).toBe(600);
+      expect(monitor.getSessionIdleSeconds()).toBe(600);
     });
 
     test('after a conclusive meeting miss, OS idle is written (non-effective can grow)', async () => {

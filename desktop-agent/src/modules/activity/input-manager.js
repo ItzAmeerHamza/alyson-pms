@@ -418,6 +418,14 @@ class UnifiedInputManager extends EventEmitter {
   }
 
   /**
+   * False while no OS hook (uiohook, Swift helper, Python monitor) is running.
+   * PowerMonitor alone only knows idle time, so clicks/keys would read 0.
+   */
+  hasInputSource() {
+    return Boolean(this.platformDetector?.inputSource);
+  }
+
+  /**
    * Return system idle time in seconds.
    * Primary source: OS-level getSystemIdleTime() (Win32 GetLastInputInfo / macOS CGEventSource).
    * Fallback to lastActivity ONLY when powerMonitor is genuinely unavailable.

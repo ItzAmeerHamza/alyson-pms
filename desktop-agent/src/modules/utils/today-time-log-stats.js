@@ -30,7 +30,11 @@ function endOfLocalDayExclusive(d = new Date()) {
 function elapsedSecondsSinceLocalMidnight(sessionStart, nowMs = Date.now()) {
   const { effectiveSessionStart } = require('./sleep-aware-elapsed');
   const wake = Number(typeof global !== 'undefined' ? global._lastWakeAtMs : 0) || 0;
-  return elapsedSecondsSinceWorkMidnight(effectiveSessionStart(sessionStart, wake), nowMs);
+  // A wake after the end being measured ends a later nap, not this span.
+  return elapsedSecondsSinceWorkMidnight(
+    effectiveSessionStart(sessionStart, wake <= nowMs ? wake : 0),
+    nowMs,
+  );
 }
 
 function secondsWithinLocalDay(startMs, endMs, dayRef = new Date()) {
@@ -78,54 +82,99 @@ function mergeIntervalsSeconds(intervals) {
   return seconds;
 }
 
+/** Row carries a server/queue proof-of-life field (null = never stamped). */
+function hasAliveProofField(log) {
+  return Object.prototype.hasOwnProperty.call(log, 'last_alive_at');
+}
+
 function aggregateTimeLogRows(timeLogs, currentTimeLogId, isTracking = false) {
   let ongoingCurrentSessionSeconds = 0;
   const now = Date.now();
   const dayRef = new Date();
-  const closedIntervals = [];
+  const dayStart = startOfWorkDay(dayRef).getTime();
+  const dayEnd = endOfWorkDayExclusive(dayRef).getTime();
+  const otherIntervals = [];
   let liveStartMs = null;
+  let liveDeductedSeconds = 0;
+  let closedDeductedSeconds = 0;
+  let reportsDeductions = false;
 
   for (const log of timeLogs || []) {
     if (!log.start_time) continue;
 
     const start = new Date(log.start_time).getTime();
     const isActiveRow = log.status === 'active';
+    // Stopped + open row with a proof-of-life field is an orphan (Pulse ends it
+    // at last_alive_at). Legacy rows without the field keep the old live read.
     const countsActiveAsLive =
-      isActiveRow && (!isTracking || !currentTimeLogId || log.id === currentTimeLogId);
+      isActiveRow &&
+      (isTracking ? !currentTimeLogId || log.id === currentTimeLogId : !hasAliveProofField(log));
     const isCurrentLive =
       countsActiveAsLive ||
       (isTracking && currentTimeLogId && log.id === currentTimeLogId);
 
+    // Screenshot deletes come off the session-start work day (Pulse rule).
+    if (Object.prototype.hasOwnProperty.call(log, 'deducted_seconds')) reportsDeductions = true;
+    const deducted = Math.max(0, Math.floor(Number(log.deducted_seconds) || 0));
+    if (deducted > 0 && start >= dayStart && start < dayEnd) {
+      if (isCurrentLive) liveDeductedSeconds += deducted;
+      else closedDeductedSeconds += deducted;
+    }
+
     if (isCurrentLive) {
       // One live session only — keep earliest start if duplicates appear.
       if (liveStartMs == null || start < liveStartMs) liveStartMs = start;
-    } else if (log.end_time) {
-      const end = new Date(log.end_time).getTime();
-      const sec = secondsWithinWorkDay(start, end, dayRef);
-      if (sec > 0) {
-        const dayStart = startOfWorkDay(dayRef).getTime();
-        const dayEnd = endOfWorkDayExclusive(dayRef).getTime();
-        closedIntervals.push({
-          startMs: Math.max(start, dayStart),
-          endMs: Math.min(end, dayEnd),
-        });
-      }
-    } else if (isActiveRow) {
-      // Orphan active row (not the live session): DO NOT count through "now".
-      // That inflated the desktop clock to wall-clock-since-midnight after
-      // crash/reboot while the portal (closed rows only) stayed correct.
-      // Session-recovery closes orphans; until then they contribute 0 here.
+      continue;
+    }
+    // Open rows that are not the live session end at last proof-of-life, never
+    // "now" (that read wall-clock-since-midnight after a crash). No proof → 0.
+    const endRaw = log.end_time || (isActiveRow ? log.last_alive_at : null);
+    if (!endRaw) continue;
+    const end = new Date(endRaw).getTime();
+    if (secondsWithinWorkDay(start, end, dayRef) > 0) {
+      otherIntervals.push({
+        startMs: Math.max(start, dayStart),
+        endMs: Math.min(end, dayEnd),
+      });
     }
   }
 
+  let completedClosedSeconds;
   if (liveStartMs != null) {
     ongoingCurrentSessionSeconds = secondsWithinWorkDay(liveStartMs, now, dayRef);
+    // Union with the live session: whatever overlaps it is already counted
+    // there (second device, or a temp-id copy of this same session).
+    const liveFrom = Math.max(liveStartMs, dayStart);
+    completedClosedSeconds = mergeIntervalsSeconds(
+      otherIntervals
+        .map((i) => ({ startMs: i.startMs, endMs: Math.min(i.endMs, liveFrom) }))
+        .filter((i) => i.endMs > i.startMs),
+    );
+  } else {
+    completedClosedSeconds = mergeIntervalsSeconds(otherIntervals);
   }
 
-  const completedClosedSeconds = mergeIntervalsSeconds(closedIntervals);
-  const totalTime = completedClosedSeconds + ongoingCurrentSessionSeconds;
+  completedClosedSeconds = Math.max(0, completedClosedSeconds - closedDeductedSeconds);
+  // Pulse takes every deduction off the day total, so a live session's
+  // deduction larger than the session so far still comes off the total.
+  // Clamping it at the session dropped the clock by the excess at Stop.
+  const liveDeductionExcessSeconds = Math.max(0, liveDeductedSeconds - ongoingCurrentSessionSeconds);
+  ongoingCurrentSessionSeconds = Math.max(0, ongoingCurrentSessionSeconds - liveDeductedSeconds);
+  const totalTime = Math.max(
+    0,
+    completedClosedSeconds + ongoingCurrentSessionSeconds - liveDeductionExcessSeconds,
+  );
   const timeLogsCount = (timeLogs || []).length;
-  return { completedClosedSeconds, ongoingCurrentSessionSeconds, totalTime, timeLogsCount };
+  return {
+    completedClosedSeconds,
+    ongoingCurrentSessionSeconds,
+    totalTime,
+    timeLogsCount,
+    deductedSeconds: closedDeductedSeconds + liveDeductedSeconds,
+    liveDeductedSeconds,
+    liveDeductionExcessSeconds,
+    reportsDeductions,
+  };
 }
 
 function logsOverlappingLocalDay(timeLogs, dayRef = new Date()) {
@@ -193,6 +242,7 @@ function loadOfflineQueuedTimeLogRows(userId, currentTimeLogId = null) {
           start_time: toIso(data.start_time),
           end_time: toIso(data.end_time),
           status: data.status || (data.end_time ? 'completed' : 'active'),
+          ...(data._checkpoint_at ? { last_alive_at: toIso(data._checkpoint_at) } : {}),
           _fromOfflineQueue: true,
         });
       } else if (item.type === 'update_time_log') {
@@ -329,6 +379,75 @@ function applyAdjustmentSeconds(sessionSeconds, adjustmentSeconds, leaveCreditSe
     otherAdjustmentSeconds: other,
     totalTime: Math.max(0, session + applied),
   };
+}
+
+/**
+ * A session longer than today has lasted is yesterday's leftover.
+ * Do not replace it with "seconds since midnight" — that painted 1h 37m
+ * before Start (Hamza, 14 Oct: 25884s clamped to 5877s).
+ *
+ * @returns {{ totalSeconds: number, closedSeconds: number, dropped: boolean }}
+ */
+function dropImpossibleSessionSeconds({
+  totalSeconds = 0,
+  closedSeconds = 0,
+  sessionTrackedSeconds = null,
+  capSeconds = null,
+  isTracking = false,
+  liveElapsedSeconds = 0,
+  otherSeconds = 0,
+  leaveSeconds = 0,
+} = {}) {
+  let closed = Math.max(0, Math.floor(Number(closedSeconds) || 0));
+  let total = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const cap = capSeconds == null ? null : Math.floor(Number(capSeconds));
+  if (cap == null || !Number.isFinite(cap)) {
+    return { totalSeconds: total, closedSeconds: closed, dropped: false };
+  }
+  const sessionTracked = Math.max(
+    0,
+    Math.floor(
+      Number(sessionTrackedSeconds != null ? sessionTrackedSeconds : total) || 0,
+    ),
+  );
+  let dropped = false;
+  if (closed > cap) {
+    closed = 0;
+    dropped = true;
+  }
+  if (sessionTracked > cap) {
+    const live = isTracking ? Math.max(0, Math.floor(Number(liveElapsedSeconds) || 0)) : 0;
+    const honest = Math.min(cap, closed + live);
+    total = applyAdjustmentSeconds(honest, otherSeconds, leaveSeconds).totalTime;
+    dropped = true;
+  }
+  return { totalSeconds: total, closedSeconds: closed, dropped };
+}
+
+/**
+ * Every second of today is already on the server: the read succeeded, nothing
+ * is queued or pending on disk, and the queue did not change while the read
+ * was in flight. Then the server total (what Pulse shows) is the only correct
+ * clock — local Stop floors exist to cover time the server does not have yet,
+ * and past that point they can only hold phantom time (Om 14 Oct: 11h vs 9h).
+ */
+function isSettledTodayRead({
+  backendFetchFailed = false,
+  timeLogsCount = 0,
+  offlinePendingCount = 0,
+  pendingCloseCount = 0,
+  queueGenAtStart = null,
+  queueGenAtEnd = null,
+  graceUntilMs = 0,
+  stopInProgress = false,
+  nowMs = Date.now(),
+} = {}) {
+  if (backendFetchFailed || stopInProgress) return false;
+  // An empty read is never proof — it may be a failed lookup that returned [].
+  if (!(Number(timeLogsCount) > 0)) return false;
+  if (Number(offlinePendingCount) > 0 || Number(pendingCloseCount) > 0) return false;
+  if (queueGenAtStart == null || queueGenAtStart !== queueGenAtEnd) return false;
+  return nowMs >= (Number(graceUntilMs) || 0);
 }
 
 function finalizeTodayAggregate(timeLogs, currentTimeLogId, isTracking, offlineCount = 0) {
@@ -517,6 +636,7 @@ async function computeTodayTimeLogSeconds(userId, currentTimeLogId, isTracking =
         adjustmentSeconds,
         leaveCreditSeconds,
         otherAdjustmentSeconds: adjustmentSeconds,
+        timeLogs: merged,
       };
     }
   } catch (err) {
@@ -579,6 +699,8 @@ function writePersistedLastGood(payload) {
         adjustmentSeconds: Math.trunc(Number(payload.adjustmentSeconds) || 0),
         leaveCreditSeconds: Math.max(0, Math.trunc(Number(payload.leaveCreditSeconds) || 0)),
         otherAdjustmentSeconds: Math.trunc(Number(payload.otherAdjustmentSeconds) || 0),
+        deductedSeconds: Math.max(0, Math.floor(Number(payload.deductedSeconds) || 0)),
+        liveDeductedSeconds: Math.max(0, Math.floor(Number(payload.liveDeductedSeconds) || 0)),
       }),
       'utf8',
     );
@@ -601,6 +723,8 @@ module.exports = {
   mergeIntervalsSeconds,
   aggregateTimeLogRows,
   applyAdjustmentSeconds,
+  dropImpossibleSessionSeconds,
+  isSettledTodayRead,
   holdLastGoodOnFailedFetch,
   statsWorkDayKey,
   shouldKeepCachedTodayStats,

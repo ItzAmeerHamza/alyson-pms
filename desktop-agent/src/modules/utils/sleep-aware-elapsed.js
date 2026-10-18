@@ -49,6 +49,172 @@ function sleepSafeEndIso({
   return now;
 }
 
+/**
+ * A wall-clock jump between two awake ticks (intervalMs apart) that was the
+ * machine asleep. macOS/Linux monotonic time stops while asleep but keeps
+ * running through App Nap and event-loop stalls, so an awake-but-throttled
+ * app (the user may be working) is never mistaken for sleep. Windows has no
+ * App Nap.
+ */
+function isSleepTickGap({
+  prevWallMs,
+  wallMs,
+  prevMonoMs,
+  monoMs,
+  intervalMs = 0,
+  platform = process.platform,
+  gapMs = SLEEP_GAP_MS,
+} = {}) {
+  const prev = Number(prevWallMs);
+  if (!(prev > 0)) return false;
+  const wallGap = Number(wallMs) - prev;
+  if (!(wallGap > (Number(intervalMs) || 0) + gapMs)) return false;
+  if (platform === 'win32') return true;
+  const monoGap = Number(monoMs) - Number(prevMonoMs);
+  if (!Number.isFinite(monoGap)) return true;
+  return wallGap - monoGap > gapMs;
+}
+
+function monotonicMs() {
+  try {
+    return Number(process.hrtime.bigint() / 1000000n);
+  } catch (_) {
+    return NaN;
+  }
+}
+
+/**
+ * Record one awake tick (main-process 1s clock). On a sleep gap, remembers
+ * the nap as global._lastSleepWindow and returns the last pre-nap tick.
+ */
+function noteAwakeTick({ g = global, wallMs = Date.now(), monoMs = monotonicMs(), platform } = {}) {
+  const prevWallMs = Number(g._lastAwakeTickMs) || 0;
+  const prevMonoMs = g._lastAwakeTickMonoMs;
+  g._lastAwakeTickMs = wallMs;
+  g._lastAwakeTickMonoMs = monoMs;
+  const slept = isSleepTickGap({ prevWallMs, wallMs, prevMonoMs, monoMs, platform });
+  if (slept) g._lastSleepWindow = { fromMs: prevWallMs, toMs: wallMs };
+  return { slept, lastAwakeMs: slept ? prevWallMs : wallMs };
+}
+
+function resetAwakeClock(g = global) {
+  g._lastAwakeTickMs = 0;
+  g._lastAwakeTickMonoMs = NaN;
+}
+
+/**
+ * End proof for a sleep stop: the latest awake mark inside this session.
+ * Marks from before Start belong to an earlier nap (would close this session
+ * at zero length). If this session just woke from a nap, the nap's start is
+ * the end — anything later is wake time. An old nap the session outlived
+ * (its close failed) must not erase the hours worked since.
+ */
+function latestAwakeProofMs({
+  candidates = [],
+  sessionStart = null,
+  sleepWindow = null,
+  nowMs = Date.now(),
+} = {}) {
+  const start = msOf(sessionStart);
+  const napFrom = msOf(sleepWindow?.fromMs);
+  const napTo = msOf(sleepWindow?.toMs);
+  const justWoke = Number.isFinite(napTo) && nowMs - napTo <= STOP_END_MAX_AGE_MS;
+  if (justWoke && Number.isFinite(start) && Number.isFinite(napFrom) && napFrom >= start) {
+    return napFrom;
+  }
+  let best = NaN;
+  for (const c of candidates) {
+    const t = msOf(c);
+    if (!Number.isFinite(t)) continue;
+    if (Number.isFinite(start) && t < start) continue;
+    if (!Number.isFinite(best) || t > best) best = t;
+  }
+  return best;
+}
+
+/** A captured Stop moment older than this is a leftover, not this Stop. */
+const STOP_END_MAX_AGE_MS = 5 * 60 * 1000;
+
+/**
+ * The pending Stop end is a sleep stop's last-awake mark. Only true while the
+ * override still equals the mark, so any reset or replacement drops it.
+ */
+function hasSleepSafeStopEnd(g = global) {
+  return !!g._sleepSafeStopEndIso && g._stopEndTimeOverride === g._sleepSafeStopEndIso;
+}
+
+/** Drop a leftover Stop end before a fresh capture — never a sleep mark. */
+function resetStopEndOverride(g = global) {
+  if (!hasSleepSafeStopEnd(g)) g._stopEndTimeOverride = null;
+}
+
+/**
+ * End a Stop bills. The captured Stop moment wins while fresh. A sleep stop's
+ * last-awake mark wins at any age — the process was frozen in between, so
+ * wake-time NOW would bill the nap (Om 14 Oct: four naps, +2h02m).
+ * Anything outside [sessionStart, now] belongs to another stop.
+ */
+function resolveStopEndMs({
+  frozenEnd,
+  sessionStart,
+  nowMs = Date.now(),
+  sleepSafe = false,
+} = {}) {
+  const frozen = msOf(frozenEnd);
+  if (!Number.isFinite(frozen) || frozen > nowMs) return nowMs;
+  const start = msOf(sessionStart);
+  if (Number.isFinite(start) && frozen < start) return nowMs;
+  if (nowMs - frozen <= STOP_END_MAX_AGE_MS) return frozen;
+  return sleepSafe ? frozen : nowMs;
+}
+
+function isSleepStopReason(reason) {
+  return reason === 'system_sleep' || reason === 'suspend';
+}
+
+/**
+ * Total to freeze on the clock at Stop. A sleep stop trusts main's total to
+ * the last awake moment: a renderer tick at wake may already have painted the
+ * nap. Only the shown idle prompt may cut, and only by its own seconds.
+ */
+function resolveStopHintSeconds({
+  reason,
+  frozenSeconds = 0,
+  liveHighSeconds = 0,
+  cutSeconds = 0,
+} = {}) {
+  const frozen = Math.max(0, Math.floor(Number(frozenSeconds) || 0));
+  const live = Math.max(0, Math.floor(Number(liveHighSeconds) || 0));
+  const cut = Math.max(0, Math.floor(Number(cutSeconds) || 0));
+  if (reason === 'idle_timeout' && cut > 0) return Math.max(frozen, Math.max(0, live - cut));
+  if (isSleepStopReason(reason) && frozen > 0) return frozen;
+  // A couple of seconds of tray/renderer skew stays. Minutes above the click
+  // snapshot are screenshot deductions the window never dropped — Stop was
+  // jumping back up to that old total.
+  if (frozen > 0 && live > frozen + 5) return frozen;
+  return Math.max(live, frozen);
+}
+
+/**
+ * Stopped clock from a stats read. A settled read (server has every second)
+ * is the server total exactly and may move the clock down. Otherwise the Stop
+ * total holds until the server catches up — a read can land before the close.
+ */
+function resolveStoppedClockSeconds({
+  dbSeconds = 0,
+  stopFloorSeconds = 0,
+  settled = false,
+  capSeconds = null,
+} = {}) {
+  const cap = capSeconds != null && Number.isFinite(Number(capSeconds))
+    ? Math.floor(Number(capSeconds))
+    : Infinity;
+  const db = Math.min(Math.max(0, Math.floor(Number(dbSeconds) || 0)), cap);
+  if (settled) return db;
+  const stop = Math.max(0, Math.floor(Number(stopFloorSeconds) || 0));
+  return stop > db && stop <= cap ? stop : db;
+}
+
 /** After wake, elapsed starts at lastWake — never at a Start that predates sleep. */
 function effectiveSessionStart(sessionStart, lastWakeMs) {
   const startMs = msOf(sessionStart);
@@ -153,6 +319,18 @@ module.exports = {
   msOf,
   isSleepGap,
   sleepSafeEndIso,
+  isSleepTickGap,
+  monotonicMs,
+  noteAwakeTick,
+  resetAwakeClock,
+  latestAwakeProofMs,
+  STOP_END_MAX_AGE_MS,
+  hasSleepSafeStopEnd,
+  resetStopEndOverride,
+  resolveStopEndMs,
+  isSleepStopReason,
+  resolveStopHintSeconds,
+  resolveStoppedClockSeconds,
   effectiveSessionStart,
   elapsedSecondsExcludingSleep,
   closedBaseAfterSleep,

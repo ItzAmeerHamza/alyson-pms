@@ -373,7 +373,7 @@ class IPCEventMap {
         } catch {
           return { success: false, error: 'Invalid URL' };
         }
-        const allowedHosts = new Set(['app.alyson.ai']);
+        const allowedHosts = new Set(['app.tavilo.ai']);
         if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname)) {
           console.warn('⚠️ [IPC] Blocked open-external-url:', raw);
           return { success: false, error: 'URL not allowed' };

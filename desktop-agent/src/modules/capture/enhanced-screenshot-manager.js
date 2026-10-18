@@ -983,7 +983,7 @@ if (uploadResult?.id) {
                   saved = true;
                   log.info({ step: 'SAVED_STORAGE', ctx: { id: uploadResult.id } });
                   console.log(`✅ [SCREENSHOT-UPLOAD] SUCCESS! Screenshot uploaded: ${uploadResult.id}`);
-                  console.log(`📊 [SCREENSHOT-UPLOAD] Uploaded with activity: C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves} Focus:${focusPercent}%`);
+                  console.log(`📊 [SCREENSHOT-UPLOAD] Uploaded with activity: C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves} Focus:${focusPercent == null ? 'unknown' : `${focusPercent}%`}`);
                   if (global.mainWindow && !global.mainWindow.isDestroyed()) {
                     global.mainWindow.webContents.send('screenshot-saved', {
                       row_id: uploadResult.id,
@@ -1154,7 +1154,7 @@ if (uploadResult?.id) {
                   saved = true;
                   log.info({ step: 'SAVED_STORAGE', ctx: { id: uploadResult.id } });
                   console.log(`✅ [SCREENSHOT-UPLOAD] SUCCESS! Screenshot uploaded: ${uploadResult.id}`);
-                  console.log(`📊 [SCREENSHOT-UPLOAD] Uploaded with activity: C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves} Focus:${focusPercent}%`);
+                  console.log(`📊 [SCREENSHOT-UPLOAD] Uploaded with activity: C:${activityData.clicks} K:${activityData.keys} M:${activityData.moves} Focus:${focusPercent == null ? 'unknown' : `${focusPercent}%`}`);
 
                   if (global.mainWindow && !global.mainWindow.isDestroyed()) {
                     global.mainWindow.webContents.send('screenshot-saved', {
@@ -2105,6 +2105,17 @@ if (uploadResult?.id) {
       }
     }
     const inMeeting = Boolean(meetingLabel) || isInMeetingSession();
+
+    // Without an input hook the counters are 0 whatever the user does. Pulse
+    // counts sub-10% shots as idle, so send unknown (null) rather than 0%.
+    if (global.unifiedInputManager?.hasInputSource?.() === false) {
+      console.warn('⚠️ [SCREENSHOT-ACTIVITY] No input source running — activity unknown, not 0%');
+      return {
+        activityPercent: null,
+        focusPercent: null,
+        meetingLabel: inMeeting ? (meetingLabel || getRecentMeetingLabel()) : null,
+      };
+    }
 
     const activityPercent = applyMeetingActivityFloor(focusPercent, context, osIdleSeconds);
 

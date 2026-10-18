@@ -90,6 +90,45 @@ const fileSink = {
   },
 };
 
+const ERROR_STACK_LINES = 5;
+const ERROR_CAUSE_DEPTH = 3;
+// Allowlist only: HTTP client errors also carry request config with auth headers.
+const ERROR_DETAIL_FIELDS = ['code', 'errno', 'syscall', 'hostname', 'address', 'port', 'status', 'statusCode'];
+
+function isError(value) {
+  return value instanceof Error || require('util').types.isNativeError(value);
+}
+
+/**
+ * JSON.stringify(error) is "{}" because message, stack and cause are not
+ * enumerable, which hid every `console.error('…', error)` in the S3 logs.
+ */
+function describeError(error, depth = 0) {
+  const out = { name: error.name || 'Error', message: String(error.message || '') };
+  for (const field of ERROR_DETAIL_FIELDS) {
+    const value = error[field];
+    if (value !== undefined && value !== null && typeof value !== 'object') out[field] = value;
+  }
+  if (typeof error.stack === 'string') {
+    const frames = error.stack.split('\n').filter((l) => /^\s+at /.test(l)).slice(0, ERROR_STACK_LINES);
+    if (frames.length) out.stack = frames.map((l) => l.trim()).join(' | ');
+  }
+  if (error.cause !== undefined && depth < ERROR_CAUSE_DEPTH) {
+    out.cause = isError(error.cause) ? describeError(error.cause, depth + 1) : error.cause;
+  }
+  return out;
+}
+
+function errorReplacer(_key, value) {
+  return isError(value) ? describeError(value) : value;
+}
+
+function formatError(error) {
+  const { name, message, ...details } = describeError(error);
+  const extra = Object.keys(details).length ? ` ${safeStringify(details)}` : '';
+  return `${name}: ${message}${extra}`;
+}
+
 /**
  * The app logs almost entirely via raw console.* calls scattered across every module,
  * not the structured Logger below — tee those into the same file sink so the log file
@@ -100,8 +139,10 @@ function stringifyConsoleArgs(args) {
   return args
     .map((a) => {
       if (typeof a === 'string') return a;
+      if (isError(a)) return formatError(a);
       try {
-        return JSON.stringify(a);
+        const json = JSON.stringify(a, errorReplacer);
+        return json === undefined ? String(a) : json;
       } catch (_) {
         return String(a);
       }
@@ -174,7 +215,7 @@ const JSON_DUPLICATE_CATEGORIES = new Set(['SESSION_AUDIT', 'SESSION', 'DB']);
 
 function safeStringify(value) {
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value, errorReplacer);
   } catch (_err) {
     return '"[unserializable]"';
   }
@@ -413,6 +454,7 @@ module.exports = {
   LEVELS,
   createFeatureLogger,
   safeConsole,
+  stringifyConsoleArgs,
   logFile: {
     dir: () => fileSink.dir,
     pathFor: (dateStr) => fileSink.currentFilePath(dateStr),

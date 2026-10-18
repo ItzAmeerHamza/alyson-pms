@@ -2,6 +2,7 @@ const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { BUILDER_ARCH, checkMacInputHelper, prepareMacAppNatives } = require('./mac-native-arch');
 
 exports.default = async function afterPack(context) {
   if (process.platform !== 'darwin') return;
@@ -31,30 +32,31 @@ print(f'Removed {count} detritus xattrs')
     console.warn(`  ⚠ cleanup: ${e.message}`);
   }
 
-  const helperPath = path.join(appPath, 'Contents', 'Resources', 'helpers', 'macos-input-helper');
-  if (fs.existsSync(helperPath)) {
+  const arch = BUILDER_ARCH[context.arch];
+  const natives = prepareMacAppNatives({ appPath, arch });
+  const prunedNote = natives.pruned.length ? `, pruned ${natives.pruned.join(', ')}` : '';
+  console.log(`  • native modules match ${arch} (${natives.checked} binaries checked${prunedNote})`);
+
+  const helperPath = checkMacInputHelper({ appPath, arch });
+  try {
+    fs.chmodSync(helperPath, 0o755);
+    // Prefer the stable CI identity so Accessibility grants on this helper persist.
+    // Do not use --options runtime here — main app is not hardened-runtime signed.
+    const signIdentity =
+      process.env.CSC_NAME ||
+      process.env.APPLE_IDENTITY ||
+      'Alyson PM Code Signing';
     try {
-      fs.chmodSync(helperPath, 0o755);
-      // Prefer the stable CI identity so Accessibility grants on this helper persist.
-      // Do not use --options runtime here — main app is not hardened-runtime signed.
-      const signIdentity =
-        process.env.CSC_NAME ||
-        process.env.APPLE_IDENTITY ||
-        'Alyson PM Code Signing';
-      try {
-        execSync(`codesign --force --sign "${signIdentity}" "${helperPath}"`, {
-          stdio: 'inherit',
-          timeout: 60000,
-        });
-        console.log(`  • signed macos-input-helper (${signIdentity})`);
-      } catch (primaryErr) {
-        execSync(`codesign --force --sign - "${helperPath}"`, { stdio: 'inherit', timeout: 60000 });
-        console.log('  • signed macos-input-helper (ad-hoc fallback)');
-      }
-    } catch (e) {
-      console.warn(`  ⚠ could not codesign macos-input-helper: ${e.message}`);
+      execSync(`codesign --force --sign "${signIdentity}" "${helperPath}"`, {
+        stdio: 'inherit',
+        timeout: 60000,
+      });
+      console.log(`  • signed macos-input-helper (${signIdentity})`);
+    } catch (primaryErr) {
+      execSync(`codesign --force --sign - "${helperPath}"`, { stdio: 'inherit', timeout: 60000 });
+      console.log('  • signed macos-input-helper (ad-hoc fallback)');
     }
-  } else {
-    console.warn('  ⚠ macos-input-helper missing from Resources/helpers — clicks/keys will be 0 in installed builds');
+  } catch (e) {
+    console.warn(`  ⚠ could not codesign macos-input-helper: ${e.message}`);
   }
 };

@@ -339,6 +339,20 @@ class ForceUpdater {
   }
 
   /**
+   * Chip to download for. The Intel build reports process.arch 'x64' under
+   * Rosetta, so keying off process.arch alone keeps Apple silicon Macs on the
+   * Intel build forever.
+   */
+  getMacDownloadArch() {
+    if (process.arch === 'arm64' || this.isRunningUnderArm64Translation()) return 'arm64';
+    return 'x64';
+  }
+
+  isRunningUnderArm64Translation() {
+    return !!(app && app.runningUnderARM64Translation);
+  }
+
+  /**
    * Arch-appropriate ZIP asset URL used by the macOS in-place updater.
    * electron-builder names them Alyson.PM-<ver>-arm64-mac.zip / -mac.zip.
    */
@@ -346,7 +360,7 @@ class ForceUpdater {
     const gh = this.getGithubReleaseTarget();
     const ver = String(version || this.pendingVersion || '').replace(/^v/i, '');
     const tag = `v${ver}`;
-    const archSuffix = process.arch === 'arm64' ? 'arm64-mac' : 'mac';
+    const archSuffix = this.getMacDownloadArch() === 'arm64' ? 'arm64-mac' : 'mac';
     return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM-${ver}-${archSuffix}.zip`;
   }
 
@@ -414,8 +428,7 @@ class ForceUpdater {
       const ver = tag.replace(/^v/i, '');
       return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM.Setup.${ver}.exe`;
     }
-    const arch = process.arch === 'arm64' ? 'arm64' : 'mac';
-    const suffix = arch === 'arm64' ? '-arm64.dmg' : '.dmg';
+    const suffix = this.getMacDownloadArch() === 'arm64' ? '-arm64.dmg' : '.dmg';
     const ver = tag.replace(/^v/i, '');
     return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM-${ver}${suffix}`;
   }

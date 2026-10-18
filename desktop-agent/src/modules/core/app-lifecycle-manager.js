@@ -81,6 +81,8 @@ class AppLifecycleManager {
             result.reason || 'unknown',
             result.path ? `(${result.path})` : '',
           );
+        } else {
+          console.log('✅ [APP-LIFECYCLE] Dock icon set from', result.path);
         }
       }
     } catch (e) {

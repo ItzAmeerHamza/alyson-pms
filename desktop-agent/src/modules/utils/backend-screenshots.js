@@ -301,7 +301,8 @@ async function fetchScreenshotsFromBackend(userId, config, opts = {}) {
 function applyActivityFilter(screenshots, activityFilter = 'all') {
   if (!activityFilter || activityFilter === 'all') return screenshots;
   return screenshots.filter((s) => {
-    const pct = s.activity_percent ?? 0;
+    if (s.activity_percent == null) return false;
+    const pct = Number(s.activity_percent);
     if (activityFilter === 'high') return pct >= 70;
     if (activityFilter === 'medium') return pct >= 10 && pct < 70;
     if (activityFilter === 'low') return pct < 10;

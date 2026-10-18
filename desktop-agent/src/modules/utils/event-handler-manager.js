@@ -132,6 +132,35 @@ class EventHandlerManager {
       this.global.currentTimeLogId ||
       this.global.trackingManager?.currentTimeLogId
     );
+    // Remember what a very short suspend interrupted so resume can pick it back
+    // up. Only an OS `suspend` qualifies; display-sleep keeps the plain halt.
+    // A suspend delivered late, at wake (Windows), arrives seconds before
+    // resume and looked like a blip — tracking restarted on its own after a
+    // 31-minute nap. If the last awake proof is already a sleep gap old, or
+    // the tray just saw a nap end, the machine really slept: no restart.
+    let sleptAlready = false;
+    try {
+      const { SLEEP_GAP_MS } = require('./sleep-aware-elapsed');
+      const now = Date.now();
+      const proofs = [global._lastAwakeTickMs, Date.parse(global._lidLastProofIso || '')]
+        .map(Number)
+        .filter((t) => Number.isFinite(t) && t > 0);
+      const lastProof = proofs.length ? Math.max(...proofs) : NaN;
+      const napEnd = Number(global._lastSleepWindow?.toMs);
+      sleptAlready =
+        (Number.isFinite(lastProof) && now - lastProof > SLEEP_GAP_MS) ||
+        (Number.isFinite(napEnd) && now - napEnd >= 0 && now - napEnd < SLEEP_GAP_MS);
+    } catch (_) { /* unknown: keep the blip check below */ }
+    this._suspendBlip =
+      hasOpenSession && source === 'suspend' && !sleptAlready
+        ? {
+            atMs: Date.now(),
+            projectId:
+              this.global.currentProjectId ||
+              this.global.trackingManager?.currentProjectId ||
+              null,
+          }
+        : null;
     if (hasOpenSession) {
       this.console.log(`🛑 Laptop lid closed / ${source} - durable arm then stop`);
       try {
@@ -176,6 +205,71 @@ class EventHandlerManager {
   }
 
   /**
+   * Windows fires `suspend` then `resume` within a second or two with no real
+   * sleep (Modern Standby transitions, a lid flick). Garima 15 Oct: a 0.2s and a
+   * 4.4s suspend each stopped a live session and cost her 110 and 10 minutes
+   * until she noticed. A suspend shorter than the sleep gap is not a nap, so
+   * the session it interrupted is restarted from wake.
+   *
+   * Returns the interrupted session when resume should restart it, else null.
+   * Always consumes the pending suspend so a later resume cannot reuse it.
+   */
+  /**
+   * Resolve with the work's result, or null after timeoutMs. The timer is
+   * cleared when the work wins, so the timeout warning only logs on a real timeout.
+   */
+  _withResumeTimeout(work, timeoutMs, warning) {
+    let timer = null;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => {
+        this.console.warn(warning);
+        resolve(null);
+      }, timeoutMs);
+    });
+    return Promise.race([Promise.resolve(work), timeout]).finally(() => clearTimeout(timer));
+  }
+
+  _takeSuspendBlip() {
+    const blip = this._suspendBlip;
+    this._suspendBlip = null;
+    if (!blip) return null;
+
+    const { SLEEP_GAP_MS } = require('./sleep-aware-elapsed');
+    const now = Date.now();
+    const elapsedMs = now - blip.atMs;
+    // Negative or huge means the clock moved or the machine really slept.
+    if (!(elapsedMs >= 0 && elapsedMs < SLEEP_GAP_MS)) return null;
+
+    // A device stuck cycling suspend/resume must not start/stop in a loop.
+    const MAX_RESTARTS = 5;
+    const WINDOW_MS = 10 * 60 * 1000;
+    this._blipRestartTimes = (this._blipRestartTimes || []).filter((t) => now - t < WINDOW_MS);
+    if (this._blipRestartTimes.length >= MAX_RESTARTS) {
+      this.console.warn(
+        `⚠️ [RESUME] ${MAX_RESTARTS} short-suspend restarts in 10 min — staying stopped`,
+      );
+      return null;
+    }
+    this._blipRestartTimes.push(now);
+    return { ...blip, elapsedMs };
+  }
+
+  async _restartAfterSuspendBlip(blip) {
+    try {
+      if (this.global.isTracking || this.global.trackingManager?.isTracking) return false;
+      if (typeof this.global.startTracking !== 'function') return false;
+      this.console.log(
+        `▶️ [RESUME] Suspend lasted ${(blip.elapsedMs / 1000).toFixed(1)}s (not a real sleep) — restarting tracking`,
+      );
+      await this.global.startTracking(blip.projectId || null);
+      return true;
+    } catch (err) {
+      this.console.warn('⚠️ [RESUME] Restart after short suspend failed:', err?.message || err);
+      return false;
+    }
+  }
+
+  /**
    * Set up power monitoring events
    */
   setupPowerMonitoring() {
@@ -204,6 +298,7 @@ class EventHandlerManager {
 
       try {
         this.console.log('🌅 System resumed from sleep');
+        const blip = this._takeSuspendBlip();
         this._lidHaltInProgress = false;
         global._lastWakeAtMs = Date.now();
         global._startAfterSleep = true;
@@ -246,6 +341,11 @@ class EventHandlerManager {
         
         // Re-sync tray state and fire any deferred auto-stop notification
         if (this.global.trayManager) {
+          // "Your laptop went to sleep" would be wrong: we restart below.
+          if (blip) {
+            this.global.trayManager._pendingAutoStopReason = null;
+            this.global.trayManager._pendingAutoStopMessage = null;
+          }
           // Company day rollover first (lid-close overnight freezes midnight timers).
           try {
             if (typeof this.global.trayManager.ensureWorkDayRollover === 'function') {
@@ -284,24 +384,24 @@ class EventHandlerManager {
         // Restore user authentication (but NOT tracking session)
         // FREEZE FIX: Wrap in 5s timeout to prevent hangs when network is not ready after resume
         const RESUME_TIMEOUT_MS = 5000;
+        let userRestored = false;
         try {
           await new Promise(resolve => setTimeout(resolve, 100));
-          const savedSession = await Promise.race([
+          const savedSession = await this._withResumeTimeout(
             (async () => {
               return this.global.loadDesktopAgentSession ? this.global.loadDesktopAgentSession() : null;
             })(),
-            new Promise(resolve => setTimeout(() => {
-              this.console.warn('⚠️ [RESUME] Session load timed out after 5s');
-              resolve(null);
-            }, RESUME_TIMEOUT_MS))
-          ]);
+            RESUME_TIMEOUT_MS,
+            '⚠️ [RESUME] Session load timed out after 5s',
+          );
           if (savedSession && savedSession.id) {
             this.console.log('✅ Desktop agent session loaded:', savedSession.email);
             if (this.global.config) {
               this.global.config.user_id = savedSession.id;
             }
             this.global._resumeTrackingAfterWake = null;
-            if (typeof this.global.showTrayNotification === 'function') {
+            userRestored = true;
+            if (typeof this.global.showTrayNotification === 'function' && !blip) {
               if (this.global.isTracking) {
                 this.global.showTrayNotification(
                   `Welcome back ${savedSession.email.split('@')[0]}! Tracking is still running — click Stop if this is unexpected.`,
@@ -327,13 +427,11 @@ class EventHandlerManager {
         // FREEZE FIX: Recover screenshot permissions with timeout (merged from system-initialization-manager)
         try {
           if (this.global.recoverScreenshotPermissions) {
-            await Promise.race([
+            await this._withResumeTimeout(
               this.global.recoverScreenshotPermissions(),
-              new Promise(resolve => setTimeout(() => {
-                this.console.warn('⚠️ [RESUME] Screenshot permission recovery timed out after 5s');
-                resolve();
-              }, RESUME_TIMEOUT_MS))
-            ]);
+              RESUME_TIMEOUT_MS,
+              '⚠️ [RESUME] Screenshot permission recovery timed out after 5s',
+            );
           }
         } catch (e) {
           this.console.warn('⚠️ [RESUME] Screenshot permission recovery error:', e?.message);
@@ -385,6 +483,21 @@ class EventHandlerManager {
             ? '🌅 System resumed — tracking will restart from wake (sleep not billed)'
             : '🌅 System resumed — tracking is stopped',
         );
+
+        // Not awaited: Start can take seconds and must not hold _resumeInProgress,
+        // or a second suspend/resume cycle would be skipped.
+        if (blip) {
+          const restart = userRestored
+            ? this._restartAfterSuspendBlip(blip)
+            : Promise.resolve(false);
+          void restart.then((restarted) => {
+            if (restarted) return;
+            // The stop notification was withheld; the employee still needs it.
+            try {
+              this.global.trayManager?.showAutoStopNotification?.('system_sleep');
+            } catch (_) { /* ignore */ }
+          });
+        }
       } finally {
         this._resumeInProgress = false;
       }

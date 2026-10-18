@@ -204,8 +204,21 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   } catch (adjErr) {
     console.warn('⚠️ [MONTHLY-REPORT] Time adjustments fetch failed:', adjErr?.message || adjErr);
   }
+  // Screenshot deletes come off the work day the session started on, after
+  // the merge (Pulse rule). Without this every day here sat above Pulse by
+  // the deleted time, and today's row pushed it back onto the big clock.
+  const deductedByDate = {};
+  for (const log of timeLogs) {
+    const deducted = Math.max(0, Math.floor(Number(log.deducted_seconds) || 0));
+    if (deducted <= 0 || !log.start_time) continue;
+    const day = workDateKey(new Date(log.start_time));
+    deductedByDate[day] = (deductedByDate[day] || 0) + deducted;
+  }
   for (let i = 0; i < daysInMonth; i++) {
-    const sessionSeconds = mergeIntervalsSeconds(dayIntervals[i]);
+    const sessionSeconds = Math.max(
+      0,
+      mergeIntervalsSeconds(dayIntervals[i]) - (deductedByDate[dailyBreakdown[i].date] || 0),
+    );
     const adj = adjustmentsByDate[dailyBreakdown[i].date] || {};
     const applied = applyAdjustmentSeconds(
       sessionSeconds,
@@ -287,11 +300,14 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
           ) || 0,
         ),
       );
+      // The clock's own figure is today. The row above only stands in when that
+      // read failed — as a max() it out-voted the clock whenever the two
+      // disagreed, and the clock is the one that matches Pulse.
+      const rowSessionSeconds = Math.floor(
+        Number(dailyBreakdown[todayIdx].trackedSessionSeconds) || 0,
+      );
       const todayApplied = applyAdjustmentSeconds(
-        Math.max(
-          fromTodayHelper,
-          Math.floor(Number(dailyBreakdown[todayIdx].trackedSessionSeconds) || 0),
-        ),
+        todayAgg.backendFetchFailed ? Math.max(fromTodayHelper, rowSessionSeconds) : fromTodayHelper,
         todayAgg.otherAdjustmentSeconds ?? 0,
         todayAgg.leaveCreditSeconds ?? 0,
       );

@@ -1,6 +1,6 @@
 {
   "name": "alyson-pm-desktop-agent",
-  "version": "1.0.249",
+  "version": "1.0.250",
   "description": "Tavilo Time — desktop time tracking",
   "main": "src/main.js",
   "author": "RevCloud",
@@ -18,7 +18,7 @@
     "bundle-python": "bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1",
     "bundle-python-windows": "node scripts/bundle-python-windows.js",
     "prebuild": "npm run generate:icons && node scripts/setup-dist.js && node generate-env-config.js --build && (bash scripts/bundle-python-deps.sh || powershell -ExecutionPolicy Bypass -File scripts/bundle-python-deps.ps1)",
-    "prebuild:mac": "npm run generate:icons && node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/bundle-python-deps.sh && bash scripts/build-swift-helper.sh && npx electron-rebuild -f -w uiohook-napi",
+    "prebuild:mac": "npm run generate:icons && node scripts/setup-dist.js && node generate-env-config.js --build && bash scripts/bundle-python-deps.sh && bash scripts/build-swift-helper.sh && node scripts/mac-native-arch.js ensure-sharp",
     "prebuild:win": "node generate-env-config.js --build && node scripts/bundle-python-windows.js",
     "build": "npm run prebuild && electron-builder",
     "postbuild": "node ../scripts/cleanup-electron-build.cjs",
@@ -73,6 +73,7 @@
       "env-config.js",
       "config.json",
       "node_modules/**/*",
+      "!**/node_modules/uiohook-napi/build/**",
       "package.json"
     ],
     "extraResources": [

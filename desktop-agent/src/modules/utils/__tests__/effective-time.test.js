@@ -4,84 +4,48 @@ const {
 } = require('../effective-time');
 
 describe('resolveLiveNonEffectiveSeconds', () => {
-  it('Stop/Pause must not apply a late Pulse jump over the already-shown split', () => {
+  it('Hamza 12 Oct: local idle and a painted high-water cannot raise the Pulse number', () => {
     expect(
       resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 50 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
-        sessionIdleSeconds: 0,
-        lastDisplayed: 30 * 60,
-        isLive: false,
+        pulseNonEffective: 18 * 60,
+        nonEffectiveAtLiveStart: 18 * 60,
+        sessionIdleSeconds: 90 * 60,
+        lastDisplayed: 86 * 60,
+        isLive: true,
       }),
-    ).toBe(30 * 60);
+    ).toBe(18 * 60);
   });
 
-  it('keeps the live overlay after Stop so the cards do not drop', () => {
+  it('a later Pulse read of 0 replaces a card that already showed meeting idle', () => {
     expect(
       resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 10 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
+        pulseNonEffective: 0,
+        nonEffectiveAtLiveStart: 10 * 60,
+        sessionIdleSeconds: 10 * 60,
+        lastDisplayed: 10 * 60,
+        isLive: true,
+      }),
+    ).toBe(0);
+  });
+
+  it('after Stop the card still shows Pulse, not the last painted local split', () => {
+    expect(
+      resolveLiveNonEffectiveSeconds({
+        pulseNonEffective: 18 * 60,
         sessionIdleSeconds: 20 * 60,
         lastDisplayed: 50 * 60,
         isLive: false,
       }),
-    ).toBe(50 * 60);
+    ).toBe(18 * 60);
   });
 
-  it('overlays reportable live idle so Stop does not jump the card', () => {
-    expect(
-      resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 30 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
-        sessionIdleSeconds: 20 * 60,
-        isLive: true,
-      }),
-    ).toBe(50 * 60);
-  });
-
-  it('ignores live idle under the 5-minute Pulse floor', () => {
-    expect(
-      resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 30 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
-        sessionIdleSeconds: 4 * 60,
-        isLive: true,
-      }),
-    ).toBe(30 * 60);
-  });
-
-  it('does not double-count when Pulse already includes the session idle', () => {
-    expect(
-      resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 50 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
-        sessionIdleSeconds: 20 * 60,
-        isLive: true,
-      }),
-    ).toBe(50 * 60);
-  });
-
-  it('keeps Pulse when the session has no idle', () => {
-    expect(
-      resolveLiveNonEffectiveSeconds({
-        pulseNonEffective: 30 * 60,
-        nonEffectiveAtLiveStart: 30 * 60,
-        sessionIdleSeconds: 0,
-        isLive: true,
-      }),
-    ).toBe(30 * 60);
-  });
-
-  it('effective + non-effective still equals tracked after overlay', () => {
+  it('effective + non-effective still equals tracked', () => {
     const tracked = 2 * 3600;
     const nonEffective = resolveLiveNonEffectiveSeconds({
-      pulseNonEffective: 30 * 60,
-      nonEffectiveAtLiveStart: 30 * 60,
-      sessionIdleSeconds: 20 * 60,
-      isLive: true,
+      pulseNonEffective: 18 * 60,
     });
     const split = computeEffectiveSeconds(tracked, 0, nonEffective);
-    expect(split.nonEffectiveSeconds).toBe(50 * 60);
-    expect(split.effectiveSeconds).toBe(tracked - 50 * 60);
+    expect(split.nonEffectiveSeconds).toBe(18 * 60);
+    expect(split.effectiveSeconds).toBe(tracked - 18 * 60);
   });
 });
