@@ -155,13 +155,30 @@ function sha256(file) {
   return require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+/**
+ * Workspace installs hoist uiohook-napi to the repo root. A direct
+ * desktop-agent/node_modules path misses it on CI (`npm ci` from the workspace).
+ */
+function resolveUiohookDir(projectDir) {
+  try {
+    return path.dirname(require.resolve('uiohook-napi/package.json', { paths: [projectDir] }));
+  } catch {
+    return null;
+  }
+}
+
 /** Copy the patched uiohook binaries over the stock prebuilds before packing. */
 function ensurePatchedUiohook({
-  nodeModules = path.join(__dirname, '..', 'node_modules'),
+  nodeModules,
   vendorDir = PATCHED_UIOHOOK_DIR,
+  projectDir = path.join(__dirname, '..'),
 } = {}) {
-  const pkgDir = path.join(nodeModules, 'uiohook-napi');
-  if (!fs.existsSync(pkgDir)) throw new Error(`uiohook-napi is not installed in ${nodeModules}`);
+  const pkgDir = nodeModules
+    ? path.join(nodeModules, 'uiohook-napi')
+    : resolveUiohookDir(projectDir);
+  if (!pkgDir || !fs.existsSync(pkgDir)) {
+    throw new Error(`uiohook-napi is not installed for ${projectDir}`);
+  }
   // node-gyp-build prefers build/Release over prebuilds/.
   fs.rmSync(path.join(pkgDir, 'build'), { recursive: true, force: true });
   for (const arch of MAC_ARCHES) {
