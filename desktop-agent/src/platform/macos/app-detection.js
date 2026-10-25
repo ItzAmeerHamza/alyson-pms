@@ -4,13 +4,26 @@
  * Extracted from main.js for modular architecture
  */
 
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 
 const BROWSER_NAME_RE = /safari|chrome|firefox|edge|brave|opera|arc|vivaldi|chromium|\bdia\b/i;
 
 let activeWinFn = null;
 let activeWinBroken = false;
 let activeWinFailCount = 0;
+// CPU FIX: three timeouts used to disable active-win forever, leaving every
+// detection on the osascript fallback. Now it is paused, then retried.
+const ACTIVE_WIN_COOLDOWN_MS = 5 * 60 * 1000;
+let activeWinDisabledUntil = 0;
+
+function noteActiveWinFailure() {
+  activeWinFailCount += 1;
+  if (activeWinFailCount >= 3) {
+    activeWinDisabledUntil = Date.now() + ACTIVE_WIN_COOLDOWN_MS;
+    // One more failure after the cooldown pauses it again right away.
+    activeWinFailCount = 2;
+  }
+}
 
 function looksLikeBrowserApp(name) {
   return BROWSER_NAME_RE.test(String(name || ''));
@@ -42,6 +55,7 @@ function normalizeActiveWinResult(result) {
 }
 
 async function tryActiveWin() {
+  if (Date.now() < activeWinDisabledUntil) return null;
   const activeWin = loadActiveWin();
   if (!activeWin) return null;
   const timeoutMs = 800;
@@ -52,15 +66,13 @@ async function tryActiveWin() {
     ]);
     const normalized = normalizeActiveWinResult(result);
     if (!normalized) {
-      activeWinFailCount += 1;
-      if (activeWinFailCount >= 3) activeWinBroken = true;
+      noteActiveWinFailure();
       return null;
     }
     activeWinFailCount = 0;
     return normalized;
   } catch (_) {
-    activeWinFailCount += 1;
-    if (activeWinFailCount >= 3) activeWinBroken = true;
+    noteActiveWinFailure();
     return null;
   }
 }
@@ -69,13 +81,20 @@ function _resetActiveWinForTests() {
   activeWinFn = null;
   activeWinBroken = false;
   activeWinFailCount = 0;
+  activeWinDisabledUntil = 0;
   lastKnownApp = null;
   resetOsascriptBackoff();
 }
 
-async function execAsync(command, timeoutMs = 3000) {
+// Run osascript directly (no /bin/sh heredoc): on timeout the shell used to be
+// killed while osascript itself kept running. SIGKILL the real child instead.
+async function osascriptAsync(script, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
-    exec(command, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, stdout) => {
+    execFile('/usr/bin/osascript', ['-e', script], {
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024,
+    }, (error, stdout) => {
       if (error) return reject(error);
       resolve((stdout || '').trim());
     });
@@ -192,10 +211,7 @@ end try
 return appName & "|" & appBundleId & "|" & windowTitle
 end tell`;
       
-      // Use heredoc approach to avoid escaping issues
-      const scriptResult = await execAsync(`/usr/bin/osascript << 'EOF'
-${combinedScript}
-EOF`, OSA_TIMEOUT_MS);
+      const scriptResult = await osascriptAsync(combinedScript, OSA_TIMEOUT_MS);
       
       const [appName, bundleId, windowTitle] = scriptResult.split('|');
 
@@ -289,5 +305,6 @@ module.exports = {
   looksLikeBrowserApp,
   OSA_TIMEOUT_MS,
   _resetActiveWinForTests,
+  ACTIVE_WIN_COOLDOWN_MS,
   _getOsascriptBackoffForTests: () => ({ ...accessibilityBackoff }),
 };

@@ -264,17 +264,47 @@ class EnhancedIdleMonitor {
     this.idleThresholdExceeded = false;
     
     // Check idle state on a fixed interval
-    this.idleMonitoringInterval = setInterval(async () => {
-      if (!this.isTracking || !global.isTracking) return;
-      try {
-        await this._evaluateIdleState();
-      } catch (error) {
-        console.log('❌ [IDLE-MONITOR] Error checking idle state:', error.message);
-      }
-    }, this.IDLE_CHECK_INTERVAL);
+    this.idleMonitoringInterval = setInterval(() => this._idleIntervalTick(), this.IDLE_CHECK_INTERVAL);
     
     cleanupRegistry.registerInterval(this.idleMonitoringInterval, 'Idle Monitoring');
     console.log('✅ [IDLE-MONITOR] Idle monitoring started');
+  }
+
+  /**
+   * One interval check at a time. A check can await osascript probes or a
+   * 25 s+ offline stopTracking; overlapping ticks used to stack up after wake.
+   * A skipped tick loses nothing: the next check re-reads OS idle seconds and
+   * backdates from them. It still records proof-of-life (as the overlapping
+   * tick's _handleSuspendGap used to) so a slow check is not mistaken for
+   * sleep — but never across a real sleep-sized gap, which the next check
+   * must still see.
+   */
+  async _idleIntervalTick() {
+    if (!this.isTracking || !global.isTracking) return;
+    // A check that never settles must not switch idle detection off for the
+    // rest of the session (away time would then count as worked time).
+    if (this._evaluating && Date.now() - (this._evaluatingSince || 0) > 2 * 60_000) {
+      console.warn('⚠️ [IDLE-MONITOR] Previous idle check still pending after 2 min — running a fresh one');
+      this._evaluating = false;
+    }
+    if (this._evaluating) {
+      const now = Date.now();
+      if (this._lastEvaluationAt && now - this._lastEvaluationAt <= this.SUSPEND_GAP_MS) {
+        this._lastEvaluationAt = now;
+      }
+      return;
+    }
+    this._evaluating = true;
+    const since = Date.now();
+    this._evaluatingSince = since;
+    try {
+      await this._evaluateIdleState();
+    } catch (error) {
+      console.log('❌ [IDLE-MONITOR] Error checking idle state:', error.message);
+    } finally {
+      // Only clear our own flag; a fresh check may have taken over meanwhile.
+      if (this._evaluatingSince === since) this._evaluating = false;
+    }
   }
 
   async stopIdleMonitoring() {
@@ -306,8 +336,11 @@ class EnhancedIdleMonitor {
       this.idleMonitoringInterval = null;
       
       // Flush any unlogged idle time when tracking stops while user is still idle.
+      // The period ends when the session ends, not when this runs: after a lid
+      // close the stop is processed on wake, and ending idle "now" logged the
+      // whole sleep (2h+) as idle against a session that had already stopped.
       if (this.currentIdleStartTime && this.wasIdleLastCheck) {
-        await this._flushIdleCheckpoint();
+        await this._flushIdleCheckpoint(this._idleEndForStop(Date.now()));
       }
       
       this.currentIdleStartTime = null;
@@ -364,7 +397,19 @@ class EnhancedIdleMonitor {
    * are kept for diagnostics but do not start idle periods.
    */
   _getEffectiveIdleSeconds() {
-    const os = global.unifiedInputManager?.getIdleTime?.() || 0;
+    let os = global.unifiedInputManager?.getIdleTime?.() || 0;
+    // An auto-clicker resets the OS idle timer with every click, so the user
+    // never looks idle. While one is running, idle is the time since the last
+    // real input (keystroke, mouse movement, normal click) instead. Without
+    // automation this is null and nothing changes.
+    let automated = false;
+    try {
+      const realIdle = global.automatedClickDetector?.realInputIdleSeconds?.();
+      if (Number.isFinite(realIdle) && realIdle > os) {
+        os = realIdle;
+        automated = true;
+      }
+    } catch (_) { /* detector optional */ }
     const input = this._getInputIdleSeconds();
     const lowActivity = this._getLowActivityIdleSeconds();
     return {
@@ -372,6 +417,7 @@ class EnhancedIdleMonitor {
       os,
       input,
       lowActivity,
+      automated,
     };
   }
 
@@ -796,6 +842,30 @@ class EnhancedIdleMonitor {
    * Persist the current idle episode as one row: original start → now.
    * Checkpoints must not mint a new idle_start (Pulse drops slices under 5 min).
    */
+  /**
+   * Latest moment an idle period can run to when tracking stops:
+   * - never past the session's recorded end (set by the stop just before this);
+   * - after a sleep, never past the last check that saw the machine awake
+   *   (plus one interval), since nothing was tracked while it slept.
+   */
+  _idleEndForStop(nowMs) {
+    let endMs = nowMs;
+    const stopEnd = Number(global._lastStopEndAtMs);
+    if (
+      Number.isFinite(stopEnd) &&
+      this.currentIdleStartTime &&
+      stopEnd >= this.currentIdleStartTime &&
+      stopEnd < endMs
+    ) {
+      endMs = stopEnd;
+    }
+    const lastSeen = Number(this._lastEvaluationAt);
+    if (Number.isFinite(lastSeen) && lastSeen > 0 && nowMs - lastSeen > this.SUSPEND_GAP_MS) {
+      endMs = Math.min(endMs, lastSeen + this.IDLE_CHECK_INTERVAL);
+    }
+    return endMs;
+  }
+
   async _flushIdleCheckpoint(endTime = Date.now()) {
     if (!this.currentIdleStartTime || !this.wasIdleLastCheck) return;
 

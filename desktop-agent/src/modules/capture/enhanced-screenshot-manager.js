@@ -30,6 +30,24 @@ const {
 
 const log = createFeatureLogger('SCREEN');
 
+// Outer bound for the dedicated macOS / Windows capture modules. A hung native
+// capture is treated exactly like a thrown capture error (failed shot).
+const PLATFORM_CAPTURE_TIMEOUT_MS = 45 * 1000;
+// Safety valve: never let a stuck in-progress flag block screenshots forever
+// (e.g. an upload that never settles after the capture itself finished).
+const CAPTURE_IN_PROGRESS_STALE_MS = 5 * 60 * 1000;
+
+function withPlatformCaptureTimeout(promise, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} screenshot capture timed out after ${PLATFORM_CAPTURE_TIMEOUT_MS / 1000}s`)),
+      PLATFORM_CAPTURE_TIMEOUT_MS
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 class EnhancedScreenshotManager {
   constructor(config, electronModules) {
     this.config = config;
@@ -46,6 +64,7 @@ class EnhancedScreenshotManager {
     this.screenshotTimerInterval = null;
     this.mandatoryScreenshotInterval = null;
     this._captureInProgress = false;
+    this._captureInProgressSince = 0;
     this._lastCaptureSuccessAt = 0;
     this._shuttingDown = false;
     // Backbone interval handle (setInterval for 10-min windows)
@@ -239,7 +258,7 @@ class EnhancedScreenshotManager {
         }
       }
 
-      if (this._captureInProgress) {
+      if (this._isCaptureBusy()) {
         log.warn({ step: 'SCREENSHOT SKIPPED', message: 'Capture: busy' });
         return { ok: false, skipped: true, reason: 'busy', nextAllowedInMs: 2000 };
       }
@@ -829,10 +848,49 @@ class EnhancedScreenshotManager {
     this.sendNextScreenshotUpdate();
   }
 
+  /** True while a capture runs (a flag older than CAPTURE_IN_PROGRESS_STALE_MS is ignored). */
+  _isCaptureBusy() {
+    if (!this._captureInProgress) return false;
+    const since = this._captureInProgressSince || 0;
+    if (since > 0 && Date.now() - since > CAPTURE_IN_PROGRESS_STALE_MS) {
+      log.warn({ step: 'CAPTURE FLAG STALE', message: `In-progress flag held ${Math.round((Date.now() - since) / 1000)}s - ignoring` });
+      return false;
+    }
+    return true;
+  }
+
   /**
    * Capture screenshot
    */
   async captureScreenshot(isHealthCheck = false) {
+    // macOS / Windows use dedicated capture modules that return early inside
+    // _captureScreenshotImpl, so the overlap guard must be applied here.
+    // Health checks keep bypassing the busy check (same as the generic path).
+    if (process.platform !== 'win32' && process.platform !== 'darwin') {
+      return this._captureScreenshotImpl(isHealthCheck);
+    }
+    if (!isHealthCheck && this._isCaptureBusy()) {
+      log.warn({ step: 'CAPTURE SKIPPED', message: 'Capture already running' });
+      return false;
+    }
+    // Only the call that set the flag clears it, so an overlapping health check
+    // can't clear a scheduled capture's flag early.
+    const ownsCaptureFlag = !this._captureInProgress || !this._isCaptureBusy();
+    if (ownsCaptureFlag) {
+      this._captureInProgress = true;
+      this._captureInProgressSince = Date.now();
+    }
+    try {
+      return await this._captureScreenshotImpl(isHealthCheck);
+    } finally {
+      if (ownsCaptureFlag) {
+        this._captureInProgress = false;
+        this._captureInProgressSince = 0;
+      }
+    }
+  }
+
+  async _captureScreenshotImpl(isHealthCheck = false) {
     // Log entry point for ALL platforms
     console.log('🎯 [SCREENSHOT-ENTRY] captureScreenshot() called, platform:', process.platform, 'isHealthCheck:', isHealthCheck);
 
@@ -891,7 +949,7 @@ class EnhancedScreenshotManager {
     if (process.platform === 'win32') {
       try {
         const { captureScreenshot: winCapture } = require('../../platform/windows/screenshot-capture');
-        const result = await winCapture();
+        const result = await withPlatformCaptureTimeout(winCapture(), 'Windows');
 
         if (result && result.success && result.buffer) {
           log.info({
@@ -1058,7 +1116,7 @@ if (uploadResult?.id) {
     if (process.platform === 'darwin') {
       try {
         const { captureScreenshot: macCapture } = require('../../platform/macos/screenshot-capture');
-        const result = await macCapture();
+        const result = await withPlatformCaptureTimeout(macCapture(), 'macOS');
 
         if (result && result.success && result.buffer) {
           log.info({
@@ -1243,6 +1301,7 @@ if (uploadResult?.id) {
         return false;
       }
       this._captureInProgress = true;
+      this._captureInProgressSince = Date.now();
       log.info({ step: 'TRIGGERING CAPTURE PIPELINE', ctx: { captureId, source: global.currentCaptureSource } });
 
       // Self-heal wrappers if missing at call time
@@ -1322,6 +1381,7 @@ if (uploadResult?.id) {
       return false;
     } finally {
       this._captureInProgress = false;
+      this._captureInProgressSince = 0;
 
       // End performance monitoring
       try {

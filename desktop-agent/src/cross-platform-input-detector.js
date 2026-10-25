@@ -43,6 +43,68 @@ function resolveAsarUnpacked(resourcePath) {
   return resourcePath;
 }
 
+
+/**
+ * stdout 'data' handler for a helper that prints one JSON event per line.
+ * Joins lines split across chunks, queues chunks that arrive mid-batch, and
+ * hands lines to onEvent in small batches off the 'data' callback so a burst
+ * never blocks the main thread in one go.
+ */
+function createJsonLineReader({ isAccepting, onEvent, onBadLine, onError, batchSize = 50 }) {
+  let partial = '';
+  const pending = [];
+  let scheduled = false;
+
+  const drain = () => {
+    scheduled = false;
+    if (!isAccepting()) {
+      // Stopped while lines were queued: nothing after Stop is counted.
+      pending.length = 0;
+      partial = '';
+      return;
+    }
+    try {
+      const end = Math.min(batchSize, pending.length);
+      for (let i = 0; i < end; i++) {
+        const line = pending[i];
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch (_) {
+          onBadLine?.(line);
+          continue;
+        }
+        onEvent(event);
+      }
+      pending.splice(0, end);
+    } catch (error) {
+      onError?.(error);
+    }
+    if (pending.length > 0) schedule();
+  };
+  const schedule = () => {
+    if (scheduled) return;
+    scheduled = true;
+    setImmediate(drain);
+  };
+
+  return (data) => {
+    if (!isAccepting()) {
+      partial = '';
+      return;
+    }
+    const text = partial + data.toString();
+    const lines = text.split('\n');
+    partial = lines.pop() || '';
+    // A line with no newline after 64 KB is not an event; don't hold it forever.
+    if (partial.length > 65536) partial = '';
+    for (const line of lines) {
+      if (line.trim()) pending.push(line);
+    }
+    if (pending.length > 0) schedule();
+  };
+}
+
 class CrossPlatformInputDetector extends EventEmitter {
   constructor() {
     super();
@@ -253,46 +315,22 @@ class CrossPlatformInputDetector extends EventEmitter {
       this.pythonProcess = helperProcess;
       this.inputSource = 'swift-helper';
 
-      // Process stdout — same JSON format as old Python script
-      let isProcessingData = false;
-
-      helperProcess.stdout.on('data', (data) => {
-        if (!this.isActive || global.isTracking === false || global.isStopping === true) {
-          return;
-        }
-        if (isProcessingData) return;
-        isProcessingData = true;
-
-        setImmediate(() => {
-          try {
-            const lines = data.toString().split('\n').filter(line => line.trim());
-            const processBatch = (batchStart = 0) => {
-              const batchSize = 5;
-              const batchEnd = Math.min(batchStart + batchSize, lines.length);
-              for (let i = batchStart; i < batchEnd; i++) {
-                try {
-                  const event = JSON.parse(lines[i]);
-                  this.handleExternalPythonEvent(event);
-                } catch (error) {
-                  if (!this.lastHelperLogTime || Date.now() - this.lastHelperLogTime > 5000) {
-                    console.log('📝 Swift helper output (throttled):', lines[i]);
-                    this.lastHelperLogTime = Date.now();
-                  }
-                }
-              }
-              if (batchEnd < lines.length) {
-                process.nextTick(() => processBatch(batchEnd));
-              } else {
-                isProcessingData = false;
-              }
-            };
-            processBatch();
-          } catch (error) {
-            console.error('❌ Error processing Swift helper data:', error);
-            isProcessingData = false;
+      // Process stdout — same JSON format as old Python script. Every complete
+      // line is handled exactly once: chunks that arrive while a batch is being
+      // processed are queued (they used to be dropped), and a line split across
+      // two chunks is joined (it used to fail to parse). Dropped events lowered
+      // activity %, which can turn real work into "low activity" time.
+      helperProcess.stdout.on('data', createJsonLineReader({
+        isAccepting: () => !(!this.isActive || global.isTracking === false || global.isStopping === true),
+        onEvent: (event) => this.handleExternalPythonEvent(event),
+        onBadLine: (line) => {
+          if (!this.lastHelperLogTime || Date.now() - this.lastHelperLogTime > 5000) {
+            console.log('📝 Swift helper output (throttled):', line);
+            this.lastHelperLogTime = Date.now();
           }
-        });
-      });
+        },
+        onError: (error) => console.error('❌ Error processing Swift helper data:', error),
+      }));
 
       helperProcess.stderr.on('data', (data) => {
         const errorStr = data.toString().trim();
@@ -557,15 +595,19 @@ class CrossPlatformInputDetector extends EventEmitter {
       if (process.platform === 'win32') {
         // Windows: Use execFile which handles paths with spaces correctly
         // execFile bypasses cmd.exe entirely
-        pythonProcess = execFile(pythonExecutable, [normalizedScriptPath], {
+        // spawn (no shell) passes paths with spaces correctly too. execFile was
+        // dropped because it buffers ALL stdout internally for its callback and
+        // kills the child once maxBuffer (10MB) is exceeded — memory growth and
+        // a forced monitor restart roughly once per workday.
+        pythonProcess = spawn(pythonExecutable, [normalizedScriptPath], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false,
           cwd: scriptDir,
           env: pythonEnv,
-          windowsHide: true,  // Prevent console window flash
-          maxBuffer: 10 * 1024 * 1024  // 10MB buffer for stdout
+          windowsHide: true  // Prevent console window flash
         });
         
-        // execFile returns ChildProcess, same as spawn
-        console.log(`✅ [PYTHON-WIN] Process started with execFile (PID: ${pythonProcess.pid})`);
+        console.log(`✅ [PYTHON-WIN] Process started with spawn (PID: ${pythonProcess.pid})`);
       } else {
         // macOS/Linux: Use spawn which works fine
         pythonProcess = spawn(pythonExecutable, [normalizedScriptPath], {
@@ -581,63 +623,19 @@ class CrossPlatformInputDetector extends EventEmitter {
       this.pythonProcess = pythonProcess;
       this.inputSource = 'python';
 
-      // 🧠 Optimization: Add processing flag to prevent queue overflow
-      let isProcessingPythonData = false;
-      
-      pythonProcess.stdout.on('data', (data) => {
-// CRITICAL FIX H7: Stop processing immediately when detector is stopped
-        // This prevents buffered Python stdout from being processed after stop
-        // Check both local and global state as safety net
-        if (!this.isActive || global.isTracking === false || global.isStopping === true) {
-          return;
-        }
-        
-        // 🧠 Optimization: Skip processing if already busy to prevent main thread blocking
-        if (isProcessingPythonData) {
-          return;
-        }
-        
-        isProcessingPythonData = true;
-        
-        // 🧠 Optimization: Move JSON parsing to setImmediate to avoid blocking on every input event
-        setImmediate(() => {
-          try {
-            const lines = data.toString().split('\n').filter(line => line.trim());
-            
-            // 🧠 Optimization: Process lines in batches using process.nextTick to prevent blocking
-            const processBatch = (batchStart = 0) => {
-              const batchSize = 5; // Process 5 lines at a time
-              const batchEnd = Math.min(batchStart + batchSize, lines.length);
-              
-              for (let i = batchStart; i < batchEnd; i++) {
-                try {
-                  // 🧠 Before: JSON.parse() blocking on every input | After: Batched non-blocking processing
-                  const event = JSON.parse(lines[i]);
-                  this.handleExternalPythonEvent(event);
-                } catch (error) {
-                  // Throttle external Python output logging to prevent spam
-                  if (!this.lastPythonLogTime || Date.now() - this.lastPythonLogTime > 5000) {
-                    console.log('📝 External Python output (throttled):', lines[i]);
-                    this.lastPythonLogTime = Date.now();
-                  }
-                }
-              }
-              
-              if (batchEnd < lines.length) {
-                // Process next batch on next tick
-                process.nextTick(() => processBatch(batchEnd));
-              } else {
-                isProcessingPythonData = false;
-              }
-            };
-            
-            processBatch();
-          } catch (error) {
-            console.error('❌ Error processing Python data:', error);
-            isProcessingPythonData = false;
+      // Every complete line is handled exactly once (see the Swift reader above).
+      // Stopped / stopping: chunks are ignored, as before.
+      pythonProcess.stdout.on('data', createJsonLineReader({
+        isAccepting: () => !(!this.isActive || global.isTracking === false || global.isStopping === true),
+        onEvent: (event) => this.handleExternalPythonEvent(event),
+        onBadLine: (line) => {
+          if (!this.lastPythonLogTime || Date.now() - this.lastPythonLogTime > 5000) {
+            console.log('📝 External Python output (throttled):', line);
+            this.lastPythonLogTime = Date.now();
           }
-        });
-      });
+        },
+        onError: (error) => console.error('❌ Error processing Python data:', error),
+      }));
 
       pythonProcess.stderr.on('data', (data) => {
         const errorStr = data.toString().trim();
@@ -793,7 +791,15 @@ class CrossPlatformInputDetector extends EventEmitter {
 
     const delay = this.pythonBackoffDelays[attempt - 1] || 120000;
     console.log(`🔄 [INPUT] Retry ${attempt}/${maxRetries} in ${delay / 1000}s...`);
-    setTimeout(() => {
+    // Keep the handle so stop() can cancel it: otherwise Stop+Start inside the
+    // backoff window would spawn a second helper (double counting, orphan).
+    if (this._retryTimer) clearTimeout(this._retryTimer);
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      // A helper is already running (e.g. started by a fresh start()) — don't add a second one.
+      if (this.pythonProcess && this.pythonProcess.exitCode === null && this.pythonProcess.signalCode == null && !this.pythonProcess.killed) {
+        return;
+      }
       if (!this.pythonDisabled && this.isActive) {
         if (scriptPath) {
           this.startExternalPythonMonitor(scriptPath);
@@ -804,11 +810,36 @@ class CrossPlatformInputDetector extends EventEmitter {
     }, delay);
   }
 
+  /** Spots auto-clicker / click-macro runs (see automated-click-detector.js). */
+  _automation() {
+    if (!this._automationDetector) {
+      const { AutomatedClickDetector } = require('./modules/activity/automated-click-detector');
+      this._automationDetector = new AutomatedClickDetector();
+    }
+    // The idle monitor reads it to ignore automated clicks when judging idle.
+    global.automatedClickDetector = this._automationDetector;
+    return this._automationDetector;
+  }
+
   handleExternalPythonEvent(event) {
     const now = Date.now();
 
     switch (event.type) {
       case 'click':
+        // Software-made clicks (machine-regular, mouse never moving) are not
+        // activity. Real clicks are untouched.
+        if (this._automation().recordClick(now, { injected: !!event.injected })) {
+          if (!this._lastAutomatedLogAt || now - this._lastAutomatedLogAt > 60_000) {
+            this._lastAutomatedLogAt = now;
+            logger.warn({
+              category: 'INPUT',
+              step: 'AUTOMATED CLICKS',
+              message: 'Machine-regular clicks with no mouse movement — not counted as activity',
+              ctx: { platform: event.platform, ...this._automation().stats() },
+            });
+          }
+          break;
+        }
         // CRITICAL FIX: Only emit event, don't call recordActivity
         // recordActivity is already called by the event handler in input-manager.js
         // Calling both causes DOUBLE COUNTING of activity
@@ -823,6 +854,25 @@ class CrossPlatformInputDetector extends EventEmitter {
         if (event.source === 'flagsChanged') {
           break;
         }
+        // Held-key / typing-bot input is not activity. Real typing is untouched.
+        if (
+          this._automation().recordKey(now, {
+            injected: !!event.injected,
+            repeat: !!event.repeat,
+            keyId: event.keycode ?? null,
+          })
+        ) {
+          if (!this._lastAutomatedKeyLogAt || now - this._lastAutomatedKeyLogAt > 60_000) {
+            this._lastAutomatedKeyLogAt = now;
+            logger.warn({
+              category: 'INPUT',
+              step: 'AUTOMATED KEYS',
+              message: 'Key held down over a minute or machine-regular typing — not counted as activity',
+              ctx: { platform: event.platform, ...this._automation().stats() },
+            });
+          }
+          break;
+        }
 // CRITICAL FIX: Only emit event, don't call recordActivity
         this.emit('keyPress', { 
           method: `platform-external_python_${event.platform || 'macos'}`, 
@@ -832,6 +882,9 @@ class CrossPlatformInputDetector extends EventEmitter {
         break;
       case 'move':
         {
+          // Every movement counts as real input for the detector, before the
+          // emit throttle below.
+          this._automation().recordMove(now);
           const moveMinMs = Number(process.env.ACTIVITY_MOVE_MIN_MS) || 200;
           if (this._lastMoveEmit && now - this._lastMoveEmit < moveMinMs) {
             break;
@@ -965,6 +1018,18 @@ class CrossPlatformInputDetector extends EventEmitter {
     }
   }
 
+  // Fallback 'user-activity' handlers (Windows/Linux) — removed on stop() now
+  // that UnifiedInputManager no longer calls powerMonitor.removeAllListeners().
+  cleanupFallbackPowerMonitorListeners() {
+    const powerMonitor = this.electronModules?.powerMonitor;
+    if (this._fallbackActivityHandlers && powerMonitor && typeof powerMonitor.removeListener === 'function') {
+      for (const handler of this._fallbackActivityHandlers) {
+        powerMonitor.removeListener('user-activity', handler);
+      }
+    }
+    this._fallbackActivityHandlers = [];
+  }
+
   async startWindowsDetection() {
     console.log('🪟 Starting Windows input detection...');
     
@@ -1094,7 +1159,9 @@ class CrossPlatformInputDetector extends EventEmitter {
     // PERFORMANCE OPTIMIZATION: Track activity summary logs to reduce console output
     this.activityLogCount = 0;
     
-    setInterval(() => {
+    // Only one summary interval per detector; stop() clears it.
+    if (this._activityInterval) clearInterval(this._activityInterval);
+    this._activityInterval = setInterval(() => {
       if (!this.isActive) return;
       
       const now = Math.floor(Date.now() / 1000);
@@ -1155,6 +1222,20 @@ class CrossPlatformInputDetector extends EventEmitter {
   async stop() {
     this.isActive = false;
     this.inputSource = null;
+    // An auto-clicker run from this session must not shape the next session's idle.
+    if (global.automatedClickDetector === this._automationDetector) {
+      global.automatedClickDetector = null;
+    }
+
+    // Cancel pending helper restart and the 90s summary interval.
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+    if (this._activityInterval) {
+      clearInterval(this._activityInterval);
+      this._activityInterval = null;
+    }
     
     // ============================================================
     // CRITICAL FIX: Remove event listeners and destroy streams FIRST
@@ -1282,6 +1363,7 @@ class CrossPlatformInputDetector extends EventEmitter {
     
     // Clean up PowerMonitor listeners to prevent memory leaks
     this.cleanupPowerMonitorListeners();
+    this.cleanupFallbackPowerMonitorListeners();
     
     // PERFORMANCE FIX: Reset fallback flags to allow restart
     this.fallbackActive = {
@@ -1297,6 +1379,11 @@ class CrossPlatformInputDetector extends EventEmitter {
       clearTimeout(this.pythonStableTimer);
       this.pythonStableTimer = null;
     }
+    
+    // A stopped detector is never restarted: UnifiedInputManager drops it and
+    // builds a new one on the next Start. Drop its subscribers so the old
+    // instance (and the manager closures) can be garbage-collected.
+    this.removeAllListeners();
     
     console.log('🛑 Cross-Platform Input Detector stopped');
   }
@@ -1395,6 +1482,7 @@ class CrossPlatformInputDetector extends EventEmitter {
       };
       
       powerMonitor.on('user-activity', windowsActivityHandler);
+      (this._fallbackActivityHandlers ||= []).push(windowsActivityHandler);
       
       // REMOVED: Idle time polling that generated synthetic clicks/keys
       // The idle delta detection was creating false positives
@@ -1485,6 +1573,7 @@ class CrossPlatformInputDetector extends EventEmitter {
           };
           
           powerMonitor.on('user-activity', linuxActivityHandler);
+          (this._fallbackActivityHandlers ||= []).push(linuxActivityHandler);
           
           console.log('✅ Linux PowerMonitor fallback active (fake activity generation disabled)');
         }
@@ -1493,4 +1582,5 @@ class CrossPlatformInputDetector extends EventEmitter {
   }
 }
 
-module.exports = CrossPlatformInputDetector; 
+module.exports = CrossPlatformInputDetector;
+module.exports.createJsonLineReader = createJsonLineReader; 

@@ -8,6 +8,28 @@ const TARGET_LONG_EDGE_PX = 1920;
 const JPEG_QUALITY = 70;
 const MIN_OUTPUT_BYTES = 200;
 
+let sharpProcessConfigured = false;
+
+/**
+ * Single place screenshot code loads sharp. Applies process-wide libvips limits
+ * once: no operation cache (it only helps when re-reading the same input, and
+ * otherwise pins decoded pixels in memory) and 2 worker threads per image
+ * instead of one per core. Encoded output is identical.
+ */
+function loadConfiguredSharp() {
+  const sharp = require('sharp');
+  if (!sharpProcessConfigured) {
+    sharpProcessConfigured = true;
+    try {
+      sharp.cache(false);
+      sharp.concurrency(2);
+    } catch (_) {
+      // Settings are an optimisation only.
+    }
+  }
+  return sharp;
+}
+
 function longestEdge(width, height) {
   const w = Number(width);
   const h = Number(height);
@@ -80,7 +102,7 @@ async function prepareScreenshotForUpload(buffer, options = {}) {
   let sharpFn = options.sharp;
   if (!sharpFn) {
     try {
-      sharpFn = require('sharp');
+      sharpFn = loadConfiguredSharp();
     } catch {
       sharpFn = null;
     }
@@ -134,4 +156,5 @@ module.exports = {
   JPEG_QUALITY,
   shouldResizeLongestEdge,
   prepareScreenshotForUpload,
+  loadConfiguredSharp,
 };

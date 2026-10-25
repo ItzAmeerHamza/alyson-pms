@@ -147,6 +147,40 @@ function prepareMacAppNatives({ appPath, arch, readArchs = lipoArchs }) {
   return { pruned, checked };
 }
 
+// Patched uiohook binaries: no per-key wait on the Electron main thread.
+// See vendor/uiohook-napi-mac/README.md.
+const PATCHED_UIOHOOK_DIR = path.join(__dirname, '..', 'vendor', 'uiohook-napi-mac');
+
+function sha256(file) {
+  return require('crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+/** Copy the patched uiohook binaries over the stock prebuilds before packing. */
+function ensurePatchedUiohook({
+  nodeModules = path.join(__dirname, '..', 'node_modules'),
+  vendorDir = PATCHED_UIOHOOK_DIR,
+} = {}) {
+  const pkgDir = path.join(nodeModules, 'uiohook-napi');
+  if (!fs.existsSync(pkgDir)) throw new Error(`uiohook-napi is not installed in ${nodeModules}`);
+  // node-gyp-build prefers build/Release over prebuilds/.
+  fs.rmSync(path.join(pkgDir, 'build'), { recursive: true, force: true });
+  for (const arch of MAC_ARCHES) {
+    const dest = path.join(pkgDir, 'prebuilds', `darwin-${arch}`, 'node.napi.node');
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(vendorDir, `darwin-${arch}`, 'node.napi.node'), dest);
+  }
+}
+
+/** Fail the build when the packed app carries the stock (keyboard-stalling) uiohook. */
+function checkPatchedUiohook({ appPath, arch, vendorDir = PATCHED_UIOHOOK_DIR }) {
+  const rel = path.join('uiohook-napi', 'prebuilds', `darwin-${arch}`, 'node.napi.node');
+  const packed = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules', rel);
+  if (!fs.existsSync(packed)) throw new Error(`${rel} is missing from the packed app`);
+  if (sha256(packed) !== sha256(path.join(vendorDir, `darwin-${arch}`, 'node.napi.node'))) {
+    throw new Error(`${rel} is the stock build, not vendor/uiohook-napi-mac (run: node scripts/mac-native-arch.js ensure-uiohook)`);
+  }
+}
+
 /**
  * The Swift helper is the fallback input source when uiohook can't load. A
  * build without it (or without the target arch) records no clicks/keys at all.
@@ -167,6 +201,8 @@ function checkMacInputHelper({ appPath, arch, readArchs = lipoArchs }) {
 module.exports = {
   BUILDER_ARCH,
   checkMacInputHelper,
+  checkPatchedUiohook,
+  ensurePatchedUiohook,
   ensureSharpPlatformPackages,
   isForOtherTarget,
   prepareMacAppNatives,
@@ -174,10 +210,14 @@ module.exports = {
 
 if (require.main === module) {
   const command = process.argv[2];
-  if (command !== 'ensure-sharp') {
-    console.error('Usage: node scripts/mac-native-arch.js ensure-sharp');
+  if (command === 'ensure-sharp') {
+    const added = ensureSharpPlatformPackages();
+    console.log(added.length ? `✅ Added ${added.join(', ')}` : '✅ sharp binaries present for arm64 and x64');
+  } else if (command === 'ensure-uiohook') {
+    ensurePatchedUiohook();
+    console.log('✅ Patched uiohook binaries in place for arm64 and x64');
+  } else {
+    console.error('Usage: node scripts/mac-native-arch.js ensure-sharp|ensure-uiohook');
     process.exit(1);
   }
-  const added = ensureSharpPlatformPackages();
-  console.log(added.length ? `✅ Added ${added.join(', ')}` : '✅ sharp binaries present for arm64 and x64');
 }

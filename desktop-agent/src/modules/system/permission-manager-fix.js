@@ -51,6 +51,9 @@ class PermissionManagerFix {
    * Safe notification display that waits for app readiness
    */
   safeNotification(title, body, options = {}) {
+    if (options?.urgency !== 'critical' && !require('../utils/user-preferences').get('desktopNotifications')) {
+      return null;
+    }
     if (!this.appReady) {
       // Queue the notification for later
       this.notificationQueue.push({ title, body, options });

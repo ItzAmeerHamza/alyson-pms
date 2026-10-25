@@ -1,7 +1,10 @@
 // 🛡️ EPIPE PROTECTION - Prevent crashes from console.log during shutdown
 process.on('uncaughtException', (error) => {
-  if (error.code === 'EPIPE') {
-    // Silently handle EPIPE errors to prevent crashes
+  // A closed terminal/pipe (EPIPE, EIO…) makes console writes fail. Logging
+  // that error writes to the console again, which fails again — this looped
+  // at full CPU and wrote 7 GB of logs in a day. Ignore these quietly.
+  const code = error && error.code;
+  if (code === 'EPIPE' || code === 'EIO' || code === 'ERR_STREAM_DESTROYED' || code === 'EBADF') {
     return;
   }
   // Log the error to help debug shutdown issues
@@ -30,8 +33,8 @@ console.log = function (...args) {
       originalConsoleLog.apply(console, args);
     }
   } catch (error) {
-    if (error.code !== 'EPIPE') {
-      // Only re-throw non-EPIPE errors
+    const code = error && error.code;
+    if (code !== 'EPIPE' && code !== 'EIO' && code !== 'ERR_STREAM_DESTROYED' && code !== 'EBADF') {
       throw error;
     }
   }
@@ -3735,38 +3738,36 @@ if (isElectronContext && ipcMain) {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
       console.log('🔔 Second Desktop Agent instance detected (debounced)');
 
+      // The window is created by AppLifecycleManager and published on
+      // global.mainWindow; the module-level `mainWindow` here is never set.
+      // Reading it left the X-hidden window hidden on Windows, so reopening
+      // the app from the Start menu / taskbar / desktop did nothing.
+      const showWindow = (win) => {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        if (process.platform === 'darwin') app.focus();
+      };
+
       try {
-        // Focus the existing window if it exists
-        if (mainWindow) {
-          if (mainWindow.isMinimized()) {
-            mainWindow.restore();
-          }
-          mainWindow.show();
-          mainWindow.focus();
+        const existing =
+          [global.mainWindow, global.appLifecycleManager?.getMainWindow?.()]
+            .find((w) => w && !w.isDestroyed());
 
-          // Ensure window is brought to front on all platforms
-          if (process.platform === 'darwin') {
-            app.focus();
-          }
-
-          // Show notification that desktop agent is already running
-          // FIX: Wait for app to be ready before creating notification
-          if (app.isReady()) {
-            const notification = new Notification({
-              title: 'Tavilo Time',
-              body: 'Desktop Agent is already running and has been brought to the front.',
-              silent: false
-            });
-            notification.show();
-          }
-        } else if (tray) {
-          // If no window but tray exists, show notification
-          const notification = new Notification({
-            title: 'Tavilo Time',
-            body: 'Desktop Agent is already running in the system tray.',
-            silent: false
-          });
-          notification.show();
+        if (existing) {
+          showWindow(existing);
+        } else if (global.appLifecycleManager?.createMainWindow) {
+          // Window was destroyed: build a new one rather than staying invisible.
+          Promise.resolve(global.appLifecycleManager.createMainWindow())
+            .then((win) => {
+              if (win && !win.isDestroyed()) {
+                global.mainWindow = win;
+                showWindow(win);
+              }
+            })
+            .catch((err) => console.error('❌ [SECOND-INSTANCE] Recreate window failed:', err));
+        } else {
+          console.warn('⚠️ [SECOND-INSTANCE] No main window available to show');
         }
       } catch (error) {
         console.error('❌ Error in second instance handler:', error);
@@ -4874,7 +4875,8 @@ if (isElectronContext && ipcMain) {
               titleBarStyle: 'hiddenInset',
               backgroundColor: '#ffffff',
               resizable: true,
-              show: true,
+              // Honor Settings → "Open the window when it starts" here too.
+              show: !require('./modules/utils/user-preferences').shouldStartHidden(),
               minWidth: 800,
               minHeight: 600,
               center: true,
@@ -4888,6 +4890,7 @@ if (isElectronContext && ipcMain) {
             // mainWindow.webContents.openDevTools({ mode: 'detach' });
 
             mainWindow.once('ready-to-show', () => {
+              if (require('./modules/utils/user-preferences').shouldStartHidden()) return;
               mainWindow.show();
               mainWindow.focus();
               if (process.platform === 'darwin') {
@@ -5201,6 +5204,14 @@ if (isElectronContext && ipcMain) {
 
   // Only set up app event handlers in Electron mode
   if (app && isElectronContext) {
+    // Windows shutdown / restart / log off: never show the "close or keep
+    // running?" prompt — it would block the OS from shutting down.
+    app.on('browser-window-created', (_event, win) => {
+      win.on('session-end', () => {
+        global.isSystemShuttingDown = true;
+      });
+    });
+
     app.on('window-all-closed', () => {
       // On macOS, keep app running when all windows closed (standard behavior)
       if (process.platform === 'darwin') return;

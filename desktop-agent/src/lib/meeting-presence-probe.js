@@ -215,7 +215,7 @@ async function listBrowserTabsWindows({ allowUia = false } = {}) {
     return { urls: [], titles: [], enumerated: false, source: null };
   }
 
-  if (!isWinChromiumFamilyRunning()) {
+  if (!(await isWinChromiumFamilyRunning())) {
     return { urls: [], titles: [], enumerated: false, source: null };
   }
 
@@ -239,33 +239,78 @@ async function listBrowserTabsWindows({ allowUia = false } = {}) {
   };
 }
 
-function isMacAppRunning(appName) {
+/*
+ * One process-list snapshot, reused for 15s. This used to run a blocking
+ * pgrep (≤300 ms) or tasklist (≤400 ms) per app — up to ~2 s of frozen main
+ * thread before each screenshot.
+ */
+const PROCESS_SNAPSHOT_TTL_MS = 15 * 1000;
+let processSnapshot = { at: 0, text: null };
+let processSnapshotInFlight = null;
+
+/*
+ * Async (was execFileSync): ps/tasklist took 30–600 ms, up to 2 s on a loaded
+ * machine, all on the Electron main thread — and the Mac keyboard hook lags
+ * whenever the main thread blocks. Same commands, same text, same 15 s cache.
+ */
+async function refreshProcessSnapshot(startedAt) {
+  let text = '';
   try {
-    const { execFileSync } = require('child_process');
-    execFileSync('/usr/bin/pgrep', ['-f', appName], {
-      timeout: 300,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return true;
+    if (process.platform === 'darwin') {
+      // Full command lines, same text `pgrep -f` matches against.
+      const { stdout } = await execFileAsync('/bin/ps', ['-axo', 'command='], {
+        timeout: 1500,
+        killSignal: 'SIGKILL',
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      text = stdout;
+    } else if (process.platform === 'win32') {
+      const { stdout } = await execFileAsync('tasklist', ['/NH', '/FO', 'CSV'], {
+        timeout: 2000,
+        killSignal: 'SIGKILL',
+        windowsHide: true,
+        encoding: 'utf8',
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      text = stdout;
+    }
   } catch (_) {
-    return false;
+    text = '';
   }
+  processSnapshot = { at: startedAt, text: String(text || '') };
+  return processSnapshot.text;
 }
 
-function isWinImageRunning(imageName) {
-  try {
-    const { execFileSync } = require('child_process');
-    const out = execFileSync('tasklist', ['/FI', `IMAGENAME eq ${imageName}`, '/NH'], {
-      timeout: 400,
-      windowsHide: true,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const text = String(out || '');
-    return /\.exe/i.test(text) && !/No tasks are running/i.test(text);
-  } catch (_) {
-    return false;
+/**
+ * One shared ps/tasklist run at a time. While a refresh is running, callers
+ * get the previous snapshot (if any) instead of waiting; the very first call
+ * awaits the real list.
+ */
+function runningProcessText() {
+  const now = Date.now();
+  if (processSnapshot.text !== null && now - processSnapshot.at < PROCESS_SNAPSHOT_TTL_MS) {
+    return Promise.resolve(processSnapshot.text);
   }
+  if (!processSnapshotInFlight) {
+    processSnapshotInFlight = refreshProcessSnapshot(now).finally(() => {
+      processSnapshotInFlight = null;
+    });
+  }
+  if (processSnapshot.text !== null) return Promise.resolve(processSnapshot.text);
+  return processSnapshotInFlight;
+}
+
+async function isMacAppRunning(appName) {
+  if (!appName) return false;
+  return (await runningProcessText()).includes(String(appName));
+}
+
+async function isWinImageRunning(imageName) {
+  if (!imageName) return false;
+  // CSV rows start with "Image.exe",…  — compare image names case-insensitively.
+  const needle = `"${String(imageName).toLowerCase()}"`;
+  return (await runningProcessText()).toLowerCase().split(/\r?\n/).some((line) => line.startsWith(needle));
 }
 
 const WIN_APP_IMAGES = {
@@ -281,20 +326,26 @@ const WIN_APP_IMAGES = {
   Dia: ['Dia.exe'],
 };
 
-function isWinAppRunning(appName) {
+async function isWinAppRunning(appName) {
   const images = WIN_APP_IMAGES[appName] || [`${String(appName || '').replace(/\.exe$/i, '')}.exe`];
-  return images.some(isWinImageRunning);
+  for (const image of images) {
+    if (await isWinImageRunning(image)) return true;
+  }
+  return false;
 }
 
 /** Cheap "is this desktop app running?" used to skip AppleScript / UIA / window walks. */
-function isDesktopAppRunning(appName) {
+async function isDesktopAppRunning(appName) {
   if (process.platform === 'darwin') return isMacAppRunning(appName);
   if (process.platform === 'win32') return isWinAppRunning(appName);
   return false;
 }
 
-function isWinChromiumFamilyRunning() {
-  return ['chrome.exe', 'msedge.exe', 'brave.exe', 'chromium.exe'].some(isWinImageRunning);
+async function isWinChromiumFamilyRunning() {
+  for (const image of ['chrome.exe', 'msedge.exe', 'brave.exe', 'chromium.exe']) {
+    if (await isWinImageRunning(image)) return true;
+  }
+  return false;
 }
 
 const CHROME_FAMILY_MAC_APPS = [
@@ -357,7 +408,7 @@ async function listChromeFamilyWindowTitlesMac() {
   `;
 
   for (const appName of CHROME_FAMILY_MAC_APPS) {
-    if (!isMacAppRunning(appName)) continue;
+    if (!(await isMacAppRunning(appName))) continue;
     try {
       const lines = await osascriptChromeFamily(appName, inner);
       for (const line of lines) {
@@ -388,7 +439,7 @@ async function listChromeFamilyTabUrlsMac() {
   const urls = [];
 
   for (const appName of apps) {
-    if (!isMacAppRunning(appName)) continue;
+    if (!(await isMacAppRunning(appName))) continue;
 
     const script = `
 tell application "System Events"
@@ -462,10 +513,10 @@ async function listOpenWindowTitles() {
     // when those apps are not running.
     const needNativeWindows =
       typeof activeWin.getOpenWindows === 'function' &&
-      (isDesktopAppRunning('zoom.us') ||
-        isDesktopAppRunning('Zoom') ||
-        isDesktopAppRunning('Microsoft Teams') ||
-        isDesktopAppRunning('Skype'));
+      ((await isDesktopAppRunning('zoom.us')) ||
+        (await isDesktopAppRunning('Zoom')) ||
+        (await isDesktopAppRunning('Microsoft Teams')) ||
+        (await isDesktopAppRunning('Skype')));
     if (!needNativeWindows) return windows;
 
     const all = await Promise.race([

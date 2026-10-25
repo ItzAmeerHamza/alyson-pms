@@ -22,6 +22,7 @@ class CleanupRegistry {
    */
   registerInterval(id, description = 'Unknown interval') {
     if (id) {
+      CleanupRegistry._pruneDestroyed(this.intervals);
       this.intervals.set(id, description);
       console.log(`🔄 [CLEANUP] Registered interval: ${description}`);
     }
@@ -29,10 +30,22 @@ class CleanupRegistry {
   }
 
   /**
+   * Drop entries whose Node timer was already cleared / fired (modules often
+   * clear with plain clearInterval, so the map otherwise grows forever).
+   * Numeric ids (browser-style) can't be inspected and are kept.
+   */
+  static _pruneDestroyed(map) {
+    for (const t of map.keys()) {
+      if (t && typeof t === 'object' && t._destroyed === true) map.delete(t);
+    }
+  }
+
+  /**
    * Register a timeout for cleanup tracking
    */
   registerTimeout(id, description = 'Unknown timeout') {
     if (id) {
+      CleanupRegistry._pruneDestroyed(this.timeouts);
       this.timeouts.set(id, description);
     }
     return id;

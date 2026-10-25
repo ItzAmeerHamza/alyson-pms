@@ -220,7 +220,53 @@ function sumLowActivitySecondsFromScreenshots(
  * Idle periods as intervals, clipped to the work day. Same order as Pulse:
  * remove live-call time first, then drop what is left under five minutes.
  */
-function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, meetingIntervals = []) {
+/**
+ * Tracked-session windows for today: every time log (an open one runs to its
+ * last proof of life, or now), plus the live session even if it has not
+ * synced yet. Idle outside these windows is not tracked time.
+ */
+function sessionWindowsFromTimeLogs(timeLogs, nowMs = Date.now()) {
+  const out = [];
+  for (const log of timeLogs || []) {
+    const startMs = new Date(log?.start_time).getTime();
+    const endRaw = log?.end_time || log?.last_alive_at || null;
+    const endMs = endRaw ? new Date(endRaw).getTime() : nowMs;
+    if (Number.isFinite(startMs) && endMs > startMs) out.push({ startMs, endMs });
+  }
+  try {
+    const live = global.isTracking
+      ? global.sessionStartTime || global.trackingManager?.sessionStartTime
+      : null;
+    const liveMs = live ? new Date(live).getTime() : NaN;
+    if (Number.isFinite(liveMs) && nowMs > liveMs) out.push({ startMs: liveMs, endMs: nowMs });
+  } catch (_) { /* no live session */ }
+  return out;
+}
+
+function clipToWindows(source, windows) {
+  const out = [];
+  for (const w of windows) {
+    const startMs = Math.max(source.startMs, w.startMs);
+    const endMs = Math.min(source.endMs, w.endMs);
+    if (endMs > startMs) out.push({ startMs, endMs });
+  }
+  // Merge overlaps so a stretch covered by two windows is not counted twice.
+  out.sort((a, b) => a.startMs - b.startMs);
+  const merged = [];
+  for (const iv of out) {
+    const last = merged[merged.length - 1];
+    if (last && iv.startMs <= last.endMs) last.endMs = Math.max(last.endMs, iv.endMs);
+    else merged.push({ ...iv });
+  }
+  return merged;
+}
+
+/**
+ * @param {Array<{startMs:number,endMs:number}>|null} [sessionWindows] — when
+ *   given, only idle inside these tracked sessions counts (an idle period that
+ *   ran on after the lid closed and tracking stopped is not non-effective time).
+ */
+function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, meetingIntervals = [], sessionWindows = null) {
   const out = [];
   for (const log of idleLogs || []) {
     const startMs = new Date(log.idle_start || log.start_time).getTime();
@@ -230,7 +276,10 @@ function idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, meetingIntervals 
       ? new Date(rawEnd).getTime()
       : startMs + Math.max(0, Number(log.duration_seconds) || 0) * 1000;
     if (!Number.isFinite(endMs) || endMs <= startMs) continue;
-    for (const piece of subtractIntervals({ startMs, endMs }, meetingIntervals)) {
+    const tracked = Array.isArray(sessionWindows)
+      ? clipToWindows({ startMs, endMs }, sessionWindows)
+      : [{ startMs, endMs }];
+    for (const piece of tracked.flatMap((iv) => subtractIntervals(iv, meetingIntervals))) {
       if ((piece.endMs - piece.startMs) / 1000 < MIN_IDLE_REPORT_SECONDS) continue;
       const lo = Math.max(piece.startMs, dayStartMs);
       const hi = Math.min(piece.endMs, dayEndMs);
@@ -372,7 +421,13 @@ async function computeTodayEffectiveStats(opts = {}) {
           { start: dayStartIso, end: dayEndIso, limit: 2000 },
           config,
         );
-        idleIntervals = idleIntervalsFromLogs(idleLogs, dayStartMs, dayEndMs, callIntervals);
+        idleIntervals = idleIntervalsFromLogs(
+          idleLogs,
+          dayStartMs,
+          dayEndMs,
+          callIntervals,
+          Array.isArray(opts.timeLogs) ? sessionWindowsFromTimeLogs(opts.timeLogs) : null,
+        );
         idleSeconds = mergeIntervalsSeconds(idleIntervals);
         idleMeasured = true;
       } catch (idleErr) {
@@ -416,6 +471,7 @@ module.exports = {
   sumIdleSecondsFromLogs,
   sumLowActivitySecondsFromScreenshots,
   idleIntervalsFromLogs,
+  sessionWindowsFromTimeLogs,
   meetingIntervalsFromScreenshots,
   isMeetingScreenshotRow,
   LOW_ACTIVITY_PERCENT,

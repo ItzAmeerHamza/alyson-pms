@@ -3042,6 +3042,20 @@
             z-index: 60;
         }
 
+        /* Settings: compact custom dropdown beside the row label (same look as Report an issue). */
+        #settingsPage .settings-row .project-dd {
+            width: 220px;
+            flex-shrink: 0;
+        }
+        #settingsPage .project-dd-trigger {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        #settingsPage .project-dd-menu {
+            z-index: 60;
+        }
+
         .report-issue-check {
             display: flex;
             align-items: flex-start;
@@ -3393,6 +3407,200 @@
 
         .sidebar .theme-toggle-btn {
             flex: 1;
+        }
+
+        /* ── Settings page ── */
+        .settings-list {
+            max-width: 720px;
+        }
+
+        .settings-group-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin: -4px 0 8px;
+        }
+        .settings-action-btn {
+            flex-shrink: 0;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            color: var(--text);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .settings-action-btn:hover { background: var(--bg-hover); }
+        .settings-perm-status { font-size: 12px; margin-top: 4px; }
+        .settings-perm-status.is-ok { color: #16a34a; }
+        .settings-perm-status.is-missing { color: #dc2626; }
+        .settings-group-title {
+            font-size: 12px;
+            font-weight: 650;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin: 20px 0 8px;
+        }
+
+        .settings-group-title:first-child {
+            margin-top: 4px;
+        }
+
+        .settings-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 14px 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 8px;
+        }
+
+        .settings-row[hidden] {
+            display: none;
+        }
+
+        .settings-row-stack {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+        }
+
+        .settings-row-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .settings-row-hint {
+            font-size: 12.5px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            line-height: 1.45;
+        }
+
+        .settings-status {
+            font-size: 12px;
+            color: var(--accent-text);
+            margin-top: 4px;
+            min-height: 0;
+        }
+
+        .settings-status:empty {
+            display: none;
+        }
+
+        .settings-status.is-error {
+            color: #dc2626;
+        }
+
+        html[data-theme="dark"] .settings-status.is-error {
+            color: #f87171;
+        }
+
+        .settings-switch {
+            position: relative;
+            flex-shrink: 0;
+            width: 40px;
+            height: 22px;
+            cursor: pointer;
+        }
+
+        .settings-switch input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .settings-switch-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            background: var(--border-strong);
+            transition: background 0.15s ease;
+            pointer-events: none;
+        }
+
+        .settings-switch-track::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+            transition: transform 0.15s ease;
+        }
+
+        .settings-switch input:checked + .settings-switch-track {
+            background: var(--accent);
+        }
+
+        .settings-switch input:checked + .settings-switch-track::after {
+            transform: translateX(18px);
+        }
+
+        .settings-switch input:focus-visible + .settings-switch-track {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        .settings-switch input:disabled + .settings-switch-track {
+            opacity: 0.6;
+        }
+
+        .settings-choices {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .settings-choice {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-2);
+            cursor: pointer;
+            background: var(--bg-surface-2);
+        }
+
+        .settings-choice:has(input:checked) {
+            border-color: var(--accent-border);
+            background: var(--accent-soft);
+            color: var(--text);
+        }
+
+        .settings-choice input {
+            accent-color: var(--accent);
+            margin: 0;
+        }
+
+        .settings-select,
+        #settingsPage .settings-select {
+            width: auto;
+            min-width: 180px;
+            flex-shrink: 0;
+        }
+
+        .settings-theme-toggle .theme-toggle-btn {
+            font-size: 12.5px;
+            padding: 6px 14px;
+        }
+
+        .settings-footnote {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin: 16px 2px 0;
         }
 
         .nav-icon {
@@ -7248,6 +7456,11 @@
                         <span>App Updates</span>
                         <span id="updatesNavBadge" class="nav-badge" hidden>1</span>
                     </div>
+
+                    <div class="nav-item" data-page="settings">
+                        <i data-lucide="settings" class="nav-icon"></i>
+                        <span>Settings</span>
+                    </div>
                 </div>
                 
                 <div class="nav-section" id="monitoringSection" style="display: none;">
@@ -7290,14 +7503,6 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div id="platformPrivacyShortcuts" class="platform-privacy-shortcuts" hidden>
-                    <div class="platform-privacy-shortcuts-label">Privacy shortcuts</div>
-                    <div class="platform-privacy-shortcuts-buttons">
-                        <button type="button" class="platform-privacy-btn" data-pane="screenRecording" data-role="screen">Screen Recording</button>
-                        <button type="button" class="platform-privacy-btn" data-pane="accessibility" data-role="access">Accessibility</button>
-                        <button type="button" class="platform-privacy-btn" data-pane="automation" data-role="extra">Automation</button>
-                    </div>
-                </div>
                 <div class="theme-toggle" role="group" aria-label="Color theme">
                     <button type="button" class="theme-toggle-btn" data-theme-option="light">Light</button>
                     <button type="button" class="theme-toggle-btn" data-theme-option="dark">Dark</button>
@@ -7974,6 +8179,148 @@
             </div>
 
             <!-- APP UPDATES — update without waiting for the next app restart -->
+            <div id="settingsPage" class="page-section settings-page">
+                <div class="control-section">
+                    <div class="control-header">
+                        <div class="control-title">Settings</div>
+                        <div class="control-subtitle">Your personal preferences for this computer</div>
+                    </div>
+
+                    <div class="settings-list">
+                        <div class="settings-group-title">General</div>
+
+                        <div class="settings-row">
+                            <div class="settings-row-text">
+                                <label class="settings-row-label" for="settingsAutoLaunch">Start Tavilo Time when I sign in</label>
+                                <div class="settings-row-hint">Opens automatically after you restart or sign in to your computer.</div>
+                                <div id="settingsAutoLaunchStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settingsAutoLaunch" role="switch">
+                                <span class="settings-switch-track" aria-hidden="true"></span>
+                            </label>
+                        </div>
+
+                        <div id="settingsOpenWindowRow" class="settings-row">
+                            <div class="settings-row-text">
+                                <label class="settings-row-label" for="settingsOpenWindow">Open the window when it starts</label>
+                                <div class="settings-row-hint">When off, Tavilo Time starts quietly in the background at sign-in. Click the Tavilo icon near the clock to open it.</div>
+                                <div id="settingsOpenWindowStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settingsOpenWindow" role="switch">
+                                <span class="settings-switch-track" aria-hidden="true"></span>
+                            </label>
+                        </div>
+
+                        <div id="settingsCloseRow" class="settings-row settings-row-stack" hidden>
+                            <div class="settings-row-text">
+                                <div class="settings-row-label" id="settingsCloseLabel">When I close the window</div>
+                                <div class="settings-row-hint">You can always quit from the Tavilo icon near the clock: right-click it and choose Quit Tavilo Time.</div>
+                                <div id="settingsCloseStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <div class="settings-choices" role="radiogroup" aria-labelledby="settingsCloseLabel">
+                                <label class="settings-choice">
+                                    <input type="radio" name="settingsClose" id="settingsCloseAsk" value="ask">
+                                    <span>Ask me to minimize or quit</span>
+                                </label>
+                                <label class="settings-choice">
+                                    <input type="radio" name="settingsClose" id="settingsCloseMinimize" value="minimize">
+                                    <span>Minimize the app</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="settings-group-title">Reminders &amp; notifications</div>
+
+                        <div class="settings-row">
+                            <div class="settings-row-text">
+                                <label class="settings-row-label" for="settingsReminder">Remind me to start tracking</label>
+                                <div class="settings-row-hint">How often to show the “Start tracking?” popup while your timer is off.</div>
+                                <div id="settingsReminderStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <select id="settingsReminder" class="screenshot-filter-control settings-select">
+                                <option value="10">Every 10 minutes</option>
+                                <option value="15">Every 15 minutes</option>
+                                <option value="30">Every 30 minutes</option>
+                                <option value="60">Every hour</option>
+                                <option value="0">Never</option>
+                            </select>
+                        </div>
+
+                        <div id="settingsNotificationsRow" class="settings-row">
+                            <div class="settings-row-text">
+                                <label class="settings-row-label" for="settingsNotifications">Desktop notifications</label>
+                                <div class="settings-row-hint">Pop-up messages like “Tracking started”. Alerts that your timer stopped always show.</div>
+                                <div id="settingsNotificationsStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settingsNotifications" role="switch">
+                                <span class="settings-switch-track" aria-hidden="true"></span>
+                            </label>
+                        </div>
+
+                        <div id="settingsMenuBarTimerRow" class="settings-row" hidden>
+                            <div class="settings-row-text">
+                                <label class="settings-row-label" for="settingsMenuBarTimer">Show timer in the menu bar</label>
+                                <div class="settings-row-hint">Shows today’s time next to the Tavilo icon at the top of the screen.</div>
+                                <div id="settingsMenuBarTimerStatus" class="settings-status" aria-live="polite"></div>
+                            </div>
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settingsMenuBarTimer" role="switch">
+                                <span class="settings-switch-track" aria-hidden="true"></span>
+                            </label>
+                        </div>
+
+                        <div id="settingsPermissionsGroup" hidden>
+                            <div class="settings-group-title" id="settingsPermissionsTitle">macOS permissions</div>
+                            <div class="settings-group-hint" id="settingsPermissionsHint">Tavilo Time needs these to record screenshots and count keyboard and mouse activity. Each button opens the right page in System Settings.</div>
+
+                            <div class="settings-row" data-perm-row="screen">
+                                <div class="settings-row-text">
+                                    <div class="settings-row-label" data-perm-label="screen">Screen Recording</div>
+                                    <div class="settings-row-hint" data-perm-hint="screen">Needed for screenshots.</div>
+                                    <div class="settings-perm-status" data-perm-status="screen" aria-live="polite"></div>
+                                </div>
+                                <button type="button" class="settings-action-btn" data-pane="screenRecording">Open settings</button>
+                            </div>
+
+                            <div class="settings-row" data-perm-row="access">
+                                <div class="settings-row-text">
+                                    <div class="settings-row-label" data-perm-label="access">Accessibility</div>
+                                    <div class="settings-row-hint" data-perm-hint="access">Needed to count keystrokes and clicks.</div>
+                                    <div class="settings-perm-status" data-perm-status="access" aria-live="polite"></div>
+                                </div>
+                                <button type="button" class="settings-action-btn" data-pane="accessibility">Open settings</button>
+                            </div>
+
+                            <div class="settings-row" data-perm-row="extra">
+                                <div class="settings-row-text">
+                                    <div class="settings-row-label" data-perm-label="extra">Automation</div>
+                                    <div class="settings-row-hint" data-perm-hint="extra">Lets Tavilo Time read the address of the page open in your browser.</div>
+                                </div>
+                                <button type="button" class="settings-action-btn" data-pane="automation">Open settings</button>
+                            </div>
+                        </div>
+
+                        <div class="settings-group-title">Appearance</div>
+
+                        <div class="settings-row">
+                            <div class="settings-row-text">
+                                <div class="settings-row-label">Theme</div>
+                                <div class="settings-row-hint">Choose a light or dark look.</div>
+                            </div>
+                            <div class="theme-toggle settings-theme-toggle" role="group" aria-label="Color theme">
+                                <button type="button" class="theme-toggle-btn" data-theme-option="light">Light</button>
+                                <button type="button" class="theme-toggle-btn" data-theme-option="dark">Dark</button>
+                            </div>
+                        </div>
+
+                        <p class="settings-footnote">Tracking, screenshot and idle rules are set by your workspace admin and can’t be changed here.</p>
+                    </div>
+                </div>
+            </div>
+
             <div id="updatesPage" class="page-section updates-page">
                 <div class="control-section">
                     <div class="control-header">
@@ -9165,7 +9512,13 @@
             updateConsoleLogViewer();
             
             // Update system info every 2 seconds for faster status updates
-            setInterval(updateSystemInfo, 2000);
+            // (skipped while the window is hidden or another page is showing)
+            setInterval(() => {
+                if (document.hidden) return;
+                const devPage = document.getElementById('developer-consolePage');
+                if (devPage && !devPage.classList.contains('active')) return;
+                updateSystemInfo();
+            }, 2000);
             
             console.log('✅ [DEV-CONSOLE] Developer console initialized');
         }

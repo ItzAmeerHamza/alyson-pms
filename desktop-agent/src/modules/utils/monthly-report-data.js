@@ -129,13 +129,19 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
   const mEndExclusiveMs = mEndMs;
   const clamp = (a, b, c, d) => Math.max(0, Math.min(b, d) - Math.max(a, c));
 
+  // Day bounds once per report, not once per log per day (that froze the main thread).
+  const dayBounds = [];
+  for (let d = 1; d <= daysInMonth; d++) dayBounds.push(workDayBoundsForYmd(workYear, workMonth, d));
+
   const dailyBreakdown = [];
+  // One formatter for the month — creating one per day was a hot spot.
+  const weekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: workTz, weekday: 'short' });
   for (let d = 1; d <= daysInMonth; d++) {
     const dateKey = `${workYear}-${String(workMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const { startMs: dayStartMs } = workDayBoundsForYmd(workYear, workMonth, d);
+    const { startMs: dayStartMs } = dayBounds[d - 1];
     dailyBreakdown.push({
       date: dateKey,
-      dayName: new Date(dayStartMs).toLocaleDateString('en-US', { timeZone: workTz, weekday: 'short' }),
+      dayName: weekdayFmt.format(new Date(dayStartMs)),
       totalSeconds: 0,
       idleSeconds: 0,
       lowSeconds: 0,
@@ -169,7 +175,7 @@ async function buildMonthlyReportData({ global, config, monthOffset = 0 }) {
       log.projects?.name || projectNameById[log.project_id] || 'No Project';
     const projectId = log.project_id || 'none';
     for (let d = 1; d <= daysInMonth; d++) {
-      const { startMs: dayStartMs, endMs: dayEndMs } = workDayBoundsForYmd(workYear, workMonth, d);
+      const { startMs: dayStartMs, endMs: dayEndMs } = dayBounds[d - 1];
       const sliceStart = Math.max(startMs, dayStartMs);
       const sliceEnd = Math.min(endMs, dayEndMs);
       if (sliceEnd > sliceStart) {

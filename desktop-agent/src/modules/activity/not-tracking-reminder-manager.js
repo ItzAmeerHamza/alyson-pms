@@ -14,6 +14,19 @@ const BLOCKED_RETRY_MS = 5 * 1000;
 const SLEEP_CATCHUP_MS = 2 * 60 * 1000;
 const ALWAYS_ON_TOP_MS = 2000;
 
+/** Interval from Settings (default 10 min). 0 = reminders turned off. */
+function reminderIntervalMs() {
+  try {
+    const mins = require('../utils/user-preferences').get('notTrackingReminderMinutes');
+    if (typeof mins === 'number' && mins >= 0) return mins * 60 * 1000;
+  } catch (_) { /* fall back to default */ }
+  return INTERVAL_MS;
+}
+
+function minutesLabel(ms) {
+  return `${Math.round(ms / 60000)}m`;
+}
+
 class NotTrackingReminderManager {
   constructor() {
     this._timeoutId = null;
@@ -28,7 +41,7 @@ class NotTrackingReminderManager {
     this._armed = true;
     if (this._isTracking()) return;
     if (this._timeoutId && this._nextDueAtMs != null) return;
-    this._scheduleFromNow(INTERVAL_MS);
+    this._scheduleFromNow(reminderIntervalMs());
     console.log(
       '🔔 [NOT-TRACKING-REMINDER] Started (10m after Stop, repeat 10m, tracking-off only)',
     );
@@ -50,8 +63,8 @@ class NotTrackingReminderManager {
 
   onTrackingStopped() {
     this._deferAfterBlock = false;
-    this._scheduleFromNow(INTERVAL_MS);
-    console.log('🔔 [NOT-TRACKING-REMINDER] Tracking stopped — 10m popup timer started');
+    this._scheduleFromNow(reminderIntervalMs());
+    console.log(`🔔 [NOT-TRACKING-REMINDER] Tracking stopped — ${minutesLabel(reminderIntervalMs())} popup timer started`);
   }
 
   /**
@@ -61,7 +74,7 @@ class NotTrackingReminderManager {
     this._armed = true;
     if (this._isTracking()) return;
     if (this._timeoutId && this._nextDueAtMs != null) return;
-    this._scheduleFromNow(INTERVAL_MS);
+    this._scheduleFromNow(reminderIntervalMs());
   }
 
   /**
@@ -71,8 +84,23 @@ class NotTrackingReminderManager {
     this._hidePrompt();
     if (this._isTracking()) return;
     this._deferAfterBlock = false;
-    this._scheduleFromNow(INTERVAL_MS);
-    console.log('🔔 [NOT-TRACKING-REMINDER] Snoozed — next popup in 10m');
+    this._scheduleFromNow(reminderIntervalMs());
+    console.log(`🔔 [NOT-TRACKING-REMINDER] Snoozed — next popup in ${minutesLabel(reminderIntervalMs())}`);
+  }
+
+  /** Settings changed the interval: restart the countdown with the new value. */
+  applyIntervalSetting() {
+    if (!this._armed) return;
+    const ms = reminderIntervalMs();
+    if (ms <= 0) this._hidePrompt();
+    if (this._isTracking()) return;
+    this._deferAfterBlock = false;
+    this._scheduleFromNow(ms);
+    console.log(
+      ms > 0
+        ? `🔔 [NOT-TRACKING-REMINDER] Interval set — next popup in ${minutesLabel(ms)}`
+        : '🔔 [NOT-TRACKING-REMINDER] Turned off in Settings',
+    );
   }
 
   _clearState() {
@@ -91,6 +119,12 @@ class NotTrackingReminderManager {
 
   _scheduleFromNow(ms) {
     this._armed = true;
+    if (!(Number(ms) > 0)) {
+      // Reminders turned off in Settings.
+      this._clearTimer();
+      this._nextDueAtMs = null;
+      return;
+    }
     const delay = Math.max(0, Math.floor(Number(ms) || 0));
     this._nextDueAtMs = Date.now() + delay;
     this._armTimeout();
@@ -168,7 +202,7 @@ class NotTrackingReminderManager {
     }
 
     if (!this._isLoggedIn()) {
-      this._scheduleFromNow(INTERVAL_MS);
+      this._scheduleFromNow(reminderIntervalMs());
       return;
     }
 
@@ -181,16 +215,16 @@ class NotTrackingReminderManager {
 
     if (this._deferAfterBlock) {
       this._deferAfterBlock = false;
-      this._scheduleFromNow(INTERVAL_MS);
-      console.log('🔔 [NOT-TRACKING-REMINDER] Unlock/wake — next popup in 10m');
+      this._scheduleFromNow(reminderIntervalMs());
+      console.log(`🔔 [NOT-TRACKING-REMINDER] Unlock/wake — next popup in ${minutesLabel(reminderIntervalMs())}`);
       return;
     }
 
     const scheduledAt = this._nextDueAtMs;
     const overdue = scheduledAt == null ? 0 : Date.now() - scheduledAt;
     if (overdue > SLEEP_CATCHUP_MS) {
-      this._scheduleFromNow(INTERVAL_MS);
-      console.log('🔔 [NOT-TRACKING-REMINDER] Timer jumped (sleep) — next popup in 10m');
+      this._scheduleFromNow(reminderIntervalMs());
+      console.log(`🔔 [NOT-TRACKING-REMINDER] Timer jumped (sleep) — next popup in ${minutesLabel(reminderIntervalMs())}`);
       return;
     }
 
@@ -203,7 +237,7 @@ class NotTrackingReminderManager {
 
     const kind = this._promptVisible ? 'repeat' : 'grace';
     this.showStartReminder();
-    this._scheduleFromNow(INTERVAL_MS);
+    this._scheduleFromNow(reminderIntervalMs());
     console.log(`🔔 [NOT-TRACKING-REMINDER] Showing start popup (${kind})`);
   }
 

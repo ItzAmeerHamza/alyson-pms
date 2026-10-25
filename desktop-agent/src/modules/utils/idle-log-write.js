@@ -67,6 +67,12 @@ async function recoverAfterWriteError(err, log, idleLogExists, config) {
  * nine copies of the same stretch.
  */
 async function flushIdleLogQueue(queue, config, persist = persistIdleLog) {
+  // Idle logs a previous run could not send come back the first time we flush.
+  let store = null;
+  try {
+    store = require('./idle-log-queue-store');
+    store.ensureRestored(queue);
+  } catch (_) { /* optional */ }
   if (!queue?.idleLogs?.length) return { flushed: 0, requeued: 0 };
   const { uniqueIdleLogs, enqueueIdleLogOnce } = require('./idle-log-period-key');
   const pending = uniqueIdleLogs(queue.idleLogs);
@@ -93,6 +99,10 @@ async function flushIdleLogQueue(queue, config, persist = persistIdleLog) {
       });
       requeued += 1;
     }
+  }
+  // Sent rows drop out of the saved copy too.
+  if (flushed > 0) {
+    try { store?.scheduleSave(); } catch (_) { /* optional */ }
   }
   return { flushed, requeued };
 }

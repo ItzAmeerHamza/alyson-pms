@@ -64,6 +64,7 @@ class WindowUIManager {
     // Show window when ready (force show to ensure visibility)
     this.mainWindow.once('ready-to-show', () => {
       console.log('🪟 [WINDOW] Main window ready to show');
+      if (require('../utils/user-preferences').shouldStartHidden()) return;
       try {
         if (!this.mainWindow.isVisible()) {
           this.mainWindow.show();
@@ -264,6 +265,7 @@ class WindowUIManager {
   }
 
   showNotification(title, body, type = 'info') {
+    if (!require('../utils/user-preferences').get('desktopNotifications')) return;
     if (this.tray) {
       this.tray.displayBalloon({
         icon: path.join(__dirname, '../../../assets/icon.png'),

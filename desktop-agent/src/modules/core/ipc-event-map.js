@@ -610,6 +610,65 @@ class IPCEventMap {
       }
     });
 
+    // Settings page: what the window X does (Windows/Linux only — macOS
+    // keeps the standard red-button behavior, so the setting is hidden there).
+    this.registerHandler('get-close-behavior', () => {
+      try {
+        const closePrompt = require('./close-prompt');
+        return {
+          success: true,
+          supported: process.platform !== 'darwin',
+          askOnClose: !closePrompt.isAskDisabled(),
+        };
+      } catch (error) {
+        return { success: false, supported: false, askOnClose: true, error: error.message };
+      }
+    });
+
+    this.registerHandler('set-close-behavior', (_event, askOnClose) => {
+      try {
+        const closePrompt = require('./close-prompt');
+        closePrompt.setAskOnClose(!!askOnClose);
+        global.trayManager?.updateMenu?.();
+        return { success: true, askOnClose: !closePrompt.isAskDisabled() };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Settings page: personal preferences (window at login, reminder,
+    // notifications, menu bar timer). See utils/user-preferences.js.
+    this.registerHandler('get-user-preferences', () => {
+      try {
+        const prefs = require('../utils/user-preferences');
+        return {
+          success: true,
+          preferences: prefs.getAll(),
+          reminderMinutes: prefs.REMINDER_MINUTES,
+          supports: { menuBarTimer: process.platform === 'darwin' },
+        };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    this.registerHandler('set-user-preferences', (_event, partial) => {
+      try {
+        const prefs = require('../utils/user-preferences');
+        const before = prefs.getAll();
+        const next = prefs.update(partial);
+        if (next.showMenuBarTimer !== before.showMenuBarTimer) {
+          global.trayManager?.refreshMenuBarTitle?.();
+        }
+        if (next.notTrackingReminderMinutes !== before.notTrackingReminderMinutes) {
+          global.notTrackingReminderManager?.applyIntervalSetting?.();
+        }
+        return { success: true, preferences: next };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
     this.registerHandler('get-config', () => {
       return this._getSafeConfig();
     });
@@ -1151,25 +1210,10 @@ class IPCEventMap {
   async _getUserProjectAssignments(userId) {
     console.log('📋 [IPC-EVENT-MAP] Getting project assignments for user:', userId);
 
-    const backendTimeLogs = require('../utils/backend-time-logs');
+    const effectiveUserId = userId || global.currentUserId || global.config?.user_id;
+    if (!effectiveUserId) return this._getFallbackProjects();
     const effectiveConfig = global.configManager?.getConfig?.() || global.config;
-    if (backendTimeLogs.isBackendTimeLogsEnabled(effectiveConfig)) {
-      try {
-        const projects = await backendTimeLogs.listUserProjects(userId, effectiveConfig);
-        if (Array.isArray(projects)) {
-          if (projects.length > 0) {
-            console.log(`✅ [IPC-EVENT-MAP] Found ${projects.length} projects from backend`);
-            return projects;
-          }
-          console.log(`⚠️ [IPC-EVENT-MAP] Backend returned no assignments for user ${userId}`);
-          return [];
-        }
-      } catch (error) {
-        console.error('❌ [IPC-EVENT-MAP] Backend project fetch failed:', error.message);
-      }
-    }
-
-    return this._getFallbackProjects();
+    return require('../utils/project-list').getUserProjects(effectiveUserId, effectiveConfig);
   }
   
   _getFallbackProjects() {

@@ -4,7 +4,7 @@
  * OPTIMIZED: Async AppleScript + Smart Detection
  */
 
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { UrlResultCache, stableUrlCacheTitle } = require('../../lib/url-result-cache');
 
 class DarwinUrlCapture {
@@ -180,19 +180,22 @@ class DarwinUrlCapture {
    * CRITICAL FIX: Reduced timeout from 2000ms to 500ms to prevent UI blocking
    */
   async executeAppleScript(script, timeout = 500) {
+    // Run osascript directly (no /bin/sh) and kill it on timeout. Before, the
+    // promise gave up but the process kept running, so a stuck System Events
+    // left osascript processes piling up.
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('AppleScript timeout'));
-      }, timeout);
-
-      exec(`/usr/bin/osascript -e '${script}'`, (error, stdout, stderr) => {
-        clearTimeout(timer);
-        if (error) {
-          reject(error);
-        } else {
-          resolve(stdout.trim());
-        }
-      });
+      execFile(
+        '/usr/bin/osascript',
+        ['-e', script],
+        { timeout, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 },
+        (error, stdout) => {
+          if (error) {
+            reject(error.killed ? new Error('AppleScript timeout') : error);
+          } else {
+            resolve(String(stdout).trim());
+          }
+        },
+      );
     });
   }
 

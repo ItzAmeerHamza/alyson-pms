@@ -13,6 +13,7 @@ const path = require('path');
 const os = require('os');
 
 const PREF_FILENAME = 'auto-launch.json';
+const { LOGIN_ARG } = require('./user-preferences');
 /** Default when no preference file exists — product ships with auto-start ON. */
 const DEFAULT_ENABLED = true;
 
@@ -96,11 +97,14 @@ function applyLoginItemSettings(enabled, { forceDev = false, exePath: exePathOve
     // Electron login items work on both macOS (Launch Agents) and Windows
     // (HKCU\\...\\Run). Pass execPath so the login item points at Tavilo Time.exe.
     const exePath = exePathOverride || process.execPath;
+    // Windows: tag login launches so the app can honor "Open window at login".
+    // macOS reports login launches itself (wasOpenedAtLogin).
+    const args = process.platform === 'win32' ? [LOGIN_ARG] : [];
     const settings = {
       openAtLogin: want,
       openAsHidden: true,
       path: exePath,
-      args: [],
+      args,
     };
     if (process.platform === 'win32') {
       settings.name = 'Tavilo Time';
@@ -113,7 +117,7 @@ function applyLoginItemSettings(enabled, { forceDev = false, exePath: exePathOve
       if (typeof app.getLoginItemSettings === 'function') {
         const current = app.getLoginItemSettings({
           path: exePath,
-          args: [],
+          args,
         });
         verified = !!current?.openAtLogin;
       }

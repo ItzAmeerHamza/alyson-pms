@@ -299,34 +299,10 @@ class IPCHandlers {
         return this._getFallbackProjects();
       }
 
-      const backendTimeLogs = require('./utils/backend-time-logs');
+      // Throws only when the backend fails and no saved list exists, so the
+      // renderer shows "retrying" instead of a silent empty list.
       const effectiveConfig = this.configManager?.getConfig?.() || global.config;
-      const backendEnabled = backendTimeLogs.isBackendTimeLogsEnabled(effectiveConfig);
-      if (!backendEnabled) {
-        console.error(
-          '❌ [IPC-PROJECTS] Backend sync not configured — check BACKEND_API_URL + INTERNAL_API_KEY in env-config.js',
-        );
-      }
-      if (backendEnabled) {
-        try {
-          const projects = await backendTimeLogs.listUserProjects(effectiveUserId, effectiveConfig);
-          if (Array.isArray(projects)) {
-            if (projects.length > 0) {
-              console.log(`✅ [IPC-PROJECTS] Found ${projects.length} projects from backend`);
-              if (global.trayManager?.setProjectList) {
-                global.trayManager.setProjectList(projects);
-              }
-              return projects;
-            }
-            console.log(`⚠️ [IPC-PROJECTS] Backend returned no assignments for user ${effectiveUserId}`);
-            return [];
-          }
-        } catch (error) {
-          console.error('❌ [IPC-PROJECTS] Backend project fetch failed:', error.message);
-        }
-      }
-
-      return this._getFallbackProjects();
+      return require('./utils/project-list').getUserProjects(effectiveUserId, effectiveConfig);
     });
     
     // Helper method for fallback projects

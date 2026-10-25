@@ -188,7 +188,7 @@ class GracefulShutdownManager {
    * @returns {boolean} true if close was intercepted
    */
   handleWindowCloseEvent(event, mainWindow, options = {}) {
-    const { showTrayNotification } = options;
+    const { showTrayNotification, platform = process.platform } = options;
 
     if (global.isQuitting) {
       return false;
@@ -198,6 +198,43 @@ class GracefulShutdownManager {
       event.preventDefault();
     }
 
+    const closePrompt = require('./close-prompt');
+    if (closePrompt.shouldAsk(platform)) {
+      // Windows/Linux: let the user pick background vs quit. Window stays
+      // visible behind the prompt so Cancel leaves everything as it was.
+      closePrompt
+        .askCloseChoice(mainWindow, { tracking: this.hasActiveSessionToClose() })
+        .then((choice) => {
+          if (choice === closePrompt.CHOICE.QUIT) {
+            console.log('🛑 [APP-LIFECYCLE] User chose Quit from the close prompt');
+            this.quitApp();
+          } else if (choice === closePrompt.CHOICE.BACKGROUND) {
+            this._hideToTray(mainWindow, showTrayNotification, platform);
+          }
+        })
+        .catch((err) => {
+          // Prompt failed: fall back to the old safe behavior (keep running).
+          console.warn('⚠️ [APP-LIFECYCLE] Close prompt failed:', err?.message || err);
+          this._hideToTray(mainWindow, showTrayNotification, platform);
+        });
+      return true;
+    }
+
+    this._hideToTray(mainWindow, showTrayNotification, platform);
+    return true;
+  }
+
+  /** Full quit: before-quit stops the timer, saves, and exits the process. */
+  quitApp() {
+    global.isQuitting = true;
+    try {
+      require('electron').app.quit();
+    } catch (err) {
+      console.error('❌ [APP-LIFECYCLE] app.quit() failed:', err?.message || err);
+    }
+  }
+
+  _hideToTray(mainWindow, showTrayNotification, platform = process.platform) {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide();
     }
@@ -206,18 +243,22 @@ class GracefulShutdownManager {
       showTrayNotification ||
       ((title, body) => global.trayManager?.showNotification?.(title, body));
     const tracking = this.hasActiveSessionToClose();
+    // Windows 11 hides new tray icons behind the ^ arrow — say where to look.
+    const where =
+      platform === 'win32'
+        ? 'Open it from the Tavilo icon near the clock (click ^ if you don’t see it), or right-click that icon and choose Quit.'
+        : 'Click the tray icon to restore.';
     notify(
       'Tavilo Time',
       tracking
-        ? 'Still tracking. Click the tray icon to restore.'
-        : 'App continues running in the background. Click the tray icon to restore.',
+        ? `Still tracking. ${where}`
+        : `Tavilo Time is minimized. ${where}`,
     );
     console.log(
       tracking
         ? '📱 [APP-LIFECYCLE] Window hidden to tray — tracking continues'
         : '📱 [APP-LIFECYCLE] Window hidden to tray - use tray or dock icon to restore',
     );
-    return true;
   }
 
   /**

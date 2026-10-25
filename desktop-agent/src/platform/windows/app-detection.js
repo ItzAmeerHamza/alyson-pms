@@ -7,7 +7,7 @@
 
 console.log('🔧 [WINDOWS-APP] Windows App Detection Module v95.2.5 loaded (PERFORMANCE FIX)');
 
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { detectActiveDesktopWindow, getAllDesktopWindows } = require('./desktop-window-detection');
 const simpleDetection = require('./simple-app-detection');
 
@@ -15,6 +15,16 @@ const simpleDetection = require('./simple-app-detection');
 let activeWin = null;
 let activeWinBroken = false; // Track if active-win consistently fails
 let activeWinFailCount = 0;
+// CPU FIX: 3 failures used to set activeWinBroken forever, after which every
+// cache miss ran the PowerShell Add-Type compile cascade. Now active-win is
+// only paused for a cooldown, then tried again.
+const ACTIVE_WIN_COOLDOWN_MS = 5 * 60 * 1000;
+let activeWinDisabledUntil = 0;
+function pauseActiveWin() {
+  activeWinDisabledUntil = Date.now() + ACTIVE_WIN_COOLDOWN_MS;
+  // One more failure after the cooldown pauses it again right away.
+  activeWinFailCount = 2;
+}
 try {
   activeWin = require('active-win');
   console.log('✅ [WINDOWS-APP] active-win loaded successfully (native Windows API)');
@@ -274,6 +284,48 @@ function toEncodedCommand(script) {
  * ApplicationFrameHost is a UWP container - we need to find the actual browser inside
  * FIXED: Use -Command instead of -EncodedCommand for ARM64 compatibility
  */
+const RUNNING_IMAGES_TTL_MS = 60 * 1000;
+let runningImagesCache = { at: 0, names: null };
+let runningImagesPending = null;
+
+/** Lower-cased image names ("chrome.exe") from one tasklist run, cached 60 s. */
+function getRunningImageNames() {
+  if (runningImagesCache.names && Date.now() - runningImagesCache.at < RUNNING_IMAGES_TTL_MS) {
+    return Promise.resolve(runningImagesCache.names);
+  }
+  if (runningImagesPending) return runningImagesPending;
+  runningImagesPending = new Promise((resolve) => {
+    try {
+      execFile('tasklist', ['/FO', 'CSV', '/NH'], {
+        timeout: 2000,
+        killSignal: 'SIGKILL',
+        windowsHide: true,
+        maxBuffer: 8 * 1024 * 1024,
+      }, (err, stdout) => {
+        if (err) return resolve(null);
+        resolve(parseTasklistImageNames(stdout));
+      });
+    } catch (_) {
+      resolve(null);
+    }
+  }).then((names) => {
+    if (names) runningImagesCache = { at: Date.now(), names };
+    return names;
+  }).finally(() => {
+    runningImagesPending = null;
+  });
+  return runningImagesPending;
+}
+
+function parseTasklistImageNames(text) {
+  const names = new Set();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = /^"([^"]+)"/.exec(line.trim());
+    if (m) names.add(m[1].toLowerCase());
+  }
+  return names;
+}
+
 async function unwrapApplicationFrameHost(windowTitle) {
   try {
     if (DEBUG) console.log('[WINDOWS-APP] Unwrapping ApplicationFrameHost, window title:', windowTitle);
@@ -306,28 +358,18 @@ async function unwrapApplicationFrameHost(windowTitle) {
       return 'opera';
     }
 
-    // Strategy 2: Check for running browser processes (simple check - ARM64 safe)
-    // Try each browser individually to avoid complex PowerShell commands that fail on ARM64
+    // Strategy 2: Check for running browser processes, same order as before.
+    // CPU FIX: was one `powershell Get-Process` + one `wmic` spawn per browser
+    // (up to 10 spawns, 5–8 s CPU per detection while a UWP app is focused).
+    // Now one cached `tasklist` snapshot answers all of them.
     const browsers = ['msedge', 'chrome', 'firefox', 'brave', 'opera'];
-
-    if (DEBUG) console.log('[WINDOWS-APP] Checking for running browsers (Strategy 2)...');
-    for (const browser of browsers) {
-      const cmd = `powershell.exe -NoProfile -NonInteractive -NoLogo -ExecutionPolicy Bypass -Command "Get-Process ${browser} -ErrorAction SilentlyContinue | Select-Object -First 1 ProcessName"`;
-      const result = await execCommand(cmd, 800);
-      if (result && result.includes(browser)) {
-        if (DEBUG) console.log('[WINDOWS-APP] Found running browser:', browser);
-        return browser;
-      }
-    }
-
-    // Strategy 3: Try using wmic (Windows Management Instrumentation) - more reliable on ARM64
-    if (DEBUG) console.log('[WINDOWS-APP] Trying wmic method (Strategy 3)...');
-    for (const browser of browsers) {
-      const cmd = `wmic process where "name='${browser}.exe'" get ProcessId /format:list`;
-      const result = await execCommand(cmd, 800);
-      if (result && result.includes('ProcessId=')) {
-        if (DEBUG) console.log('[WINDOWS-APP] Found browser via wmic:', browser);
-        return browser;
+    const running = await getRunningImageNames();
+    if (running) {
+      for (const browser of browsers) {
+        if (running.has(`${browser}.exe`)) {
+          if (DEBUG) console.log('[WINDOWS-APP] Found running browser:', browser);
+          return browser;
+        }
       }
     }
 
@@ -598,7 +640,7 @@ async function detectActiveApp() {
 async function doActualDetection() {
 // PERFORMANCE FIX 3: Skip broken active-win after 3 failures
   // PRIORITY 1: Try active-win (native Windows API - works in VMs)
-  if (activeWin && !activeWinBroken) {
+  if (activeWin && !activeWinBroken && Date.now() >= activeWinDisabledUntil) {
     try {
       if (DEBUG) console.log('[WINDOWS-APP] Using active-win (native Windows API) as PRIMARY method');
 
@@ -651,16 +693,16 @@ if (result && result.owner && result.owner.name) {
       // Track failures to disable broken active-win
       activeWinFailCount++;
       if (activeWinFailCount >= 3) {
-        console.log('⚠️ [WINDOWS-APP] active-win failed 3 times, disabling to improve performance');
-        activeWinBroken = true;
+        console.log('⚠️ [WINDOWS-APP] active-win failed 3 times, pausing it for 5 min to improve performance');
+        pauseActiveWin();
       }
       if (DEBUG) console.log('[WINDOWS-APP] active-win returned null or incomplete data, failCount:', activeWinFailCount);
     } catch (error) {
       // Bug fix: Also increment fail count on exceptions, not just null results
       activeWinFailCount++;
       if (activeWinFailCount >= 3) {
-        console.log('⚠️ [WINDOWS-APP] active-win failed 3 times (exception), disabling to improve performance');
-        activeWinBroken = true;
+        console.log('⚠️ [WINDOWS-APP] active-win failed 3 times (exception), pausing it for 5 min to improve performance');
+        pauseActiveWin();
       }
       if (DEBUG) console.warn('[WINDOWS-APP] active-win failed:', error.message, 'failCount:', activeWinFailCount);
     }
@@ -914,5 +956,25 @@ async function getAllDesktopApplications() {
 module.exports = {
   getWindowsActiveApplication,
   detectActiveApp,
-  getAllDesktopApplications // New function for getting all windows
+  getAllDesktopApplications, // New function for getting all windows
+  // Test hooks
+  _internals: {
+    unwrapApplicationFrameHost,
+    parseTasklistImageNames,
+    ACTIVE_WIN_COOLDOWN_MS,
+    clearDetectionCache() {
+      detectionCache.result = null;
+      detectionCache.timestamp = 0;
+      detectionCache.lastExternalApp = null;
+    },
+    resetForTests() {
+      activeWinFailCount = 0;
+      activeWinDisabledUntil = 0;
+      runningImagesCache = { at: 0, names: null };
+      runningImagesPending = null;
+      detectionCache.result = null;
+      detectionCache.timestamp = 0;
+      detectionCache.pending = null;
+    },
+  },
 };

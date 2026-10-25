@@ -16,14 +16,36 @@
 
 const DEFAULT_WORK_TIMEZONE = 'America/Los_Angeles';
 
+// Validation builds an Intl formatter (slow); it was rebuilt on every
+// stats / work-day IPC. Zones don't change validity, so remember the answer.
+const _tzValidity = new Map();
+
 function isValidIanaTimezone(tz) {
   if (!tz || typeof tz !== 'string') return false;
+  const key = tz.trim();
+  const known = _tzValidity.get(key);
+  if (known !== undefined) return known;
+  let ok;
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz.trim() }).format(new Date());
-    return true;
+    new Intl.DateTimeFormat('en-US', { timeZone: key }).format(new Date());
+    ok = true;
   } catch {
-    return false;
+    ok = false;
   }
+  if (_tzValidity.size < 100) _tzValidity.set(key, ok);
+  return ok;
+}
+
+/** Cached Intl formatter per (time zone + options) — toLocale*String builds a new one per call. */
+const _fmtCache = new Map();
+function cachedFormatter(tz, options) {
+  const key = `${tz}|${JSON.stringify(options)}`;
+  let fmt = _fmtCache.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, ...options });
+    if (_fmtCache.size < 200) _fmtCache.set(key, fmt);
+  }
+  return fmt;
 }
 
 function resolveWorkTimezone(config = global?.config) {
@@ -51,23 +73,34 @@ function initWorkTimezone(config = global?.config) {
   return _tz;
 }
 
+// Building an Intl.DateTimeFormat is slow (~0.1ms). The monthly report calls
+// this thousands of times per refresh, which froze the main thread for seconds.
+const _tzFormatters = new Map();
+
+function getTzFormatter(tz) {
+  let dtf = _tzFormatters.get(tz);
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    });
+    _tzFormatters.set(tz, dtf);
+  }
+  return dtf;
+}
+
 function getWorkTzParts(date = new Date(), tz = _tz) {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
-  return Object.fromEntries(
-    dtf
-      .formatToParts(date)
-      .filter((p) => p.type !== 'literal')
-      .map((p) => [p.type, parseInt(p.value, 10)]),
-  );
+  const parts = {};
+  for (const p of getTzFormatter(tz).formatToParts(date)) {
+    if (p.type !== 'literal') parts[p.type] = parseInt(p.value, 10);
+  }
+  return parts;
 }
 
 function getWorkTimezoneOffsetMs(date, tz = _tz) {
@@ -146,13 +179,12 @@ function formatWorkClock(value, tz = _tz) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const zone = isValidIanaTimezone(tz) ? String(tz).trim() : _tz;
-  return date.toLocaleTimeString('en-US', {
-    timeZone: zone,
+  return cachedFormatter(zone, {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  });
+  }).format(date);
 }
 
 /** Wall-clock time in work TZ, e.g. "17:46" (24h) or "5:46 PM". */
@@ -160,12 +192,11 @@ function formatWorkTime(value, { hour12 = false } = {}, tz = _tz) {
   if (value == null || value === '') return '';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-US', {
-    timeZone: tz,
+  return cachedFormatter(tz, {
     hour: '2-digit',
     minute: '2-digit',
     hour12,
-  });
+  }).format(date);
 }
 
 /** Short date in work TZ, e.g. "Jul 16". */
@@ -173,11 +204,10 @@ function formatWorkDateShort(value, tz = _tz) {
   if (value == null || value === '') return '';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', {
-    timeZone: tz,
+  return cachedFormatter(tz, {
     month: 'short',
     day: 'numeric',
-  });
+  }).format(date);
 }
 
 function nextWorkDayMidnight(date = new Date(), tz = _tz) {

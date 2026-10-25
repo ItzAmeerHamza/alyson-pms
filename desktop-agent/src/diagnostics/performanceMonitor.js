@@ -377,10 +377,15 @@ class PerformanceMonitor {
     const mainCpuPercent =
       Math.round(((diff.user + diff.system) / (elapsedMs * 1000)) * 1000) / 10;
 
-    // getAppMetrics() walks all Electron processes — skip unless explicitly enabled.
+    // Every Electron process (window, GPU, utility…), not just this one. A Mac
+    // that froze at 50 GB showed a normal main-process RSS right up to the
+    // freeze, so the growth was in a process this line never measured. One
+    // getAppMetrics() call per 5-minute sample is cheap.
     let electronCpuPercent = null;
     let processCount = null;
-    if (process.env.PERF_CPU_APP_METRICS === '1') {
+    let processMemMb = null;
+    let totalMemMb = null;
+    if (process.env.PERF_CPU_APP_METRICS !== '0') {
       try {
         const { app } = require('electron');
         if (app && typeof app.getAppMetrics === 'function') {
@@ -389,6 +394,15 @@ class PerformanceMonitor {
           electronCpuPercent = Math.round(
             metrics.reduce((sum, m) => sum + (Number(m?.cpu?.percentCPUUsage) || 0), 0) * 10,
           ) / 10;
+          processMemMb = {};
+          let totalKb = 0;
+          for (const m of metrics) {
+            const kb = Number(m?.memory?.workingSetSize) || 0;
+            totalKb += kb;
+            const key = String(m?.type || 'Unknown');
+            processMemMb[key] = Math.round(((processMemMb[key] || 0) * 1024 + kb) / 1024);
+          }
+          totalMemMb = Math.round(totalKb / 1024);
         }
       } catch (_) { /* non-Electron / early boot */ }
     }
@@ -400,6 +414,8 @@ class PerformanceMonitor {
       mainCpuPercent,
       electronCpuPercent,
       processCount,
+      processMemMb,
+      totalMemMb,
       // `value` used by calculateStats() in performance reports
       value: mainCpuPercent,
       userMs: Math.round(diff.user / 1000),
@@ -443,6 +459,10 @@ class PerformanceMonitor {
           intervalSec: Math.round(s.intervalMs / 1000),
           rssMb: s.rssMb,
           heapMb: s.heapMb,
+          externalMb: s.externalMb,
+          arrayBuffersMb: s.arrayBuffersMb,
+          totalMemMb: s.totalMemMb,
+          processMemMb: s.processMemMb,
           isTracking: s.isTracking,
           logFile: this.cpuTextFile,
         },
@@ -573,12 +593,61 @@ class PerformanceMonitor {
     console.log(
       `[PERF] CPU usage logging every ${Math.round(intervalMs / 1000)}s → ${this.cpuTextFile}`,
     );
+
+    this.startHighMemoryWatch();
+  }
+
+  /**
+   * Every 30 s, a cheap look at total memory across all Tavilo processes. Logs
+   * only when it is over the limit, and flushes straight away so the line
+   * survives a freeze. The 5-minute sample above is too slow to catch a spike
+   * that takes a Mac down in a few minutes.
+   */
+  startHighMemoryWatch() {
+    if (this._memWatchInterval || process.env.PERF_MEM_WATCH === '0') return;
+    const limitMb = Math.max(512, Number(process.env.PERF_MEM_WARN_MB) || 2048);
+    let lastWarnAt = 0;
+    this._memWatchInterval = setInterval(() => {
+      try {
+        const { app } = require('electron');
+        if (!app || typeof app.getAppMetrics !== 'function') return;
+        const metrics = app.getAppMetrics() || [];
+        let totalKb = 0;
+        const byProcess = [];
+        for (const m of metrics) {
+          const kb = Number(m?.memory?.workingSetSize) || 0;
+          totalKb += kb;
+          byProcess.push({ type: m?.type, pid: m?.pid, mb: Math.round(kb / 1024) });
+        }
+        const totalMb = Math.round(totalKb / 1024);
+        const now = Date.now();
+        if (totalMb < limitMb || now - lastWarnAt < 5 * 60_000) return;
+        lastWarnAt = now;
+        const mem = process.memoryUsage();
+        console.warn(
+          `[PERF] HIGH MEMORY ${totalMb}MB across Tavilo processes ${JSON.stringify({
+            limitMb,
+            byProcess,
+            mainHeapMb: Math.round(mem.heapUsed / 1048576),
+            mainExternalMb: Math.round((mem.external || 0) / 1048576),
+            mainArrayBuffersMb: Math.round((mem.arrayBuffers || 0) / 1048576),
+            isTracking: !!global.isTracking,
+          })}`,
+        );
+        try { require('../modules/utils/logger').logFile.flush(); } catch (_) { /* ignore */ }
+      } catch (_) { /* diagnostics only */ }
+    }, 30_000);
+    if (typeof this._memWatchInterval.unref === 'function') this._memWatchInterval.unref();
   }
 
   stopCpuUsageLogging() {
     if (this._cpuLogInterval) {
       clearInterval(this._cpuLogInterval);
       this._cpuLogInterval = null;
+    }
+    if (this._memWatchInterval) {
+      clearInterval(this._memWatchInterval);
+      this._memWatchInterval = null;
     }
   }
 

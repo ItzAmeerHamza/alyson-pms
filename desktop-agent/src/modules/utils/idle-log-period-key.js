@@ -87,10 +87,13 @@ function enqueueIdleLogOnce(queue, idleData) {
         ...incoming,
         queuedAt: queue.idleLogs[idx].queuedAt || incoming.queuedAt,
       };
+      try { require('./idle-log-queue-store').scheduleSave(); } catch (_) { /* optional */ }
     }
     return false;
   }
   queue.idleLogs.push(incoming);
+  // Keep unsent idle logs on disk (cheap: only on change, bundled, async).
+  try { require('./idle-log-queue-store').scheduleSave(); } catch (_) { /* optional */ }
   return true;
 }
 

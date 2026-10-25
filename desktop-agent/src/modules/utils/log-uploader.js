@@ -22,6 +22,25 @@ let periodicTimer = null;
 let lastSeenDate = todayDateStr();
 const uploadedDates = new Set();
 let lastTodayUploadAt = 0;
+// Size of each date's file at its last upload — skip re-sending an unchanged file.
+const uploadedSizes = new Map();
+// Never pull a runaway file into memory (one day once reached 4 GB).
+const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+// Bound the S3 PUT so a half-open socket (e.g. after wake) can't pin up to 80 MB forever.
+const PUT_TIMEOUT_MS = 5 * 60 * 1000;
+// Serialize uploads: periodic / day-roll / shutdown runs never overlap (each holds
+// a full copy of the file in memory). Periodic runs skip while one is pending;
+// forced runs (day roll, startup catch-up, shutdown) queue behind it.
+let uploadChain = null;
+
+function fileSize(p) {
+  try {
+    const fs = require('fs');
+    return p && fs.existsSync(p) ? fs.statSync(p).size : 0;
+  } catch (_) {
+    return 0;
+  }
+}
 
 function todayDateStr() {
   return new Date().toISOString().slice(0, 10);
@@ -33,20 +52,46 @@ function yesterdayDateStr(fromDateStr) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Prefer JSONL (Athena); fall back to legacy .log text if JSONL missing. */
-function readLogFile(dateStr) {
+/**
+ * Cheap stat-only equivalent of `readLogFile(dateStr) !== null` (no file read).
+ */
+function hasUploadableLogFile(dateStr) {
   try {
     const fs = require('fs');
     const jsonlPath = typeof logFile.jsonlPathFor === 'function' ? logFile.jsonlPathFor(dateStr) : null;
     if (jsonlPath && fs.existsSync(jsonlPath)) {
-      const content = fs.readFileSync(jsonlPath, 'utf8');
+      const size = fileSize(jsonlPath);
+      if (size > MAX_UPLOAD_BYTES) return false;
+      if (size > 0) return true;
+    }
+    const filePath = logFile.pathFor(dateStr);
+    if (!filePath || !fs.existsSync(filePath)) return false;
+    const size = fileSize(filePath);
+    return size > 0 && size <= MAX_UPLOAD_BYTES;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** Prefer JSONL (Athena); fall back to legacy .log text if JSONL missing. */
+async function readLogFile(dateStr) {
+  try {
+    const fs = require('fs');
+    const jsonlPath = typeof logFile.jsonlPathFor === 'function' ? logFile.jsonlPathFor(dateStr) : null;
+    if (jsonlPath && fs.existsSync(jsonlPath)) {
+      if (fileSize(jsonlPath) > MAX_UPLOAD_BYTES) {
+        log.warn({ step: 'TOO_LARGE', ctx: { date: dateStr, bytes: fileSize(jsonlPath) } });
+        return null;
+      }
+      const content = await fs.promises.readFile(jsonlPath, 'utf8');
       if (content && content.length > 0) {
         return { content, contentType: 'application/x-ndjson', format: 'jsonl' };
       }
     }
     const filePath = logFile.pathFor(dateStr);
     if (!filePath || !fs.existsSync(filePath)) return null;
-    const content = fs.readFileSync(filePath, 'utf8');
+    if (fileSize(filePath) > MAX_UPLOAD_BYTES) return null;
+    const content = await fs.promises.readFile(filePath, 'utf8');
     if (!content || content.length === 0) return null;
     // Wrap legacy free-text as a single JSONL message so Athena still ingests it.
     const wrapped =
@@ -65,7 +110,19 @@ function readLogFile(dateStr) {
 }
 
 /** Upload the log file for a given date. Returns true on success. */
-async function uploadLogFile(dateStr, { force = false } = {}) {
+function uploadLogFile(dateStr, opts = {}) {
+  const force = !!(opts && opts.force);
+  if (uploadChain && !force) return Promise.resolve(false); // periodic: one already running
+  const prev = uploadChain || Promise.resolve();
+  const run = prev.catch(() => {}).then(() => uploadLogFileNow(dateStr, { force }));
+  const tracked = run.finally(() => {
+    if (uploadChain === tracked) uploadChain = null;
+  });
+  uploadChain = tracked;
+  return run;
+}
+
+async function uploadLogFileNow(dateStr, { force = false } = {}) {
   try {
     const backendTimeLogs = require('./backend-time-logs');
     if (!backendTimeLogs.isBackendTimeLogsEnabled()) return false;
@@ -83,7 +140,9 @@ async function uploadLogFile(dateStr, { force = false } = {}) {
     }
 
     logFile.flush();
-    const payload = readLogFile(dateStr);
+    const sizeNow = fileSize(logFile.jsonlPathFor?.(dateStr)) || fileSize(logFile.pathFor(dateStr));
+    if (sizeNow > 0 && uploadedSizes.get(dateStr) === sizeNow) return false; // nothing new
+    const payload = await readLogFile(dateStr);
     if (!payload) return false;
 
     const { upload_url: uploadUrl, s3_key: s3Key } = await backendTimeLogs.getLogUploadUrl({
@@ -95,16 +154,24 @@ async function uploadLogFile(dateStr, { force = false } = {}) {
     });
     if (!uploadUrl) return false;
 
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': payload.contentType || 'application/x-ndjson' },
-      body: payload.content,
-    });
-    if (!response.ok) {
-      throw new Error(`S3 PUT failed (${response.status})`);
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const abortTimer = controller ? setTimeout(() => controller.abort(), PUT_TIMEOUT_MS) : null;
+    try {
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': payload.contentType || 'application/x-ndjson' },
+        body: payload.content,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!response.ok) {
+        throw new Error(`S3 PUT failed (${response.status})`);
+      }
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
     }
 
     uploadedDates.add(dateStr);
+    uploadedSizes.set(dateStr, sizeNow);
     if (dateStr === todayDateStr()) lastTodayUploadAt = Date.now();
     log.info({
       step: 'UPLOADED',
@@ -152,7 +219,7 @@ function startLogUploadSchedule() {
 
   // Catch up on a file from a previous run that never got uploaded.
   const missed = yesterdayDateStr(lastSeenDate);
-  if (readLogFile(missed)) {
+  if (hasUploadableLogFile(missed)) {
     void uploadLogFile(missed, { force: true });
   }
 

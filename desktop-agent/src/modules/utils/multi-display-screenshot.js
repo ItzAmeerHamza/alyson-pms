@@ -16,6 +16,11 @@ const screenshot = require('screenshot-desktop');
 
 const MAX_STITCH_EDGE_PX = 3840;
 const MAX_PANE_EDGE_PX = 1600;
+// screenshot-desktop shells out (system_profiler / screencapture). Bound them so a
+// wedged child can't hang the capture pipeline; on timeout the existing
+// error/fallback path runs.
+const LIST_DISPLAYS_TIMEOUT_MS = 15000;
+const PRIMARY_CAPTURE_TIMEOUT_MS = 20000;
 
 function withTimeout(promise, ms, label) {
   let timer;
@@ -35,7 +40,7 @@ async function captureAllDisplaysStitched() {
   // Electron already knows the display count; PowerShell is the capture path.
   if (process.platform !== 'win32') {
     try {
-      listed = await screenshot.listDisplays();
+      listed = await withTimeout(screenshot.listDisplays(), LIST_DISPLAYS_TIMEOUT_MS, 'listDisplays');
     } catch (err) {
       console.warn('[MULTI-DISPLAY] listDisplays failed:', err.message);
     }
@@ -539,7 +544,11 @@ function uniqueCaptureBuffers(captures) {
 
 async function capturePrimaryOnly(method) {
   try {
-    const buffer = await screenshot({ format: 'png' });
+    const buffer = await withTimeout(
+      screenshot({ format: 'png' }),
+      PRIMARY_CAPTURE_TIMEOUT_MS,
+      'screenshot-desktop primary capture',
+    );
     if (!buffer || buffer.length === 0) {
       return { success: false, method, error: 'Empty buffer returned' };
     }
@@ -589,7 +598,7 @@ async function stitchCaptures(captures) {
 async function stitchCapturesWithSharp(captures) {
   let sharp;
   try {
-    sharp = require('sharp');
+    sharp = require('./prepare-screenshot-upload').loadConfiguredSharp();
   } catch (err) {
     throw new Error(`sharp unavailable: ${err.message}`);
   }
@@ -963,7 +972,8 @@ async function captureViaDesktopCapturerStitched(thumbnailSize) {
 
   let withImages = [];
   let usedSize = preferred;
-  for (const size of sizesToTry) {
+  for (let attempt = 0; attempt < sizesToTry.length; attempt++) {
+    const size = sizesToTry[attempt];
     usedSize = size;
     const sources = await withTimeout(
       desktopCapturer.getSources({
@@ -979,6 +989,13 @@ async function captureViaDesktopCapturerStitched(thumbnailSize) {
       `[MULTI-DISPLAY] desktopCapturer sources=${(sources || []).length}, withImages=${withImages.length}, size=${size.width}x${size.height}`,
     );
     if (withImages.length >= 2) break;
+    // The OS reported fewer than 2 screens (e.g. external monitor asleep): a
+    // smaller thumbnail can't add a screen, and each call re-captures every
+    // display. Skip the intermediate size and go straight to the final one, so
+    // the single-screen result is the same image the full ladder produced.
+    if ((sources || []).length < 2 && attempt < sizesToTry.length - 2) {
+      attempt = sizesToTry.length - 2;
+    }
   }
 
   if (withImages.length === 0) {

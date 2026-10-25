@@ -26,11 +26,31 @@ function todayDateStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Disk limits. One runaway loop once wrote 7 GB in a day, and old days were
+ * never deleted. Keep a week (the uploader ships yesterday's file on day
+ * roll) and stop writing routine lines once a day's file gets big.
+ */
+const LOG_RETENTION_DAYS = 7;
+const MAX_DAILY_BYTES = 40 * 1024 * 1024; // per file (.log and .jsonl each)
+const MAX_DAILY_ERROR_BYTES = 60 * 1024 * 1024; // errors may go a bit past the cap
+
+/** A closed terminal / pipe makes console writes fail; never treat that as an error to log. */
+function isBrokenStreamError(err) {
+  const code = err && err.code;
+  return code === 'EPIPE' || code === 'EIO' || code === 'ERR_STREAM_DESTROYED' || code === 'EBADF';
+}
+
 const fileSink = {
   dir: resolveLogDir(),
   buffer: [],
   jsonlBuffer: [],
   flushTimer: null,
+  // Bytes written per file today, so we can stop at MAX_DAILY_BYTES.
+  sizeDate: null,
+  sizes: { log: 0, jsonl: 0 },
+  capNoted: { log: false, jsonl: false },
+  lastPruneDate: null,
   ensureDir() {
     if (!this.dir) return false;
     try {
@@ -51,18 +71,73 @@ const fileSink = {
     const path = require('path');
     return path.join(this.dir, `${dateStr}.jsonl`);
   },
-  append(line) {
+  /** Start-of-day bookkeeping: pick up existing file sizes and prune old days. */
+  rollDay() {
+    const today = todayDateStr();
+    if (this.sizeDate === today) return;
+    this.sizeDate = today;
+    this.capNoted = { log: false, jsonl: false };
+    const fs = require('fs');
+    const statSize = (p) => {
+      try { return p && fs.existsSync(p) ? fs.statSync(p).size : 0; } catch (_) { return 0; }
+    };
+    this.sizes = {
+      log: statSize(this.currentFilePath(today)),
+      jsonl: statSize(this.currentJsonlPath(today)),
+    };
+    if (this.lastPruneDate !== today) {
+      this.lastPruneDate = today;
+      this.pruneOldLogs();
+    }
+  },
+  /** Delete .log / .jsonl files older than LOG_RETENTION_DAYS. */
+  pruneOldLogs() {
     if (!this.dir) return;
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const cutoff = new Date();
+      cutoff.setUTCDate(cutoff.getUTCDate() - LOG_RETENTION_DAYS);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      for (const name of fs.readdirSync(this.dir)) {
+        const m = /^(\d{4}-\d{2}-\d{2})\.(log|jsonl)$/.exec(name);
+        if (m && m[1] < cutoffStr) {
+          try { fs.unlinkSync(path.join(this.dir, name)); } catch (_) { /* in use / gone */ }
+        }
+      }
+    } catch (_) { /* best-effort only */ }
+  },
+  /** true if a line of this kind may still be written today. */
+  hasRoom(kind, bytes, isError) {
+    this.rollDay();
+    const limit = isError ? MAX_DAILY_ERROR_BYTES : MAX_DAILY_BYTES;
+    if (this.sizes[kind] + bytes <= limit) {
+      this.sizes[kind] += bytes;
+      return true;
+    }
+    if (!this.capNoted[kind]) {
+      this.capNoted[kind] = true;
+      const note = `${new Date().toISOString()} [WARN] [LOG] Daily log size limit reached — routine lines skipped until tomorrow`;
+      if (kind === 'log') this.buffer.push(note);
+      else this.jsonlBuffer.push(JSON.stringify({ ts: new Date().toISOString(), level: 'warn', message: note, category: 'log_cap' }));
+    }
+    return false;
+  },
+  append(line, isError = false) {
+    if (!this.dir) return;
+    if (!this.hasRoom('log', line.length + 1, isError)) return;
     this.buffer.push(line);
     if (!this.flushTimer) {
       this.flushTimer = setTimeout(() => this.flush(), 2000);
       if (this.flushTimer.unref) this.flushTimer.unref();
     }
   },
-  appendJsonl(obj) {
+  appendJsonl(obj, isError = false) {
     if (!this.dir || !obj) return;
     try {
-      this.jsonlBuffer.push(JSON.stringify(obj));
+      const line = JSON.stringify(obj);
+      if (!this.hasRoom('jsonl', line.length + 1, isError)) return;
+      this.jsonlBuffer.push(line);
     } catch (_) {
       return;
     }
@@ -150,18 +225,38 @@ function stringifyConsoleArgs(args) {
     .join(' ');
 }
 
+// Set once stdout/stderr is gone (terminal closed, app launched without one).
+// Before this, a failed console write threw, the crash handler logged it to
+// the console, that write failed too… looping at full CPU for days.
+let consoleOutputDisabled = false;
+
 function installConsoleFileTee() {
   if (console.__alysonFileTeeInstalled) return;
   console.__alysonFileTeeInstalled = true;
 
+  for (const stream of [process.stdout, process.stderr]) {
+    try {
+      stream?.on?.('error', (err) => {
+        if (isBrokenStreamError(err)) consoleOutputDisabled = true;
+      });
+    } catch (_) { /* ignore */ }
+  }
+
   ['log', 'info', 'warn', 'error', 'debug'].forEach((method) => {
     const original = console[method].bind(console);
     const level = method === 'log' ? 'info' : method;
+    const isError = level === 'error' || level === 'warn';
     console[method] = (...args) => {
-      original(...args);
+      if (!consoleOutputDisabled) {
+        try {
+          original(...args);
+        } catch (err) {
+          if (isBrokenStreamError(err)) consoleOutputDisabled = true;
+        }
+      }
       try {
         const message = stringifyConsoleArgs(args);
-        fileSink.append(`${new Date().toISOString()} [${level.toUpperCase()}] ${message}`);
+        fileSink.append(`${new Date().toISOString()} [${level.toUpperCase()}] ${message}`, isError);
         // Structured JSONL for S3 / Athena — identity fields when available.
         let userId = null;
         let deviceId = null;
@@ -189,7 +284,7 @@ function installConsoleFileTee() {
           workspace_id: workspaceId != null ? String(workspaceId) : null,
           agent_version: agentVersion,
           category: 'console',
-        });
+        }, isError);
       } catch (_) { /* best-effort only */ }
     };
   });
@@ -448,6 +543,9 @@ const db = {
 };
 
 module.exports = {
+  isBrokenStreamError,
+  MAX_DAILY_BYTES,
+  LOG_RETENTION_DAYS,
   Logger,
   logger,
   db,
@@ -460,6 +558,8 @@ module.exports = {
     pathFor: (dateStr) => fileSink.currentFilePath(dateStr),
     jsonlPathFor: (dateStr) => fileSink.currentJsonlPath(dateStr),
     flush: () => fileSink.flush(),
+    pruneOldLogs: () => fileSink.pruneOldLogs(),
+    _sink: fileSink,
   },
 };
 

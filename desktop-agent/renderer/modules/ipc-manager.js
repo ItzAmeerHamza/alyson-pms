@@ -413,10 +413,18 @@ class IPCManager {
         });
       }
       // Force-refresh the monthly report so the stopped session appears immediately
+      // (deferred to window-show while hidden in the tray — same fresh data then)
       if (this.uiManager && typeof this.uiManager.loadMonthlyReport === 'function') {
-        this.uiManager.loadMonthlyReport(true, { silent: true }).catch(err => {
-          console.warn('⚠️ [IPC] Failed to refresh monthly report after session update:', err);
-        });
+        const refreshMonth = () => {
+          this.uiManager.loadMonthlyReport(true, { silent: true }).catch(err => {
+            console.warn('⚠️ [IPC] Failed to refresh monthly report after session update:', err);
+          });
+        };
+        if (typeof window !== 'undefined' && typeof window.runWhenRendererVisible === 'function') {
+          window.runWhenRendererVisible('monthly-report-refresh', refreshMonth);
+        } else {
+          refreshMonth();
+        }
       }
     });
     
@@ -1710,10 +1718,17 @@ class IPCManager {
         console.log(`🧹 [IPC] Trimmed APP list to 10 most recent entries`);
       }
       
-      // Reinitialize Lucide icons for the new element
+      // Reinitialize Lucide icons for the new element (while the window is
+      // hidden this waits until it is shown — nothing to paint until then)
       if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-        console.log('🎨 [IPC] Lucide icons reinitialized for new APP item');
+        const renderIcons = () => {
+          if (typeof lucide !== 'undefined') lucide.createIcons();
+        };
+        if (typeof window !== 'undefined' && typeof window.runWhenRendererVisible === 'function') {
+          window.runWhenRendererVisible('detection-list-icons', renderIcons);
+        } else {
+          renderIcons();
+        }
       }
       
       console.log(`✅ [IPC] APP item added to container: ${displayTitle}`);
@@ -1726,15 +1741,15 @@ class IPCManager {
   // Add URL to real-time detection list
   addUrlToDetectionList(urlData) {
     try {
-      console.log('🌐 [IPC] Adding URL to detection list:', urlData);
-      
       // Find the URL detection list container
       const urlListContainer = document.getElementById('urlDetectionList');
       
       if (!urlListContainer) {
-        console.error('❌ [IPC] Could not find URL detection list container (urlDetectionList)');
+        // This list is not part of the current UI — nothing to render. (Was a
+        // console.error on every URL change, shipped to disk/S3 logs.)
         return;
       }
+      console.log('🌐 [IPC] Adding URL to detection list:', urlData);
       
       // ENHANCED: Check for duplicate URLs and implement visit counter
       const urlTitle = urlData.domain || urlData.url || 'Unknown URL';

@@ -4,6 +4,8 @@ const path = require('path');
 const {
   BUILDER_ARCH,
   checkMacInputHelper,
+  checkPatchedUiohook,
+  ensurePatchedUiohook,
   ensureSharpPlatformPackages,
   isForOtherTarget,
   prepareMacAppNatives,
@@ -225,6 +227,50 @@ describe('checkMacInputHelper', () => {
       expect(checkMacInputHelper({ appPath, arch, readArchs })).toBe(
         path.join(appPath, 'Contents/Resources/helpers/macos-input-helper'),
       );
+    }
+  });
+});
+
+describe('patched uiohook (no per-key main-thread wait)', () => {
+  const vendor = () => {
+    const vendorDir = path.join(tmp, 'vendor');
+    writeFile(vendorDir, 'darwin-arm64/node.napi.node', 'patched-arm64');
+    writeFile(vendorDir, 'darwin-x64/node.napi.node', 'patched-x64');
+    return vendorDir;
+  };
+
+  it('replaces the stock prebuilds and removes a shadowing build/', () => {
+    const vendorDir = vendor();
+    const nodeModules = path.join(tmp, 'node_modules');
+    writeFile(nodeModules, 'uiohook-napi/prebuilds/darwin-arm64/node.napi.node', 'stock');
+    writeFile(nodeModules, 'uiohook-napi/prebuilds/darwin-x64/node.napi.node', 'stock');
+    writeFile(nodeModules, 'uiohook-napi/build/Release/uiohook_napi.node', 'stock');
+
+    ensurePatchedUiohook({ nodeModules, vendorDir });
+
+    const read = (rel) => fs.readFileSync(path.join(nodeModules, 'uiohook-napi', rel), 'utf8');
+    expect(read('prebuilds/darwin-arm64/node.napi.node')).toBe('patched-arm64');
+    expect(read('prebuilds/darwin-x64/node.napi.node')).toBe('patched-x64');
+    expect(fs.existsSync(path.join(nodeModules, 'uiohook-napi', 'build'))).toBe(false);
+  });
+
+  it('fails the build when the packed app has the stock binary', () => {
+    const vendorDir = vendor();
+    const { appPath } = packedApp({ 'uiohook-napi/prebuilds/darwin-x64/node.napi.node': 'stock' });
+    expect(() => checkPatchedUiohook({ appPath, arch: 'x64', vendorDir })).toThrow('is the stock build');
+  });
+
+  it('accepts the packed app with the patched binary', () => {
+    const vendorDir = vendor();
+    const { appPath } = packedApp({ 'uiohook-napi/prebuilds/darwin-arm64/node.napi.node': 'patched-arm64' });
+    expect(() => checkPatchedUiohook({ appPath, arch: 'arm64', vendorDir })).not.toThrow();
+  });
+
+  it('ships real Mach-O binaries for both arches', () => {
+    const real = path.join(__dirname, '..', '..', 'vendor', 'uiohook-napi-mac');
+    for (const arch of ['arm64', 'x64']) {
+      const head = fs.readFileSync(path.join(real, `darwin-${arch}`, 'node.napi.node')).subarray(0, 4);
+      expect(head.readUInt32LE(0)).toBe(0xfeedfacf);
     }
   });
 });

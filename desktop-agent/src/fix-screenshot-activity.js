@@ -8,7 +8,7 @@ let lastInputStats = { mouseClicks: 0, keystrokes: 0, mouseMovements: 0 };
 
 // Function to sync activity data for screenshots
 function syncActivityDataForScreenshots() {
-  console.log('🔧 [FIX-ACTIVITY] Syncing activity data for screenshots...');
+  // (routine, every 10–30s) console.log('🔧 [FIX-ACTIVITY] Syncing activity data for screenshots...');
 try {
     // Create global betweenScreenshotsActivity if it doesn't exist
     if (!global.betweenScreenshotsActivity) {
@@ -31,7 +31,7 @@ try {
       totalClicks = activity.clicks || 0;
       totalKeys = activity.keys || 0;
       totalMoves = activity.moves || 0;
-      console.log('✅ [FIX-ACTIVITY] Got data from enhancedActivityManager:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
+      // (routine, every 10–30s) console.log('✅ [FIX-ACTIVITY] Got data from enhancedActivityManager:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
     }
     
     // Source 2: Display Activity Stats
@@ -39,7 +39,7 @@ try {
       totalClicks = global.displayActivityStats.clicks || totalClicks;
       totalKeys = global.displayActivityStats.keys || totalKeys;
       totalMoves = global.displayActivityStats.moves || totalMoves;
-      console.log('✅ [FIX-ACTIVITY] Got data from displayActivityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
+      // (routine, every 10–30s) console.log('✅ [FIX-ACTIVITY] Got data from displayActivityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
     }
     
     // Source 3: Activity Stats
@@ -47,7 +47,7 @@ try {
       totalClicks = global.activityStats.mouseClicks || totalClicks;
       totalKeys = global.activityStats.keystrokes || totalKeys;
       totalMoves = global.activityStats.mouseMovements || totalMoves;
-      console.log('✅ [FIX-ACTIVITY] Got data from activityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
+      // (routine, every 10–30s) console.log('✅ [FIX-ACTIVITY] Got data from activityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
     }
     
     // Source 4: Period Activity Stats
@@ -55,7 +55,7 @@ try {
       totalClicks = global.periodActivityStats.mouseClicks || totalClicks;
       totalKeys = global.periodActivityStats.keystrokes || totalKeys;
       totalMoves = global.periodActivityStats.mouseMovements || totalMoves;
-      console.log('✅ [FIX-ACTIVITY] Got data from periodActivityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
+      // (routine, every 10–30s) console.log('✅ [FIX-ACTIVITY] Got data from periodActivityStats:', { clicks: totalClicks, keys: totalKeys, moves: totalMoves });
     }
     
     // Source 5: UnifiedInputManager stats (last resort) - using delta calculation
@@ -154,11 +154,9 @@ function registerActivitySyncIntervals() {
   
   // Create intervals with cleanup tracking
   // CRITICAL FIX: Only run when tracking is active
-  const activitySyncInterval = setInterval(() => {
-    if (!global.isTracking) return; // Skip when not tracking
-    syncActivityDataForScreenshots();
-  }, 30000); // Sync every 30 seconds
-  
+  // The 30s "activity sync" no longer changes any counters (see
+  // syncActivityDataForScreenshots) — it only wrote log lines, so it no
+  // longer runs on a timer. Call syncActivityData() by hand to debug.
   const trackingStateSyncInterval = setInterval(() => {
     if (!global.isTracking) return; // Skip when not tracking
     ensureTrackingStateSync();
@@ -168,16 +166,16 @@ function registerActivitySyncIntervals() {
   if (!global.activityFixIntervals) {
     global.activityFixIntervals = [];
   }
-  global.activityFixIntervals.push(activitySyncInterval, trackingStateSyncInterval);
+  global.activityFixIntervals.push(trackingStateSyncInterval);
   
-  console.log('✅ [FIX-ACTIVITY] Activity sync intervals registered (30s activity sync, 10s state sync)');
+  console.log('✅ [FIX-ACTIVITY] Tracking-state sync registered (10s)');
 }
 
 // Ensure enhanced activity manager has correct tracking state
 function ensureTrackingStateSync() {
   if (global.enhancedActivityManager && global.isTracking !== undefined) {
     global.enhancedActivityManager.setTrackingState(global.isTracking);
-    console.log(`🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: ${global.isTracking}`);
+    // (routine, every 10–30s) console.log(`🔄 [FIX-ACTIVITY] Synced tracking state to enhancedActivityManager: ${global.isTracking}`);
   }
 }
 

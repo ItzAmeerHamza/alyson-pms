@@ -1,0 +1,38 @@
+diff --git a/libuiohook/src/darwin/input_hook.c b/libuiohook/src/darwin/input_hook.c
+index e6cd6ce..f15ca92 100644
+--- a/libuiohook/src/darwin/input_hook.c
++++ b/libuiohook/src/darwin/input_hook.c
+@@ -70,6 +70,11 @@ TISKeycodeMessage *tis_keycode_message;
+ typedef void* dispatch_queue_t;
+ #endif
+ static struct dispatch_queue_s *dispatch_main_queue_s;
++// Tavilo patch: 0 = no key-typed lookup and no main-thread dispatch from the tap thread.
++#ifndef TAVILO_KEY_TYPED_ENABLED
++#define TAVILO_KEY_TYPED_ENABLED 0
++#endif
++
+ static void (*dispatch_sync_f_f)(dispatch_queue_t, void *, void (*function)(void *));
+ 
+ #if !defined(USE_CARBON_LEGACY) && defined(USE_APPLICATION_SERVICES)
+@@ -268,8 +273,9 @@ static inline void process_key_pressed(uint64_t timestamp, CGEventRef event_ref)
+     // Fire key pressed event.
+     dispatch_event(&event);
+ 
+-    // If the pressed event was not consumed...
+-    if (event.reserved ^ 0x01) {
++    // Tavilo: skip EVENT_KEY_TYPED. Its Unicode lookup blocks this tap thread on the
++    // app's main thread for every key press. We only count key presses.
++    if (TAVILO_KEY_TYPED_ENABLED && (event.reserved ^ 0x01)) {
+         tis_keycode_message->event = event_ref;
+         tis_keycode_message->length = 0;
+         bool is_runloop_main = CFEqual(event_loop, CFRunLoopGetMain());
+@@ -509,7 +515,8 @@ static inline void process_system_key(uint64_t timestamp, CGEventRef event_ref)
+         tis_event_message->subtype = 0;
+         tis_event_message->data1 = 0;
+ 
+-        if (dispatch_sync_f_f != NULL && dispatch_main_queue_s != NULL && !is_runloop_main) {
++        // Tavilo: never block on the main thread; fall through to CGEventCreateData parsing.
++        if (TAVILO_KEY_TYPED_ENABLED && dispatch_sync_f_f != NULL && dispatch_main_queue_s != NULL && !is_runloop_main) {
+             logger(LOG_LEVEL_DEBUG, "%s [%u]: Using dispatch_sync_f for system key events.\n",
+                     __FUNCTION__, __LINE__);
+ 

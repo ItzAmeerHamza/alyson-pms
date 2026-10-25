@@ -193,11 +193,12 @@ class ActivityMonitor {
 
       // Poll database for recent screenshots (reduced from 10s to 30s to lower IPC/DB pressure)
       this.pollInterval = setInterval(() => {
+        if (document.hidden) return; // window hidden — refreshed on show
         this.loadRecentScreenshots().catch(() => {});
       }, 30000);
 
       // Fallback: poll get-activity-stats (reduced from 5s to 15s - IPC activity-update handles real-time)
-      this.statsInterval = setInterval(async () => {
+      const pollStats = async () => {
         try {
           if (!this.ipcRenderer) return;
           // Prefer consolidated 'get-stats' which draws from global.displayActivityStats
@@ -228,7 +229,23 @@ class ActivityMonitor {
             this.renderLiveCounters(mappedLegacy);
           }
         } catch {}
+      };
+      this._pollStats = pollStats;
+      this.statsInterval = setInterval(() => {
+        if (document.hidden) return; // window hidden — refreshed on show
+        return pollStats();
       }, 15000);
+
+      // Hidden windows skip the polls above; catch up once when shown.
+      if (!this._visibilityHandler && typeof document.addEventListener === 'function') {
+        this._visibilityHandler = () => {
+          if (document.hidden || !this._mounted || !this.statsInterval) return;
+          this.loadRecentScreenshots().catch(() => {});
+          if (this._pollStats) this._pollStats();
+          this.updateActivityRates();
+        };
+        document.addEventListener('visibilitychange', this._visibilityHandler);
+      }
       
       // Start activity rate calculation (updates every 15 seconds, consolidated with stats)
       this.startActivityRateCalculation();
@@ -249,6 +266,7 @@ class ActivityMonitor {
     }
     
     this.rateUpdateInterval = setInterval(() => {
+      if (document.hidden) return; // window hidden — refreshed on show
       this.updateActivityRates();
     }, 10000); // Update every 10 seconds
     

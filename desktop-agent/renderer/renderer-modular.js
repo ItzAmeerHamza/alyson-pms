@@ -8,6 +8,50 @@ if (typeof window !== 'undefined') {
 }
 
 const { ipcRenderer } = require('electron');
+// Hidden-window deferral: background refreshes queue here while the window is
+// hidden and run once when it is shown (see modules/hidden-deferral.js).
+if (typeof window !== 'undefined' && !window.__hiddenDeferral) {
+  try {
+    window.__hiddenDeferral = require('./modules/hidden-deferral').createHiddenDeferral(document);
+  } catch (_) { /* fall back to running immediately */ }
+}
+function runWhenRendererVisible(key, fn) {
+  const d = typeof window !== 'undefined' ? window.__hiddenDeferral : null;
+  if (d) return d.runWhenVisible(key, fn);
+  fn();
+  return true;
+}
+if (typeof window !== 'undefined') window.runWhenRendererVisible = runWhenRendererVisible;
+
+// lucide.createIcons() re-replaces EVERY icon in the document on each call:
+// the generated <svg> keeps data-lucide, so it is selected and rebuilt again.
+// Strip data-lucide from already-rendered svgs after each call so later calls
+// only render new <i data-lucide> placeholders. Rendered icons look identical
+// (nothing in the renderer selects svg[data-lucide]).
+function installLucideRenderOnce() {
+  try {
+    const L = typeof window !== 'undefined' ? window.lucide : null;
+    if (!L || typeof L.createIcons !== 'function' || L.__tfRenderOnce) return;
+    const original = L.createIcons;
+    const wrapped = function createIconsRenderOnce(...args) {
+      const result = original.apply(this, args);
+      try {
+        document.querySelectorAll('svg[data-lucide]').forEach((svg) => svg.removeAttribute('data-lucide'));
+      } catch (_) { /* ignore */ }
+      return result;
+    };
+    L.createIcons = wrapped;
+    if (L.createIcons === wrapped) L.__tfRenderOnce = true;
+  } catch (_) { /* leave lucide untouched */ }
+}
+if (typeof window !== 'undefined') {
+  window.installLucideRenderOnce = installLucideRenderOnce;
+  installLucideRenderOnce(); // lucide is a deferred script — usually not loaded yet
+  try {
+    document.addEventListener('DOMContentLoaded', installLucideRenderOnce);
+    window.addEventListener('load', installLucideRenderOnce);
+  } catch (_) { /* ignore */ }
+}
 const {
   initWorkTimezone,
   setWorkTimezone,
@@ -118,6 +162,7 @@ async function syncWorkDayContextFromMain(reason = 'poll') {
 void syncWorkDayContextFromMain('boot');
 if (typeof window !== 'undefined' && !window.__workDayContextPoll) {
   window.__workDayContextPoll = setInterval(() => {
+    if (document.hidden) return; // refreshed on visibilitychange
     void syncWorkDayContextFromMain('poll');
   }, 30 * 1000);
 }
@@ -838,8 +883,12 @@ function setTrackerDisplaySeconds(trackedSeconds, { allowDecrease = false } = {}
   }
   window.__todayTrackedSeconds = tracked;
   if (tracked > 0) {
-    // Force persist on authorized decrease / day change; otherwise throttle.
-    persistTrackedHighWater(window.__todayTrackedHighWaterSeconds, { force: allowDecrease });
+    // Force persist only on a real decrease (deduction / day change). The
+    // tray tick passes allowDecrease every second, which made this a
+    // storage write every second instead of every 30s.
+    persistTrackedHighWater(window.__todayTrackedHighWaterSeconds, {
+      force: allowDecrease && tracked < prevTracked,
+    });
   } else {
     clearTrackedHighWaterStorage(todayKey);
   }
@@ -1292,6 +1341,9 @@ function updateRendererTrackingClock() {
   }
   const start = window.__lastTrackingStartTime;
   if (!start) return;
+  // Window hidden / minimized: nothing to paint. The visibilitychange
+  // handler repaints as soon as it is shown again.
+  if (typeof document !== 'undefined' && document.hidden) return;
   const { excludeOwnSessionFromClosedBase } = require('../src/modules/utils/sleep-aware-elapsed');
   const dashboardTimer = document.getElementById('sessionTime');
   const trayAge = Date.now() - (window.__lastTrayTimerTickAt || 0);
@@ -1460,6 +1512,9 @@ function ensureTrackingDisplayWatchdog() {
       }
       return;
     }
+    // Hidden: the display isn't visible, so don't read or repaint it (the
+    // heartbeat probe above still runs). Repainted on visibilitychange.
+    if (typeof document !== 'undefined' && document.hidden) return;
     const shown = readTrackerDisplaySeconds();
     if (shown !== window.__lastWatchdogShownSeconds) {
       window.__lastWatchdogShownSeconds = shown;
@@ -1479,6 +1534,7 @@ function ensureTrackingDisplayWatchdog() {
         !!window.__lastTrackingStartTime ||
         !!(typeof moduleInstances !== 'undefined' && moduleInstances?.ipcManager?.isTracking);
       if (!tracking) return;
+      if (document.hidden) return; // backend call; refreshed when shown
       void refreshTodayCompletedBaseSeconds().then(() => {
         if (window.__lastTrackingStartTime) {
           // Refresh cards / base only; clock keeps ticking from tray/failover.
@@ -1740,6 +1796,9 @@ function ensureLocalDayRolloverWatch() {
   ensureCurrentWorkDay({ reason: 'watch-init' });
   scheduleNextWorkDayRollover();
   window.__localDayRolloverWatch = setInterval(() => {
+    // Hidden: the scheduled rollover timer and visibility/focus handlers
+    // cover the day change; skip the 30s storage write.
+    if (document.hidden) return;
     ensureCurrentWorkDay({ reason: 'watch-tick' });
   }, 30 * 1000);
 }
@@ -1937,9 +1996,10 @@ function setupModuleCommunication() {
   
   // Activity stats updates
   let __lastTodayTimeRefresh = 0;
-  ipcManager.on('activity-stats-updated', (stats) => {
-    console.log('📊 Activity stats updated:', stats);
-    // Throttle today's time refresh (30s)
+  ipcManager.on('activity-stats-updated', () => {
+    // Throttle today's time refresh (30s); skip entirely while hidden —
+    // the visibilitychange handler refreshes when the window is shown.
+    if (document.hidden) return;
     const now = Date.now();
     if (uiManager.loadTodaysTotalTime && (now - __lastTodayTimeRefresh > 30000)) {
       __lastTodayTimeRefresh = now;
@@ -2013,15 +2073,6 @@ function setupModuleCommunication() {
     }
   });
   
-  // DIAGNOSTIC: Log all IPC events received
-  const originalOn = ipcManager.on;
-  ipcManager.on = function(event, listener) {
-    const wrappedListener = function(...args) {
-      console.log(`🔍 [IPC-DEBUG] Event received: ${event}`, args);
-      return listener.apply(this, args);
-    };
-    return originalOn.call(this, event, wrappedListener);
-  };
   
   // Main-process tray timer pushes elapsed time every second when the event loop is healthy.
   // Renderer-side watchdog takes over if tray ticks stall for >2.5s.
@@ -2033,7 +2084,16 @@ function setupModuleCommunication() {
         return;
       }
       // Opening the lid / focusing the app after overnight sleep.
+      void syncWorkDayContextFromMain('visibility');
       ensureCurrentWorkDay({ reason: 'visibility' });
+      try {
+        // Background polls skip while hidden; catch up once now.
+        const ui = moduleInstances?.uiManager;
+        if (ui?.loadTodaysTotalTime && Date.now() - (window.__lastShownStatsRefreshAt || 0) > 30000) {
+          window.__lastShownStatsRefreshAt = Date.now();
+          ui.loadTodaysTotalTime();
+        }
+      } catch (_) { /* ignore */ }
       if (isRendererActivelyTracking() && window.__lastTrackingStartTime) {
         updateRendererTrackingClock();
       } else if (!isRendererActivelyTracking()) {
@@ -2129,12 +2189,15 @@ function setupModuleCommunication() {
         }
         setTrackerDisplaySeconds(db, { allowDecrease: true });
       });
-      if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
-        void moduleInstances.uiManager.loadTodaysTotalTime();
-      }
-      if (moduleInstances?.uiManager?.loadMonthlyReport) {
-        void moduleInstances.uiManager.loadMonthlyReport(true, { silent: true });
-      }
+      // Hidden after wake: refresh once when the window is shown instead.
+      runWhenRendererVisible('system-resumed-reports', () => {
+        if (moduleInstances?.uiManager?.loadTodaysTotalTime) {
+          void moduleInstances.uiManager.loadTodaysTotalTime();
+        }
+        if (moduleInstances?.uiManager?.loadMonthlyReport) {
+          void moduleInstances.uiManager.loadMonthlyReport(true, { silent: true });
+        }
+      });
     }
   });
   ipcRenderer.on('tray-timer-tick', (_event, data) => {
@@ -2171,6 +2234,17 @@ function setupModuleCommunication() {
       }
     } else {
       window.__localTrackingClockActive = true;
+    }
+    if (typeof document !== 'undefined' && document.hidden) {
+      // Hidden: just remember the latest total (this fired every second all
+      // day, repainting and writing storage for a window nobody could see).
+      const hiddenCum = Math.max(
+        0,
+        Math.floor(Number(data?.cumulativeSeconds) || 0),
+        parseHmsToSeconds(data?.cumulativeDisplay),
+      );
+      if (hiddenCum > 0) window.__lastTrayIpcCumulativeSeconds = hiddenCum;
+      return;
     }
     const dashboardTimer = document.getElementById('sessionTime');
     if (data && (data.display || data.cumulativeDisplay)) {
@@ -2483,6 +2557,7 @@ function setupModuleCommunication() {
       window.clearSecondaryRendererTimers();
       void refreshTodayCompletedBaseSeconds().then(() => updateRendererTrackingClock());
       // Temporary 1Hz until tray ticks arrive; cleared on first tray-timer-tick.
+      window.clearSecondaryRendererTimers(); // never leak a previous 1Hz handle
       timerUpdateInterval = setInterval(() => {
         if (isTrayTimerDrivingDisplay()) {
           window.clearSecondaryRendererTimers();
@@ -2566,7 +2641,10 @@ function setupModuleCommunication() {
           }
           
           window.__localTrackingClockActive = true;
-          // Temporary until tray owns the clock
+          // Temporary until tray owns the clock. Clear again right before
+          // arming: a second event landing during the await above would
+          // otherwise create a second 1Hz interval and lose the first handle.
+          window.clearSecondaryRendererTimers();
           timerUpdateInterval = setInterval(() => {
             if (isTrayTimerDrivingDisplay()) {
               window.clearSecondaryRendererTimers();
@@ -3726,33 +3804,44 @@ function setupLegacyEventListeners() {
 
   setupLoginOsAccessPanel();
 
-  const platformPrivacyShortcuts = document.getElementById('platformPrivacyShortcuts');
-  if (platformPrivacyShortcuts && ['darwin', 'win32', 'linux'].includes(process.platform)) {
-    const label = platformPrivacyShortcuts.querySelector('.platform-privacy-shortcuts-label');
-    if (label) {
-      if (process.platform === 'win32') label.textContent = 'Windows privacy';
-      else if (process.platform === 'linux') label.textContent = 'Linux settings';
-      else label.textContent = 'macOS permissions';
-    }
-    const btnLabels = {
-      darwin: { screen: 'Screen Recording', access: 'Accessibility', extra: 'Automation' },
-      win32: { screen: 'Graphics capture', access: 'Ease of Access', extra: 'Privacy' },
-      linux: { screen: 'Privacy & screen', access: 'Accessibility', extra: 'Applications' },
+  // Permissions section on the Settings page (moved from the sidebar).
+  const permissionsGroup = document.getElementById('settingsPermissionsGroup');
+  if (permissionsGroup && ['darwin', 'win32', 'linux'].includes(process.platform)) {
+    const copy = {
+      darwin: {
+        title: 'macOS permissions',
+        hint: 'Tavilo Time needs these to record screenshots and count keyboard and mouse activity. Each button opens the right page in System Settings.',
+        screen: ['Screen Recording', 'Needed for screenshots.'],
+        access: ['Accessibility', 'Needed to count keystrokes and clicks.'],
+        extra: ['Automation', 'Lets Tavilo Time read the address of the page open in your browser.'],
+      },
+      win32: {
+        title: 'Windows privacy',
+        hint: 'Each button opens the matching page in Windows Settings.',
+        screen: ['Graphics capture', 'Needed for screenshots.'],
+        access: ['Ease of Access', 'Keyboard and mouse settings.'],
+        extra: ['Privacy', 'General Windows privacy settings.'],
+      },
+      linux: {
+        title: 'Linux settings',
+        hint: 'Each button opens the matching system settings page.',
+        screen: ['Privacy & screen', 'Needed for screenshots.'],
+        access: ['Accessibility', 'Keyboard and mouse settings.'],
+        extra: ['Applications', 'Application permissions.'],
+      },
+    }[process.platform];
+    const setText = (sel, text) => {
+      const el = permissionsGroup.querySelector(sel);
+      if (el) el.textContent = text;
     };
-    const bl = btnLabels[process.platform] || btnLabels.darwin;
-    platformPrivacyShortcuts.querySelectorAll('[data-role="screen"]').forEach((b) => {
-      b.textContent = bl.screen;
-    });
-    platformPrivacyShortcuts.querySelectorAll('[data-role="access"]').forEach((b) => {
-      b.textContent = bl.access;
-    });
-    platformPrivacyShortcuts.querySelectorAll('[data-role="extra"]').forEach((b) => {
-      b.textContent = bl.extra;
-    });
-
-    platformPrivacyShortcuts.removeAttribute('hidden');
-    platformPrivacyShortcuts.style.display = 'flex';
-    platformPrivacyShortcuts.querySelectorAll('[data-pane]').forEach((btn) => {
+    setText('#settingsPermissionsTitle', copy.title);
+    setText('#settingsPermissionsHint', copy.hint);
+    for (const role of ['screen', 'access', 'extra']) {
+      setText(`[data-perm-label="${role}"]`, copy[role][0]);
+      setText(`[data-perm-hint="${role}"]`, copy[role][1]);
+    }
+    permissionsGroup.removeAttribute('hidden');
+    permissionsGroup.querySelectorAll('[data-pane]').forEach((btn) => {
       btn.addEventListener('click', () => {
         ipcRenderer.invoke('open-system-settings', { pane: btn.dataset.pane });
       });
@@ -4644,8 +4733,18 @@ ipcRenderer.on('screenshot-saved', (event, data) => {
 
     screenshotSavedRefreshTimer = setTimeout(() => {
         screenshotSavedRefreshTimer = null;
+        // Hidden in the tray: nothing to repaint. Run the same refresh once
+        // when the window is shown (backend already has the upload by then).
+        if (typeof document !== 'undefined' && document.hidden) {
+            runWhenRendererVisible('screenshot-saved-refresh', () => runScreenshotSavedRefresh(0));
+            return;
+        }
+        runScreenshotSavedRefresh(1500);
+    }, 2000);
+});
+
+function runScreenshotSavedRefresh(refreshDelay) {
         closeScreenshotLightbox(true);
-        const refreshDelay = 1500;
 
         const screenshotsPage = document.getElementById('screenshotsPage');
         if (isPageSectionActive(screenshotsPage)) {
@@ -4673,8 +4772,7 @@ ipcRenderer.on('screenshot-saved', (event, data) => {
                 window.moduleInstances?.activityMonitor?.loadRecentScreenshots?.();
             }, refreshDelay);
         }
-    }, 2000);
-});
+}
 
 // NOTE: Toggle monitoring tools listener moved to ipc-manager.js module (lines 393-473)
 // to avoid duplication and ensure proper initialization order

@@ -67,6 +67,9 @@ class EnhancedSyncManager {
     this.flushTimers = new Map();
 
     this.appLogRetry = { inFlight: false, failures: 0, nextAttemptAt: 0 };
+    // 15 s URL / idle drains: one at a time; idle retries back off on failure.
+    this._urlQueueInFlight = false;
+    this.idleLogRetry = { inFlight: false, failures: 0, nextAttemptAt: 0 };
     
     // Register for cleanup
     cleanupRegistry.registerResource({
@@ -377,6 +380,16 @@ class EnhancedSyncManager {
   }
   
   async processUrlQueue() {
+    if (this._urlQueueInFlight) return;
+    this._urlQueueInFlight = true;
+    try {
+      await this._processUrlQueueOnce();
+    } finally {
+      this._urlQueueInFlight = false;
+    }
+  }
+
+  async _processUrlQueueOnce() {
     let urlLogs = [];
     try {
       const { isLikelyOffline } = require('../utils/backend-time-logs');
@@ -808,7 +821,37 @@ class EnhancedSyncManager {
   
   async processIdleQueue() {
     if (!global.offlineQueue?.idleLogs?.length) return;
-    await flushIdleLogQueue(global.offlineQueue, this.config);
+    const retry = this.idleLogRetry;
+    if (retry.inFlight) return;
+    if (Date.now() < retry.nextAttemptAt) return;
+    try {
+      const { isLikelyOffline } = require('../utils/backend-time-logs');
+      if (isLikelyOffline()) return;
+    } catch (_) {}
+
+    retry.inFlight = true;
+    try {
+      const result = await flushIdleLogQueue(global.offlineQueue, this.config);
+      if (result && result.requeued > 0) {
+        retry.failures += 1;
+        // Short cap: queued idle logs live in memory only, so a long wait
+        // widens the window in which a quit could lose them.
+        const delayMs = Math.min(60_000, jitteredBackoffMs(retry.failures));
+        retry.nextAttemptAt = Date.now() + delayMs;
+        if (retry.failures <= 3) {
+          console.warn(`⚠️ [IDLE-SYNC] ${result.requeued} idle log(s) kept for retry in ${Math.round(delayMs / 1000)}s`);
+        }
+      } else {
+        retry.failures = 0;
+        retry.nextAttemptAt = 0;
+      }
+    } catch (error) {
+      retry.failures += 1;
+      retry.nextAttemptAt = Date.now() + Math.min(60_000, jitteredBackoffMs(retry.failures));
+      throw error;
+    } finally {
+      retry.inFlight = false;
+    }
   }
 
   /**

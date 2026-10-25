@@ -99,8 +99,17 @@ class PlatformManager {
       }
 
       // Use the unified detectActiveApp method
-      const activeApp = await this.appDetector.detectActiveApp();
-      
+      // CPU FIX: concurrent callers on a cache miss share one detector run
+      // instead of each spawning active-win / osascript / PowerShell.
+      if (!this._detectInFlight) {
+        this._detectInFlight = Promise.resolve()
+          .then(() => this.appDetector.detectActiveApp())
+          .finally(() => {
+            this._detectInFlight = null;
+          });
+      }
+      const activeApp = await this._detectInFlight;
+
       // Normalize the format for consumers (provide both legacy and new keys)
       if (activeApp) {
         const normalized = {

@@ -7,6 +7,7 @@
 const path = require('path');
 const fs = require('fs');
 const { nativeImage } = require('electron');
+const userPreferences = require('../utils/user-preferences');
 
 class TrayManager {
   constructor(electronModules) {
@@ -468,9 +469,12 @@ class TrayManager {
   }
 
   _persistWorkDayKey(dayKey) {
+    // Called from the 1s tray tick: only touch disk when the day changes.
+    if (dayKey && dayKey === this._persistedWorkDayKey) return;
     try {
       const filePath = this._workDayKeyFilePath();
       if (!filePath || !dayKey) return;
+      this._persistedWorkDayKey = dayKey;
       fs.writeFileSync(
         filePath,
         JSON.stringify({ workDayKey: dayKey, updatedAt: new Date().toISOString() }),
@@ -541,9 +545,7 @@ class TrayManager {
 
     if (this.isTracking && this.tray && !this.tray.isDestroyed()) {
       const zeroDisplay = this._formatElapsed(0);
-      if (process.platform === 'darwin') {
-        this.tray.setTitle(zeroDisplay, { fontType: 'monospacedDigit' });
-      }
+      this._setMenuBarTitle(zeroDisplay, true);
       const projectLabel = this._currentProjectName || 'No Project';
       this.tray.setToolTip(`▶ Today: ${zeroDisplay} (session ${zeroDisplay}) — ${projectLabel}`);
     }
@@ -597,9 +599,10 @@ class TrayManager {
     this._localDayKey = persisted || todayKey;
     this._maybeRolloverLocalDay();
     this._scheduleNextWorkDayRollover();
+    // Backup only — _scheduleNextWorkDayRollover fires at company midnight.
     this._dayWatchInterval = setInterval(() => {
       this._maybeRolloverLocalDay();
-    }, 5000);
+    }, 60 * 1000);
     if (typeof this._dayWatchInterval.unref === 'function') {
       this._dayWatchInterval.unref();
     }
@@ -737,12 +740,9 @@ class TrayManager {
     const live = this._resolveLiveClock();
     const cumulativeDisplay = this._formatElapsed(live.cumulative);
     this._lastCumulativeSeconds = live.cumulative;
-    if (process.platform === 'darwin' && typeof this.tray.setTitle === 'function') {
-      try {
-        this.tray.setTitle(cumulativeDisplay, { fontType: 'monospacedDigit' });
-        this._lastTrayTitle = cumulativeDisplay;
-      } catch (_) { /* next tick paints it */ }
-    }
+    try {
+      this._setMenuBarTitle(cumulativeDisplay, true);
+    } catch (_) { /* next tick paints it */ }
     this._pushRendererTick?.({
       force: true,
       display: this._formatElapsed(live.elapsed),
@@ -872,15 +872,11 @@ class TrayManager {
     const initialDisplay = this._formatElapsed(initialElapsed);
     const initialCumulativeDisplay = this._formatElapsed(initialCumulative);
 
-    if (!initialHold && process.platform === 'darwin' && this.tray && !this.tray.isDestroyed()) {
-      const hasSetTitle = typeof this.tray.setTitle === 'function';
-      if (hasSetTitle) {
-        try {
-          this.tray.setTitle(initialCumulativeDisplay, { fontType: 'monospacedDigit' });
-          this._lastTrayTitle = initialCumulativeDisplay;
-        } catch (e) {
-          console.error('❌ [TRAY] setTitle failed:', e?.message);
-        }
+    if (!initialHold && this.tray && !this.tray.isDestroyed()) {
+      try {
+        this._setMenuBarTitle(initialCumulativeDisplay, true);
+      } catch (e) {
+        console.error('❌ [TRAY] setTitle failed:', e?.message);
       }
     }
 
@@ -916,11 +912,8 @@ class TrayManager {
           global._trayTodayHighWaterDate = localDateKey();
         } catch (_) { /* ignore */ }
 
-        if (process.platform === 'darwin' && cumulativeDisplay !== this._lastTrayTitle) {
-          // Only touch the menu bar when the second string changes.
-          this.tray.setTitle(cumulativeDisplay, { fontType: 'monospacedDigit' });
-          this._lastTrayTitle = cumulativeDisplay;
-        }
+        // Only touches the menu bar when the shown text changes.
+        this._setMenuBarTitle(cumulativeDisplay);
         const projectLabel = this._currentProjectName || 'No Project';
         const tooltip = `▶ Today: ${cumulativeDisplay} (session ${display}) — ${projectLabel}`;
         if (tooltip !== this._lastTrayTooltip) {
@@ -998,9 +991,7 @@ class TrayManager {
     this._setStoppedIcon();
 
     if (this.tray && !this.tray.isDestroyed()) {
-      if (process.platform === 'darwin') {
-        this.tray.setTitle('');
-      }
+      this._setMenuBarTitle('', true);
       this.tray.setToolTip('⏹ Tavilo Time — Not Tracking');
     }
     console.log('⏱️ [TRAY] Timer stopped');
@@ -1144,7 +1135,27 @@ class TrayManager {
       menuItems.push({ type: 'separator' });
 
       menuItems.push({
-        label: 'Quit',
+        label: 'Open Tavilo Time',
+        click: () => this.onShowWindow?.()
+      });
+
+      // Windows/Linux: turn the "keep running or quit?" prompt on the window X
+      // back on after someone ticked "Don't ask again".
+      if (process.platform !== 'darwin') {
+        const closePrompt = require('../core/close-prompt');
+        menuItems.push({
+          label: 'Ask before closing window',
+          type: 'checkbox',
+          checked: !closePrompt.isAskDisabled(),
+          click: (item) => {
+            closePrompt.setAskOnClose(item.checked);
+            this.updateMenu();
+          }
+        });
+      }
+
+      menuItems.push({
+        label: 'Quit Tavilo Time',
         click: () => this.onQuit?.()
       });
 
@@ -1417,6 +1428,8 @@ class TrayManager {
       const { app } = require('electron');
       const flagFile = path.join(app.getPath('userData'), '.notification-permission-checked');
 
+      if (!userPreferences.get('desktopNotifications')) return;
+
       // Only run the full check once
       if (fs.existsSync(flagFile)) {
         console.log('🔔 [TRAY] Notification permission already checked previously — skipping dialog');
@@ -1456,9 +1469,33 @@ class TrayManager {
   }
 
   /**
+   * macOS menu bar text next to the icon. Blank when the person turned
+   * "Show timer in menu bar" off in Settings. force = repaint even if unchanged.
+   */
+  _setMenuBarTitle(text, force = false) {
+    if (process.platform !== 'darwin') return;
+    if (!this.tray || this.tray.isDestroyed?.() || typeof this.tray.setTitle !== 'function') return;
+    const shown = text && userPreferences.get('showMenuBarTimer') ? text : '';
+    if (!force && shown === this._lastTrayTitle) return;
+    this.tray.setTitle(shown, { fontType: 'monospacedDigit' });
+    this._lastTrayTitle = shown;
+  }
+
+  /** Settings changed the menu bar timer: show or clear it right away. */
+  refreshMenuBarTitle() {
+    if (this.isTracking) this.paintLiveTotal();
+    else this._setMenuBarTitle('', true);
+  }
+
+  /**
    * Show notification
    */
   showNotification(title, body, options = {}) {
+    // Settings → Notifications off hides everything except timer-stopped alerts.
+    if (options.urgency !== 'critical' && !userPreferences.get('desktopNotifications')) {
+      console.log(`🔕 [TRAY] Notification skipped (turned off in Settings): ${title}`);
+      return;
+    }
     if (!this.Notification || typeof this.Notification.isSupported !== 'function') {
       console.log('⚠️ Notification module not available');
       return;

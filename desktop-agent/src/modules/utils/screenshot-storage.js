@@ -44,10 +44,21 @@ function resolveDesktopSyncConfig() {
 }
 
 async function fetchWithTimeout(url, options, timeoutMs = UPLOAD_TIMEOUT_MS) {
+  const { response } = await fetchAndReadWithTimeout(url, options, timeoutMs, null);
+  return response;
+}
+
+/**
+ * Like fetchWithTimeout, but the body is read (by `readBody`) before the timer
+ * is cleared — a stalled body would otherwise hang for undici's 300 s default.
+ */
+async function fetchAndReadWithTimeout(url, options, timeoutMs = UPLOAD_TIMEOUT_MS, readBody = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const body = readBody ? await readBody(response, controller.signal) : undefined;
+    return { response, body };
   } finally {
     clearTimeout(timer);
   }
@@ -55,15 +66,23 @@ async function fetchWithTimeout(url, options, timeoutMs = UPLOAD_TIMEOUT_MS) {
 
 async function callDesktopSync(syncUrl, apiKey, action, data) {
   log.info({ step: 'S3_API_CALL', ctx: { action } });
-  const response = await fetchWithTimeout(syncUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
+  const { response, body } = await fetchAndReadWithTimeout(
+    syncUrl,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({ action, data }),
     },
-    body: JSON.stringify({ action, data }),
-  });
-  const body = await response.json().catch(() => ({}));
+    UPLOAD_TIMEOUT_MS,
+    (res, signal) =>
+      res.json().catch((err) => {
+        if (signal.aborted) throw err; // timed out mid-body: fail, don't treat as {}
+        return {};
+      }),
+  );
   if (!response.ok) {
     const msg = body?.message || body?.error || response.statusText || 'Sync API error';
     throw new Error(`${action} failed (${response.status}): ${msg}`);
@@ -106,7 +125,7 @@ async function uploadScreenshotViaS3Api({
 
   log.info({ step: 'S3_PUT_START', ctx: { s3_key: init.s3_key } });
 
-  const putRes = await fetchWithTimeout(
+  const { response: putRes, body: putErrText } = await fetchAndReadWithTimeout(
     init.upload_url,
     {
       method: 'PUT',
@@ -114,9 +133,10 @@ async function uploadScreenshotViaS3Api({
       body: uploadBuffer,
     },
     UPLOAD_TIMEOUT_MS,
+    (res) => (res.ok ? '' : res.text().catch(() => '')),
   );
   if (!putRes.ok) {
-    const errText = await putRes.text().catch(() => '');
+    const errText = putErrText || '';
     return { error: `S3 PUT failed (${putRes.status}): ${errText.slice(0, 120)}` };
   }
 

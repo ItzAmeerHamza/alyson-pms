@@ -4,6 +4,20 @@ All notable changes to the desktop agent will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-26
+
+### Added
+- Auto-clickers and machine-regular typing no longer count as activity, and they no longer keep a session looking active.
+- Personal settings for start at login, opening the window at login, the start reminder, notifications, the menu bar timer, and the Windows close button.
+
+### Changed
+- On Windows and Linux, the window X asks whether to keep tracking in the background or quit. The macOS red button still hides the window.
+- Mac builds ship the patched keyboard hook so keystrokes are not dropped. The app stays non-notarized, signed with Alyson PM Code Signing, on the same bundle id, and updates in place.
+
+### Fixed
+- Idle ends when tracking stops, including after the lid closes and the machine wakes later.
+- Screenshot and diagnostic uploads retry without blocking the timer.
+
 ## [1.0.250] - 2026-10-19
 
 ### Changed

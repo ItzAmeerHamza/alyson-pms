@@ -120,6 +120,7 @@ class AppLifecycleManager {
 
     this.mainWindow.once('ready-to-show', () => {
       console.log('🪟 [APP-LIFECYCLE] Window ready-to-show event fired');
+      if (require('../utils/user-preferences').shouldStartHidden()) return;
       try {
         const { app } = this.electronModules || {};
         // macOS: ensure Dock is shown
@@ -158,10 +159,13 @@ class AppLifecycleManager {
         // this.mainWindow.webContents.openDevTools({ mode: 'detach' });
         
         // Window shows on ready-to-show; ensure focus after load
+        // (focus() would also show it, so skip when starting in the background).
         try {
-          const { app } = this.electronModules || {};
-          if (process.platform === 'darwin' && app?.dock && app.dock.show) app.dock.show();
-          this.mainWindow.focus();
+          if (!require('../utils/user-preferences').shouldStartHidden()) {
+            const { app } = this.electronModules || {};
+            if (process.platform === 'darwin' && app?.dock && app.dock.show) app.dock.show();
+            this.mainWindow.focus();
+          }
         } catch (e) {
           console.log('⚠️ [APP-LIFECYCLE] post-load focus failed:', e?.message || e);
         }

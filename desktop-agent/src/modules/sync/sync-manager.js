@@ -136,16 +136,32 @@ class SyncManager {
       throw new Error('Missing INTERNAL_API_KEY for backend sync API');
     }
 
-    const response = await fetch(this.desktopSyncApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.internalApiKey,
-      },
-      body: JSON.stringify({ action, data }),
-    });
+    // Bound the whole request incl. body read: a half-open socket after wake must
+    // not pin `_syncing` for undici's 300 s default.
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const abortTimer = controller ? setTimeout(() => controller.abort(), 12000) : null;
+    let response;
+    let body;
+    try {
+      response = await fetch(this.desktopSyncApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.internalApiKey,
+        },
+        body: JSON.stringify({ action, data }),
+        ...(controller ? { signal: controller.signal } : {}),
+      });
 
-    const body = await response.json();
+      body = await response.json();
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        throw new Error(`Backend sync timeout (${action})`);
+      }
+      throw err;
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
+    }
 
     if (!response.ok) {
       const errorMsg = body?.message || body?.error || `Edge function returned ${response.status}`;
@@ -499,7 +515,10 @@ class SyncManager {
       this.saveQueue();
     } finally {
       this._syncing = false;
-      if (Object.values(this.queue).some((arr) => arr.length > 0)) {
+      // Only re-arm for queues this flush actually drains — an unknown key
+      // loaded from an old queue file would otherwise loop every ~0.5 s forever.
+      const known = ['screenshots', 'appLogs', 'urlLogs', 'idleLogs', 'timeLogs', 'fraudAlerts'];
+      if (known.some((k) => Array.isArray(this.queue?.[k]) && this.queue[k].length > 0)) {
         this.requestFlush();
       }
     }
@@ -555,6 +574,9 @@ class SyncManager {
         ctx: { count: screenshots.length },
       });
     } catch (error) {
+      // Back off like every other failing step; otherwise `finally` re-arms the
+      // flush at 250–750 ms and re-decodes every base64 row in a tight loop.
+      this._noteFlushFailure(error);
       logger.warn({
         category: 'SYNC',
         step: 'SCREENSHOT MIGRATE FAILED',

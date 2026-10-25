@@ -1,7 +1,7 @@
 // Enhanced Anti-Cheat Detection System v2.0
 // Comprehensive fraud detection for mouse jigglers, auto-clickers, fake typing, and more
 const { powerMonitor } = require('electron');
-const { execSync, exec } = require('child_process');
+const { execSync, exec, execFile } = require('child_process');
 const os = require('os');
 
 class AntiCheatDetector {
@@ -163,6 +163,15 @@ class AntiCheatDetector {
 
   recordActivity(type, data) {
     const timestamp = Date.now();
+    // The per-event arrays are appended in timestamp order, so stale entries
+    // are always at the front. If the wall clock ever goes backwards, fall back
+    // to a full filter until everything recorded before the jump has aged out.
+    if (this._maxRecordedTs !== undefined && timestamp < this._maxRecordedTs) {
+      this._unsortedUntilTs = this._maxRecordedTs;
+    }
+    if (this._maxRecordedTs === undefined || timestamp > this._maxRecordedTs) {
+      this._maxRecordedTs = timestamp;
+    }
     const activity = { type, data, timestamp };
     
     this.activityHistory.push(activity);
@@ -183,13 +192,27 @@ class AntiCheatDetector {
     }
   }
 
+  /**
+   * Same result as `arr.filter(x => ts(x) > cutoff)` but trims the stale
+   * prefix in place: no new array per keystroke/click on the main thread.
+   */
+  _pruneOlder(arr, cutoff, ts) {
+    if (this._unsortedUntilTs !== undefined && cutoff < this._unsortedUntilTs) {
+      return arr.filter(x => ts(x) > cutoff);
+    }
+    let i = 0;
+    while (i < arr.length && !(ts(arr[i]) > cutoff)) i++;
+    if (i > 0) arr.splice(0, i);
+    return arr;
+  }
+
   recordMouseMove(position, timestamp) {
     this.mousePositions.push({ ...position, timestamp });
     this.recentMouseMoves.push({ ...position, timestamp });
     
     // Keep only recent moves (last 2 minutes)
     const cutoff = timestamp - 2 * 60 * 1000;
-    this.recentMouseMoves = this.recentMouseMoves.filter(move => move.timestamp > cutoff);
+    this.recentMouseMoves = this._pruneOlder(this.recentMouseMoves, cutoff, move => move.timestamp);
   }
 
   recordMouseClick(data, timestamp) {
@@ -203,8 +226,8 @@ class AntiCheatDetector {
     
     // Keep only recent clicks (last 10 minutes)
     const cutoff = timestamp - 10 * 60 * 1000;
-    this.mouseClickTimestamps = this.mouseClickTimestamps.filter(click => click > cutoff);
-    this.mouseClickPositions = this.mouseClickPositions.filter(click => click.timestamp > cutoff);
+    this.mouseClickTimestamps = this._pruneOlder(this.mouseClickTimestamps, cutoff, click => click);
+    this.mouseClickPositions = this._pruneOlder(this.mouseClickPositions, cutoff, click => click.timestamp);
   }
 
   recordKeyboard(data, timestamp) {
@@ -214,8 +237,8 @@ class AntiCheatDetector {
     
     // Keep only recent keystrokes (last 5 minutes)
     const cutoff = timestamp - 5 * 60 * 1000;
-    this.recentKeyPresses = this.recentKeyPresses.filter(key => key.timestamp > cutoff);
-    this.keyboardTimestamps = this.keyboardTimestamps.filter(time => time > cutoff);
+    this.recentKeyPresses = this._pruneOlder(this.recentKeyPresses, cutoff, key => key.timestamp);
+    this.keyboardTimestamps = this._pruneOlder(this.keyboardTimestamps, cutoff, time => time);
   }
 
   analyzeActivity() {
@@ -1124,12 +1147,12 @@ class AntiCheatDetector {
     return new Promise((resolve) => {
       try {
         // WINDOWS 11 FIX: wmic is deprecated, use PowerShell directly as primary method
-        const psCmd = 'powershell -Command "Get-PnpDevice -Class USB | Select-Object FriendlyName,InstanceId | Format-List"';
-        exec(psCmd, { timeout: 10000 }, (error, stdout) => {
+        // execFile (no cmd.exe): on timeout the real child is killed, not just the shell.
+        const noShell = { timeout: 10000, killSignal: 'SIGKILL', windowsHide: true };
+        execFile('powershell.exe', ['-Command', 'Get-PnpDevice -Class USB | Select-Object FriendlyName,InstanceId | Format-List'], noShell, (error, stdout) => {
           if (error) {
             // Fallback to wmic for older Windows versions
-            const cmd = 'wmic path Win32_USBControllerDevice get Dependent /format:list';
-            exec(cmd, { timeout: 10000 }, (err2, stdout2) => {
+            execFile('wmic', ['path', 'Win32_USBControllerDevice', 'get', 'Dependent', '/format:list'], noShell, (err2, stdout2) => {
               if (err2) {
                 // Both methods failed
                 console.warn('⚠️ [ANTI-CHEAT] Both PowerShell and wmic USB detection failed - USB scanning disabled');
@@ -1157,13 +1180,23 @@ class AntiCheatDetector {
   getMacUSBDevices() {
     return new Promise((resolve) => {
       try {
-        exec('system_profiler SPUSBDataType 2>/dev/null | grep -E "Product ID|Vendor ID|[A-Za-z]:"', 
-          { timeout: 10000 }, (error, stdout) => {
-          if (error) {
+        // Was `system_profiler … | grep -E …` through /bin/sh; on timeout only
+        // the shell died. Run system_profiler directly and grep in JS.
+        execFile('system_profiler', ['SPUSBDataType'],
+          { timeout: 10000, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {
+          // The pipeline's status was grep's: only a kill/spawn failure or
+          // "no matching line" made it fail. Keep that.
+          if (error && (error.killed || error.signal || typeof error.code !== 'number')) {
             resolve([]);
             return;
           }
-          const devices = stdout.split('\n')
+          const matched = String(stdout || '').split('\n')
+            .filter(line => /Product ID|Vendor ID|[A-Za-z]:/.test(line));
+          if (matched.length === 0) {
+            resolve([]);
+            return;
+          }
+          const devices = matched
             .map(line => line.trim())
             .filter(line => line && !line.includes('ID:'));
           resolve(devices);

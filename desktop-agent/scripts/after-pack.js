@@ -2,7 +2,7 @@ const { execSync, execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { BUILDER_ARCH, checkMacInputHelper, prepareMacAppNatives } = require('./mac-native-arch');
+const { BUILDER_ARCH, checkMacInputHelper, checkPatchedUiohook, prepareMacAppNatives } = require('./mac-native-arch');
 
 exports.default = async function afterPack(context) {
   if (process.platform !== 'darwin') return;
@@ -36,6 +36,8 @@ print(f'Removed {count} detritus xattrs')
   const natives = prepareMacAppNatives({ appPath, arch });
   const prunedNote = natives.pruned.length ? `, pruned ${natives.pruned.join(', ')}` : '';
   console.log(`  • native modules match ${arch} (${natives.checked} binaries checked${prunedNote})`);
+  checkPatchedUiohook({ appPath, arch });
+  console.log('  • uiohook is the patched build (no per-key main-thread wait)');
 
   const helperPath = checkMacInputHelper({ appPath, arch });
   try {

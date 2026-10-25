@@ -9,7 +9,52 @@ import sys
 import json
 import signal
 import threading
+import queue
 from datetime import datetime
+
+# Output queue: the low-level hook callbacks run on the thread that owns the
+# system-wide keyboard/mouse hooks. Writing to stdout there can block when the
+# parent (Electron) is slow to drain the pipe, which stalls input for the whole
+# machine. Callbacks only enqueue; a daemon writer thread prints + flushes.
+# Line format is unchanged (one json.dumps(event) per line).
+# No size limit: every real input event must reach the app (dropped events
+# lower activity %). Human input is a few MB per hour at most, so even a long
+# stall in the parent cannot grow this meaningfully.
+_OUTPUT_QUEUE_MAX = 0
+_output_queue = queue.Queue(maxsize=_OUTPUT_QUEUE_MAX)
+_output_dropped = 0
+
+
+def _output_writer():
+    while True:
+        item = _output_queue.get()
+        try:
+            print(json.dumps(item), flush=True)
+        except Exception:
+            pass
+        finally:
+            _output_queue.task_done()
+
+
+_output_thread = threading.Thread(target=_output_writer, name="stdout-writer", daemon=True)
+_output_thread.start()
+
+
+def _emit(item):
+    """Queue one JSON line for stdout without ever blocking the caller."""
+    global _output_dropped
+    try:
+        _output_queue.put_nowait(item)
+    except queue.Full:
+        # Parent is not reading; drop rather than block the input hook.
+        _output_dropped += 1
+
+
+def _drain_output(timeout=2.0):
+    """Best effort: let queued lines reach stdout before a direct print/exit."""
+    deadline = time.time() + timeout
+    while _output_queue.unfinished_tasks and time.time() < deadline:
+        time.sleep(0.01)
 
 # Import Windows-specific modules
 try:
@@ -61,6 +106,23 @@ try:
     
     kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
     kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+
+    # Hook payloads, read only for the "injected" flag (input made by software
+    # via SendInput, e.g. auto-clickers). Reported for diagnostics only: the
+    # app decides "automated" from the click pattern, because password
+    # managers, on-screen keyboards and remote support also inject real input.
+    class KBDLLHOOKSTRUCT(ctypes.Structure):
+        _fields_ = [("vkCode", wintypes.DWORD), ("scanCode", wintypes.DWORD),
+                    ("flags", wintypes.DWORD), ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t)]
+
+    class MSLLHOOKSTRUCT(ctypes.Structure):
+        _fields_ = [("pt", wintypes.POINT), ("mouseData", wintypes.DWORD),
+                    ("flags", wintypes.DWORD), ("time", wintypes.DWORD),
+                    ("dwExtraInfo", ctypes.c_size_t)]
+
+    LLKHF_INJECTED = 0x10
+    LLMHF_INJECTED = 0x01
     
     WINDOWS_API_AVAILABLE = True
     
@@ -72,6 +134,22 @@ except ImportError as e:
         "timestamp": time.time()
     }), flush=True)
 
+def _vk_code(lParam):
+    """Virtual-key code of a keyboard hook event (kept in memory only)."""
+    try:
+        return int(ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents.vkCode)
+    except Exception:
+        return None
+
+
+def _is_injected(lParam, struct_type, flag):
+    """True when Windows marks this hook event as made by software."""
+    try:
+        return bool(ctypes.cast(lParam, ctypes.POINTER(struct_type)).contents.flags & flag)
+    except Exception:
+        return False
+
+
 class WindowsInputMonitor:
     # Mouse hooks emit WM_MOUSEMOVE for every pointer tick — throttle so "move" counts reflect gestures, not pixels.
     MOVE_EMIT_MIN_INTERVAL_MS = 100
@@ -82,6 +160,9 @@ class WindowsInputMonitor:
         self.keyboard_hook = None
         self.mouse_hook = None
         self._last_move_emit_ms = 0
+        # Virtual-key codes currently held down. Only used to mark auto-repeat
+        # (a key held down); the key itself is never sent anywhere.
+        self._keys_down = set()
         
     def log_event(self, event_type, details=None):
         """Log an event to stdout as JSON"""
@@ -93,7 +174,8 @@ class WindowsInputMonitor:
         if details:
             event_data.update(details)
             
-        print(json.dumps(event_data), flush=True)
+        # Non-blocking: never write to stdout from the hook thread.
+        _emit(event_data)
     
     def keyboard_callback(self, nCode, wParam, lParam):
         """Callback for keyboard hook"""
@@ -104,7 +186,21 @@ class WindowsInputMonitor:
                 if wParam == WM_KEYDOWN or wParam == 0x0100 or wParam == 0x0104:
                     now = int(time.time())
                     self.activity_map.add(now)
-                    self.log_event("key", {"wParam": wParam})
+                    details = {"wParam": wParam}
+                    vk = _vk_code(lParam)
+                    if vk is not None:
+                        # Key-down while already down = Windows auto-repeat (key held).
+                        if vk in self._keys_down:
+                            details["repeat"] = True
+                        else:
+                            self._keys_down.add(vk)
+                    if _is_injected(lParam, KBDLLHOOKSTRUCT, LLKHF_INJECTED):
+                        details["injected"] = True
+                    self.log_event("key", details)
+                elif wParam == 0x0101 or wParam == 0x0105:  # WM_KEYUP / WM_SYSKEYUP
+                    vk = _vk_code(lParam)
+                    if vk is not None:
+                        self._keys_down.discard(vk)
         except Exception as e:
             self.log_event("error", {"message": f"Keyboard callback error: {e}"})
         
@@ -125,10 +221,16 @@ class WindowsInputMonitor:
                         self.log_event("move")
                 elif wParam == WM_LBUTTONDOWN or wParam == 0x0201:
                     self.activity_map.add(now)
-                    self.log_event("click", {"button": "left", "wParam": wParam})
+                    details = {"button": "left", "wParam": wParam}
+                    if _is_injected(lParam, MSLLHOOKSTRUCT, LLMHF_INJECTED):
+                        details["injected"] = True
+                    self.log_event("click", details)
                 elif wParam == WM_RBUTTONDOWN or wParam == 0x0204:
                     self.activity_map.add(now)
-                    self.log_event("click", {"button": "right", "wParam": wParam})
+                    details = {"button": "right", "wParam": wParam}
+                    if _is_injected(lParam, MSLLHOOKSTRUCT, LLMHF_INJECTED):
+                        details["injected"] = True
+                    self.log_event("click", details)
                 elif wParam != WM_MOUSEMOVE:
                     # Log any non-move mouse events for debugging
                     self.log_event("mouse_debug", {"wParam": hex(wParam) if isinstance(wParam, int) else str(wParam)})
@@ -250,6 +352,7 @@ class WindowsInputMonitor:
 
 def signal_handler(signum, frame):
     """Handle termination signals"""
+    _drain_output()
     print(json.dumps({
         "type": "signal",
         "message": f"Received signal {signum}, shutting down",
@@ -273,12 +376,14 @@ def main():
     }), flush=True)
     
     if monitor.start():
+        _drain_output()
         print(json.dumps({
             "type": "stopped",
             "message": "Monitor stopped normally",
             "timestamp": time.time()
         }), flush=True)
     else:
+        _drain_output()
         print(json.dumps({
             "type": "error",
             "message": "Monitor failed to start",

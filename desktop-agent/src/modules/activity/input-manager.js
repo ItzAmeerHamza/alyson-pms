@@ -27,6 +27,10 @@ class UnifiedInputManager extends EventEmitter {
     };
     this.detectionMethods = new Set();
     this.intervals = [];
+    // Bumped on every start/stop so a platform detector whose async start()
+    // finishes after Stop (or after a newer Start) is stopped, not adopted.
+    this._startGeneration = 0;
+    this._powerMonitorActivityHandler = null;
   }
 
   /**
@@ -83,6 +87,7 @@ class UnifiedInputManager extends EventEmitter {
 
     // Mark as active early so UI is responsive
     this.isActive = true;
+    this._startGeneration++;
 
     // Method 2: Cross-platform detection (external Python process)
     // OPTIMIZED: Start in background for faster UI response, other methods work immediately
@@ -139,6 +144,7 @@ class UnifiedInputManager extends EventEmitter {
     
     logger.info({ category: 'INPUT', step: 'MONITOR STOP', message: 'Stopping input detection monitoring' });
     this.isActive = false;
+    this._startGeneration++;
     
     // CRITICAL FIX: Stop platform-specific detector (kills external Python process)
     if (this.platformDetector && typeof this.platformDetector.stop === 'function') {
@@ -158,11 +164,13 @@ class UnifiedInputManager extends EventEmitter {
     });
     this.intervals = [];
     
-    // Remove PowerMonitor listeners if they exist
+    // Remove only our own PowerMonitor listener (removeAllListeners would also
+    // strip other modules' 'user-activity' handlers).
     const { powerMonitor } = this.electronModules;
-    if (powerMonitor && powerMonitor.removeAllListeners) {
-      powerMonitor.removeAllListeners('user-activity');
+    if (powerMonitor && this._powerMonitorActivityHandler && typeof powerMonitor.removeListener === 'function') {
+      powerMonitor.removeListener('user-activity', this._powerMonitorActivityHandler);
     }
+    this._powerMonitorActivityHandler = null;
     
     this.detectionMethods.clear();
     
@@ -190,7 +198,10 @@ class UnifiedInputManager extends EventEmitter {
   initializePowerMonitor(powerMonitor) {
     let lastPowerActivity = Date.now();
 
-    powerMonitor.on('user-activity', () => {
+    if (this._powerMonitorActivityHandler && typeof powerMonitor.removeListener === 'function') {
+      powerMonitor.removeListener('user-activity', this._powerMonitorActivityHandler);
+    }
+    this._powerMonitorActivityHandler = () => {
       const now = Date.now();
       lastPowerActivity = now;
       
@@ -212,7 +223,8 @@ class UnifiedInputManager extends EventEmitter {
       // PowerMonitor doesn't know if user clicked or typed - it just fires on any activity
       // Real input detection happens via Python external monitors on all platforms
       // This prevents false activity during idle periods
-    });
+    };
+    powerMonitor.on('user-activity', this._powerMonitorActivityHandler);
 
     this.detectionMethods.add('powerMonitor');
     logger.debug({ category: 'INPUT', step: 'METHOD', message: 'PowerMonitor active (idle timer only, no synthetic activity)' });
@@ -223,6 +235,7 @@ class UnifiedInputManager extends EventEmitter {
    */
   async initializePlatformSpecific() {
     // Import existing platform detector if available
+    const generation = this._startGeneration;
     try {
       const CrossPlatformInputDetector = require('../../cross-platform-input-detector.js');
       const detector = new CrossPlatformInputDetector();
@@ -243,6 +256,18 @@ class UnifiedInputManager extends EventEmitter {
       });
 
       await detector.start(this.electronModules);
+      // Stop (or a newer Start) happened while the helper was launching:
+      // stopTracking() could not see this detector, so stop it here instead
+      // of adopting it — otherwise its helper process is orphaned.
+      if (!this.isActive || generation !== this._startGeneration) {
+        logger.info({ category: 'INPUT', step: 'PLATFORM START STALE', message: 'Tracking stopped during platform start; stopping detector' });
+        try {
+          await detector.stop();
+        } catch (stopErr) {
+          logger.warn({ category: 'INPUT', step: 'PLATFORM STOP ERROR', message: stopErr.message });
+        }
+        return;
+      }
       this.platformDetector = detector;
       this.detectionMethods.add('platform');
       logger.debug({ category: 'INPUT', step: 'METHOD', message: 'Platform-specific detection active' });
@@ -262,21 +287,9 @@ class UnifiedInputManager extends EventEmitter {
    * System idle monitoring (from UnifiedInputTracker)
    */
   initializeSystemIdleMonitoring(powerMonitor) {
-    const interval = setInterval(() => {
-      if (!this.isActive) return;
-
-      try {
-        const systemIdle = powerMonitor.getSystemIdleTime();
-        const timeSinceLastActivity = Date.now() - this.stats.lastActivity;
-
-        // In user-only mode we never synthesize input from idle APIs.
-        // Keep this path purely informational for higher-level idle checks.
-      } catch (error) {
-        // Ignore monitoring errors
-      }
-    }, 4000);
-
-    this.intervals.push(interval);
+    // This used to poll getSystemIdleTime() every 4s and discard the result
+    // (user-only mode never synthesizes input). Idle checks live in the idle
+    // monitor, so no timer is needed here.
     this.detectionMethods.add('systemIdle');
     logger.debug({ category: 'INPUT', step: 'METHOD', message: 'System idle monitoring active' });
   }
@@ -458,6 +471,7 @@ class UnifiedInputManager extends EventEmitter {
    */
   stop() {
     this.isActive = false;
+    this._startGeneration++;
 
     // Clear all intervals
     this.intervals.forEach(interval => clearInterval(interval));

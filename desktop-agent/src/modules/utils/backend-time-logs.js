@@ -116,6 +116,7 @@ async function callDesktopAction(action, data, config = global.config, options =
       signal: controller.signal,
     });
   } catch (err) {
+    clearTimeout(timer);
     const aborted = err?.name === 'AbortError' || controller.signal.aborted;
     noteNetworkResult(false);
     throw new Error(
@@ -124,15 +125,22 @@ async function callDesktopAction(action, data, config = global.config, options =
         : err?.message || `Backend sync network error (${action})`,
       { cause: err },
     );
-  } finally {
-    clearTimeout(timer);
   }
 
+  // Keep the timer armed through the body read — a stalled body after headers
+  // would otherwise hang for undici's 300 s default.
   let body = {};
   try {
     body = await response.json();
-  } catch {
+  } catch (err) {
+    if (controller.signal.aborted) {
+      clearTimeout(timer);
+      noteNetworkResult(false);
+      throw new Error(`Backend sync timeout after ${timeoutMs}ms (${action})`, { cause: err });
+    }
     body = {};
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!response.ok) {

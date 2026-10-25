@@ -584,8 +584,9 @@ class SystemMonitor {
               });
             });
           }
-        } else if (!pythonAvailable && (platform === 'darwin' || platform === 'linux')) {
-          // macOS/Linux: Check system Python
+        } else if (!pythonAvailable && platform === 'linux') {
+          // Linux: check system Python. (macOS uses uiohook, not Python —
+          // spawning python3 every 5 min there was wasted work.)
           const { exec } = require('child_process');
           const pythonCmd = 'python3 --version';
           
@@ -885,6 +886,8 @@ class SystemMonitor {
     }
     
     this.healthCheckInterval = setInterval(async () => {
+      // Nothing useful to check while locked / asleep — and it wakes the Mac.
+      if (global.isScreenLocked || global.trayManager?._systemSleeping) return;
       if (global.isTracking) {
         const permissions = await this.checkPermissions({ cheap: true });
         this.emit('health-check-completed', {
@@ -894,6 +897,11 @@ class SystemMonitor {
         });
         return;
       }
+      // Not tracking: the full check (screen-source probe, backend call…)
+      // at most every 30 min; it also runs on start-up and on demand.
+      const now = Date.now();
+      if (now - (this._lastIdleFullCheckAt || 0) < 30 * 60 * 1000) return;
+      this._lastIdleFullCheckAt = now;
       const health = await this.performComprehensiveHealthCheck();
       this.emit('health-check-completed', health);
     }, intervalMs);

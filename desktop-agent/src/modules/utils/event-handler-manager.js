@@ -506,6 +506,8 @@ class EventHandlerManager {
     // System shutdown event
     this.powerMonitor.on('shutdown', () => {
       this.console.log('🔴 System shutdown detected');
+      // Skip the close prompt so it can't block the OS shutting down.
+      this.global.isSystemShuttingDown = true;
       
       if (this.global.isTracking) {
         this.console.log('🛑 System shutdown - stopping tracking immediately');

@@ -352,7 +352,7 @@ class UIManager {
     };
     
     // Cache all page sections
-    const pageIds = ['dashboard', 'timetracker', 'assistant', 'screenshots', 'faq', 'report-issue', 'updates', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
+    const pageIds = ['dashboard', 'timetracker', 'assistant', 'screenshots', 'faq', 'report-issue', 'updates', 'settings', 'reports', 'url-activity', 'app-activity', 'activity-between-screenshots', 'today-history', 'developer-console', 'featureStatus'];
     pageIds.forEach(pageId => {
       const pageElement = document.getElementById(pageId + 'Page');
       if (pageElement) {
@@ -509,6 +509,14 @@ class UIManager {
       this.bindReportIssue();
     }
 
+    if (pageId === 'settings') {
+      try {
+        require('./settings-page').initSettingsPage(this.ipcRenderer);
+      } catch (err) {
+        console.warn('⚠️ [UI-MANAGER] Could not load Settings:', err?.message || err);
+      }
+    }
+
     if (pageId === 'assistant') {
       setTimeout(() => this.initAssistantPage(), 50);
     }
@@ -592,6 +600,7 @@ class UIManager {
       // Clear any existing interval to avoid duplicates
       this.stopScreenshotActivityAutoRefresh();
       this.screenshotActivityInterval = setInterval(() => {
+        if (document.hidden) return; // window hidden — nothing to refresh
         // Only refresh if the Activity Monitor page is currently active
         const active = this.cachedElements?.currentActivePage?.id === 'activity-between-screenshotsPage';
         if (active && typeof this.loadScreenshotActivity === 'function') {
@@ -647,7 +656,8 @@ class UIManager {
       'today-history': "Today's History",
       'faq': 'FAQ',
       'report-issue': 'Report an issue',
-      'updates': 'App Updates'
+      'updates': 'App Updates',
+      'settings': 'Settings'
     };
     return pageTitles[pageId] || 'Dashboard';
   }
@@ -906,6 +916,7 @@ class UIManager {
 
     // Auto-refresh every 30 seconds when on reports page
     this.reportsRefreshInterval = setInterval(() => {
+      if (document.hidden) return; // window hidden — nothing to refresh
       const reportsPage = document.getElementById('reportsPage');
       const currentPage = document.querySelector('.page.active')?.id;
       
@@ -1900,9 +1911,9 @@ class UIManager {
           } catch { /* keep default */ }
         }
         
-        // Load projects for the dropdowns if not already populated
-        const projectSelect = document.getElementById('projectSelect');
-        if (!projectSelect || projectSelect.options.length <= 1) {
+        // Load projects for the dropdowns if they haven't loaded yet
+        // (a failed load shows a message option, so don't count options).
+        if (!this._projectsLoaded) {
           await this.loadMainAppProjects();
         }
         
@@ -2960,9 +2971,19 @@ class UIManager {
       console.log('🎯 [UI-MANAGER] Started permission status checking');
       
       // Keep checking every second until both permissions are granted
+      // While the window is hidden (tray / covered by System Settings) check
+      // every 10 s instead of every second; re-checked immediately when shown.
+      let hiddenTicks = 0;
       this.permissionCheckInterval = setInterval(() => {
+        if (document.hidden && ++hiddenTicks % 10 !== 0) return;
         this.checkPermissionStatus();
       }, 1000);
+      if (!this._permissionVisibilityHandler) {
+        this._permissionVisibilityHandler = () => {
+          if (!document.hidden && this.permissionCheckInterval) this.checkPermissionStatus();
+        };
+        document.addEventListener('visibilitychange', this._permissionVisibilityHandler);
+      }
       
       // Also check if we should skip onboarding entirely
       const { ipcRenderer } = require('electron');
@@ -3236,7 +3257,52 @@ class UIManager {
     });
   }
 
-  async loadMainAppProjects() {
+  /**
+   * Load the project dropdowns. If the fetch fails (common right after
+   * sign-in, before Wi-Fi is up), keep retrying in the background and
+   * again as soon as the network comes back, instead of leaving the list
+   * empty until a restart.
+   */
+  loadMainAppProjects() {
+    if (this._projectsLoadPromise) return this._projectsLoadPromise;
+
+    if (!this._projectsOnlineListener) {
+      this._projectsOnlineListener = () => {
+        if (this._projectsLoaded) return;
+        console.log('🌐 [UI-MANAGER] Back online — retrying project list');
+        clearTimeout(this._projectsRetryTimer);
+        this._projectsRetryTimer = null;
+        void this.loadMainAppProjects();
+      };
+      window.addEventListener('online', this._projectsOnlineListener);
+    }
+
+    this._projectsLoadPromise = this._loadMainAppProjectsOnce()
+      .then(() => {
+        this._projectsRetryCount = 0;
+        clearTimeout(this._projectsRetryTimer);
+        this._projectsRetryTimer = null;
+      })
+      .catch(() => {
+        this._projectsLoaded = false;
+        const delays = [3, 5, 10, 20, 30, 60];
+        const n = this._projectsRetryCount || 0;
+        const delayMs = delays[Math.min(n, delays.length - 1)] * 1000;
+        this._projectsRetryCount = n + 1;
+        console.log(`🔁 [UI-MANAGER] Project list retry #${n + 1} in ${delayMs / 1000}s`);
+        clearTimeout(this._projectsRetryTimer);
+        this._projectsRetryTimer = setTimeout(() => {
+          this._projectsRetryTimer = null;
+          void this.loadMainAppProjects();
+        }, delayMs);
+      })
+      .finally(() => {
+        this._projectsLoadPromise = null;
+      });
+    return this._projectsLoadPromise;
+  }
+
+  async _loadMainAppProjectsOnce() {
     // Load user projects for main app dropdowns using database query
     console.log('🔧 [UI-MANAGER] Loading projects for main app...');
     
@@ -3284,6 +3350,7 @@ class UIManager {
         if (dashboardProjectSelect) dashboardProjectSelect.innerHTML += noProjectsOption;
         try { window.refreshProjectDropdown?.(); } catch (_) {}
         console.log('⚠️ [UI-MANAGER] No projects for user', currentUser.id);
+        this._projectsLoaded = true;
         return;
       }
       
@@ -3327,15 +3394,22 @@ class UIManager {
       } catch (_) {}
       
       console.log(`✅ [UI-MANAGER] Added ${projectData.length} projects to main app dropdowns`);
+      this._projectsLoaded = true;
       
     } catch (error) {
       console.error('❌ [UI-MANAGER] Error loading main app projects:', error);
       const projectSelect = document.getElementById('projectSelect');
       const dashboardProjectSelect = document.getElementById('dashboardProjectSelect');
-      const errorOption = '<option value="" disabled>Could not load projects</option>';
-      if (projectSelect) projectSelect.innerHTML = errorOption;
-      if (dashboardProjectSelect) dashboardProjectSelect.innerHTML = errorOption;
-      try { window.refreshProjectDropdown?.(); } catch (_) {}
+      // Keep a list that is already showing; only replace an empty one.
+      const hasProjects = (sel) => !!sel && Array.from(sel.options).some((o) => o.value);
+      if (!hasProjects(projectSelect) && !hasProjects(dashboardProjectSelect)) {
+        const errorOption =
+          '<option value="" disabled selected>Loading projects… (waiting for connection)</option>';
+        if (projectSelect) projectSelect.innerHTML = errorOption;
+        if (dashboardProjectSelect) dashboardProjectSelect.innerHTML = errorOption;
+        try { window.refreshProjectDropdown?.(); } catch (_) {}
+      }
+      throw error;
     }
   }
 
@@ -5043,7 +5117,62 @@ class UIManager {
     if (typeof lucide !== 'undefined') lucide.createIcons();
   }
 
-  async loadMonthlyReport(forceRefresh = false, options = {}) {
+  /**
+   * One shared in-flight load per month offset: overlapping callers (Stop,
+   * screenshot, wake, auto-refresh) reuse it instead of each re-fetching the
+   * whole month. A forced refresh requested mid-flight chains exactly one
+   * follow-up fetch so its caller still ends up with fresh data.
+   */
+  loadMonthlyReport(forceRefresh = false, options = {}) {
+    const offset = this._monthlyReportMonthOffset || 0;
+    const inflightMap = this._monthlyReportInflight || (this._monthlyReportInflight = {});
+    const current = inflightMap[offset];
+    // Join only while that load is still the live one (no newer load / month
+    // switch has invalidated it); otherwise start fresh exactly as before.
+    if (current && current.gen === this._monthlyReportLoadGen) {
+      let renderedCache = false;
+      if (forceRefresh) {
+        current.forceAgain = true;
+      } else {
+        const cached = this._monthlyReportCacheByOffset?.[offset];
+        if (cached?.reportData && Date.now() - cached.time < 60 * 1000) {
+          this._applyMonthlyReportToDom(cached.reportData);
+          renderedCache = true;
+        }
+      }
+      if (!options.silent && !renderedCache) {
+        this._showMonthlyReportLoading(this._monthLabelForOffset(offset));
+      }
+      this._syncMonthlyReportNavButtons();
+      return current.promise;
+    }
+    const entry = { gen: null, forceAgain: false, promise: null };
+    const runOnce = (force, opts) => {
+      const p = this._loadMonthlyReportOnce(force, opts);
+      entry.gen = this._monthlyReportLoadGen; // bumped synchronously by the call
+      return p;
+    };
+    const first = runOnce(forceRefresh, options);
+    entry.promise = (async () => {
+      try {
+        await first;
+        while (
+          entry.forceAgain &&
+          entry.gen === this._monthlyReportLoadGen &&
+          (this._monthlyReportMonthOffset || 0) === offset
+        ) {
+          entry.forceAgain = false;
+          await runOnce(true, { silent: true });
+        }
+      } finally {
+        if (inflightMap[offset] === entry) delete inflightMap[offset];
+      }
+    })();
+    inflightMap[offset] = entry;
+    return entry.promise;
+  }
+
+  async _loadMonthlyReportOnce(forceRefresh = false, options = {}) {
     const silent = !!options.silent;
     // Short TTL: effective/non-effective must stay aligned with Today's cards.
     const CACHE_TTL_MS = 60 * 1000;
@@ -5174,10 +5303,15 @@ class UIManager {
     }
   }
 
-  /** Auto-refresh "This Month at a Glance" while Time Tracker is visible (~1 min, like screenshots). */
+  /**
+   * Auto-refresh "This Month at a Glance" while Time Tracker is visible.
+   * Every 5 min: each refresh re-fetches the whole month in main, which was
+   * the once-a-minute ~60% CPU spike. The page still loads fresh when opened.
+   */
   startMonthlyReportAutoRefresh() {
     this.stopMonthlyReportAutoRefresh();
     this.monthlyReportRefreshInterval = setInterval(() => {
+      if (document.hidden) return; // window hidden — nothing to refresh
       const timetrackerPage = document.getElementById('timetrackerPage');
       const isActive =
         timetrackerPage?.classList?.contains('active') ||
@@ -5191,8 +5325,8 @@ class UIManager {
         .finally(() => {
           this._monthlyReportRefreshing = false;
         });
-    }, 60 * 1000);
-    console.log('🔄 [AUTO-REFRESH] Monthly report auto-refresh started (60s)');
+    }, 5 * 60 * 1000);
+    console.log('🔄 [AUTO-REFRESH] Monthly report auto-refresh started (5 min)');
   }
 
   stopMonthlyReportAutoRefresh() {

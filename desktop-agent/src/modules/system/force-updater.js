@@ -586,7 +586,7 @@ class ForceUpdater {
     // Install update (quit and install)
     safeHandle('install-update', () => {
       console.log('🔄 [FORCE-UPDATER] IPC: install-update requested');
-      return this.installUpdate();
+      return this.installUpdate({ userInitiated: true });
     });
 
     safeHandle('open-manual-update-download', () => {
@@ -836,16 +836,26 @@ class ForceUpdater {
   async fetchLatestPrereleaseViaGithubApi() {
     const gh = this.getGithubReleaseTarget();
     const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/releases?per_page=30`;
-    const res = await fetch(url, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'alyson-pm-desktop-agent-updater',
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`GitHub releases API returned ${res.status}`);
+    // Bound the request (incl. body read): a half-open socket after wake must not
+    // hang the update check indefinitely.
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const abortTimer = controller ? setTimeout(() => controller.abort(), 15000) : null;
+    let releases;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'alyson-pm-desktop-agent-updater',
+        },
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (!res.ok) {
+        throw new Error(`GitHub releases API returned ${res.status}`);
+      }
+      releases = await res.json();
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
     }
-    const releases = await res.json();
     if (!Array.isArray(releases)) return null;
 
     const platformAsset = process.platform === 'win32' ? 'latest.yml' : 'latest-mac.yml';
@@ -903,7 +913,22 @@ class ForceUpdater {
     };
   }
 
-  async checkForUpdates() {
+  /**
+   * Concurrent callers (login fires several checks, interval + IPC) share one
+   * in-flight check instead of each hitting GitHub / electron-updater.
+   */
+  checkForUpdates() {
+    if (this._checkForUpdatesInFlight) return this._checkForUpdatesInFlight;
+    const p = Promise.resolve()
+      .then(() => this._checkForUpdatesImpl())
+      .finally(() => {
+        if (this._checkForUpdatesInFlight === p) this._checkForUpdatesInFlight = null;
+      });
+    this._checkForUpdatesInFlight = p;
+    return p;
+  }
+
+  async _checkForUpdatesImpl() {
     // CRITICAL: Always get fresh version from app, never use cached
     if (app) {
       const freshVersion = app.getVersion();
@@ -1441,21 +1466,77 @@ class ForceUpdater {
     return /ENOSPC|no space left|not enough (free )?disk|disk.?full|edquot/i.test(msg);
   }
 
-  getVolumeFreeBytes(dir) {
-    const { execFileSync } = require('child_process');
+  /**
+   * Async execFile (same semantics as execFileSync: resolves stdout, rejects on
+   * non-zero exit / timeout) so update staging never blocks the main thread
+   * (a blocked main thread lags the macOS keyboard hook system-wide).
+   */
+  _execFileAsync(cmd, args, options = {}) {
+    const { execFile } = require('child_process');
+    return new Promise((resolve, reject) => {
+      execFile(cmd, args, { maxBuffer: 16 * 1024 * 1024, ...options }, (err, stdout, stderr) => {
+        if (err) {
+          err.stdout = stdout;
+          err.stderr = stderr;
+          reject(err);
+          return;
+        }
+        resolve(stdout);
+      });
+    });
+  }
+
+  /** Async spawnSync equivalent: resolves { status, stdout, stderr, error } and never rejects. */
+  _spawnCollectAsync(cmd, args, options = {}) {
+    const { spawn } = require('child_process');
+    const { timeout, encoding, ...rest } = options;
+    return new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      let child;
+      let timer = null;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve({ stdout, stderr, ...result });
+      };
+      try {
+        child = spawn(cmd, args, rest);
+      } catch (error) {
+        finish({ status: null, error });
+        return;
+      }
+      if (encoding && child.stdout) child.stdout.setEncoding(encoding);
+      if (encoding && child.stderr) child.stderr.setEncoding(encoding);
+      if (child.stdout) child.stdout.on('data', (d) => { stdout += d; });
+      if (child.stderr) child.stderr.on('data', (d) => { stderr += d; });
+      if (timeout) {
+        timer = setTimeout(() => {
+          try { child.kill('SIGTERM'); } catch (_) {}
+          finish({ status: null, error: new Error(`${cmd} timed out`) });
+        }, timeout);
+      }
+      child.on('error', (error) => finish({ status: null, error }));
+      child.on('close', (code) => finish({ status: code }));
+    });
+  }
+
+  async getVolumeFreeBytes(dir) {
     const os = require('os');
-    const out = execFileSync('df', ['-k', dir || os.tmpdir()], { encoding: 'utf8' });
+    const out = await this._execFileAsync('df', ['-k', dir || os.tmpdir()], { encoding: 'utf8', timeout: 30000 });
     const line = out.trim().split('\n').pop() || '';
     const parts = line.split(/\s+/).filter(Boolean);
     const availK = Number(parts[3]);
     return Number.isFinite(availK) ? availK * 1024 : 0;
   }
 
-  assertEnoughDiskForMacUpdate(workDir) {
+  async assertEnoughDiskForMacUpdate(workDir) {
     const needBytes = 500 * 1024 * 1024;
     let free = 0;
     try {
-      free = this.getVolumeFreeBytes(workDir);
+      free = await this.getVolumeFreeBytes(workDir);
     } catch (_) {
       return;
     }
@@ -1731,7 +1812,6 @@ class ForceUpdater {
    */
   async downloadMacInPlaceUpdate() {
     const os = require('os');
-    const { execFileSync } = require('child_process');
 
     if (this.isDownloading) {
       return { success: true, inProgress: true };
@@ -1745,6 +1825,10 @@ class ForceUpdater {
     const workDir = path.join(os.tmpdir(), `alyson-pm-update-${version}-${Date.now()}`);
     const zipPath = path.join(workDir, 'update.zip');
     const extractDir = path.join(workDir, 'extracted');
+
+    // Abandoned staging dirs (~0.5 GB each) otherwise pile up in $TMPDIR across
+    // repeated wake/retry cycles. Never touches the dir about to be used.
+    this._cleanupStaleMacUpdateWorkDirs(workDir);
 
     try {
       const bundlePath = this.getInstalledAppBundlePath();
@@ -1762,7 +1846,7 @@ class ForceUpdater {
       }
 
       fs.mkdirSync(extractDir, { recursive: true });
-      this.assertEnoughDiskForMacUpdate(workDir);
+      await this.assertEnoughDiskForMacUpdate(workDir);
 
       const url = this.getMacZipUrl(version);
       console.log('📥 [FORCE-UPDATER] macOS in-place download:', url);
@@ -1784,14 +1868,14 @@ class ForceUpdater {
       if (downloadErr) throw downloadErr;
 
       console.log('📦 [FORCE-UPDATER] Extracting update ZIP...');
-      execFileSync('ditto', ['-x', '-k', zipPath, extractDir], { timeout: 300000 });
+      await this._execFileAsync('ditto', ['-x', '-k', zipPath, extractDir], { timeout: 300000 });
 
       const appName = fs.readdirSync(extractDir).find((n) => n.endsWith('.app'));
       if (!appName) throw new Error('No .app found in update ZIP');
       const stagedApp = path.join(extractDir, appName);
 
       // Remove quarantine so Gatekeeper does not block the swapped bundle.
-      try { execFileSync('xattr', ['-cr', stagedApp], { timeout: 60000 }); } catch (e) {
+      try { await this._execFileAsync('xattr', ['-cr', stagedApp], { timeout: 60000 }); } catch (e) {
         console.warn('⚠️ [FORCE-UPDATER] xattr strip warning:', e.message);
       }
 
@@ -1799,7 +1883,7 @@ class ForceUpdater {
       // Accessibility) survive the in-place swap. Ad-hoc re-signing ("-") creates a
       // NEW identity on every update and forces users to re-grant permissions.
       // Only fall back to ad-hoc when the downloaded bundle is unsigned / ad-hoc.
-      this._ensureMacBundleSignature(stagedApp);
+      await this._ensureMacBundleSignature(stagedApp);
 
       this.macStagedAppPath = stagedApp;
       this.macUpdateWorkDir = workDir;
@@ -1855,15 +1939,49 @@ class ForceUpdater {
   }
 
   /**
+   * Remove the previous staged work dir and older `alyson-pm-update-*` dirs in
+   * $TMPDIR before a fresh Mac staging. `currentWorkDir` (the dir about to be
+   * used) is never touched. Deletion is async so it never blocks the main thread.
+   */
+  _cleanupStaleMacUpdateWorkDirs(currentWorkDir) {
+    const os = require('os');
+    const tsOf = (p) => {
+      const m = /alyson-pm-update-.*-(\d+)$/.exec(path.basename(String(p || '')));
+      return m ? Number(m[1]) : NaN;
+    };
+    const currentResolved = path.resolve(currentWorkDir);
+    const currentTs = tsOf(currentWorkDir);
+    const targets = new Set();
+    if (this.macUpdateWorkDir && path.resolve(this.macUpdateWorkDir) !== currentResolved) {
+      targets.add(path.resolve(this.macUpdateWorkDir));
+    }
+    try {
+      const tmp = os.tmpdir();
+      for (const name of fs.readdirSync(tmp)) {
+        if (!name.startsWith('alyson-pm-update-')) continue;
+        const full = path.resolve(path.join(tmp, name));
+        if (full === currentResolved) continue;
+        const ts = tsOf(full);
+        if (Number.isFinite(ts) && Number.isFinite(currentTs) && ts < currentTs) targets.add(full);
+      }
+    } catch (_) {}
+    if (this.macUpdateWorkDir && targets.has(path.resolve(this.macUpdateWorkDir))) {
+      this.macUpdateWorkDir = null;
+    }
+    for (const dir of targets) {
+      if (dir === currentResolved) continue;
+      fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+    return [...targets];
+  }
+
+  /**
    * Keep a stable CI code signature when present; only ad-hoc sign unsigned /
    * ad-hoc bundles. Stable identity is required for TCC permissions to persist
    * across in-place updates.
    */
-  _ensureMacBundleSignature(stagedApp) {
-    const { spawnSync } = require('child_process');
-    const { execFileSync } = require('child_process');
-
-    const probe = spawnSync('codesign', ['-dv', '--verbose=2', stagedApp], {
+  async _ensureMacBundleSignature(stagedApp) {
+    const probe = await this._spawnCollectAsync('codesign', ['-dv', '--verbose=2', stagedApp], {
       encoding: 'utf8',
       timeout: 30000,
     });
@@ -1894,7 +2012,7 @@ class ForceUpdater {
     }
 
     try {
-      execFileSync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
+      await this._execFileAsync('codesign', ['--force', '--deep', '--sign', '-', stagedApp], { timeout: 120000 });
       console.log('⚠️ [FORCE-UPDATER] Bundle was unsigned — applied ad-hoc signature');
     } catch (e) {
       console.warn('⚠️ [FORCE-UPDATER] ad-hoc codesign warning:', e.message);
@@ -1939,8 +2057,9 @@ PID=${pid}
 STAGED="${stagedApp.replace(/"/g, '\\"')}"
 TARGET="${bundlePath.replace(/"/g, '\\"')}"
 WORKDIR="${workDir.replace(/"/g, '\\"')}"
-# Wait for the running app to fully quit
-for i in $(seq 1 60); do
+# Wait for the running app to fully quit (up to 120 s — graceful shutdown can
+# take longer than 30 s after wake; rsync --delete over a live bundle corrupts it)
+for i in $(seq 1 240); do
   if ! kill -0 "$PID" 2>/dev/null; then break; fi
   sleep 0.5
 done
@@ -2024,7 +2143,20 @@ open "$TARGET"
   /**
    * Install the update (quit and install)
    */
-  async installUpdate() {
+  /**
+   * Automatic installs check "not tracking" before they start, but a Mac
+   * re-stage now runs in the background (it used to freeze the app), so the
+   * employee can press Start while it runs. Re-check right before the app
+   * quits so an automatic install never ends a live session.
+   */
+  _deferAutoInstallIfTracking(userInitiated) {
+    if (userInitiated || !this.isTrackingActive()) return null;
+    console.log('⏸️ [FORCE-UPDATER] Tracking started while the update was being prepared — installing after Stop');
+    this._installWhenIdle = true;
+    return { success: false, deferred: true, reason: 'tracking_active' };
+  }
+
+  async installUpdate({ userInitiated = false } = {}) {
     console.log('🔄 [FORCE-UPDATER] installUpdate() called');
     console.log('🔧 [FORCE-UPDATER] State check:', {
       hasAutoUpdater: !!autoUpdater,
@@ -2042,6 +2174,10 @@ open "$TARGET"
       this.windowsInstallerPath &&
       fs.existsSync(this.windowsInstallerPath)
     ) {
+      {
+        const deferred = this._deferAutoInstallIfTracking(userInitiated);
+        if (deferred) return deferred;
+      }
       return this.launchWindowsInstaller(this.windowsInstallerPath);
     }
 
@@ -2055,6 +2191,10 @@ open "$TARGET"
       console.log('🔧 [FORCE-UPDATER] No staged Windows update — downloading Setup.exe via Node before install');
       const dl = await this.downloadWindowsInstallerViaNode();
       if (dl?.success && this.windowsInstallerPath && fs.existsSync(this.windowsInstallerPath)) {
+        {
+          const deferred = this._deferAutoInstallIfTracking(userInitiated);
+          if (deferred) return deferred;
+        }
         return this.launchWindowsInstaller(this.windowsInstallerPath);
       }
     }
@@ -2062,6 +2202,10 @@ open "$TARGET"
     if (this.isMacPackaged()) {
       const stagedValid = this.macStagedAppPath && fs.existsSync(this.macStagedAppPath);
       if (stagedValid && !this.manualInstallRequired) {
+        {
+          const deferred = this._deferAutoInstallIfTracking(userInitiated);
+          if (deferred) return deferred;
+        }
         return this.installMacInPlace();
       }
       // No valid staged bundle (e.g. app restarted after download, losing the in-memory
@@ -2072,6 +2216,10 @@ open "$TARGET"
         try {
           const restage = await this.downloadMacInPlaceUpdate();
           if (restage?.success && this.macStagedAppPath && fs.existsSync(this.macStagedAppPath)) {
+            {
+              const deferred = this._deferAutoInstallIfTracking(userInitiated);
+              if (deferred) return deferred;
+            }
             return this.installMacInPlace();
           }
         } catch (e) {
@@ -2099,6 +2247,10 @@ open "$TARGET"
         this.manualInstallRequired = false;
         const dl = await this.downloadWindowsInstallerViaNode();
         if (dl?.success && this.windowsInstallerPath && fs.existsSync(this.windowsInstallerPath)) {
+          {
+            const deferred = this._deferAutoInstallIfTracking(userInitiated);
+            if (deferred) return deferred;
+          }
           return this.launchWindowsInstaller(this.windowsInstallerPath);
         }
       }
@@ -2143,6 +2295,11 @@ open "$TARGET"
       } else {
         return { success: false, error: 'No update downloaded', installing: false };
       }
+    }
+
+    {
+      const deferred = this._deferAutoInstallIfTracking(userInitiated);
+      if (deferred) return deferred;
     }
 
     if (process.platform === 'win32' && !this.acquireInstallLock(this.pendingVersion)) {
