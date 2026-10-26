@@ -4,6 +4,11 @@ All notable changes to the desktop agent will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-26
+
+### Fixed
+- Opening the app no longer downloads the Mac installer. The update stays inside the app: it downloads the ZIP and replaces Tavilo Time in place, keeping Screen Recording and Accessibility. The DMG opens only if someone clicks Download Installer.
+
 ## [1.1.1] - 2026-10-26
 
 ### Added

@@ -96,4 +96,53 @@ describe('restart auto-update', () => {
     updater.isUpdateDownloaded = true;
     expect(updater.hasInstallablePayload()).toBe(false);
   });
+
+  it('does not open the installer while the in-place download is already running', async () => {
+    const { shell } = require('electron');
+    shell.openExternal.mockClear();
+    const updater = new ForceUpdater();
+    updater.isDevMode = false;
+    updater.isMacPackaged = () => true;
+    updater.currentVersion = '1.1.1';
+    updater.macStagedAppPath = null;
+    updater.isUpdateDownloaded = false;
+    updater.isDownloading = true;
+    updater.isUpdateAvailable = true;
+    updater.pendingVersion = '1.1.2';
+    updater.installMacInPlace = jest.fn();
+    updater.openManualDownload = jest.fn();
+    updater.checkForUpdates = jest.fn(async () => ({
+      updateAvailable: true,
+      updateDownloaded: false,
+      newVersion: '1.1.2',
+      currentVersion: '1.1.1',
+    }));
+    updater.notifyUpdateAvailable = jest.fn();
+
+    const outcome = await updater.applyUpdateOnRestart();
+
+    expect(outcome.reason).toBe('download_in_progress');
+    expect(updater.openManualDownload).not.toHaveBeenCalled();
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('keeps Install inside the app when the ZIP is not staged yet', async () => {
+    const { shell } = require('electron');
+    shell.openExternal.mockClear();
+    const updater = new ForceUpdater();
+    updater.isMacPackaged = () => true;
+    updater.macStagedAppPath = null;
+    updater.isUpdateDownloaded = false;
+    updater.isUpdateAvailable = true;
+    updater.pendingVersion = '1.1.2';
+    updater.isDownloading = true;
+    updater.installMacInPlace = jest.fn();
+    updater.downloadMacInPlaceUpdate = jest.fn(async () => ({ success: true, inProgress: true }));
+
+    const result = await updater.installUpdate({ userInitiated: true });
+
+    expect(result.inProgress).toBe(true);
+    expect(result.dmgOpened).toBeFalsy();
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
 });

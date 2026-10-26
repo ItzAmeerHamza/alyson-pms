@@ -2031,16 +2031,14 @@ class ForceUpdater {
     const bundlePath = this.getInstalledAppBundlePath();
 
     if (!stagedApp || !fs.existsSync(stagedApp) || !bundlePath) {
-      console.warn('⚠️ [FORCE-UPDATER] No staged app for in-place install — falling back to DMG');
-      this.manualInstallRequired = true;
-      this.openManualDownload();
+      console.warn('⚠️ [FORCE-UPDATER] No staged app for in-place install — will retry the in-app download');
       return {
-        success: true,
+        success: false,
         installing: false,
-        dmgOpened: true,
-        manualInstallRequired: true,
-        manualDownloadUrl: this.getManualDownloadUrl(),
-        message: 'Installer opened in your browser. Drag Tavilo Time to Applications, then reopen the app.',
+        dmgOpened: false,
+        manualInstallRequired: false,
+        error: 'not_staged',
+        message: 'The update is still downloading inside the app.',
       };
     }
 
@@ -2126,16 +2124,14 @@ open "$TARGET"
     } catch (error) {
       console.error('❌ [FORCE-UPDATER] macOS in-place install failed:', error.message);
       global.isInstallingUpdate = false;
-      this.manualInstallRequired = true;
-      this.openManualDownload();
       return {
         success: false,
         installing: false,
-        dmgOpened: true,
-        manualInstallRequired: true,
+        dmgOpened: false,
+        manualInstallRequired: false,
         manualDownloadUrl: this.getManualDownloadUrl(),
         error: error.message,
-        message: 'Automatic install failed. Installer opened in your browser — drag Tavilo Time to Applications, then reopen.',
+        message: 'Automatic install failed. Click Retry Update. The installer was not opened.',
       };
     }
   }
@@ -2215,6 +2211,12 @@ open "$TARGET"
         console.log('🍎 [FORCE-UPDATER] No staged bundle at install time — attempting in-place re-stage');
         try {
           const restage = await this.downloadMacInPlaceUpdate();
+          // A download already started on open. Opening the DMG here is what
+          // sent the installer to the browser while the ZIP was still coming down.
+          if (restage?.inProgress || this.isDownloading) {
+            console.log('🍎 [FORCE-UPDATER] In-place download still running — not opening the installer');
+            return { success: true, installing: false, inProgress: true };
+          }
           if (restage?.success && this.macStagedAppPath && fs.existsSync(this.macStagedAppPath)) {
             {
               const deferred = this._deferAutoInstallIfTracking(userInitiated);
@@ -2226,16 +2228,19 @@ open "$TARGET"
           console.warn('⚠️ [FORCE-UPDATER] In-place re-stage failed:', e?.message || e);
         }
       }
-      // Genuine failure — fall back to DMG so the user is never stuck.
+      // Opening the app, or clicking Install before the ZIP is staged, must not
+      // launch the DMG. The browser opens only from Download installer.
       const url = this.getManualDownloadUrl();
-      this.openManualDownload();
+      console.log('🍎 [FORCE-UPDATER] In-place update not ready — leaving the installer closed');
       return {
-        success: true,
+        success: false,
         installing: false,
-        dmgOpened: true,
-        manualInstallRequired: true,
+        dmgOpened: false,
+        inProgress: !!this.isDownloading,
+        manualInstallRequired: false,
         manualDownloadUrl: url,
-        message: 'Installer opened in your browser. Drag Tavilo Time to Applications to replace the old version, then reopen the app.',
+        error: 'in_place_not_ready',
+        message: 'The update downloads inside the app. The installer was not opened.',
       };
     }
 
@@ -2255,20 +2260,16 @@ open "$TARGET"
         }
       }
       const url = this.getManualDownloadUrl();
-      // Only open browser when install is explicitly stuck after retry.
-      if (process.platform !== 'win32') {
-        this.openManualDownload();
-      }
       return {
         success: false,
         installing: false,
-        dmgOpened: process.platform !== 'win32',
+        dmgOpened: false,
         manualInstallRequired: true,
         manualDownloadUrl: url,
         message:
           process.platform === 'win32'
             ? 'In-app download failed. Click Retry Update, or use Download Installer Manually.'
-            : 'Installer opened in your browser. Install it, then reopen the app.',
+            : 'Automatic update could not finish. Click Retry Update. Use Download Installer only if Retry keeps failing.',
       };
     }
 
@@ -2511,8 +2512,19 @@ open "$TARGET"
 
       this.notifyUpdateAvailable(check);
 
+      // checkForUpdates starts the ZIP download from the update-available
+      // handler. Installing in that same turn sees "nothing staged yet" and
+      // used to open the DMG in the browser.
+      if (this.isDownloading && !this.hasInstallablePayload()) {
+        console.log('🍎 [FORCE-UPDATER] Download already running — will install when it finishes');
+        return { applied: false, reason: 'download_in_progress' };
+      }
+
       if (!check.updateDownloaded && !this.isDownloading) {
         const dl = await this.downloadUpdate();
+        if (dl?.inProgress || (this.isDownloading && !this.hasInstallablePayload())) {
+          return { applied: false, reason: 'download_in_progress', dl };
+        }
         if (!dl?.success && !this.hasInstallablePayload()) {
           return { applied: false, reason: 'download_failed', dl };
         }
