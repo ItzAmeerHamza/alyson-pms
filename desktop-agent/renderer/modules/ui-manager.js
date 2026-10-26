@@ -187,7 +187,7 @@ class UIManager {
     if (els.progressText) {
       els.progressText.textContent = data.message ? `${data.message} (${percent}%)` : `${percent}%`;
     }
-    if (els.status && !data.message) els.status.textContent = 'Downloading update…';
+    if (els.status && !data.message) els.status.textContent = 'Updating Tavilo Time…';
   }
 
   /** Orange dot on the nav item so an available update is visible from any page. */
@@ -225,7 +225,7 @@ class UIManager {
     if (els.checkBtn) els.checkBtn.disabled = false;
 
     if (status.isDownloading) {
-      els.status.textContent = pending ? `Downloading ${pending}…` : 'Downloading update…';
+      els.status.textContent = pending ? `Updating to ${pending}…` : 'Updating Tavilo Time…';
       this.renderUpdateProgress({ percent: status.downloadProgress || 0 });
       if (els.checkBtn) els.checkBtn.disabled = true;
       this.setUpdatesNavBadge(true);
@@ -245,9 +245,8 @@ class UIManager {
 
     if (status.manualInstallRequired) {
       els.status.textContent = pending
-        ? `${pending} needs to be installed manually.`
-        : 'This update needs to be installed manually.';
-      if (els.manualBtn) els.manualBtn.hidden = false;
+        ? `Tavilo Time is still updating to ${pending}. Leave the app open.`
+        : 'Tavilo Time is still updating itself. Leave the app open.';
       this.setUpdatesNavBadge(true);
       return;
     }
@@ -4306,41 +4305,19 @@ class UIManager {
     const progressContainer = document.getElementById('updateProgressContainer');
 
     if (progressContainer) progressContainer.classList.remove('visible');
-    // Keep Retry Update as the primary action — never hide it behind manual-only.
     if (updateBtn) {
       updateBtn.style.display = 'flex';
       updateBtn.disabled = false;
     }
     if (btnSpinner) btnSpinner.style.display = 'none';
-    if (btnText) {
-      btnText.textContent = updateInfo.dmgInstallReady ? 'Retry Update' : 'Retry Update';
-    }
-    if (manualBtn) {
-      manualBtn.style.display = 'flex';
-      const manualLabel = manualBtn.querySelector('span');
-      if (manualLabel) {
-        manualLabel.textContent = updateInfo.dmgInstallReady
-          ? 'Download Installer'
-          : 'Download Installer Manually';
-      }
-      if (!manualBtn._manualHandlerAttached) {
-        manualBtn._manualHandlerAttached = true;
-        manualBtn.addEventListener('click', () => this.handleManualDownloadClick());
-      }
-    }
+    if (btnText) btnText.textContent = 'Retry Update';
+    // Never offer a second installer. The app is already installed and replaces itself.
+    if (manualBtn) manualBtn.style.display = 'none';
 
     const rawVersion = updateInfo.newVersion || updateInfo.version || '';
-    const versionPrefix = rawVersion ? `Version ${rawVersion} is ready. ` : '';
-    let message = updateInfo.message;
-    if (!message) {
-      if (updateInfo.dmgInstallReady) {
-        message = `${versionPrefix}Automatic update could not finish. Click Retry Update to install in place. Use Download Installer only if Retry keeps failing.`;
-      } else if (updateInfo.windowsInstaller || updateInfo.showManualDownloadOption || updateInfo.fallbackToWindowsInstaller) {
-        message = `${versionPrefix}Click Retry Update — Tavilo Time will download and install automatically. Use Download Installer Manually only if Retry keeps failing.`;
-      } else {
-        message = `${versionPrefix}Click Retry Update to continue the automatic install.`;
-      }
-    }
+    const versionPrefix = rawVersion ? `Version ${rawVersion} is still installing. ` : '';
+    const message = updateInfo.message
+      || `${versionPrefix}Tavilo Time updates itself. Click Retry Update and leave this window open.`;
     this.showUpdateError(message);
   }
 
@@ -4443,7 +4420,7 @@ class UIManager {
     
     // Show loading state
     if (updateBtn) updateBtn.disabled = true;
-    if (btnText) btnText.textContent = 'Downloading...';
+    if (btnText) btnText.textContent = 'Updating…';
     if (btnSpinner) btnSpinner.style.display = 'inline-block';
     if (progressContainer) progressContainer.classList.add('visible');
     if (progressText) progressText.textContent = 'Downloading update...';
@@ -4519,9 +4496,9 @@ class UIManager {
       // (common after restoring stale update-state.json on Windows).
       let friendly = msg;
       if (/please check update first/i.test(msg)) {
-        friendly = 'Update check expired. Click Retry Update — if it fails again, use Download Installer.';
+        friendly = 'Update check expired. Click Retry Update. Tavilo Time will continue updating itself.';
       } else if (/ERR_ADDRESS_UNREACHABLE|ERR_CONNECTION_|ENETUNREACH|ERR_NAME_NOT_RESOLVED/i.test(msg)) {
-        friendly = 'Could not reach the update server. Click Retry Update, or use Download Installer Manually.';
+        friendly = 'Could not reach the update server. Click Retry Update. You do not need to install the app again.';
       }
       this.showUpdateError(friendly);
       
@@ -4553,7 +4530,7 @@ class UIManager {
           ? `${(bps / 1024 / 1024).toFixed(1)} MB/s`
           : `${Math.max(1, Math.round(bps / 1024))} KB/s`;
       }
-      const hint = progress.message || (percent < 100 ? 'Downloading update…' : 'Download complete');
+      const hint = progress.message || (percent < 100 ? 'Updating Tavilo Time…' : 'Update ready');
       progressText.textContent = speed
         ? `${hint} ${percent}% (${speed})`
         : `${hint} ${percent}%`;
@@ -4628,7 +4605,7 @@ class UIManager {
         this.isInstallingUpdate = false;
         if (btnText) btnText.textContent = 'Installer Opened';
         if (btnSpinner) btnSpinner.style.display = 'none';
-        this.showUpdateError(result.message || 'Installer opened. Drag Tavilo Time to Applications, then reopen the app.');
+        this.showUpdateError(result.message || 'Tavilo Time is updating itself. Leave this window open.');
       } else if (result && result.installing) {
         // Update is installing, app will quit - show success state
         if (btnText) btnText.textContent = 'Restarting...';

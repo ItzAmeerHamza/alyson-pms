@@ -7263,20 +7263,20 @@
                     <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
             </div>
-            <h2>Update Required</h2>
+            <h2>Updating Tavilo Time</h2>
             <div class="update-modal-version">
-                New version <strong id="updateNewVersion">--</strong> is available
+                Version <strong id="updateNewVersion">--</strong> is installing itself
             </div>
             <p class="update-modal-message">
-                You're currently on version <span id="updateCurrentVersion">--</span>.<br>
-                Please update to continue using the app.
+                You're on version <span id="updateCurrentVersion">--</span>.<br>
+                Leave this window open. Tavilo Time replaces itself. You do not need to download or install the app again.
             </p>
             
             <div id="updateProgressContainer" class="update-progress-container">
                 <div class="update-progress-bar-bg">
                     <div id="updateProgressBar" class="update-progress-bar"></div>
                 </div>
-                <div id="updateProgressText" class="update-progress-text">Downloading update...</div>
+                <div id="updateProgressText" class="update-progress-text">Updating…</div>
             </div>
             
             <button id="updateNowBtn" class="update-btn">
@@ -7284,7 +7284,7 @@
                 <span id="updateBtnSpinner" class="spinner" style="display: none;"></span>
             </button>
 
-            <button id="manualUpdateBtn" class="update-btn update-btn-secondary" style="display: none; margin-top: 10px;">
+            <button id="manualUpdateBtn" class="update-btn update-btn-secondary" style="display: none; margin-top: 10px;" hidden>
                 Download Installer Manually
             </button>
             
@@ -8325,7 +8325,7 @@
                 <div class="control-section">
                     <div class="control-header">
                         <div class="control-title">App updates</div>
-                        <div class="control-subtitle">Check for a new version and install it without restarting manually</div>
+                        <div class="control-subtitle">Tavilo Time updates itself. You do not need to download the app again.</div>
                     </div>
 
                     <div style="max-width: 720px;">
@@ -8348,8 +8348,8 @@
                             </div>
 
                             <div class="updates-actions">
-                                <button type="button" id="updatesDownloadBtn" class="btn btn-primary" hidden>Download update</button>
-                                <button type="button" id="updatesInstallBtn" class="btn btn-primary" hidden>Install and restart</button>
+                                <button type="button" id="updatesDownloadBtn" class="btn btn-primary" hidden>Update now</button>
+                                <button type="button" id="updatesInstallBtn" class="btn btn-primary" hidden>Restart to finish update</button>
                                 <button type="button" id="updatesManualBtn" class="btn btn-secondary" hidden>Download installer</button>
                             </div>
                         </div>

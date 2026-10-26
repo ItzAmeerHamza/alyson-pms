@@ -521,8 +521,15 @@ class ForceUpdater {
     return `https://github.com/${gh.owner}/${gh.repo}/releases/download/${tag}/Alyson.PM-${ver}${suffix}`;
   }
 
-  openManualDownload() {
+  openManualDownload({ userInitiated = false } = {}) {
     const url = this.getManualDownloadUrl();
+    // Installed apps update in place. Opening the DMG makes people think they
+    // have to install Tavilo Time again, so the browser stays closed unless
+    // someone explicitly chooses the installer.
+    if (!userInitiated) {
+      console.log('🍎 [FORCE-UPDATER] Installer left closed. The app updates itself.');
+      return { success: false, opened: false, url, error: 'installer_not_opened' };
+    }
     if (shell?.openExternal) {
       shell.openExternal(url);
       return { success: true, url };
@@ -590,7 +597,7 @@ class ForceUpdater {
     });
 
     safeHandle('open-manual-update-download', () => {
-      return this.openManualDownload();
+      return this.openManualDownload({ userInitiated: true });
     });
 
     safeHandle('reset-update-cache', () => {
@@ -1294,8 +1301,8 @@ class ForceUpdater {
     this.saveUpdateState();
     console.log(`🔧 [FORCE-UPDATER] Windows download soft-fallback (auto-retry kept): ${url} (${reason || 'unknown'})`);
     const friendly = this.isTransientNetworkUpdateError(reason)
-      ? 'Could not reach the update server. Click Retry Update — the app will download and install automatically. Manual download is only if Retry keeps failing.'
-      : 'Download interrupted. Click Retry Update — Tavilo Time will download and install automatically. Use Download Installer only if Retry keeps failing.';
+      ? 'Could not reach the update server. Click Retry Update. Tavilo Time will keep updating itself.'
+      : 'The update was interrupted. Click Retry Update. You do not need to install the app again.';
     return {
       success: false,
       error: reason || 'download_failed',
@@ -1925,7 +1932,7 @@ class ForceUpdater {
       this.saveUpdateState();
       const message = disk
         ? (error.message || 'Not enough free disk space to install the update. Free at least 500 MB, then click Retry Update.')
-        : 'Automatic update could not finish. Click Retry Update to install in place. Use Download Installer only if Retry keeps failing.';
+        : 'The update could not finish. Click Retry Update. Tavilo Time replaces itself. You do not need to install the app again.';
       return {
         success: false,
         error: disk ? 'disk_full' : 'in_place_failed',
@@ -2266,10 +2273,7 @@ open "$TARGET"
         dmgOpened: false,
         manualInstallRequired: true,
         manualDownloadUrl: url,
-        message:
-          process.platform === 'win32'
-            ? 'In-app download failed. Click Retry Update, or use Download Installer Manually.'
-            : 'Automatic update could not finish. Click Retry Update. Use Download Installer only if Retry keeps failing.',
+        message: 'The update could not finish. Click Retry Update. Tavilo Time replaces itself. You do not need to install the app again.',
       };
     }
 

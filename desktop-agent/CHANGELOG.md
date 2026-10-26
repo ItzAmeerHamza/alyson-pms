@@ -4,6 +4,11 @@ All notable changes to the desktop agent will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-26
+
+### Fixed
+- The update screen no longer offers an installer. Tavilo Time replaces itself, and people who already have the app are not asked to install it again. Screen Recording and Accessibility stay granted.
+
 ## [1.1.2] - 2026-10-26
 
 ### Fixed

@@ -145,4 +145,39 @@ describe('restart auto-update', () => {
     expect(result.dmgOpened).toBeFalsy();
     expect(shell.openExternal).not.toHaveBeenCalled();
   });
+
+  it('does not open the installer when the in-place download fails', async () => {
+    const { shell } = require('electron');
+    shell.openExternal.mockClear();
+    const updater = new ForceUpdater();
+    updater.isMacPackaged = () => true;
+    updater.macStagedAppPath = null;
+    updater.isUpdateDownloaded = false;
+    updater.isUpdateAvailable = true;
+    updater.pendingVersion = '1.1.2';
+    updater.isDownloading = false;
+    updater.manualInstallRequired = false;
+    updater.downloadMacInPlaceUpdate = jest.fn(async () => ({ success: false, error: 'in_place_failed' }));
+
+    const result = await updater.installUpdate({ userInitiated: true });
+
+    expect(result.dmgOpened).toBeFalsy();
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('leaves the installer closed unless someone explicitly asks for it', () => {
+    const { shell } = require('electron');
+    shell.openExternal.mockClear();
+    const updater = new ForceUpdater();
+    updater.pendingVersion = '1.1.2';
+
+    const blocked = updater.openManualDownload();
+    expect(blocked.success).toBe(false);
+    expect(blocked.error).toBe('installer_not_opened');
+    expect(shell.openExternal).not.toHaveBeenCalled();
+
+    const opened = updater.openManualDownload({ userInitiated: true });
+    expect(opened.success).toBe(true);
+    expect(shell.openExternal).toHaveBeenCalledTimes(1);
+  });
 });
