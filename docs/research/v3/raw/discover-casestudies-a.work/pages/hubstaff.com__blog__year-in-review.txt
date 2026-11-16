@@ -1,0 +1,584 @@
+URL: https://hubstaff.com/blog/year-in-review/
+TITLE: 2020 Year in Review | Hubstaff Blog
+META: <meta name="description" content="See the highlights and recap of our year at Hubstaff. New products, integrations, team growth, financial summaries, and more. Check it out." />
+META: <meta property="og:title" content="2020 Year in Review" />
+META: <meta property="og:description" content="See the highlights and recap of our year at Hubstaff." />
+META: <meta property="article:published_time" content="2022-03-04T18:47:13+00:00" />
+META: <meta property="article:modified_time" content="2025-08-20T17:01:07+00:00" />
+META: <meta name="twitter:description" content="See the highlights and recap of our year at Hubstaff. New products, integrations, team growth, financial summaries, and more." />
+META: <meta name='shareaholic:article_published_time' content='2022-03-04T13:47:13-05:00' />
+META: <meta name='shareaholic:article_modified_time' content='2025-08-20T13:01:07-04:00' />
+LD: datePublished=2022-03-04T13:47:13-05:00
+LD: dateModified=2025-08-20T13:01:07-04:00
+LD: datePublished=2022-03-04T13:47:13-05:00
+LD: dateModified=2025-08-20T13:01:07-04:00
+----
+2020 Year in Review | Hubstaff Blog 
+ A report for agencies: make capacity calls with data. 
+ Get the report 
+ / 
+ Blog 
+ Product 
+ Time tracking 
+ Productivity monitoring 
+ Workforce analytics 
+ Payments and costs 
+ Integrations 
+ Download the apps 
+ Time tracking software 
+ Time tracking software for teams across devices.
+ Automated timesheets Automatically turn tracked time into accurate timesheets. 
+ Time reports Detailed time reports that help you improve business processes. 
+ Project and task tracking Track time across projects, tasks, and team activities. 
+ GPS time tracking Create job sites that automatically clock teams in and out. 
+ Attendance and time-off tracking Track attendance, time off, and team availability. 
+ See all features 
+ Productivity monitoring software 
+ See how work time is spent – without micromanagement.
+ Employee monitoring Clear visibility into work activity – built for transparency. 
+ Employee activity tracking Track activity levels to understand work patterns. 
+ Time tracking with screenshots Add screenshots to tracked time for context. 
+ Idle time tracking Identify idle time and understand productivity gaps. 
+ App and URL usage See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software 
+ Turn work data into operational insights and decisions.
+ Advanced insights See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning Plan team workloads and prevent resource bottlenecks. 
+ Reporting Analyze work data with detailed operational reports. 
+ Unusual activity tracking Detect unusual activity patterns in tracked work data. 
+ See all features 
+ Global payments 
+ Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting Track project costs based on tracked work hours. 
+ Invoicing and billing Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations. Hubstaff
+ syncs with the apps you’re already using.
+ Jira Slack Wise Deel Asana Google Calendar Trello Github ClickUp Zendesk Quickbooks Monday PayPal Gusto Salesforce 
+ See it in action 
+ Maximize productivity with time tracking you can trust.
+ Get started 
+ See it in action 
+ Get insights, benchmarks,
+ and proactive alerts on team performance.
+ Request a demo 
+ Free interactive demo 
+ Explore how Hubstaff works with our interactive video demo!
+ Try our demo 
+ Free interactive demo 
+ Explore how Hubstaff works with our interactive video demo!
+ Try our demo 
+ See it in action 
+ Streamline your global
+ payroll with Hubstaff + Deel.
+ Learn more 
+ Solutions 
+ By industry 
+ Agencies Manage campaigns, billable hours, client budgets, project budgets, and more. Software development Reach milestones sooner with workload management and time tracking features. Consulting Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all industries 
+ By workforce 
+ Fully remote Manage remote teams of any size, anywhere. Hybrid Streamline management for both in-office and remote teams. Field Track time with geofencing and manage projects in real-time. 
+ By type 
+ SMB Workforce management software for small and medium-sized businesses. Enterprise Grow your company with enterprise-grade features, compliance, and support. 
+ Customer stories 
+ OneIMS boosts value
+ offered to customers by 30% with Hubstaff.
+ Explore our customer stories 
+ Resources 
+ Learn 
+ What Hubstaff tracks Delivering transparency, control, and access to every member of the team. Guiding principles Discover more about Hubstaff's employee experience values and policies. Help center Hubstaff time tracking support articles and walkthrough videos. FAQ Check out our frequently asked questions. 
+ Discover 
+ Resources Explore guides, tools, and practical team resources. Blog Explore the latest on productivity, product news, tips, and more. Customer stories Discover the experiences of our valued customers through their stories. Reviews See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales Connect with our sales team to explore tailored solutions for your business needs. Partners Join us in shaping a brighter future for the global workforce. Careers Explore exciting opportunities to join our amazing team. 
+ Featured resource 
+ Ready to lead with AI? This report reveals what winning teams do differently.
+ Read now 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Subscribe
+ Product 
+ Time tracking software 
+ Time tracking software for teams across devices.
+ Automated timesheets Automatically turn tracked time into accurate timesheets. 
+ Time reports Detailed time reports that help you improve business processes. 
+ Project and task tracking Track time across projects, tasks, and team activities. 
+ GPS time tracking Create job sites that automatically clock teams in and out. 
+ Attendance and time-off tracking Track attendance, time off, and team availability. 
+ See all features 
+ Productivity monitoring software 
+ See how work time is spent – without micromanagement.
+ Employee monitoring Clear visibility into work activity – built for transparency. 
+ Employee activity tracking Track activity levels to understand work patterns. 
+ Time tracking with screenshots Add screenshots to tracked time for context. 
+ Idle time tracking Identify idle time and understand productivity gaps. 
+ App and URL usage See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software 
+ Turn work data into operational insights and decisions.
+ Advanced insights See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning Plan team workloads and prevent resource bottlenecks. 
+ Reporting Analyze work data with detailed operational reports. 
+ Unusual activity tracking Detect unusual activity patterns in tracked work data. 
+ See all features 
+ Global payments 
+ Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting Track project costs based on tracked work hours. 
+ Invoicing and billing Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations.
+ Hubstaff syncs with the apps you’re already using.
+ Jira Slack Wise Deel Asana Google Calendar Trello Github ClickUp Zendesk Quickbooks Monday PayPal Gusto Salesforce 
+ Solutions 
+ By industry 
+ Agencies Manage campaigns, billable hours, client budgets, project budgets, and more. Software development Reach milestones sooner with workload management and time tracking features. Consulting Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all industries 
+ By workforce 
+ Fully remote Manage remote teams of any size, anywhere. Hybrid Streamline management for both in-office and remote teams. Field Track time with geofencing and manage projects in real-time. 
+ By industry 
+ SMB Workforce management software for small and medium-sized businesses. Enterprise Grow your company with enterprise-grade features, compliance, and support. 
+ Resources 
+ Learn 
+ What Hubstaff tracks Delivering transparency, control, and access to every member of the team. Guiding principles Discover more about Hubstaff's employee experience values and policies. Help center Hubstaff time tracking support articles and walkthrough videos. FAQ Check out our frequently asked questions. 
+ Discover 
+ Resources Explore guides, tools, and practical team resources. Blog Explore the latest on productivity, product news, tips, and more. Customer stories Discover the experiences of our valued customers through their stories. Reviews See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales Connect with our sales team to explore tailored solutions for your business needs. Partners Join us in shaping a brighter future for the global workforce. Careers Explore exciting opportunities to join our amazing team. 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Subscribe 
+ Payments 
+ Productivity 
+ Product 
+ Remote Work 
+ Time Tracking 
+ Workforce Management 
+ Product 
+ Mar 4, 2022 
+ One for the Books: Hubstaff’s Year in Review
+ By Dave Nevogt 
+ 13 min read 
+ What You'll Learn
+ Nearly 75% of companies shifted to remote work in 2020, up from 23% pre-pandemic — a surge that drove Hubstaff growth, a 44% team expansion, and reinforced its transparency-first approach.
+ Hubstaff's 2020 integrations — including Zapier, Slack, and ClickUp — were built to eliminate repetitive tasks and help distributed teams collaborate more efficiently across tools they already use.
+ Hubstaff's fully virtual 2021 retreat proved global teams can build real culture remotely, though managing Zoom fatigue and time zones across continents remains a key challenge to plan around.
+ Table of contents 2020 by the numbers 
+ Hubstaff 
+ Hubstaff Tasks 
+ The financials 
+ What our customers had to say 
+ New integrations saved us all from wasted time 
+ What we launched in 2020 
+ Hubstaff 
+ Our team’s year in review 
+ Our first virtual retreat was a Zoom-ing success 
+ What we’re looking forward to in the next year 
+ Looking ahead 
+ 2020. Phew. What was that?
+ Looking back at the last year feels like stepping off a carnival ride. It was a year unlike any other, and we mean that in so many ways.
+ The best way to describe it is to say 2020 was a year of ups and downs:
+ A global pandemic brought restrictions and curfews to our entire team. We’ve been remote since the beginning, but this still was a huge change in how people lived and worked. Goodbye coffee shops, our annual retreat, seeing family, traveling, weddings, and hugs. Not to mention the new fear of our team and families getting sick.
+ Offices closed almost overnight and everyone adapted to remote work on the fly. According to a recent survey , nearly 75% of companies were remote in 2020, compared to only 23% before the pandemic. Kitchen tables became home offices and schools.
+ That led to a huge increase in new Hubstaff signups in March and April as teams scrambled to track time and work asynchronously.
+ Our revenue went up and our churn went down in the past year, which are both good signs that we’re delivering the features and experience that newly and long-time remote teams need.
+ Our own team grew by 44%.
+ Remote work and the software that makes it possible became so popular that it led us to examine our own purpose. People who had never heard of proof of work or time tracking software were hesitant to try it.
+ We’ve always been proponents of remote work. But given this sudden shift, how can we help companies embrace it long-term? And how can our tools help people work smarter and with more flexibility?
+ Finally, how can we reinforce that our tools aren’t built to run secretly in the background nor to keep a too-close eye on employees?
+ This year led us back to our guiding principles of transparency, access, and control:
+ Transparency into how the software works at all times
+ Access to all of your own data, and the ability to see everything that a manager sees
+ Control to start and stop the apps and grant permissions on your own device
+ We were able to refocus as a team and work toward our shared goal of helping the business world transform to a remote-first workplace.
+ Not long after, we went on the TODAY show to talk about the future of work. We believe remote work is here to stay. And we’re going to do what we can to make it as successful and beneficial for everyone as possible.
+ Before we look ahead, we’re going to dive into what 2020 looked like for Hubstaff and its remote team of 79.
+ Stay in the loop
+ Subscribe to our blog for the latest remote work insights and productivity tips.
+ 2020 by the numbers
+ We like numbers. They can’t tell the entire story (that’s what this post is for!) but they can show us how this year compared to the previous.
+ Hubstaff
+ Hubstaff Tasks
+ That’s what happened with our time tracking and Agile project management software. How did the company as a whole do?
+ The financials
+ Like many remote software teams, we spent March and April onboarding customers who were suddenly leading teams from home. It was a whirlwind couple of months for us.
+ Even though stay home orders ended at different times depending on location, we’re still seeing higher active users now than we did in 2019.
+ That’s partially because remote work will likely continue well into this year as companies realize how valuable distributed work is. It also helps that employees are pushing for it, with one survey finding that 96% of employees prefer some amount of remote work.
+ So how did 2020 look when it came to new signups and retention?
+ You might already know that Hubstaff is part of the Open Startups project. Our metrics are public with the hope of encouraging transparency within our company and sharing our story with those outside of it.
+ Here’s a look at our top startup metrics for 2020 from our dashboard.
+ What our customers had to say
+ Without a doubt, the most important feedback we get comes directly from customers. What they like about the software, which features they’d like to see in the future, and how we’re doing in resolving issues or answering their questions are our top concerns.
+ For this, we look to our most recent customer stories. Click on any of the quotes below to read the full case study.
+ “Not only are we saving time and money each day, but our team actually has more free time.” 
+ Andriy Sambir , CEO of LinkUp 
+ “Hubstaff helps me know how many hours workers are at a job site from start to finish. Also, sometimes we partner with people who want to see our hourly reports, and I can easily show them. This app makes it all easier.” 
+ Javier Enciso Jr. , Founder and President of ENC Construction & Design
+ “We’ve been growing very fast over the last six months and that’s partly due to Hubstaff’s ability to scale. Onboarding, billing, and task management is simple to get going and no longer an all-day event.” 
+ Justin Mitchell , CEO of YAC 
+ “Having Hubstaff linked to Hubstaff Tasks makes things super easy when it comes to onboarding. We love the Sprints feature within Hubstaff Tasks. We’ve been using it since it launched.” 
+ Alin Spirdon , Web Developer at Epic Coders 
+ “‘We believe — just like Hubstaff — that talent is everywhere and people should be able to work any time, anywhere, even in their pajamas.’ Hubstaff allows Tallyfy not only to function with a remote team, but thrive with one. They can now easily pay their employees and onboard new ones.” 
+ Amit Kothari , Co-founder of Tallyfy 
+ “The main draw towards Hubstaff for Terran was the payroll feature. Hubstaff makes it easy to track your team’s hours and log timesheets across desktop, web, and mobile. What’s more, Hubstaff allows you to automatically set up payroll for everyone on your team based on preset pay rates.” 
+ Read more about Terran 
+ Interested in more? Check out all of our customer stories .
+ Let’s hear it for the customer experience team ????
+ The speed of this remote work shift meant confusion, frustration, and businesses muddling through a messy transition.
+ Our customer success and support teams rose to the challenge. Here are a few accolades from customers about our above-and-beyond support team.
+ “Support assistance was quick, informative, and thorough. Including screenshots to easily follow steps. A+!” 
+ “So responsive and helpful. You guys opened some windows of opportunity for artists like me. Thank you!” 
+ “Awesome! It really helped me to get in touch with a lot of options and useful things. Without Ӧgbę, it would have been difficult for me to find and understand all the options. Thanks a lot.”
+ “Solved in 20 seconds, thanks Carlo!” 
+ “Sarah is great – always responsive, understanding and speedy as well as professional. I am so grateful to be able to count on her when it comes to our postings. Thank you Sarah!” 
+ New integrations saved us all from wasted time
+ No one likes those repetitive, time-consuming tasks that eat into your dedicated work time.
+ If you felt more frustrated with this type of work in 2020, you’re not alone. Automation has reached new levels during the pandemic as more people realized the value of their time.
+ “Anywhere today that you have repetitive operations in place, those are prime things you could potentially automate to reduce your costs and become more efficient and more responsible,” said Gartner analyst, Alan Priestley, in Wired .
+ With this in mind, we can safely say it was a great year for new integrations.
+ For us, adding integrations is all about automating or streamlining these tasks so you don’t have to spend brainpower on them. It’s about working smarter, not harder.
+ The new integrations we rolled out were all about fulfilling customer requests and making work easier for everyone.
+ Let’s take a look.
+ Slack
+ With this integration, you can get notifications in Slack when a team member starts or stops tracking time, or completes a task. It’s a great way to stay in the loop without having to send a message or jump over to the Hubstaff dashboard.
+ Check out Hubstaff + Slack 
+ ClickUp
+ Track time directly to ClickUp tasks by assigning them to your team members. Time entries show up as comments in ClickUp so it’s easy to see how much time has been spent so far.
+ Read more about ClickUp 
+ Zapier
+ We were thrilled to announce Hubstaff + Zapier! This was our most requested integration to date.
+ Using Hubstaff actions as triggers, you can automate a number of processes with your other apps such as Quickbooks Online or Slack. The possibilities are almost endless.
+ Check out the templates linked below to get started.
+ Get your Zap hacks 
+ Zapier allows our customers to connect Hubstaff to any other solution they use.
+ – Alex Yarotsky , Hubstaff’s Engineering Manager
+ Quickbooks Online update
+ This update allows you to easily send timesheets and pay rates to Quickbooks Online. We’ve smoothed out the steps from tracking time to running payroll so everything just works better.
+ See what’s new with Quickbooks Online 
+ What we launched in 2020
+ Next, let’s take a look at the top features we rolled out in the past year.
+ Hubstaff
+ Design and UI updates
+ The Hubstaff apps and web dashboard saw a refresh in 2020. Cleaner, more user-friendly, and easier to find exactly what you’re looking for. Specifically:
+ A new look for timesheets
+ A clear settings dialog
+ Jobs and work orders
+ A big update for field and mobile teams came with the Jobs and Work orders features. You can now schedule and assign jobs in Hubstaff. Easily keep track of crews, who can track time and view schedules from their devices.
+ All of your client details are in one place, and anyone can access them when they need to.
+ Expense tracking
+ Our expenses feature makes it easy to add costs to an invoice and keep better records. It’s easy to submit an expense, assign it to a project or client, and bill for it all within Hubstaff.
+ Onboarding progress for your team
+ See where each person is in their onboarding journey. Give a friendly nudge or help out those who may be stuck.
+ Hubstaff Tasks
+ Timelines
+ Visualize projects with the timeline view in Hubstaff Tasks. Assign start and end dates, and move tasks around to balance workloads.
+ Roadmap
+ Timelines let you see all tasks within the selected project. But with Roadmaps, you can now get an organization-level view of all tasks, across all projects.
+ Plan out roadmaps and get your whole company in alignment. Product, marketing, and dev teams can all benefit from this visualization of priorities. Check it out.
+ To-Dos
+ Set your priorities and make sure you get your most crucial work done. Schedule any task or checklist item for today, tomorrow or next week with one click.
+ Looking for more? You can read more about our latest features right here .
+ Our team’s year in review
+ Now we’re going to get personal. And by that, we mean talking about our people.
+ In 2020, our team grew to 79 professionals from around the world. We ended 2019 with 55 team members, which means we saw a 44% increase in team size.
+ We worried that team bonding would suffer since we couldn’t gather in person, but that wasn’t the case. We held a virtual retreat — it ruled — that even inspired some new bonding activities.
+ New team members joined in on discussions of what to watch, read, listen to, and what games to play. We celebrated our accomplishments and recognized those who embodied the Hubstaff values. We even started a weekly game night in two different time zones along with regular trivia.
+ Here are some other highlights:
+ Monthly AMAs helped us get to know our fellow Hubstaffers better.
+ The #adventure channel showcased our most creative attempts are pandemic-friendly fun (drive-in raves!).
+ Kelvin, once again, cycled a lot (3,000 miles though he wished it was more)
+ New babies and new homes
+ Our #hubstars channel was a buzz. Here, Hubstaffers can recognize fellow team members, who then get a bonus for their hard work.
+ Our proudest accomplishments
+ We asked Hubstaffers to share what they’re looking back on fondly from the past year. Here’s what they said.
+ In general, I’m proud of my development from the start, I have learned a lot of things. 
+ To receive good feedback on my work at the end of the year. 
+ Although it wasn’t a personal accomplishment, seeing our CEO and co-founder Jared brown on The Today Show was definitely one of my proudest moments as a Hubstaffer. 
+ Getting the devops train moving 🙂 
+ Being called “glue” for bringing people together. 
+ Helping two of our long-standing support team members get promoted to team lead. 
+ The Hubstaff marketing design system 
+ The reworks and results we made in the outreach team are my proudest accomplishments. 
+ Continuing to improve our products, processes, and teams. 
+ I’m proud of the big base of support focused content we created which should be extremely helpful to our existing user base. 
+ Took over a huge task and kept enthusiasm while working on it 
+ Subscribe to the Hubstaff blog for more remote tips
+ Virtual high fives to our whole team
+ As you can see, we accomplished a lot this year as a team.
+ We also asked people to give a shout-out to their colleagues who made the year better. Cheers to this crew, and the power of recognition.
+ Carlo Soriano 
+ Jared 
+ A shout out to Alex! 
+ Shout out to Michal Hantl who is leading the development of an awesome product in Hubstaff Tasks! 
+ Shout out to Win Risner for being a fantastic co-leader on the Success team. I could never have become or been successful as Director of Customer Experience without him. 
+ Sarah Craig 
+ Props to Courtney to be a great manager and special props to Gia too 
+ Bobana ⭐ 
+ Danny Baumann 
+ Shoutout to my League buddies Jared and Tyler! You guys rock! 
+ Felipe Maier has been one of the best leaders I had a chance to work with 
+ What our team thought about 2020
+ Finally, we asked people to sum up 2020 in ten words or less.
+ A crazy year that makes us learn what really matters in our life, how important is our family/friends, how important we should preserve nature and our planet and especially our freedom. 
+ Profound changes in a good and bad way 
+ ???????? ????️????????????????‍♂️????????????????????
+ OPTIMISM. *worry* CRISIS. Recovery? Nope. No toilet paper. Okay? Okay. 
+ ????????????????‍????????????‍????????
+ ????‍????????????
+ Challenge, mental stability, fitness, family, food 
+ barf city. poo-ville. so long. 
+ Hard, challenging, missing some people 
+ Challenging and changing 
+ Our first virtual retreat was a Zoom-ing success
+ Zoom, if you’re reading this: Yes, we are accepting sponsors for our next annual retreat. But only in the form of risotto.
+ It wasn’t beach volleyball in Mexico or outdoor dining in Lisbon but we made the best of it.
+ We even had a pretty stellar kick-off with a keynote from Job van de Voort (!), who is the co-founder and CEO of Remote . Previously, Job was the VP of product at GitLab.
+ After that, we broke up into teams for the hackathon. There were different activities every day such as a murder mystery game and online poker. Some of our colleagues led workshops and others gave walking tours of their cities.
+ Coordinating a schedule for as many time zones as we occupy was not easy. But it did make for a pretty colorful spreadsheet.
+ Our virtual retreat was a lot of fun with a Zoom hangover. Ask a remote team to be on camera for four days straight and you can expect a lot of napping afterward.
+ What stood out the most? In our team’s own words:
+ Sergey driving along the streets of Herceg-Novi. 
+ Playing Among Us with everyone on discord 
+ Sergey showing his pet-rock 
+ Making risotto with people from around the world! It was 11 AM for me, but 2 PM for the rest of the US team who participated, and dinner time for people in Portugal and Russia and Eastern Europe. We still got to hang out and make a meal together. It was a lot of fun watching people cook for their families, especially when they’re not the ones who usually do the cooking. 
+ Job van de Voort’s keynote 
+ I have many great memories from both retreats. Playing volleyball at the beach and having drinks with the team in Cancun, and beers at night with the guys and walking through the streets of Lisbon. 
+ Sergey’s pet rock and live streams 
+ Online poker 
+ The murder mystery or playing League of Legend with everyone. Good laughs, good times, lots of fun. 
+ I learned a lot from some of the lectures, specifically the investing lecture 
+ Thanks to Job van de Voort for our virtual retreat keynote! 
+ Risotto cooking class led by Eyal 
+ Bertrams’ risotto 
+ Virtual murder mystery. The fun of an escape room without the fear of never leaving a dark, windowless closet. 
+ Kitty led the team on a walking tour of Las Vegas. 
+ In-between, we shared meals and happy hours and got to know each other a little better.
+ What we’re looking forward to in the next year
+ First, let’s give a big old good riddance to the pandemic and its effects in 2020. There’s a light at the end of the tunnel and there’s reason to believe…
+ Maybe this year will be better than the last
+ — Counting Crows (@CountingCrows) January 1, 2021 
+ Here’s how our CEO, Jared Brown, summed up the year.
+ As we get ready to put 2020 in the rearview mirror, I wanted to take a moment to reflect on what we’ve accomplished this year. ????
+ While 2020 has been a successful year for our company, it hasn’t been without its hardships. 
+ Many of us have been worried about the wellbeing of our loved ones and our own health during COVID. We’ve had to deal with the mental aspects of not having the usual social outlets or ability to live life as we normally do during much of the year. Not to mention homeschooling! Ugh! Our team members in the U.S. and especially in Belarus have had to deal with curfews, protests, and civil unrest. It’s certainly not been an easy year. ????
+ But we got through it and we are stronger for it. I truly appreciate all of the hard work you put in everyday. 
+ Here’s to 2021. ????
+ Looking ahead
+ We’ll leave you with our hopes and dreams. Here’s what our team is looking forward to most in 2021.
+ I want to learn another language on a hobby level 
+ Hope to see mom 
+ Travel to see my family (I live in another country) 
+ Get knees deep into Devops experience 
+ Help develop and improve our framework and taking in more responsibilities 
+ Continuing to iterate and grow as a CX team especially since we are growing with a sales team now! 
+ Solidify the Hubstaff design system and apply the new design to all marketing pages 
+ Taking more managerial responsibility, growing Hubstaff Tasks with the team, learning more about agile PM and putting more effort in untapped outreach strategies. 
+ Continuing to build great products for our customers. 
+ More personal development. I think there was steady growth in the quality of content I was creating and I think 2021 will push me to improve it even further. I’m excited for that. 
+ Meet friends for lunch and start planning for an in-person Hubstaff retreat 
+ Promote, study some programming 
+ To become a better professional and feel that I make a difference for the better with my work. 
+ Travel to Vienna to see my friends 
+ Go out to eat. 
+ Go back to my favorite coffee shop, order a pot of jasmine tea and listen to my favorite playlist while I edit. 
+ Getting alcohol poisoning with the boys in the pub 
+ More freedom 
+ To re-organize my personal life, see my family and friends again, and I hope that my husband can find work ( that he lost with this pandemic). 
+ Getting married after 10 long years together 
+ High adoption of remote work, USD/EUR parity go up, life resetting back to “normal” 
+ I’m looking forward to transitioning the world from WFH to “Work From Anywhere” 
+ Hopefully, the end of the pandemic 
+ More face time with family and friends (hopefully) 
+ In general I’m looking forward to (hopefully) returning to some semblance of normalcy. I love working remotely but I used to have a good balance of time spent home for work and time spent out and about at coffee shops or parks etc. I got a little stir crazy in 2020 hoping to change that a bit in 2021. 
+ What’s on your agenda for 2021? Let us know in the comments.
+ Category: 
+ Product 
+ Dave Nevogt 
+ Dave Nevogt is an American entrepreneur and the co-founder of Hubstaff, a time tracking software company. He has earned a finance undergraduate degree, the Indianapolis Business Journal’s Forty Under 40 award, and Arizona's 35 under 35 award.
+ Most popular
+ Workforce Management 
+ A Quick Guide to Work Order Management 
+ From quick fixes to long-term stability, work orders are crucial to asset management and helping managers keep operations running...
+ Workforce Management 
+ How to Identify High Performers Using Work Patterns 
+ Every business has top performers, and managers are told to find them all the time. But in most cases, they default to approaches...
+ Product 
+ The AI Productivity Panel: Lessons From Leaders on What’s Working (and What’s Not) 
+ When I moderated this AI productivity panel, I expected a solid conversation. What I didn’t expect was the flood of real-world i...
+ Product 
+ Ask Your Workforce Data Anything with Hubstaff’s New AI-Ready CLI and API 
+ It’s Monday morning. Your CEO asks, “Which projects went over budget?” Instead of pulling reports, exporting numbers, and ve...
+ Table of contents 
+ 2020 by the numbers 
+ Hubstaff 
+ Hubstaff Tasks 
+ The financials 
+ What our customers had to say 
+ New integrations saved us all from wasted time 
+ What we launched in 2020 
+ Hubstaff 
+ Our team’s year in review 
+ Our first virtual retreat was a Zoom-ing success 
+ What we’re looking forward to in the next year 
+ Looking ahead 
+ Smarter Work Starts Here
+ Productivity insights and time data to help your team thrive.
+ Subscribe to our blog 
+ All articles
+ Product 
+ 5 Best HIPAA and SOC 2 Compliant Time Tracking Software Applications (2026) 
+ Health care is a challenging profession as leaders are managing patients, staff, schedules, and more — and that’s before audits. Fortunately, HIPAA-compliant time tracking soft...
+ By Rashika Mukherjee 
+ 10 min read 
+ Product 
+ The 14 Best Timeline Software and Timeline Makers (Free and Paid) 
+ We’re all looking for ways to be more efficient at work — but taking that next step doesn’t always come from within the organization. The best timeline software can a...
+ By Kylie Bonassi 
+ 12 min read 
+ Product 
+ 11 Best DeskTime Alternatives in 2025 
+ Many teams use DeskTime to track time and manage their schedules. It’s a solid option, but its competitors might offer better features for your team. That’s why we’ve rounded...
+ By Rashika Mukherjee 
+ 9 min read 
+ Product 
+ 9 Best ClickUp Alternatives & Competitors 
+ ClickUp is a popular collaboration and project management tool, but it’s not the best option for every team. If you’re looking for ClickUp alternatives to meet the growing dema...
+ By Aubrey Nekvinda 
+ 10 min read 
+ Save time and money in one click
+ Hubstaff streamlines time tracking, productivity, team management, invoicing, and more.
+ Try it free 
+ Free 14 day trial. No credit card required.
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Hubstaff is a time tracking platform that turns work hours into insights with productivity monitoring and automated payments.
+ Ready to get started?
+ Use your work email to sign up and see how it works for your team.
+ Create account 
+ Connect
+ GDPR 
+ SOC 2 Type II 
+ HIPAA 
+ LGPD and CCPA 
+ Trust center 
+ Terms 
+ Privacy 
+ Copyright © 2026 Netsoft Holdings, LLC 
+ All systems normal 
+ Last Updated on: Aug 20, 2025

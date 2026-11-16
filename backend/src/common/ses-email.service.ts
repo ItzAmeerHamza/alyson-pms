@@ -8,6 +8,7 @@ import type {
   SesEmailResult,
 } from '../lambda/ses-email-handler';
 import { buildSesRawMime } from './ses-raw-mime';
+import { ensureTaviloLogoAttachment } from './tavilo-email-brand';
 
 /**
  * Sends transactional email.
@@ -33,11 +34,11 @@ export class SesEmailService {
       'us-west-2';
     this.emailFunctionName = (config.get<string>('SES_EMAIL_FUNCTION_NAME') || '').trim();
     this.emailFrom = (
-      (config.get<string>('EMAIL_FROM') || '').trim() || 'hamza@cintara.ai'
+      (config.get<string>('EMAIL_FROM') || '').trim() || 'support@tavilo.ai'
     ).toLowerCase();
     const sendersRaw =
       (config.get<string>('EMAIL_SENDERS') || '').trim() ||
-      'hamza@cintara.ai,mohita@cintara.ai';
+      'support@tavilo.ai,hamza@cintara.ai,mohita@cintara.ai';
     const parsed = sendersRaw
       .split(',')
       .map((s) => s.trim().toLowerCase())
@@ -138,6 +139,7 @@ export class SesEmailService {
         };
       })
       .filter((a): a is SesEmailAttachmentPayload => Boolean(a));
+    const withLogo = ensureTaviloLogoAttachment(html, attachments);
 
     if (!to.length || !subject || !html || !from) {
       return {
@@ -156,7 +158,7 @@ export class SesEmailService {
         html,
         text: input.text,
         from,
-        ...(attachments.length ? { attachments } : {}),
+        ...(withLogo.length ? { attachments: withLogo } : {}),
       });
     }
 
@@ -165,7 +167,7 @@ export class SesEmailService {
     }
 
     try {
-      const useRaw = attachments.length > 0;
+      const useRaw = withLogo.length > 0;
       const result = await this.sesClient.send(
         new SendEmailCommand(
           useRaw
@@ -184,10 +186,11 @@ export class SesEmailService {
                       subject,
                       html,
                       text: input.text,
-                      attachments: attachments.map((a) => ({
+                      attachments: withLogo.map((a) => ({
                         filename: a.filename,
                         contentType: a.contentType,
                         content: Buffer.from(a.contentBase64, 'base64'),
+                        contentId: a.contentId,
                       })),
                     }),
                   },

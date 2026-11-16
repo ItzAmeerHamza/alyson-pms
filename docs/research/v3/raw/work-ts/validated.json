@@ -1,0 +1,160 @@
+{
+ "webdew|Time Doctor": {
+  "status": "PROBABLE",
+  "confidence_score": 80,
+  "evidence_type": "Company's own website/blog",
+  "evidence_summary": "TheirStack lists webdew as a Time Doctor user. webdew's own About page says it adopted Time Doctor in 2019 to manage employee time, attendance, hours and time per task/project. Its knowledge base has a 'How to use Time Doctor' article and its blog has several Time Doctor how-tos (ClickUp integration, API data export). webdew is also a HubSpot agency that ran HubSpot for Time Doctor, so it is a Time Doctor service partner as well as a user.",
+  "evidence_quote": "Time Doctor is a time management tool that webdew uses not only to manage the time of the employees but also to check attendance, working hours",
+  "second_source_url": "https://www.webdew.com/about",
+  "third_source_url": "https://support.webdew.com/kb/brain/kb/how-to-use-time-doctor",
+  "status_reason": "Own-website statements of internal use (adopted 2019) plus TheirStack signal. No 2025-2026 dated confirmation, so PROBABLE.",
+  "workforce_signals": "Digital marketing/HubSpot agency, India (Mohali) delivery team serving US/Canada clients; tracks attendance, hours and per-task time.",
+  "contacts": [
+   {
+    "name": "Danish Wadhwa",
+    "title": "CEO and co-founder",
+    "linkedin": "https://www.linkedin.com/in/danishwadhwa",
+    "source_url": "https://www.webdew.com/about"
+   },
+   {
+    "name": "Chehak Wadhwa",
+    "title": "Co-founder, creative lead",
+    "linkedin": "https://www.linkedin.com/in/chehak-wadhwa/",
+    "source_url": "https://www.webdew.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/webdewltd",
+  "company_phone": "+1 (888) 644-4432; +1 (778) 655-7871; +1 (253) 400-5346",
+  "public_email": "sales@webdew.com",
+  "contact_source_url": "https://www.webdew.com/contact",
+  "company_domain": "webdew.com",
+  "pitch_angle": "Agency of roughly 110 people with an offshore team on Time Doctor since 2019. Tavilo covers attendance and per-task time tracking for about $3-4/seat versus Time Doctor Standard at $14/seat. Note the partner relationship (webdew built Time Doctor's HubSpot).",
+  "notes": "Validated 2026-10-05 via webdew.com/about, support KB and blog."
+ },
+ "Thinkingbox|Harvest Forecast": {
+  "status": "PROBABLE",
+  "confidence_score": 75,
+  "evidence_type": "Current job posting",
+  "evidence_summary": "TheirStack lists Thinkingbox as a Harvest Forecast user. A Built In Toronto job ad for a Senior Account Manager at AntiSocial (a Thinkingbox division) lists Harvest and Forecast as skills and describes regular tracking of team hours (page text read via search snippet; the direct fetch was 403).",
+  "evidence_quote": "",
+  "second_source_url": "https://builtintoronto.com/job/senior-account-manager-antisocial/4711827",
+  "status_reason": "Job ad naming Harvest/Forecast for hour tracking plus TheirStack. The posting date is not visible (fetch was blocked).",
+  "workforce_signals": "Creative/digital production agency, about 125-140 staff across Vancouver, Toronto, LA, NYC, SLC, Chicago and London; billable hours.",
+  "contacts": [
+   {
+    "name": "Amir Sahba",
+    "title": "Founder and CEO",
+    "linkedin": "https://www.linkedin.com/in/amir-sahba-2ba36722/",
+    "source_url": "https://www.pehub.com/3335996/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/thinkingbox",
+  "company_phone": "",
+  "public_email": "hello@thinkingbox.com",
+  "contact_source_url": "https://www.thinkingbox.com/contact",
+  "pitch_angle": "Multi-office agency on Harvest + Forecast; pitch around Harvest's 2026 price increase (Teams is now $11/seat monthly) and Tavilo's bundled time tracking with activity insight.",
+  "notes": "Validated 2026-10-05 via the job-ad search snippet."
+ },
+ "Movement Strategy|Harvest Forecast": {
+  "status": "POSSIBLE",
+  "confidence_score": 60,
+  "evidence_type": "Current job posting",
+  "evidence_summary": "TheirStack lists Movement Strategy as a Harvest Forecast user. A Built In job ad for a Sr. Resource Manager mentions resource-management platforms 'such as Harvest/Forecast', alongside OpenAir, Mavenlink, Coda and Asana (search snippet; the direct fetch was 403).",
+  "second_source_url": "https://builtin.com/job/sr-resource-manager/4520209",
+  "status_reason": "The job ad lists Harvest/Forecast as one of several example tools ('such as'), which is weaker than a requirement.",
+  "workforce_signals": "Independent social media agency, about 150-170 staff in NYC, LA and Denver; resource management role.",
+  "contacts": [
+   {
+    "name": "Jason Mitchell",
+    "title": "CEO and co-founder",
+    "linkedin": "https://www.linkedin.com/in/jhmitchell/",
+    "source_url": "https://agencybusiness.substack.com/p/building-a-social-first-ad-agency"
+   },
+   {
+    "name": "Eric Dieter",
+    "title": "Co-founder and President",
+    "linkedin": "https://www.linkedin.com/in/ericmdieter/",
+    "source_url": "https://www.linkedin.com/in/ericmdieter/"
+   }
+  ],
+  "company_linkedin": "",
+  "contact_source_url": "https://www.movementstrategy.com/contact",
+  "pitch_angle": "Agency resource management with Harvest; pitch on cost after Harvest's 2026 price rise.",
+  "notes": "Validated 2026-10-05 (weak). The contact page lists no phone or email."
+ },
+ "SPICA GROUP|My Hours": {
+  "status": "DO_NOT_TARGET",
+  "confidence_score": 0,
+  "status_reason": "SPICA International (spica.com) is the developer of My Hours (spica.com news: 'Spica entered American market with Time Tracking app My Hours'). It is the vendor itself.",
+  "second_source_url": "https://www.spica.com/news/spica-entered-american-market-with-time-tracking-app-my-hours"
+ },
+ "VASL|Time Doctor": {
+  "status": "DO_NOT_TARGET",
+  "confidence_score": 30,
+  "status_reason": "Iran-based company (vasl.ir). US/EU sanctions make outreach and selling inadvisable. Not validated.",
+  "notes": "Skipped validation because of sanctions."
+ },
+ "Velstar|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of Harvest/Forecast use."
+ },
+ "Metajive|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "Luci Creative|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "Merge Rocks|Toggl": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of Toggl use."
+ },
+ "Maverick XM|Connecteam": {
+  "notes": "Validation search 2026-10-05: a search summary claimed Maverick XM uses Connecteam for event data, but no citable source page was found, so it stays unvalidated."
+ },
+ "Counter|ClockShark": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "Viamark Advertising|Paymo": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "Ascertus Limited|Paymo": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "RMG | مجموعة ريناد المجد (لتقنية المعلومات)|Hubstaff": {
+  "notes": "Validation search 2026-10-05 (site:rmg-sa.com hubstaff) found no confirmation."
+ },
+ "QATestLab|Replicon": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "Sourcebae|Replicon": {
+  "notes": "Validation search 2026-10-05 found no public confirmation."
+ },
+ "TEAM LEWIS|ClickTime": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "LEWIS|ClickTime": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Inviqa|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Armadillo|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Transpire Technology Pty Ltd|Harvest Forecast": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use. Transpire was acquired by CI&T in 2022 (ciandt.com press release)."
+ },
+ "FifthColor|Paymo": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Launchpad Technologies Inc.|Connecteam": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Endo Networks Inc.|Connecteam": {
+  "notes": "Validation search 2026-10-05 found no public confirmation of use."
+ },
+ "Grapefruit|Connecteam": {
+  "notes": "Not validated: generic name and no domain."
+ },
+ "Align|busybusy": {
+  "notes": "Not validated: Align (align.com) is an IT services firm, but busybusy is construction-focused, so a name/tech collision is likely."
+ }
+}

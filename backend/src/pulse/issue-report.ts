@@ -1,3 +1,5 @@
+import { taviloEmailBrandLockup } from '../common/tavilo-email-brand';
+
 export const ISSUE_CATEGORIES = [
   'tracking',
   'screenshots',
@@ -103,15 +105,46 @@ export function buildIssueEmail(input: {
   ]
     .filter((part) => part !== '')
     .join('\n');
-  const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;color:#0f172a;">
-<p><strong>${escapeHtml(name)}</strong> (${escapeHtml(email)}) reported a ${escapeHtml(category.toLowerCase())} issue from Tavilo Time.</p>
-<p style="color:#64748b;">App ${escapeHtml(version)} · ${escapeHtml(platform)} · ${escapeHtml(osSummary)}</p>
-<pre style="white-space:pre-wrap;font-family:inherit;">${escapeHtml(message)}</pre>
-${
-  diagnostics
-    ? `<h3>Diagnostics</h3><pre style="white-space:pre-wrap;font-size:12px;">${escapeHtml(diagnostics)}</pre>`
-    : '<p>No diagnostics were included.</p>'
-}
-</body></html>`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="background:#173b67;padding:20px 24px;">
+            ${taviloEmailBrandLockup()}
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">Issue report</div>
+            <div style="font-size:14px;color:#c5d4e8;margin-top:6px;">${escapeHtml(category)}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <p style="margin:0 0 8px;font-size:15px;color:#262626;line-height:1.5;"><strong>${escapeHtml(name)}</strong> reported this from Tavilo Time.</p>
+            <p style="margin:0 0 20px;font-size:14px;color:#595959;line-height:1.5;">${escapeHtml(email)}</p>
+            <div style="margin:0 0 20px;padding:14px 16px;background:#f5f7fa;border-radius:6px;border:1px solid #e8e8e8;font-size:13px;color:#595959;line-height:1.5;">
+              App ${escapeHtml(version)} · ${escapeHtml(platform)} · ${escapeHtml(osSummary)}
+            </div>
+            <div style="font-size:12px;color:#8c8c8c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">What happened</div>
+            <p style="margin:0 0 20px;font-size:15px;color:#262626;line-height:1.55;white-space:pre-wrap;">${escapeHtml(message)}</p>
+            ${
+              diagnostics
+                ? `<div style="font-size:12px;color:#8c8c8c;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Diagnostics</div>
+            <pre style="margin:0;padding:14px 16px;background:#fafafa;border:1px solid #f0f0f0;border-radius:6px;white-space:pre-wrap;font-size:12px;line-height:1.5;color:#434343;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(diagnostics)}</pre>`
+                : '<p style="margin:0;font-size:14px;color:#8c8c8c;">No diagnostics were included.</p>'
+            }
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 24px;background:#fafafa;border-top:1px solid #f0f0f0;font-size:12px;color:#8c8c8c;">
+            Sent from Tavilo Time · Employee issue report
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
   return { subject, html, text };
 }

@@ -1,0 +1,522 @@
+URL: https://hubstaff.com/productivity-monitoring
+TITLE: Productivity Monitoring Software for Compliant Teams
+META: <meta name="description" content="Productivity monitoring software that helps teams improve productivity, gain workforce insights, support compliance, and maintain audit-ready work records.">
+META: <meta property="og:title" content="Productivity Monitoring Software for Compliant Teams">
+META: <meta property="og:description" content="Productivity Monitoring Software for Compliant Teams">
+META: <meta name="twitter:description" content="Productivity monitoring software that helps teams improve productivity, gain workforce insights, support compliance, and maintain audit-ready work records.">
+LD: datePublished=2026-07-30T19:53:00+06:00
+LD: datePublished=2026-07-30T19:53:00+06:00
+----
+Productivity Monitoring Software for Compliant Teams ` from breaking out. Applies to all three render blocks below. Sibling sites: hsds-page-hub.vue, hsds-faq.vue. --> 
+ Product 
+ Time tracking 
+ Productivity monitoring 
+ Workforce analytics 
+ Payments and costs 
+ Integrations 
+ Download the apps 
+ Time tracking software Time tracking software for teams across devices.
+ Automated timesheets 
+ Automatically turn tracked time into accurate timesheets. 
+ Time reports 
+ Detailed time reports that help you improve business processes. 
+ Project and task tracking 
+ Track time across projects, tasks, and team activities. 
+ GPS time tracking 
+ Create job sites that automatically clock teams in and out. 
+ Attendance tracking 
+ Track attendance, shifts, and clock-ins across your team. 
+ Time-off and leave management 
+ Track time off, holidays, and team availability. 
+ See all features 
+ Productivity monitoring software See how work time is spent – without micromanagement.
+ Employee monitoring 
+ Clear visibility into work activity – built for transparency. 
+ Employee activity tracking 
+ Track activity levels to understand work patterns. 
+ Time tracking with screenshots 
+ Add screenshots to tracked time for context. 
+ Idle time tracking 
+ Identify idle time and understand productivity gaps. 
+ App and URL usage 
+ See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software Turn work data into operational insights and decisions.
+ Advanced insights 
+ See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance 
+ Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning 
+ Plan team workloads and prevent resource bottlenecks. 
+ Reporting 
+ Analyze work data with detailed operational reports. 
+ AI Unusual activity tracking 
+ Detect unusual activity patterns in tracked work data. 
+ AI-ready workforce data 
+ Query, analyze, and understand work data with AI tools and agents. 
+ Workforce intelligence software 
+ Combine work data and AI for automated insights. 
+ Time tracking API 
+ Build custom time tracking into your own product. 
+ See all features 
+ Global payments Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting 
+ Track project costs based on tracked work hours. 
+ Invoicing and billing 
+ Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker 
+ Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations. Hubstaff syncs with the apps you’re already using.
+ Jira 
+ Slack 
+ Wise 
+ Deel 
+ Asana 
+ Google Calendar 
+ Trello 
+ GitHub 
+ ClickUp 
+ Zendesk 
+ Quickbooks 
+ Monday 
+ Paypal 
+ Gusto 
+ Salesforce 
+ See all integrations 
+ See it in action Maximize productivity with time tracking you can trust. Get started 
+ Solutions 
+ By industry 
+ Agencies 
+ Manage campaigns, billable hours, client budgets, project budgets, and more. 
+ Software development 
+ Reach milestones sooner with workload management and time tracking features. 
+ Consulting 
+ Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all solutions 
+ By workforce 
+ Remote 
+ Manage remote teams of any size, anywhere. 
+ In-office 
+ Simplify attendance, scheduling, and payroll for on-site teams. 
+ Field 
+ Track time with geofencing and manage projects in real-time. 
+ Enterprise 
+ Scale operations with enterprise-grade features, compliance, and support. 
+ By outsourcing type 
+ BPO 
+ Boost efficiency and client satisfaction with targeted time tracking and productivity insights. 
+ Virtual assistant services 
+ Enhance task organization and productivity with time tracking and workload management. 
+ Call centers (CX) 
+ Elevate customer experience with streamlined employee management and performance metrics. 
+ Customer stories Affordable Staff saved $4.2M over 12 years with Hubstaff. Explore our customer stories 
+ Resources 
+ Learn 
+ What Hubstaff tracks 
+ Delivering transparency, control, and access to every member of the team. 
+ Guiding principles 
+ Discover more about Hubstaff's employee experience values and policies. 
+ Help center 
+ Hubstaff time tracking support articles and walkthrough videos. 
+ FAQ 
+ Check out our frequently asked questions. 
+ Discover 
+ Resources 
+ Explore guides, tools, and practical team resources. 
+ Blog 
+ Explore the latest on productivity, product news, tips, and more. 
+ Customer stories 
+ Discover the experiences of our valued customers through their stories. 
+ Reviews 
+ See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales 
+ Connect with our sales team to explore tailored solutions for your business needs. 
+ Partners 
+ Join us in shaping a brighter future for the global workforce. 
+ Careers 👋 Hiring 
+ Explore exciting opportunities to join our amazing team. 
+ Featured resource Ready to see how your team stacks up? Read our NEW 2026 Global Work Report. Download now 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Sign in 
+ Product 
+ Time tracking software Time tracking software for teams across devices.
+ Automated timesheets 
+ Automatically turn tracked time into accurate timesheets. 
+ Time reports 
+ Detailed time reports that help you improve business processes. 
+ Project and task tracking 
+ Track time across projects, tasks, and team activities. 
+ GPS time tracking 
+ Create job sites that automatically clock teams in and out. 
+ Attendance tracking 
+ Track attendance, shifts, and clock-ins across your team. 
+ Time-off and leave management 
+ Track time off, holidays, and team availability. 
+ See all features 
+ Productivity monitoring software See how work time is spent – without micromanagement.
+ Employee monitoring 
+ Clear visibility into work activity – built for transparency. 
+ Employee activity tracking 
+ Track activity levels to understand work patterns. 
+ Time tracking with screenshots 
+ Add screenshots to tracked time for context. 
+ Idle time tracking 
+ Identify idle time and understand productivity gaps. 
+ App and URL usage 
+ See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software Turn work data into operational insights and decisions.
+ Advanced insights 
+ See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance 
+ Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning 
+ Plan team workloads and prevent resource bottlenecks. 
+ Reporting 
+ Analyze work data with detailed operational reports. 
+ AI Unusual activity tracking 
+ Detect unusual activity patterns in tracked work data. 
+ AI-ready workforce data 
+ Query, analyze, and understand work data with AI tools and agents. 
+ Workforce intelligence software 
+ Combine work data and AI for automated insights. 
+ Time tracking API 
+ Build custom time tracking into your own product. 
+ See all features 
+ Global payments Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting 
+ Track project costs based on tracked work hours. 
+ Invoicing and billing 
+ Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker 
+ Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations. Hubstaff syncs with the apps you’re already using.
+ Jira 
+ Slack 
+ Wise 
+ Deel 
+ Asana 
+ Google Calendar 
+ Trello 
+ GitHub 
+ ClickUp 
+ Zendesk 
+ Quickbooks 
+ Monday 
+ Paypal 
+ Gusto 
+ Salesforce 
+ See all integrations 
+ Solutions 
+ By industry 
+ Agencies 
+ Manage campaigns, billable hours, client budgets, project budgets, and more. 
+ Software development 
+ Reach milestones sooner with workload management and time tracking features. 
+ Consulting 
+ Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all solutions 
+ By workforce 
+ Remote 
+ Manage remote teams of any size, anywhere. 
+ In-office 
+ Simplify attendance, scheduling, and payroll for on-site teams. 
+ Field 
+ Track time with geofencing and manage projects in real-time. 
+ Enterprise 
+ Scale operations with enterprise-grade features, compliance, and support. 
+ By outsourcing type 
+ BPO 
+ Boost efficiency and client satisfaction with targeted time tracking and productivity insights. 
+ Virtual assistant services 
+ Enhance task organization and productivity with time tracking and workload management. 
+ Call centers (CX) 
+ Elevate customer experience with streamlined employee management and performance metrics. 
+ Resources 
+ Learn 
+ What Hubstaff tracks 
+ Delivering transparency, control, and access to every member of the team. 
+ Guiding principles 
+ Discover more about Hubstaff's employee experience values and policies. 
+ Help center 
+ Hubstaff time tracking support articles and walkthrough videos. 
+ FAQ 
+ Check out our frequently asked questions. 
+ Discover 
+ Resources 
+ Explore guides, tools, and practical team resources. 
+ Blog 
+ Explore the latest on productivity, product news, tips, and more. 
+ Customer stories 
+ Discover the experiences of our valued customers through their stories. 
+ Reviews 
+ See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales 
+ Connect with our sales team to explore tailored solutions for your business needs. 
+ Partners 
+ Join us in shaping a brighter future for the global workforce. 
+ Careers 👋 Hiring 
+ Explore exciting opportunities to join our amazing team. 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Sign in 
+ Productivity Monitoring Platform Built For Scalability Visibility Trust 
+ Understand productivity patterns from tracked hours that reveal bottlenecks, time drains, and inefficiencies. Use these insights to benchmark performance, generate reports, and maintain transparent work records ready for audits.
+ Book a demo 
+ Hubstaff is a great tool for businesses that operate remotely because it gives accountability to employees and streamlined tracking capabilities for the managers.
+ Tyler Nimmons / Front Runner Films CEO
+ Why productivity tracking matters
+ Move beyond surveillance with productivity-monitoring software that delivers trusted data to drive better business outcomes. Gain real-time visibility into team performance, spot productivity drains, and support compliance for teams growing at scale.
+ Improve visibility into how projects move forward.
+ Spot distractions before they lead to missed deadlines.
+ Support fair, data-driven performance reviews.
+ Balance healthy workloads across remote and hybrid teams.
+ Standardize visibility across hybrid and offshore teams with structured, audit-ready records.
+ Live Demo
+ See how Hubstaff’s productivity monitoring features keep large, distributed teams ready to meet compliance requirements without sacrificing accountability.
+ Get a demo 
+ How Hubstaff’s productivity monitoring works
+ Track time with Hubstaff apps 
+ Have employees, contractors, and other team members install the Hubstaff app on desktop, mobile, or Chrome and begin tracking time to tasks and projects. Every productivity metric is built on accurate time tracking to ensure accuracy and efficiency. 
+ Capture productivity signals 
+ While the timer runs, Hubstaff records key productivity data on desktop, such as app & URL usage , activity levels, idle time, and optional screenshots. Each feature can be enabled or disabled to fit your workflow, and screenshots can be blurred or turned off entirely. Hubstaff records context, never content.
+ Review insights and reports 
+ Hubstaff turns raw productivity signals into real-time productivity dashboards and 20+ reports . Managers can customize their dashboard to see live updates on productivity drops, workloads, and focus patterns using drag-and-drop widgets.
+ Data can then be filtered by employee, project, or timeframe, and exported for clients, key stakeholders, or internal reviews. Reports can be shared with specific people via role-based permissions or exported for compliance and audit purposes.
+ Key features of Hubstaff’s productivity monitoring 
+ Hubstaff provides a clear, low-intrusion view of how work time is used. Instead of surveillance, it focuses on tangible data, context, and productivity signals that help teams stay focused and work more effectively. 
+ Activity levels 
+ Hubstaff does not perform keystroke logging under any circumstances. Instead, keyboard and mouse activity percentages serve as a simple signal of engagement, not a definitive measure of productivity.
+ Low activity during training sessions, meetings, or calls is normal — it’s the context that matters.
+ App & URL tracking 
+ See which apps and websites are used during tracked time for smoother workflows and optimized tech budgets. A dedicated AI tools category highlights the usage of tools like ChatGPT, Claude, and Gemini, with customizable rules based on team or role.
+ Or, try the Insights add-on for productive/unproductive classifications to help reduce wasted hours.
+ Idle time tracking 
+ Detect and manage idle time for more accurate time tracking, timesheets, and payments. Alerts help you spot idle timeouts in real time to prevent time theft, burnout, and other issues before it’s too late.
+ Achievement badges 
+ Turn productivity tracking into motivation, not micromanagement. Reward consistent focus with Achievements that recognize employee efficiency, completed tasks, and time goals. You’ll also gain better insight into unhealthy work patterns or overwork. 
+ Optional screenshots 
+ Capture visual context only when needed with optional, fully configurable screenshots. You can customize time tracking with screenshots , change frequency, and enable blurring.
+ Apply different settings by role , department, or team to support internal governance and regional compliance requirements. Employees also have visibility into their own monitoring data, aligning with Hubstaff's guiding principles of transparency and trust.
+ Workforce analytics 
+ Go beyond day-to-day productivity monitoring with advanced workforce analytics that highlight unusual activity , workload imbalances, department-level productivity trends, and optimization opportunities.
+ Balance utilization rates, plan capacity more effectively, and reduce unnecessary meetings. Benchmark productivity across teams to identify long-term trends, compare remote and in-office performance , and spot opportunities to improve compliance with structured, data-driven reporting.
+ Access controls for larger teams 
+ Deploy productivity monitoring confidently with security and governance features made to support the needs of larger teams operating in the regulated sector.
+ Hubstaff supports Single Sign-On ( SSO ), role-based permissions, configurable data retention, and audit-ready reporting to help IT, HR, and compliance teams manage workforce data securely with system-defined data retention windows built for regulated environments.
+ Explore Employee Productivity at Your Speed 
+See how Hubstaff helps teams reach new heights with time tracking, employee productivity, and more in this interactive demo.
+ How productivity monitoring differs from employee monitoring 
+ Employee monitoring focuses on accountability and compliance, capturing things like which apps and URLs are used, screenshots, and evidence of activity. Productivity monitoring, on the other hand, centers on efficiency and trends.
+ It’s about helping teams identify productivity trends, reduce burnout, and improve efficiency without micromanagement. Many organizations need both: employee monitoring to meet compliance requirements and productivity monitoring to improve team performance. Hubstaff brings these capabilities together, allowing large organizations the ability to monitor without micromanaging .
+ Hubstaff’s guiding principles
+ Principle 1: Transparency
+ Hubstaff is designed to provide clarity, not an excuse to micromanage. Users are in control of when they track time, take breaks, and submit timesheets, and they can remove sensitive data as needed. The software also ensures monitoring is connected only to active work time on employee-owned devices.
+ Principle 2: Access
+ Both employees and managers have access to performance data like app and URL usage, keyboard and mouse activity levels, and more. Hubstaff only tracks time on personal devices when users are clocked in, and data is never sold to third parties. 
+ Principle 3: Control
+ Hubstaff enables users to tailor the software to their managerial style and compliance needs, with data access available only to specific roles, the option to customize screenshots, and visibility into app and URL usage and activity levels that matter. Hubstaff avoids invasive practices like keystroke logging, webcam recording, and email monitoring. Hubstaff also supports regulated industries with SOC 2 Type II certification, GDPR compliance, and HIPAA -ready deployments, giving teams flexibility and options to meet regulatory requirements.
+ See our guiding principles 
+ Built for compliance-heavy industries 
+ Businesses in healthcare, legal, or finance need productivity monitoring for both operational visibility and compliance. Hubstaff makes it happen by bringing transparent productivity insights with configurable controls together. From audit-ready reporting to security features that maintain internal governance, teams can access everything they need to meet regulatory compliance and data governance requirements .
+ Compliance support that meets HIPAA, GDPR, and SOC 2 requirements.
+ Access controls created for secure deployments with SSO, role-based permissions, and configurable monitoring policies.
+ Exportable reports for internal reviews, client reporting, and compliance audits.
+ Customizable monitoring settings and data retention policies to match every organization's needs.
+ Who uses Hubstaff’s employee productivity software?
+ Hubstaff powers over 140,000 remote, distributed, and hybrid users—from IT, legal, healthcare, and outsourcing firms to growing virtual agencies and enterprise operations. Whether you manage hundreds of contractors or a small hybrid crew, Hubstaff gives you real-time visibility into team and role-based productivity without slowing teams down.
+ Enterprise 
+ Legal 
+ Healthcare 
+ Financial Services 
+ Remote Teams 
+ BPOs and Outsourcing Teams 
+ Virtual Assistant Agencies 
+ Call Centers and Support Operations 
+ Software Development Companies 
+ Learn more about employee productivity tracking
+ How productivity tracking works
+ Learn more about how productivity tracking software collects data to improve efficiency without compromising employee privacy.
+ How tracking works 
+ Surveillance vs. productivity monitoring 
+ See how employee surveillance compares to productivity monitoring - and what each approach means for trust, visibility, and outcomes.
+ Surveillance vs. productivity 
+ Employee productivity report template
+ Use customizable productivity templates to track performance, organize work, and uncover trends - before moving to more automated, scalable solutions.
+ Employee productivity template 
+ Privacy-friendly monitoring
+ Learn how to monitor productivity while respecting employee privacy through thoughtful settings and permissions.
+ Privacy-first monitoring 
+ Productivity monitoring pros and cons
+ Understand the real impact of productivity tracking - and why how you use the data matters more than the data itself.
+ Productivity tracking effects 
+ Discover productivity tips
+ Discover workforce productivity's role in business success and how to measure it properly.
+ Workforce productivity guide 
+ My people need to document their work so that I can have visibility into what they did during the day. Using Hubstaff reduces the meeting time I needed and gives me clarity into what was done and what wasn’t.
+ Brian Dordevic / Alpha Efficiency
+ Read the case study 
+ Affordable Staff turned to Hubstaff to manage and pay contractors and freelancers, streamlining operations as it grew. It saves $170,000 annually thanks to our platform.
+ David Judge / Affordable Staff
+ Read the case study 
+ We use Insights to ensure workloads are balanced across the team, preventing burnout. If someone is overworked, we can adjust assignments to maintain productivity without overwhelming them.
+ Lauren Klesser / My Biz Niche
+ Read the case study 
+ Hubstaff automatically gathers all company information — hours tracked towards projects and budgets, for example — and builds custom reports.
+ Andriy Sambir / CEO of LinkUp
+ Read case study 
+ FREQUENTLY ASKED QUESTIONS
+ Your questions, answered
+ Can I use Hubstaff to analyze productivity trends over time?
+ Yes. Hubstaff can analyze productivity trends with a fully customizable dashboard that provides live updates on employee activity levels, website and app usage, earnings, PTO, and more. There are also over 20+ detailed reports for time , activity, expenses, and more. 
+ Is employee privacy protected when using productivity monitoring tools?
+ Tools protect employee privacy when they prioritize user control , data protection, and adhere to compliance standards like GDPR , HIPAA , and SOC 2 . Tools like Hubstaff offer customizable permissions and enterprise-grade compliance, and avoid intrusive practices like keystroke logging and webcam shots . 
+ What types of teams benefit from productivity monitoring?
+ Productivity monitoring benefits virtually any team. Whether you work remotely, hybrid, in-office, or in the field, productivity monitoring tools can help organizations of all sizes reach new heights. They’re especially useful for BPOs, VAs, agencies, construction, healthcare, and various other industries.
+ Can productivity monitoring help reduce burnout?
+ Yes. While productivity monitoring is also associated with invasive tactics and potential for micromanagement , it can also be used to give managers the ability to check in on the mental health of remote, hybrid, or distributed team employees they might not have face-to-face interactions with.
+ What should I look for when choosing productivity monitoring software?
+ It’s important to look for a productivity monitoring tool that fits both your budget and your ethics surrounding productivity monitoring . Test drive tools that allow you to customize monitoring features to fit your unique management style and compliance needs.
+ Does Hubstaff integrate with project management or payroll tools?
+ Yes. Hubstaff integrates with over 35 tools for project management, accounting, payroll, and CRM like Asana, QuickBooks, PayPal, and Salesforce. 
+ Is productivity monitoring software expensive?
+ The cost of productivity monitoring software depends on the company and the extent of your monitoring needs. Most offer flexible pricing plans that scale with your team's growth, providing you with the features you need while you set the pace. 
+ Is Hubstaff’s productivity monitoring software compliant with HIPAA, GDPR, and SOC 2?
+ Yes, Hubstaff’s productivity monitoring software can be configured to comply with HIPAA, GDPR, and SOC2 requirements. Hubstaff ensures organizations have the support for compliance requirements they need through configurable monitoring settings, role-based permissions, audit-ready reporting, and security controls. Companies can configure the platform to align with internal policies and regulatory requirements, including HIPAA, GDPR, and SOC 2.
+ Productivity monitoring that scales with your performance and compliance needs
+ From workforce insights to audit-ready reporting, Hubstaff gives IT, HR, and operations leaders the visibility they need to improve performance and govern work with confidence.
+ Book a demo today 
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Hubstaff is a time tracking platform that turns work hours into insights with productivity monitoring and automated payments.
+ Ready to get started?
+ Use your work email to sign up and see how it works for your team.
+ Create account 
+ Connect
+ GDPR 
+ SOC 2 Type II 
+ HIPAA 
+ LGPD and CCPA 
+ Trust center 
+ Terms 
+ Privacy 
+ Your privacy choices 
+ Copyright © 2026 Netsoft Holdings, LLC 
+ All systems normal

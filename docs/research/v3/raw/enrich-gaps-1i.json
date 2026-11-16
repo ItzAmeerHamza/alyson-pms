@@ -1,0 +1,1335 @@
+[
+ {
+  "company_name": "Episource",
+  "company_domain": "episource.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "5,001-10,000 (LinkedIn); ~2.9K (Craft/third-party)",
+  "hq_country": "US (Gardena, CA) / India ops",
+  "contacts": [
+   {
+    "name": "Harshith Ramesh",
+    "title": "Co-CEO",
+    "linkedin": "https://www.linkedin.com/in/harshith-ramesh-56088a1/",
+    "source_url": "https://theorg.com/org/episource/org-chart/harshith-ramesh"
+   },
+   {
+    "name": "Sishir Reddy",
+    "title": "Co-CEO",
+    "linkedin": "https://www.linkedin.com/in/sishir-reddy-a985826/",
+    "source_url": "https://theorg.com/org/episource/org-chart/sishir-reddy"
+   },
+   {
+    "name": "Angshuman",
+    "title": "VP Operations, Optum (Episource) - ProHance testimonial author (surname not given)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   },
+   {
+    "name": "Erik Simonsen",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": "https://craft.co/episource/executives"
+   },
+   {
+    "name": "Evelyn Acosta Behrendt",
+    "title": "Chief People Officer",
+    "linkedin": "",
+    "source_url": "https://craft.co/episource/executives"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/episource",
+  "company_phone": "(714) 452-1961",
+  "public_email": "",
+  "contact_source_url": "https://www.yellowpages.com/gardena-ca/mip/episource-504415194",
+  "notes": "Episource was acquired by Optum (UnitedHealth Group) in 2023 and still operates as 'Episource, an Optum company' (KLAS listing) - not shut, so status left empty, but buying decisions may now sit with Optum. Co-CEO names from theorg.com/Craft (third-party, could be stale post-acquisition); LinkedIn URLs appeared in a site:linkedin.com search showing 'Episource'. episource.com would not fetch (expired TLS certificate), so the phone is from Yellow Pages/Chamber of Commerce listings (address 500 W 190th St Suite 400, Gardena, CA 90248). No public email found. Company had a 5.4M-record data breach in 2025 (security-sensitive buyer)."
+ },
+ {
+  "company_name": "Faes & Co",
+  "company_domain": "faesinvest.com",
+  "vendor": "Monitask",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "small (exact count not found)",
+  "hq_country": "US (Los Angeles); UK roots",
+  "contacts": [
+   {
+    "name": "Christian Faes",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/christianfaes/",
+    "source_url": "https://faesinvest.com/"
+   },
+   {
+    "name": "Jamie McGee",
+    "title": "Director - Fund Sales & Investor Relations",
+    "linkedin": "https://www.linkedin.com/in/jamescmcgee/",
+    "source_url": "https://rocketreach.co/faes-co-management_b77947c9c5181c89"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 424 500 4055",
+  "public_email": "hello@faesinvest.com",
+  "contact_source_url": "https://faesinvest.com/",
+  "notes": "Christian Faes still Founder & CEO (Crunchbase/RocketReach; Dec 2024 and Apr 2026 press). Second contact Jamie McGee from RocketReach (name/title only) and his LinkedIn search result titled 'Director Fund Sales & Investor Relations' at Faes & Co. Phone/email from faesinvest.com (address 233 Wilshire Blvd Suite 220, Santa Monica, CA 90401); a search snippet also showed (424) 209-7970. Group lender is F2 Finance. Company LinkedIn page not found verbatim (site references a LinkedIn link but URL not visible)."
+ },
+ {
+  "company_name": "Pandoblox",
+  "company_domain": "pandoblox.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "US (Los Angeles); Philippines delivery team",
+  "contacts": [
+   {
+    "name": "Henry Park",
+    "title": "Co-Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/henry-park-3a43a1/",
+    "source_url": "https://www.pandoblox.com/ourteampb"
+   },
+   {
+    "name": "Luinell Florentin",
+    "title": "Country Director & Head of Excellence",
+    "linkedin": "",
+    "source_url": "https://www.pandoblox.com/ourteampb"
+   },
+   {
+    "name": "Rachel Simmons",
+    "title": "Director of Services",
+    "linkedin": "",
+    "source_url": "https://www.pandoblox.com/ourteampb"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/pandoblox",
+  "company_phone": "",
+  "public_email": "contact@pandoblox.com",
+  "contact_source_url": "https://www.pandoblox.com/",
+  "notes": "Team from pandoblox.com/ourteampb. Henry Park LinkedIn appeared in site:linkedin.com search (LA, Pandoblox/3GC). Pandoblox acquired 3GC Group (einpresswire). Country Director is likely the PH ops lead, relevant to the Clockify PH job. No phone on site; contact page only lists contact@pandoblox.com."
+ },
+ {
+  "company_name": "Visual Visitor",
+  "company_domain": "visualvisitor.com",
+  "vendor": "Prodoscore",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "United States (Jacksonville FL / Atlanta GA)",
+  "contacts": [
+   {
+    "name": "Rick Batchelor",
+    "title": "CEO & Co-founder",
+    "linkedin": "https://www.linkedin.com/in/rickbatchelor/",
+    "source_url": "https://www.prodoscore.com/resources/case-studies/visual-visitor/"
+   },
+   {
+    "name": "Mark Ihlenburg",
+    "title": "VP of Operations",
+    "linkedin": "https://www.linkedin.com/in/mark-ihlenburg-13055755/",
+    "source_url": "https://www.prodoscore.com/resources/case-studies/visual-visitor/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/visual-visitor",
+  "company_phone": "(888) 586-7730",
+  "public_email": "support@visualvisitor.com",
+  "contact_source_url": "https://www.visualvisitor.com/contact-us_old/",
+  "notes": "Rick Batchelor LinkedIn search result titled 'Co-Founder, Visual Visitor' (Roswell GA). Mark Ihlenburg LinkedIn headline mirrors Visual Visitor's tagline ('Driving Growth with AI-Powered Person...'), Winder GA - good match but headline doesn't name the company. Phone/email from a search snippet of visualvisitor.com contact page (site returns 403 to fetch); address 7400 Baymeadows Way #230, Jacksonville FL. Inc. 5000 2025."
+ },
+ {
+  "company_name": "General Informatics",
+  "company_domain": "geninf.com",
+  "vendor": "Prodoscore",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "United States (Baton Rouge, LA HQ; Cincinnati office)",
+  "contacts": [
+   {
+    "name": "Don Monistere",
+    "title": "CEO & President",
+    "linkedin": "https://www.linkedin.com/in/donaldmonistere/",
+    "source_url": "https://geninf.com/get-to-know-the-ceo/"
+   },
+   {
+    "name": "Edward Reade",
+    "title": "Chief Operating Officer",
+    "linkedin": "https://www.linkedin.com/in/edwardreade/",
+    "source_url": "https://theorg.com/org/general-informatics/teams/leadership-team"
+   },
+   {
+    "name": "Dustin Landry",
+    "title": "Chief Technology Officer",
+    "linkedin": "",
+    "source_url": "https://theorg.com/org/general-informatics/teams/leadership-team"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/general-informatics",
+  "company_phone": "(225) 767-7670",
+  "public_email": "",
+  "contact_source_url": "https://www.lba.org/LBA/LBA/Bankers_Directory/Association_Profile_Paid.aspx?ID=44144",
+  "notes": "Input second_contact duplicated the CEO; replaced with COO Edward Reade (LinkedIn search result 'Chief Operating Officer at General ...'). Phone/address (One Smart Way, Suite 200, Baton Rouge, LA 70810) from Louisiana Bankers Association directory; geninf.com pages returned empty to fetch. Emails seen only in a data-broker snippet, not recorded."
+ },
+ {
+  "company_name": "Kinective",
+  "company_domain": "kinective.io",
+  "vendor": "Prodoscore",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Stephen Baker",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/stephen-baker-153279/",
+    "source_url": "https://www.kinective.io/company/"
+   },
+   {
+    "name": "Scott Perkins",
+    "title": "EVP Sales",
+    "linkedin": "https://www.linkedin.com/in/scott-perkins-6669b76/",
+    "source_url": "https://www.kinective.io/company/"
+   },
+   {
+    "name": "Sarah Schedler",
+    "title": "EVP of Talent",
+    "linkedin": "",
+    "source_url": "https://www.kinective.io/company/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/kinective",
+  "company_phone": "888-563-2848",
+  "public_email": "info@kinective.io",
+  "contact_source_url": "https://www.kinective.io/",
+  "notes": "Scott Perkins (case study contact) still EVP Sales per kinective.io/company and his LinkedIn result. Added CEO Stephen Baker as decision maker (LinkedIn result 'Stephen Baker - Kinective', Charleston SC; Inc. 5000 2026 #766) and EVP Talent Sarah Schedler. Existing phone/email kept."
+ },
+ {
+  "company_name": "ACP Billing Service",
+  "company_domain": "acpbillingservices.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "27 (RocketReach)",
+  "hq_country": "US (Orlando, FL) / India (Chennai)",
+  "contacts": [
+   {
+    "name": "Dr. Charlin Anthony (Charlin Anthony Raj)",
+    "title": "Founder, President & CEO",
+    "linkedin": "https://www.linkedin.com/in/dr-charlin-anthony-3973111a/",
+    "source_url": "https://acpbillingservices.com/about-us"
+   },
+   {
+    "name": "Tabby Parvez",
+    "title": "CFO",
+    "linkedin": "",
+    "source_url": "https://acpbillingservices.com/about-us"
+   },
+   {
+    "name": "Dr. Hussien Ballout, MD",
+    "title": "CSO",
+    "linkedin": "",
+    "source_url": "https://acpbillingservices.com/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/acpbillingservicesllc",
+  "company_phone": "321-364-4342",
+  "public_email": "info@acpbillingservices.com",
+  "contact_source_url": "https://acpbillingservices.com/about-us",
+  "notes": "DOMAIN CORRECTED: the ProHance case-study PDF (https://www.prohance.net/pdf/Case-Study-ACP-Billing-Shows-19-Percent-Improvement-In-Productive-Time.pdf, per search snippet) describes 'ACP Billing Services ... offices in Florida, USA and Chennai, India' - that is ACP Billing Services LLC, Orlando (acpbillingservices.com), NOT acpbilling.com (Automatic Claims Processing Inc., Chino CA; CEO Robert Dimaano). The input's phone +1-909-591-9100 and info@acpbilling.com belong to the Chino company and have been replaced. Address 618 E South St STE 500, Orlando, FL 32801. Email decoded from site's Cloudflare-protected mailto. LinkedIn URLs from a Brave search result page. RocketReach also lists David Raja as HR Manager (name/title only)."
+ },
+ {
+  "company_name": "Servus Limited",
+  "company_domain": "servus.co.tt",
+  "vendor": "Jibble",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "Trinidad and Tobago",
+  "contacts": [
+   {
+    "name": "Edward Kacal",
+    "title": "Chief Executive Officer",
+    "linkedin": "https://www.linkedin.com/in/edwardkacal/",
+    "source_url": "https://www.linkedin.com/in/edwardkacal/"
+   }
+  ],
+  "company_linkedin": "https://tt.linkedin.com/company/servustt",
+  "company_phone": "+1 (868) 627 6113",
+  "public_email": "service@servus.co.tt",
+  "contact_source_url": "https://servus.co.tt/contact",
+  "notes": "Edward Kacal still CEO (LinkedIn result 'Chief Executive Officer - Servus Limited ... CEO at Servus Trinidad'). Second contact not found: servus.co.tt/about names no managers, Jibble case study quotes only 'Servus' collectively, and a site:linkedin.com search was rate-limited. Existing LinkedIn/phone/email kept."
+ },
+ {
+  "company_name": "Paxson Fay",
+  "company_domain": "paxsonfay.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "5 (story); grew 60%",
+  "hq_country": "US (Seattle, WA)",
+  "contacts": [
+   {
+    "name": "Amy Golden",
+    "title": "Co-Founder & Principal",
+    "linkedin": "https://www.linkedin.com/in/amyleedom/",
+    "source_url": "https://paxsonfay.com/"
+   },
+   {
+    "name": "Tessa Franchini",
+    "title": "Co-Founder & Principal",
+    "linkedin": "https://www.linkedin.com/in/tessaandrews/",
+    "source_url": "https://paxsonfay.com/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/paxson-fay",
+  "company_phone": "718.924.4096",
+  "public_email": "info@paxsonfay.com",
+  "contact_source_url": "https://paxsonfay.com/",
+  "notes": "Previous decision maker Anna Coumou (Communications Manager) is no longer on the team list at paxsonfay.com, so she was replaced by the two co-founders/principals. Their LinkedIn results were titled 'Amy Golden - Paxson Fay' and 'Tessa Franchini - Paxson Fay'. The site publishes amy@paxsonfay.com and tessa@paxsonfay.com plus info@paxsonfay.com. Phone 718.924.4096 is listed as the Paxson Fay PR contact (Amy Golden) in a Miller Hull press release (https://millerhull.com/2021/the-deschutes-public-library-district-board-selects-the-miller-hull-partnership-and-steele-associates-to-bring-the-communitys-vision-for-public-libraries-across-central-oregon-to-life/), 2021 - may be her direct line. Address 4770 Ohio Ave S, Ste B, Seattle, WA 98134. About 7 staff now."
+ },
+ {
+  "company_name": "RogueMark Studios",
+  "company_domain": "roguemarkstudios.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "1-5 (Prospeo lists 1 employee)",
+  "hq_country": "US (Berkeley, CA)",
+  "contacts": [
+   {
+    "name": "Abby VanMuijen",
+    "title": "Founder & WIC (Woman In Charge)",
+    "linkedin": "https://www.linkedin.com/in/abby-vanmuijen-5723a915/",
+    "source_url": "https://www.roguemarkstudios.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/roguemark-studios",
+  "company_phone": "",
+  "public_email": "info@roguemarkstudios.com",
+  "contact_source_url": "https://roguemarkstudios.com/contact",
+  "notes": "Founder Abby VanMuijen (Crunchbase, roguemarkstudios.com/about, LinkedIn result 'Abby VanMuijen - RogueMark Studios'). Co-founder Eliza Reisfeld's LinkedIn says she was Creative Director 'for five years' (past tense), so she is not used as second contact. Contact page lists abby@roguemarkstudios.com and info@roguemarkstudios.com, address 2101 Ashby Avenue, Berkeley, CA 94705; no phone. Very small (maybe solo now) - low seat potential."
+ },
+ {
+  "company_name": "Crossley Acoustics",
+  "company_domain": "crossleyacoustics.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "21",
+  "hq_country": "US (Brooklyn, NY)",
+  "contacts": [
+   {
+    "name": "Tim Crossley",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://www.getharvest.com/customers/crossley-acoustics"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/crossley-acoustics",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.linkedin.com/company/crossley-acoustics",
+  "notes": "crossleyacoustics.com now redirects to a login-gated Google Sites page (sites.google.com/crossleyacoustics.com), so no phone/email could be read from the company site - check the company is still active before outreach. Company LinkedIn page URL from a search result ('multidisciplinary engineering and design firm located in Brooklyn'); several staff list Crossley Acoustics as current employer. No personal LinkedIn for Tim Crossley found; second contact not found (only shop/admin staff visible)."
+ },
+ {
+  "company_name": "CCD Innovation",
+  "company_domain": "ccdinnovation.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 65,
+  "employee_count": "12",
+  "hq_country": "US (now Battle Creek, MI; formerly San Francisco)",
+  "contacts": [
+   {
+    "name": "Jeff Grogg",
+    "title": "Founder, JPG Resources (parent company)",
+    "linkedin": "",
+    "source_url": "https://jpgresources.com/about"
+   },
+   {
+    "name": "Natalie Shmulik",
+    "title": "Contact listed on CCD Innovation site (JPG Resources; title not stated)",
+    "linkedin": "",
+    "source_url": "https://www.ccdinnovation.com/contact"
+   },
+   {
+    "name": "Ruth Halpern",
+    "title": "CEO (per Harvest story; current role unverified)",
+    "linkedin": "",
+    "source_url": "https://www.getharvest.com/customers/ccd-innovation"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/ccdinnovation",
+  "company_phone": "415.693.8900",
+  "public_email": "Connect@CCDInnovation.com",
+  "contact_source_url": "https://www.ccdinnovation.com/contact",
+  "notes": "CCD Innovation is now 'a fully owned subsidiary of JPG Resources' (ccdinnovation.com homepage); contact address is JPG's 62 E. Michigan Ave, Ste 210, Battle Creek, MI 49017. Still operating, so status left empty, but the buying decision (and possibly the Harvest account) may now sit with JPG Resources (50+ staff; info@jpgresources.com). Ruth Halpern is not named on either site, so she may have left - kept as a third contact flagged unverified. Site also lists Natalie.Shmulik@jpgresources.com as a contact email."
+ },
+ {
+  "company_name": "Beanstalk Web Solutions",
+  "company_domain": "beanstalkwebsolutions.com",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "US (St. Louis, MO)",
+  "contacts": [
+   {
+    "name": "Zachary Cocos",
+    "title": "President",
+    "linkedin": "",
+    "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"
+   },
+   {
+    "name": "Parker Freeman",
+    "title": "Digital Marketing Director",
+    "linkedin": "",
+    "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"
+   },
+   {
+    "name": "Tim Hebel",
+    "title": "Advisor (former owner)",
+    "linkedin": "",
+    "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/beanstalk-web-solutions",
+  "company_phone": "(314) 736-4430",
+  "public_email": "",
+  "contact_source_url": "https://beanstalkwebsolutions.com/contact",
+  "notes": "Previous decision maker Tim Hebel (Owner) is now listed only as an Advisor; the team page names Zachary Cocos as President, so he is the new decision maker. LinkedIn not searched (search budget exhausted). Site shows no email (contact form only). Phone (314) 736-4430 and address 54 W. Moody Ave, St. Louis, MO 63119 confirmed."
+ },
+ {
+  "company_name": "Sneeze It",
+  "company_domain": "sneeze.it",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "",
+  "hq_country": "US (Fairfield, NJ)",
+  "contacts": [
+   {
+    "name": "David Steel",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/dsteel/",
+    "source_url": "https://www.indeed.com/cmp/Sneeze-IT"
+   },
+   {
+    "name": "Nathaniel Foss",
+    "title": "Manager of Web Development",
+    "linkedin": "https://www.linkedin.com/in/nathanielfoss11/",
+    "source_url": "https://www.linkedin.com/in/nathanielfoss11/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sneeze-it",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "CEO David Steel per Indeed company page snippet; his LinkedIn result shows 'Experience: Sneeze It', Fairfield. Second contact is a manager, not an executive - weak. sneeze.it returns 403/bot challenge to fetch, so phone and email not found. These came from one web search results page fetched before the search limit was reached."
+ },
+ {
+  "company_name": "Mactores",
+  "company_domain": "mactores.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 40,
+  "employee_count": "",
+  "hq_country": "United States (Bellevue, WA)",
+  "contacts": [],
+  "company_linkedin": "https://www.linkedin.com/company/mactores",
+  "company_phone": "",
+  "public_email": "lets-talk@mactores.com",
+  "contact_source_url": "https://mactores.com/about",
+  "notes": "Decision maker not found: mactores.com/about and the homepage list no executives (legal entity Mactores Cognition Inc., 2018 156th Ave NE, Suite 214, Bellevue, WA 98007). Emails lets-talk@mactores.com (kept) and partner@mactores.com. No phone on site. Leadership needs a search (budget exhausted)."
+ },
+ {
+  "company_name": "Sofo Studios",
+  "company_domain": "jollity.io",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "US (Denver, CO)",
+  "contacts": [
+   {
+    "name": "Jenn Hess",
+    "title": "Co-founder & CEO, Jollity (Sofo Studios merged into Jollity in 2023)",
+    "linkedin": "https://www.linkedin.com/in/jenniferhess/",
+    "source_url": "https://jollity.io/about"
+   },
+   {
+    "name": "Karri Cole",
+    "title": "Director of Technology",
+    "linkedin": "https://www.linkedin.com/in/karrielizabethcole/",
+    "source_url": "https://jollity.io/about"
+   },
+   {
+    "name": "Lauren Perfors",
+    "title": "Co-founder",
+    "linkedin": "",
+    "source_url": "https://jollity.io/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/jollityweb/",
+  "company_phone": "720-515-7547",
+  "public_email": "",
+  "contact_source_url": "https://jollity.io/contact",
+  "notes": "sofostudios.com now 301-redirects to jollity.io: 'After a decade of success, Sofo Studios merged with Jollity in 2023, where Jenn now serves as Co-founder & CEO.' Business continues as Jollity Studios (team ~10 incl. developers in Brazil), so not DO_NOT_TARGET; target as Jollity. LinkedIn URLs listed on jollity.io/about. No email on the site (forms only). Addresses: 1500 N Grant St, Ste R, Denver, CO 80203; mailing 9450 SW Gemini Dr, Ste 64378, Beaverton, OR 97008."
+ },
+ {
+  "company_name": "Euronet Worldwide",
+  "company_domain": "euronetworldwide.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "",
+  "hq_country": "US (Leawood, Kansas)",
+  "contacts": [
+   {
+    "name": "Michael J. Brown",
+    "title": "Chairman, President and CEO",
+    "linkedin": "",
+    "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"
+   },
+   {
+    "name": "Kevin J. Caponecchi",
+    "title": "EVP and CEO, epay, Software and EFT Asia Pacific Division",
+    "linkedin": "",
+    "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"
+   },
+   {
+    "name": "Dr. Martin L. Brückner",
+    "title": "SVP and Chief Technology Officer",
+    "linkedin": "",
+    "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/euronet-worldwide/",
+  "company_phone": "+1-913-327-4200",
+  "public_email": "",
+  "contact_source_url": "https://www.euronetworldwide.com/contact-us/",
+  "notes": "Executives from Euronet's IR executive-management page. The ProHance case study does not say which Euronet unit uses it (only 'a financial technology company specializing in electronic payment services'); probably an India/APAC software or ops centre, so the APAC division CEO (Caponecchi) is included as the most relevant second contact. HQ 11400 Tomahawk Creek Parkway Suite 300, Leawood, KS 66211 (phone from site footer). No public email on the site. Large enterprise: a site-level ops or WFM lead would be a better entry point but needs a search."
+ },
+ {
+  "company_name": "Tata Digital",
+  "company_domain": "tatadigital.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "India (Mumbai)",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "tatadigital.com, tataneu.com and tata.com all returned 403 to fetch, and the ProHance case-study page names no people (only '43% reduction in vendor headcount'). Leadership, LinkedIn, phone and email are all blank: they need a web search (budget exhausted)."
+ },
+ {
+  "company_name": "HBC",
+  "company_domain": "",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "DO_NOT_TARGET",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Mohith Mohan",
+    "title": "Divisional Vice President and Site Head (per ProHance testimonial; likely no longer with HBC)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://en.wikipedia.org/wiki/Hudson%27s_Bay_Company",
+  "notes": "The testimonial is from HBC's India GCC (site head). HBC spun its US assets into Saks Global in Nov 2024; if the Bengaluru centre moved to Saks Global, that would be a separate prospect to research - not checked.",
+  "status_reason": "Hudson's Bay Company filed for creditor protection in March 2025, closed all stores by June 2025, sold its IP to Canadian Tire and was renamed 1242939 B.C. Unlimited Liability Co. in August 2025. Only 8 staff remained by Feb 2026 (Wikipedia). thebay.com now redirects to canadiantire.ca."
+ },
+ {
+  "company_name": "Tesco Business Services",
+  "company_domain": "tescobengaluru.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "India (Bengaluru) / UK",
+  "contacts": [
+   {
+    "name": "Dr. Sumit Mitra",
+    "title": "CEO, Tesco Business Solutions",
+    "linkedin": "https://www.linkedin.com/in/drsumitmitra/",
+    "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"
+   },
+   {
+    "name": "James Glavey",
+    "title": "Chief Operating Officer, Tesco Business Solutions",
+    "linkedin": "https://www.linkedin.com/in/james-glavey-6a1533121/",
+    "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"
+   },
+   {
+    "name": "Somnath Baishya",
+    "title": "Director - People, Tesco Business Solutions and Tesco India; Site Head - Bengaluru",
+    "linkedin": "https://www.linkedin.com/in/somnathbaishya/",
+    "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/tesco-bengaluru/",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.tescobengaluru.com/contact/",
+  "notes": "Unit is now called Tesco Business Solutions (part of Tesco Bengaluru). The ProHance testimonial author Altaf Patel (Director, Business Transformation) is NOT on the current leadership page, so he may have moved on; replaced with CEO, COO and People/site head. LinkedIn URLs are linked on the leadership page itself. Contact page gives the address (Tesco Main Campus, 81 & 82 EPIP, Whitefield, Bengaluru) and only candidatecare@tesco.com (recruitment-fraud reporting - not a sales email); no phone."
+ },
+ {
+  "company_name": "Solverminds",
+  "company_domain": "solverminds.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "",
+  "hq_country": "India/Singapore",
+  "contacts": [
+   {
+    "name": "Anthony Damian",
+    "title": "Founder & Director",
+    "linkedin": "",
+    "source_url": "https://www.solverminds.com/about"
+   },
+   {
+    "name": "Mohit Oberoi",
+    "title": "Founder & Director",
+    "linkedin": "",
+    "source_url": "https://www.solverminds.com/about"
+   },
+   {
+    "name": "Capt. Ritesh Sood",
+    "title": "Director & Co-founder; MD Solverminds Singapore",
+    "linkedin": "",
+    "source_url": "https://www.solverminds.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/solverminds-solutions-and-technologies",
+  "company_phone": "+91 44 4202 0233",
+  "public_email": "enquiry@solverminds.com",
+  "contact_source_url": "https://www.solverminds.com/",
+  "notes": "Anthony Damian (ProHance testimonial author) is still listed as Founder & Director on solverminds.com/about. Added co-founders Mohit Oberoi and Capt. Ritesh Sood. Personal LinkedIn URLs not linked on the site and not searched (budget exhausted). Existing LinkedIn page, phone (044 4202 0233) and enquiry@solverminds.com confirmed on the about page."
+ },
+ {
+  "company_name": "SMV Software Solutions",
+  "company_domain": "",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 25,
+  "employee_count": "",
+  "hq_country": "India",
+  "contacts": [
+   {
+    "name": "Dr. Sankar Venkat",
+    "title": "General Manager (ProHance testimonial)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "No company domain in the input and none can be identified without a web search (budget exhausted), so LinkedIn, phone and email are blank. Contact is from the ProHance testimonials page only; still-in-role not verified."
+ },
+ {
+  "company_name": "Stellarix Consultancy Services",
+  "company_domain": "stellarix.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "",
+  "hq_country": "India",
+  "contacts": [
+   {
+    "name": "Ramraj Kumhar",
+    "title": "Senior IT Administrator (ProHance testimonial)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/stellarix",
+  "company_phone": "+91-141-4920704",
+  "public_email": "sales@stellarix.com",
+  "contact_source_url": "https://stellarix.com/",
+  "notes": "stellarix.com about-us and /leadership pages list no named leaders (only '250+ consulting minds'). The existing contact is an IT admin, not a decision maker; the CEO/founder needs a search (budget exhausted). Existing company LinkedIn (linkedin.com/company/stellarix), phone +91-141-4920704 and sales@stellarix.com confirmed in the site footer; HQ Atlantis Tower, Plot D-232/233, Jaipur."
+ },
+ {
+  "company_name": "Metromax",
+  "company_domain": "",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 10,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "ProHance case study only says 'a logistics conglomerate managing tech-driven companies' - no website, location or people. Without a web search (budget exhausted) the company can't be identified with confidence, so everything is blank."
+ },
+ {
+  "company_name": "Texila American University",
+  "company_domain": "tauedu.org",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "Guyana/India",
+  "contacts": [
+   {
+    "name": "S.P. Saju Bhaskar",
+    "title": "Founder and President",
+    "linkedin": "",
+    "source_url": "https://tauedu.org/about-us/"
+   },
+   {
+    "name": "Vivek Kishore Verma",
+    "title": "Group CEO - Texila American University Consortium",
+    "linkedin": "",
+    "source_url": "https://tauedu.org/about-us/"
+   },
+   {
+    "name": "Syam Kumar",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://tauedu.org/about-us/"
+   },
+   {
+    "name": "Sivakumar",
+    "title": "CPO (ProHance testimonial author)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/texilaguyana/",
+  "company_phone": "+91 7397718369 (WhatsApp, general enquiries)",
+  "public_email": "",
+  "contact_source_url": "https://tauedu.org/contact-us/",
+  "notes": "Leadership from tauedu.org/about-us (also lists EVP Chithra Lakshmi, Vice Chancellor Prof. Ajay Kumar Poddar, CAO Guyana Dr. Dheeraj Bansal). The ProHance user is likely the India office (ELCOT IT Tower, Coimbatore). Contact page has only a WhatsApp number and forms - no email. Campuses: Guyana, Zambia; offices in India, Mauritius, Plano TX."
+ },
+ {
+  "company_name": "University of the People",
+  "company_domain": "uopeople.edu",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Shai Reshef",
+    "title": "President",
+    "linkedin": "",
+    "source_url": "https://www.uopeople.edu/about/leadership/administration/"
+   },
+   {
+    "name": "Anand Natarajan",
+    "title": "SVP, India Operations",
+    "linkedin": "",
+    "source_url": "https://www.uopeople.edu/about/leadership/administration/"
+   },
+   {
+    "name": "Erika Roegies",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.uopeople.edu/about/leadership/administration/"
+   },
+   {
+    "name": "Anat Mogilevsky",
+    "title": "VP, HR",
+    "linkedin": "",
+    "source_url": "https://www.uopeople.edu/about/leadership/administration/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/school/university-of-the-people/",
+  "company_phone": "+1 (626) 264-8880",
+  "public_email": "info@uopeople.edu",
+  "contact_source_url": "https://www.uopeople.edu/contact-us/",
+  "notes": "The ProHance testimonial author Asha Rao (Associate HR Director) is NOT on the current administration page, so she was replaced. ProHance is most likely used by the India operations team, so SVP India Operations Anand Natarajan is the best entry point alongside the COO and VP HR. Phone is a recorded-message line. Partnerships email partnerships@uopeople.edu also listed. Addresses: 595 E Colorado Blvd Suite 623, Pasadena CA 91101; 221 West 10th St, Wilmington DE."
+ },
+ {
+  "company_name": "Catapult",
+  "company_domain": "",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 40,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [
+   {
+    "name": "Gopipati DK",
+    "title": "Country Manager, Philippines & Director Strategic Initiatives",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "ProHance testimonial names Gopipati DK of Catapult (Philippines operations). The case-study page does not give industry, location or website, so the exact 'Catapult' entity (many companies share the name) could not be confirmed without a search; domain, company LinkedIn, phone and email left blank. Full case study is behind a ProHance lead form (not bypassed)."
+ },
+ {
+  "company_name": "Sutherland",
+  "company_domain": "sutherlandglobal.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "US (Rochester, NY) / global BPO",
+  "contacts": [
+   {
+    "name": "Dilip R. Vellodi",
+    "title": "Founder, Chairman and CEO",
+    "linkedin": "",
+    "source_url": "https://www.sutherlandglobal.com/about-us/leadership"
+   },
+   {
+    "name": "Eric Tinch",
+    "title": "Chief People Officer",
+    "linkedin": "",
+    "source_url": "https://www.sutherlandglobal.com/about-us/leadership"
+   },
+   {
+    "name": "N Muthuraman",
+    "title": "Sr. Director (ProHance testimonial author)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   },
+   {
+    "name": "Doug Gilbert",
+    "title": "Chief Information Officer and Chief Digital Officer",
+    "linkedin": "",
+    "source_url": "https://www.sutherlandglobal.com/about-us/leadership"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sutherland-global-services/",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.sutherlandglobal.com/contact-us",
+  "notes": "Leadership from sutherlandglobal.com/about-us/leadership. ProHance testimonial is by N Muthuraman, Sr. Director (still-in-role not verifiable without search). Contact page has forms only - no phone/email found. Large BPO (tens of thousands of agents) - big seat potential but likely enterprise WFM procurement."
+ },
+ {
+  "company_name": "Chetan Pabari & Associates",
+  "company_domain": "",
+  "vendor": "Workstatus",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 30,
+  "employee_count": "",
+  "hq_country": "India",
+  "contacts": [
+   {
+    "name": "Chetan Pabari",
+    "title": "Principal (name of firm; title not stated)",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Workstatus homepage testimonial still shows 'Chetan Pabari, CHETAN PABARI & ASSOCIATES'. No website given, and the firm can't be identified without a web search (budget exhausted), so LinkedIn, phone and email are blank."
+ },
+ {
+  "company_name": "RF Solutions",
+  "company_domain": "",
+  "vendor": "Workstatus",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [
+   {
+    "name": "Alvaro J Ruiz",
+    "title": "(title not stated)",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Workstatus homepage testimonial 'Alvaro J Ruiz, RF Solutions' (still live). 'RF Solutions' is a common name and can't be pinned to one company or domain without a search; all other fields blank."
+ },
+ {
+  "company_name": "DITS",
+  "company_domain": "",
+  "vendor": "Workstatus",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [
+   {
+    "name": "Sudha",
+    "title": "(title not stated; surname not given)",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   },
+   {
+    "name": "Akash",
+    "title": "(title not stated; surname not given)",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Two Workstatus homepage testimonials credited to 'DITS' (first names only). The acronym can't be resolved to a company or domain without a search; all other fields blank."
+ },
+ {
+  "company_name": "Investment House",
+  "company_domain": "",
+  "vendor": "Workstatus",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [
+   {
+    "name": "Karna Shah",
+    "title": "(title not stated)",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Workstatus homepage testimonial 'Karna Shah, Investment House' (still live). Generic company name - domain, LinkedIn, phone and email not found without a search."
+ },
+ {
+  "company_name": "Experts Bio",
+  "company_domain": "",
+  "vendor": "Workstatus",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [
+   {
+    "name": "Karthik",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://www.workstatus.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Workstatus homepage testimonial 'Karthik, CEO of Experts Bio'. I checked expertsbio.com, but it is a coaching business whose founder is 'Punya Slogan', so it is NOT treated as this company. Domain, LinkedIn, phone and email are blank."
+ },
+ {
+  "company_name": "Xybion (now Instem)",
+  "company_domain": "instem.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "",
+  "hq_country": "UK / US (Instem); Xybion had US/India ops",
+  "contacts": [
+   {
+    "name": "Vik Krishnan",
+    "title": "Chief Executive Officer, Instem",
+    "linkedin": "",
+    "source_url": "https://www.instem.com/about/leadership/"
+   },
+   {
+    "name": "Gina Green",
+    "title": "Chief Operations Officer, Instem",
+    "linkedin": "",
+    "source_url": "https://www.instem.com/about/leadership/"
+   },
+   {
+    "name": "Eve Leconte",
+    "title": "Chief Administrative Officer, Instem",
+    "linkedin": "",
+    "source_url": "https://www.instem.com/about/leadership/"
+   },
+   {
+    "name": "Louis Brook",
+    "title": "Chief Technology Officer, Instem",
+    "linkedin": "",
+    "source_url": "https://www.instem.com/about/leadership/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/instem/",
+  "company_phone": "",
+  "public_email": "info@instem.com",
+  "contact_source_url": "https://www.instem.com/contact-us/",
+  "notes": "xybion.com now 301-redirects to instem.com, and Xybion's Pristima is listed as 'Xybion Legacy study management software' within Instem. The ProHance user (Xybion) is now part of Instem, so Instem's leadership is listed. The CAO (Eve Leconte) owns people/workplace. It's unclear whether ProHance survived the merger. info@instem.com is from the contact page (the other emails there belong to regional distributors). No HQ phone was extracted."
+ },
+ {
+  "company_name": "German-Malaysian Institute (GMI)",
+  "company_domain": "gmi.edu.my",
+  "vendor": "Jibble",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "Malaysia",
+  "contacts": [
+   {
+    "name": "Tuan Haji Ahmad Solihin bin Mohamed Yusoff",
+    "title": "Managing Director",
+    "linkedin": "",
+    "source_url": "https://www.gmi.edu.my/management-team/"
+   },
+   {
+    "name": "Dr. Nurhafiza binti Kamaruddin",
+    "title": "Deputy Managing Director, Corporate",
+    "linkedin": "",
+    "source_url": "https://www.gmi.edu.my/management-team/"
+   },
+   {
+    "name": "Ms. Asni binti Ishak",
+    "title": "Head of Section, Human Capital Management",
+    "linkedin": "",
+    "source_url": "https://www.gmi.edu.my/management-team/"
+   },
+   {
+    "name": "Ts. Razali bin Abu Bakar",
+    "title": "Head of Section, Information & Communication Technology",
+    "linkedin": "",
+    "source_url": "https://www.gmi.edu.my/management-team/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/gmi_official",
+  "company_phone": "+60 3 8921 9000",
+  "public_email": "marketing@gmi.edu.my",
+  "contact_source_url": "https://www.gmi.edu.my/contact-us",
+  "notes": "Management from gmi.edu.my/management-team. The Managing Director is the top executive. HR (Human Capital Management) and ICT heads are included as the likely Jibble owners. Procurement head: Ms. Siti Saeidah binti Mohd Zaki. The page has no LinkedIn URLs, and personal LinkedIn was not searched (budget exhausted). Existing LinkedIn, phone and email kept."
+ },
+ {
+  "company_name": "ERP Connect Consulting",
+  "company_domain": "erpconnectconsulting.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "1-10",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Natalie Lemke",
+    "title": "CEO, RUX Software (acquirer)",
+    "linkedin": "",
+    "source_url": "https://ruxsoftware.com/about-rux"
+   },
+   {
+    "name": "Ben Cole",
+    "title": "Strategic Sales Executive, RUX Software (former ERP Connect President)",
+    "linkedin": "https://www.linkedin.com/in/bencolebc/",
+    "source_url": "https://ruxsoftware.com/about-rux"
+   },
+   {
+    "name": "Emily Senica",
+    "title": "Human Resources, RUX Software",
+    "linkedin": "",
+    "source_url": "https://ruxsoftware.com/about-rux"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/erp-connect-consulting",
+  "company_phone": "(214) 433-0923",
+  "public_email": "support@ruxsoftware.com",
+  "contact_source_url": "https://erpconnectconsulting.com/pages/contact",
+  "notes": "ROLE CHANGE: the erpconnectconsulting.com footer now reads 'ERP Connect Consulting Acquired by RUX Software' with support@ruxsoftware.com. Ben Cole is listed on ruxsoftware.com/about-rux as Strategic Sales Executive, so he is no longer the decision maker; RUX CEO Natalie Lemke replaces him. The business continues under RUX (Microsoft BC rental/service software), so status is left empty, but the Clockify story may predate the acquisition. Old email bc@erpconnectconsulting.com replaced with the address the site now shows. RUX LinkedIn: https://www.linkedin.com/company/rux-software/ (the ERP Connect LinkedIn page is still linked)."
+ },
+ {
+  "company_name": "Pariuri Si Jocuri",
+  "company_domain": "pariurisijocuri.ro",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "9",
+  "hq_country": "Romania",
+  "contacts": [
+   {
+    "name": "Adrian Matieș",
+    "title": "Journalist / sports-betting expert (Clockify story: Project Coordinator)",
+    "linkedin": "",
+    "source_url": "https://pariurisijocuri.ro/despre-noi/"
+   },
+   {
+    "name": "Marius Doroftei",
+    "title": "Journalist and Sports Expert",
+    "linkedin": "https://ro.linkedin.com/in/marius-doroftei-a9b7b6122",
+    "source_url": "https://pariurisijocuri.ro/despre-noi/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "info@pariurisijocuri.ro",
+  "contact_source_url": "https://pariurisijocuri.ro/contact/",
+  "notes": "The site is owned by Playhill Limited (international company, ONJN licence 2597/28.11.2018) per the despre-noi page, so the real buyer is Playhill. No owner or executive is named. Adrian Maties is still on the team. Marius Doroftei's LinkedIn is linked from the about page (he is a writer, not a decision maker). No phone or company LinkedIn found. iGaming affiliate with about 9 staff, so low seat value."
+ },
+ {
+  "company_name": "Foster Yarborough PLLC",
+  "company_domain": "fyktriallaw.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "7",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Ben Foster",
+    "title": "Partner/Founder",
+    "linkedin": "",
+    "source_url": "https://www.fyktriallaw.com/ourteam"
+   },
+   {
+    "name": "Patrick Yarborough",
+    "title": "Partner",
+    "linkedin": "",
+    "source_url": "https://www.fyktriallaw.com/ourteam"
+   },
+   {
+    "name": "Michael Killingsworth",
+    "title": "Partner (name partner)",
+    "linkedin": "",
+    "source_url": "https://www.fyktriallaw.com/ourteam"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 713 331 5254",
+  "public_email": "admin@fyktriallaw.com",
+  "contact_source_url": "https://www.fyktriallaw.com/ourteam",
+  "notes": "RENAMED: the firm is now Foster Yarborough Killingsworth PLLC, and fosteryarborough.com 301-redirects to fyktriallaw.com. Ben Foster and Patrick Yarborough are still listed. The site shows admin@fyktriallaw.com (the mailto link still points to admin@fosteryarborough.com) and 713-331-5254, The Lyric Center, 440 Louisiana Suite 1800, Houston TX 77002. Now about 9 people. No LinkedIn URLs on the site; personal and company LinkedIn not searched."
+ },
+ {
+  "company_name": "Perception Engineering",
+  "company_domain": "perceptioneng.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "6",
+  "hq_country": "US (Spring Lake, MI)",
+  "contacts": [
+   {
+    "name": "Scott Tompsett",
+    "title": "President & Owner",
+    "linkedin": "https://www.linkedin.com/in/scott-tompsett-2a338b27/",
+    "source_url": "https://www.perceptioneng.com/about-us"
+   },
+   {
+    "name": "Justeene Miller",
+    "title": "Design Operations Manager",
+    "linkedin": "",
+    "source_url": "https://www.perceptioneng.com/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/perception-engineering-llc",
+  "company_phone": "(616) 965-1806",
+  "public_email": "sales@perceptioneng.com",
+  "contact_source_url": "https://www.perceptioneng.com/contact-us",
+  "notes": "Domain taken from the Toggl customer story link. ROLE CHANGE: previous decision maker Stephen Wierenga (Owner) is not on the current team page, which lists Scott Tompsett as President & Owner (LinkedIn linked from the page). Ownership may have changed hands. Address 14998 Cleveland Street, Suite C, Spring Lake, MI."
+ },
+ {
+  "company_name": "Harvey Esquire",
+  "company_domain": "harveyesq.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "6",
+  "hq_country": "US (Los Angeles, CA)",
+  "contacts": [
+   {
+    "name": "Chris A. Harvey",
+    "title": "CEO and Managing Partner (site: Emerging Fund Lawyer)",
+    "linkedin": "https://www.linkedin.com/in/harveyesq/",
+    "source_url": "https://harveyesq.com/about"
+   },
+   {
+    "name": "Alan S. Gutterman",
+    "title": "Venture Counsel",
+    "linkedin": "https://www.linkedin.com/in/alangutterman/",
+    "source_url": "https://harveyesq.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/harvey-esquire/",
+  "company_phone": "310.819.1366",
+  "public_email": "info@harveyesq.com",
+  "contact_source_url": "https://harveyesq.com/",
+  "notes": "Domain from the Toggl customer story link. Chris Harvey is still at the firm (harveyesq.com/about). The firm looks smaller now, with only 2 lawyers listed. Address 12130 Millennium Dr, 3rd Floor, Los Angeles, CA 90094."
+ },
+ {
+  "company_name": "Revelation PR, Advertising & Social Media",
+  "company_domain": "revelation.agency",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "5",
+  "hq_country": "US (Madison, WI area)",
+  "contacts": [
+   {
+    "name": "Brian Lee, APR",
+    "title": "President",
+    "linkedin": "https://www.linkedin.com/in/brian-lee-apr-ab83161/",
+    "source_url": "https://revelation.agency/about"
+   },
+   {
+    "name": "Taylor Kennedy",
+    "title": "PR Counselor",
+    "linkedin": "https://www.linkedin.com/in/taylor-kennedy-a6879517/",
+    "source_url": "https://revelation.agency/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "608-622-7767",
+  "public_email": "info@revelation.agency",
+  "contact_source_url": "https://revelation.agency/contact",
+  "notes": "Domain from the Toggl customer story link. Brian Lee is still President. The contact page names him as the contact for new work and writes the email as 'info [at] revelation.agency'. Team of 5. The second contact is staff, not an executive. Company LinkedIn not linked on the site."
+ },
+ {
+  "company_name": "Adamick Architecture",
+  "company_domain": "adamickarchitecture.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "8",
+  "hq_country": "US (New Orleans, LA)",
+  "contacts": [
+   {
+    "name": "Alec Adamick",
+    "title": "Founder / Architect (AIA, NCARB)",
+    "linkedin": "",
+    "source_url": "https://adamickarchitecture.com/about-us/"
+   },
+   {
+    "name": "Clayton Hakes",
+    "title": "Architect",
+    "linkedin": "",
+    "source_url": "https://adamickarchitecture.com/about-us/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/adamick-architecture",
+  "company_phone": "+1 504 322 1220",
+  "public_email": "",
+  "contact_source_url": "https://adamickarchitecture.com/contact-us",
+  "notes": "Alec Adamick is still listed first on the 'Meet the Makers' page. Clayton Hakes is the only other licensed architect, so he is a weak second contact. The site shows no email (contact form only). Phone 504.322.1220, address 3301 Chippewa St, New Orleans, LA 70115, and LinkedIn page confirmed. Personal LinkedIn not searched (budget exhausted)."
+ },
+ {
+  "company_name": "Juicyorange",
+  "company_domain": "juicyorange.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "5",
+  "hq_country": "US (New York, NY)",
+  "contacts": [
+   {
+    "name": "Mark Robohm",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://www.getharvest.com/customers/juicyorange"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/juicyorange",
+  "company_phone": "646.666.9363",
+  "public_email": "hello@juicyorange.com",
+  "contact_source_url": "https://www.juicyorange.com/contact",
+  "notes": "Phone and address (Juicyorange, LLC, 275 W 39th St 4th Fl, New York, NY 10018) from juicyorange.com/contact. hello@juicyorange.com and the LinkedIn page are confirmed. The site names no team members, so I couldn't confirm Mark Robohm is still in charge or find a second contact; personal LinkedIn not searched."
+ },
+ {
+  "company_name": "7shifts",
+  "company_domain": "7shifts.com",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 40,
+  "employee_count": "",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Kelly Bonneau",
+    "title": "Accounting Manager (Everhour testimonial author; not re-verified)",
+    "linkedin": "",
+    "source_url": "https://everhour.com/customers"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "7shifts.com returns a Cloudflare challenge to every fetch (about/contact/privacy), so leadership, phone and email could not be read. Search budget exhausted, so nothing was added. FLAG: 7shifts sells restaurant scheduling with a built-in time clock and payroll, which overlaps partly with time tracking. It isn't a direct Tavilo competitor (no activity or screenshot monitoring), so status is left empty, but the coordinator may want to review it."
+ },
+ {
+  "company_name": "Pazion",
+  "company_domain": "pazion.nl",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "",
+  "hq_country": "Netherlands",
+  "contacts": [
+   {
+    "name": "Paul Groeneweg",
+    "title": "Web Developer / Ondernemer (owner) - not re-verified",
+    "linkedin": "",
+    "source_url": "https://everhour.com/customers"
+   }
+  ],
+  "company_linkedin": "http://www.linkedin.com/company/pazion-it",
+  "company_phone": "026 302 0038",
+  "public_email": "info@pazion.nl",
+  "contact_source_url": "https://www.pazion.nl/nl/privacybeleid",
+  "notes": "Pazion BV, Nieuwe Kade 18-2, 6827AB Arnhem, NL. info@pazion.nl and 026-3020038 come from the contact page and privacy policy (the email is a mailto link), and the LinkedIn page (linkedin.com/company/pazion-it) is linked from the site. The site names no staff, so I couldn't confirm Paul Groeneweg is still the owner or find a second contact. KvK number not shown."
+ }
+]

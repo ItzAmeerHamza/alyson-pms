@@ -1,0 +1,199 @@
+URL: https://resources.timedoctor.com/case-studies/us-bpo-company/
+TITLE: Leading BPO company reduced software license costs with Time Doctor
+META: <meta name="description" content="Discover how a BPO company used Time Doctor’s Web and App Usage data to identify 70% unused licenses and reduce software spend." />
+META: <meta property="og:title" content="Leading BPO company reduced software license costs with Time Doctor" />
+META: <meta property="og:description" content="Discover how a BPO company used Time Doctor’s Web and App Usage data to identify 70% unused licenses and reduce software spend." />
+META: <meta property="article:published_time" content="2023-12-19T07:32:18+00:00" />
+META: <meta property="article:modified_time" content="2026-02-05T16:35:23+00:00" />
+LD: datePublished=2023-12-19T07:32:18+00:00
+LD: dateModified=2026-02-05T16:35:23+00:00
+LD: datePublished=2023-12-19T07:32:18+00:00
+LD: dateModified=2026-02-05T16:35:23+00:00
+----
+Leading BPO company reduced software license costs with Time Doctor 
+ View a demo 
+ Product 
+ How it works 
+ Feature overview 
+ Integrations 
+ Get started 
+ Use case 
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Solutions 
+ Industry 
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Workforce 
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Pricing 
+ Resources 
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Login 
+ Get a demo 
+ Try it free 
+ Resources 
+ Case Studies 
+ How Time Doctor helped a leading BPO company save six figures annually in software licenses
+ Case Studies 
+ How Time Doctor helped a leading BPO company save six figures annually in software licenses
+ At a glance
+ The organization is an award-winning business process outsourcing (BPO) company headquartered in Austin, Texas. The company focuses on offering cost-effective business solutions and software licenses to help its clients scale faster and efficiently. By offering finance and accounting, back office, customer experience, and digital services, the company is able to support businesses of all sizes to reach their goals and increase productivity.
+ Company Size
+ 1,000+
+ Industry
+ Business Process Outsourcing
+ Location
+ US
+ Work Type
+ Hybrid
+ The challenges
+ At the company, the digital services group is focused on helping clients with graphic, web, and print design. One of the main tools they use in their daily operations is a graphic design app which costs several hundred dollars per seat license.
+ “We had little visibility into who was actually using the app,” the company’s Head of IT said.
+ The executive noted that this created a costly problem: “Employees don’t always let us know that they no longer require using the graphics design app. Over time, the number of software licenses we purchased across the company ballooned very rapidly. We needed more visibility into who was actually using the app in their day-to-day work.”
+ The solutions
+ “We used to have a couple hundred licenses of a popular graphics design app, and now we have less than 50,” said the Head of IT.
+ After implementing Time Doctor, the team used our Web & App Usage Report to gain visibility into applications used by its team and for how long. The Web & App Usage feature tracks the total time spent in each tool but also provides insights into what tools are considered productive to different teams and job roles.
+ The Head of IT shared with us that this data from Time Doctor uncovered a huge cost-saving opportunity. The team realized that 70% of the graphic design apps were going unused. They were able to remove several hundred unused software licenses, generating savings in the six figures. With Time Doctor, management now has a new way to impact profitability based on information that is backed up by hard data.
+ “And there was no way to get this data other than using Time Doctor. Time Doctor uncovered that 70% of licenses were unused, saving the company six figures!”
+ It’s useful, especially with the work from home set up now. In the next couple of years as work from home becomes more prominent, companies are going to need to have an automated productivity management tool that they can rely on to get data and make their decisions. 
+ Senior Director of Information Technology
+ Related Case Studies
+ View all Case Studies 
+ Case Studies 
+ Leading US health insurance company boosts productivity and saves $1M with Time Doctor 
+ Case Studies 
+ Healthcare industry outsourcer Dentistry Support® sees 85% increase in employee efficiency with Time Doctor 
+ Case Studies 
+ How SmartBuyGlasses Enhanced Productivity and Payroll Management with Time Doctor 
+ Case Studies 
+ Eufonie achieves 30% productivity boost — How Time Doctor transformed remote work management 
+ Other Resource Types
+ Podcasts 
+ Webinars 
+ Blog 
+ Customer Training 
+ Products
+ Features 
+ Pricing 
+ Integrations 
+ Get started 
+ Use Case
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Time Tracking 
+ Payroll 
+ Time Management 
+ Screen Monitoring 
+ Attendance 
+ Accountability 
+ Profitability 
+ Empowering Employees 
+ Industry
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Workforce Type
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Resources
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Benchmarking Tool 
+ Help
+ Contact us 
+ Help Center 
+ FAQs 
+ Uptime Status 
+ Company
+ About us 
+ Jobs 
+ Partner Program 
+ Privacy Policy 
+ Terms of Service 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube 
+ Products
+ Features 
+ Pricing 
+ Integrations 
+ Get started 
+ Use Case
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Time Tracking 
+ Payroll 
+ Time Management 
+ Screen Monitoring 
+ Attendance 
+ Accountability 
+ Profitability 
+ Empowering Employees 
+ Industry
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Resources
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Benchmarking Tool 
+ Company
+ About us 
+ Jobs 
+ Partner Program 
+ Privacy Policy 
+ Terms of Service 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube 
+ Workforce Type
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Help
+ Contact us 
+ Help Center 
+ FAQs 
+ Uptime Status 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube

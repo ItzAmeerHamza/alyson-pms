@@ -158,7 +158,8 @@ export function pulseTenantForbiddenMessage(
 }
 
 /**
- * Overlay selected company for platform operators.
+ * Overlay a selected company for platform operators.
+ * With no header, a super-admin stays on their own workspace.
  * Company admins keep their membership workspace; the header is ignored.
  */
 export function applyPulseWorkspaceContext<T extends ScopedAuthUser>(
@@ -167,7 +168,8 @@ export function applyPulseWorkspaceContext<T extends ScopedAuthUser>(
 ): T {
   if (!user.is_super_admin) return user;
   const wsId = parseWorkspaceId(headerValue);
-  return { ...user, organization_id: wsId ? String(wsId) : null };
+  if (!wsId) return user;
+  return { ...user, organization_id: String(wsId) };
 }
 
 /**

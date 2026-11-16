@@ -1,0 +1,1180 @@
+[
+  {
+    "company_name": "FrankCrum",
+    "company_domain": "frankcrum.com",
+    "vendor": "My Hours",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "550",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Mario Montero",
+        "title": "Director of Project Delivery",
+        "linkedin": "",
+        "source_url": "https://myhours.com/case-study-frankcrum"
+      },
+      {
+        "name": "Anna Leo Holder",
+        "title": "Chief Operating Officer",
+        "linkedin": "https://www.linkedin.com/in/anna-leo-holder-mba-5044ba151/",
+        "source_url": "https://www.frankcrum.com/about/leadership"
+      },
+      {
+        "name": "Chris Bardusch",
+        "title": "Enterprise Chief Information Officer",
+        "linkedin": "https://www.linkedin.com/in/chris-bardusch-8b4b264/",
+        "source_url": "https://www.frankcrum.com/about/leadership"
+      },
+      {
+        "name": "Frank W. Crum, Jr.",
+        "title": "Founder, Owner and CEO",
+        "linkedin": "https://www.linkedin.com/in/frank-w-crum-jr-06373247/",
+        "source_url": "https://www.frankcrum.com/about/leadership"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/frankcrum",
+    "company_phone": "800-277-1620",
+    "public_email": "privacy@frankcrum.com",
+    "contact_source_url": "https://www.frankcrum.com/privacy-center",
+    "notes": "Mario Montero (case-study champion) not listed on the leadership page and his LinkedIn would need search; kept from case study, still-in-role unverified. Leadership page lists COO, CIO (relevant for monitoring rollout) and CEO with LinkedIn links verbatim. Only public email on site is the privacy inbox (privacy@frankcrum.com, Data Privacy Officer Amber Perrone) - use with care; phone 800-277-1620 confirmed."
+  },
+  {
+    "company_name": "Ring Ring Marketing",
+    "company_domain": "ringringmarketing.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "130+ full-time (per founder bio)",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Welton Hong",
+        "title": "Founder & CEO",
+        "linkedin": "",
+        "source_url": "https://www.ringringmarketing.com/about-us/"
+      },
+      {
+        "name": "Christina Novak",
+        "title": "Vice President, Operations",
+        "linkedin": "",
+        "source_url": "https://www.ringringmarketing.com/about-us/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/ring-ring-marketing",
+    "company_phone": "(888) 383-2848",
+    "public_email": "info@ringringmarketing.com",
+    "contact_source_url": "https://www.ringringmarketing.com/about-us/",
+    "notes": "Welton Hong confirmed as Founder & CEO on About page ('team of 125+'). Added Christina Novak, VP Operations, from the RRM Leadership list. No personal LinkedIn linked on site; would need search. Phone/email/company LinkedIn reconfirmed."
+  },
+  {
+    "company_name": "MID Construction",
+    "company_domain": "midconstruction.com",
+    "vendor": "WebWork Time Tracker",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "50-100 + offshore",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Marry Mapula",
+        "title": "Back Office Manager",
+        "linkedin": "",
+        "source_url": "https://www.webwork-tracker.com/customers/mid-construction"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/mid-construction-group/",
+    "company_phone": "323-200-9171",
+    "public_email": "info@midconstruction.com",
+    "contact_source_url": "https://midconstruction.com/contact-us/",
+    "notes": "Found site midconstruction.com (MID Construction Group, Los Angeles, CA LIC 1030925, '1,500 local construction projects' - matches WebWork case study: LA, 1,500+ builds). Phone, email, company LinkedIn from site. Site has a 'Word from our CEO' block but no CEO name; team names on About page look like template placeholders, so not recorded. Back Office Manager from case study kept; no LinkedIn without search."
+  },
+  {
+    "company_name": "A-List Therapy Group, LLC",
+    "company_domain": "alist-therapy.com",
+    "vendor": "WebWork Time Tracker",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "76 (TheirStack); LinkedIn band 51-200",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Mina Hanna, PT, DPT",
+        "title": "Chief Executive Officer",
+        "linkedin": "https://www.linkedin.com/in/mina-hanna-pt-dpt-ocs-cscs-368107129/",
+        "source_url": "https://theirstack.com/en/technology/webwork-time-tracker/us"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/a-list-therapy-group",
+    "company_phone": "323-943-7300",
+    "public_email": "admin@alist-therapy.com",
+    "contact_source_url": "https://www.alist-therapy.com/",
+    "notes": "Site (home, About Us) names no leadership; second contact not found without search. Also lists hr@alist-therapy.com on About page. Existing phone/email/company LinkedIn reconfirmed on home page."
+  },
+  {
+    "company_name": "SupportZebra",
+    "company_domain": "supportzebra.com",
+    "vendor": "Insightful",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "700+",
+    "hq_country": "Philippines (Cagayan de Oro, Cebu) + Mexico",
+    "contacts": [
+      {
+        "name": "Nathan Yap",
+        "title": "CEO & Founder",
+        "linkedin": "",
+        "source_url": ""
+      },
+      {
+        "name": "Nino Duran, Ph.D.",
+        "title": "Co-founder / acting Managing Director",
+        "linkedin": "",
+        "source_url": ""
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/supportzebraph",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "supportzebra.com returns 403 (Cloudflare) to both curl and WebFetch on home/contact/about, so phone, email and still-in-role checks could not be done. Existing contacts kept unverified."
+  },
+  {
+    "company_name": "AM2PM Support",
+    "company_domain": "am2pmsupport.com",
+    "vendor": "Flowace",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "96 agents",
+    "hq_country": "India",
+    "contacts": [
+      {
+        "name": "Mayank Jain",
+        "title": "Co-Founder & CEO",
+        "linkedin": "https://in.linkedin.com/in/camayankjain1",
+        "source_url": "https://am2pmsupport.com/about-us-new/"
+      },
+      {
+        "name": "Ankit Kapoor",
+        "title": "Co-Founder & COO",
+        "linkedin": "https://www.linkedin.com/in/ankit-kapoor-87574b36/",
+        "source_url": "https://am2pmsupport.com/about-us-new/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/am2pmsupport",
+    "company_phone": "+91 89272 47247; +1 (202) 960 2843 (US)",
+    "public_email": "info@am2pmsupport.com",
+    "contact_source_url": "https://am2pmsupport.com/contact/",
+    "notes": "Both co-founders still listed on About page (Ankit's LinkedIn linked there). Phone +91 89272 47247 on contact page; US number +1 (202) 960 2843 in home-page FAQ. info@ (Cloudflare-obfuscated, decoded) on contact page; support@am2pmsupport.com also on home page. Address: Plot No 13, GT Karnal Rd, Delhi 110009."
+  },
+  {
+    "company_name": "Knowcraft Analytics",
+    "company_domain": "knowcraftanalytics.com",
+    "vendor": "Flowace",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "350+",
+    "hq_country": "India",
+    "contacts": [
+      {
+        "name": "Anshuman Thakur",
+        "title": "President",
+        "linkedin": "",
+        "source_url": "https://www.knowcraftanalytics.com/"
+      },
+      {
+        "name": "Upasak Shah",
+        "title": "Co-founder & Director",
+        "linkedin": "",
+        "source_url": "https://www.knowcraftanalytics.com/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/knowcraft-analytics-pvt-ltd-",
+    "company_phone": "+1 408 714 0539; +91 79 6823 6400 (India HQ)",
+    "public_email": "info@knowcraftanalytics.com",
+    "contact_source_url": "https://www.knowcraftanalytics.com/",
+    "notes": "Both still profiled on the company home page leadership section. No personal LinkedIn links on site; needs search. Added India HQ phone. Site also publishes ushah@knowcraftanalytics.com (Upasak Shah) verbatim."
+  },
+  {
+    "company_name": "InData Labs",
+    "company_domain": "indatalabs.com",
+    "vendor": "Beebole",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "~80 + contractors",
+    "hq_country": "Lithuania/US",
+    "contacts": [
+      {
+        "name": "Marat Karpeko",
+        "title": "Founder",
+        "linkedin": "https://www.linkedin.com/in/marat-karpeko-2876aaa",
+        "source_url": "https://indatalabs.com/about"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/indata-labs",
+    "company_phone": "+1 305 447 7330",
+    "public_email": "info@indatalabs.com",
+    "contact_source_url": "https://indatalabs.com/about",
+    "notes": "About page: 'founded in 2014 by ... Marat Karpeko', LinkedIn linked there; 80+ employees. No other named leaders on About page; second contact not found."
+  },
+  {
+    "company_name": "TRST01",
+    "company_domain": "trst01.com",
+    "vendor": "Flowace",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "55",
+    "hq_country": "India",
+    "contacts": [
+      {
+        "name": "Prabir Mishra",
+        "title": "Founder & CEO",
+        "linkedin": "https://www.linkedin.com/in/prabirmishra/",
+        "source_url": "https://trst01.com/about-us"
+      },
+      {
+        "name": "Manoj Vembu",
+        "title": "Co-Founder & Global Director",
+        "linkedin": "",
+        "source_url": "https://trst01.com/about-us"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/trst01official",
+    "company_phone": "+91 910 010 6371",
+    "public_email": "journey@trst01.com",
+    "contact_source_url": "https://trst01.com/",
+    "notes": "Leadership Team on About page: Prabir Mishra (Founder & CEO, LinkedIn linked on home page), Manoj Vembu (Co-Founder & Global Director). Also CTO 'Praveen' (surname not shown). No phone on site."
+  },
+  {
+    "company_name": "The Coding Network",
+    "company_domain": "codingnetwork.com",
+    "vendor": "CurrentWare",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "700+",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Neal Green",
+        "title": "Co-founder & Owner (CEO per existing record)",
+        "linkedin": "",
+        "source_url": "https://codingnetwork.com/about-us-about-tcn/"
+      },
+      {
+        "name": "Mark Babst",
+        "title": "Co-founder & Owner",
+        "linkedin": "",
+        "source_url": "https://codingnetwork.com/about-us-about-tcn/"
+      },
+      {
+        "name": "Steve Micks",
+        "title": "",
+        "linkedin": "",
+        "source_url": "https://www.currentware.com/customers/the-coding-network/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/the-coding-network",
+    "company_phone": "(888) 565-5117",
+    "public_email": "",
+    "contact_source_url": "https://codingnetwork.com/contact-us/",
+    "notes": "About page: 'founders and owners, Mark Babst and Neal Green'. Contact page lists Neal Green and Mark Babst, both at (888) 565-5117, 324 South Palm Drive, Beverly Hills, CA 90212. No public email on site (form only). Steve Micks (existing second contact) not found on the TCN site; kept unverified. No personal LinkedIn links on site."
+  },
+  {
+    "company_name": "TopFoxx",
+    "company_domain": "topfoxx.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "20 (BuiltIn); 19 (TheirStack)",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Helen Getts",
+        "title": "Founder (woman-owned company, NYC)",
+        "linkedin": "",
+        "source_url": "https://topfoxx.com/pages/our-story"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/topfoxx",
+    "company_phone": "(646) 540-7419",
+    "public_email": "info@topfoxx.com",
+    "contact_source_url": "https://topfoxx.com/pages/contact-topfoxx",
+    "notes": "Our Story page: 'Topfoxx is a 100% woman-owned company, founded by New York City native, Helen Getts' (since 2015). Input HQ looked like Uruguay (TheirStack /uy listing); site says NYC, so hq_country set to United States. Contact page also lists andy@topfoxx.com (collaborations & press), luis@topfoxx.com (wholesale), hayley@topfoxx.com (customer support) - roles only, names not full. No company LinkedIn linked on site; no second decision maker found."
+  },
+  {
+    "company_name": "Paint & Profits",
+    "company_domain": "paintandprofits.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Dillon Jonker",
+        "title": "Founder",
+        "linkedin": "",
+        "source_url": "https://www.paintandprofits.com/landingpage"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "https://www.paintandprofits.com/landingpage",
+    "notes": "onlinejobs.ph posting gives no website; paintandprofits.com matches (local SEO agency for U.S. painting contractors, same as posting). Site names Dillon Jonker as Founder/Co-Founder. No phone, email or LinkedIn on site (booking funnel only). Note: paintandprofit.com (singular) is a different painter-coaching business."
+  },
+  {
+    "company_name": "Lunatik Marketing",
+    "company_domain": "lunatikmarketing.com",
+    "vendor": "Monitask",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; lunatikmarketing.com exists (GoDaddy placeholder site titled Lunatik Marketing, 'Unleash your brand's potential', (c)2023) with no people, phone, email or LinkedIn. Domain match by name only, weak confirmation. Nothing else found without search."
+  },
+  {
+    "company_name": "Nabler",
+    "company_domain": "nabler.com",
+    "vendor": "Timely",
+    "evidence_type": "Contact enrichment",
+    "status": "DO_NOT_TARGET",
+    "confidence_score": 0,
+    "employee_count": "200",
+    "hq_country": "India/US",
+    "contacts": [
+      {
+        "name": "Praveen Dalal",
+        "title": "Director of HR (per Timely case study; current employer unverified)",
+        "linkedin": "",
+        "source_url": "https://www.timely.com/case-studies/nabler/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "nabler.com home and /contact-us/ both show a single 'Nabler - Now Brainlabs' notice with no contact details. Brainlabs (large independent digital media agency) could be evaluated as a separate prospect, but the Timely relationship was Nabler's.",
+    "status_reason": "Acquired: nabler.com now only shows 'Nabler is now part of Brainlabs'; the Nabler brand is folded into Brainlabs."
+  },
+  {
+    "company_name": "Viking Yachts",
+    "company_domain": "vikingyachts.com",
+    "vendor": "CurrentWare",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "1700+ (per CurrentWare case study)",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Patrick Healey",
+        "title": "President and CEO",
+        "linkedin": "",
+        "source_url": "https://www.vikingyachts.com/History.asp"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "609-296-6000",
+    "public_email": "customerservice@vikingyachts.com",
+    "contact_source_url": "https://www.vikingyachts.com/Contact.asp",
+    "notes": "History page: 'Current President and CEO Patrick Healey'. Contact page: New Gretna, NJ 08224, phone 609-296-6000, customer service email; also sales email gwaldron@vikingyachts.com. CurrentWare case study names no individual. No IT head or company LinkedIn found on site (only Facebook/Instagram)."
+  },
+  {
+    "company_name": "Boston Centerless",
+    "company_domain": "bostoncenterless.com",
+    "vendor": "CurrentWare",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "~135",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Steve Tamasi",
+        "title": "Owner & CEO",
+        "linkedin": "",
+        "source_url": "https://www.currentware.com/customers/boston-centerless/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/boston-centerless",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "https://www.bostoncenterless.com/contact",
+    "notes": "bostoncenterless.com blocks curl (403); via WebFetch the home page links linkedin.com/company/boston-centerless. Contact page lists addresses only (11 Presidential Way, Woburn, MA 01801; 6901 South Hanna St., Ft. Wayne, IN 46816), no phone/email (forms only). Steve Tamasi still-in-role not verifiable from site; no second contact found."
+  },
+  {
+    "company_name": "Shady Maple Smorgasbord & Farm Market",
+    "company_domain": "shady-maple.com",
+    "vendor": "CurrentWare",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "800+",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Lin Weaver",
+        "title": "Chief Executive Officer",
+        "linkedin": "",
+        "source_url": "https://www.shady-maple.com/about/founders-executive-team/"
+      },
+      {
+        "name": "Phil Weaver",
+        "title": "President",
+        "linkedin": "",
+        "source_url": "https://www.shady-maple.com/about/founders-executive-team/"
+      },
+      {
+        "name": "Diane Adamczyk",
+        "title": "Chief Human Resource Officer",
+        "linkedin": "",
+        "source_url": "https://www.shady-maple.com/about/founders-executive-team/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "717-354-4981",
+    "public_email": "",
+    "contact_source_url": "https://www.shady-maple.com/contact-us/",
+    "notes": "Founders & Executive Team page: Lin Weaver CEO, Phil Weaver President (existing contact confirmed), Diane Adamczyk CHRO, Steve Althouse CFO. No public email or company LinkedIn on site (contact forms; phone +1 717-354-8222 already on record)."
+  },
+  {
+    "company_name": "First Choice Health",
+    "company_domain": "fchn.com",
+    "vendor": "CurrentWare",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "400+ (per CurrentWare case study)",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Nicholas Scheetz",
+        "title": "IT Service Desk Supervisor & System Administrator",
+        "linkedin": "",
+        "source_url": "https://www.currentware.com/customers/first-choice-health/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "CurrentWare case study: Seattle, WA managed-care services provider, 400+ employees, quote from Nicholas Scheetz (IT). Domain fchn.com is the known First Choice Health Network site but it returns 403 to curl and WebFetch, so no leadership, phone or email could be read; domain not confirmed from a fetched page. No executive decision maker found without search."
+  },
+  {
+    "company_name": "Beauty Biz Pro",
+    "company_domain": "beautybizpro.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Jake Randolph",
+        "title": "Founder",
+        "linkedin": "",
+        "source_url": "https://beautybizpro.com/about"
+      },
+      {
+        "name": "Tony Cruz",
+        "title": "Head Coach",
+        "linkedin": "",
+        "source_url": "https://beautybizpro.com/about"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "+1 737 299 7422",
+    "public_email": "support@pmumarketer.com",
+    "contact_source_url": "https://beautybizpro.com/about",
+    "notes": "onlinejobs.ph posting gives no website; beautybizpro.com matches (marketing agency for beauty businesses, runs ad accounts). Legal entity PMU Marketer, LLC, 410 Windjammer Ct, Destin, FL 32541. Founder Jake Randolph (founded 2017); Tony Cruz leads coaching/strategy calls. No company LinkedIn linked."
+  },
+  {
+    "company_name": "Silicon Valley Construction Services (SV Estimating Services)",
+    "company_domain": "svestimatingservices.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "12 (TheirStack)",
+    "hq_country": "United States (San Francisco Bay Area)",
+    "contacts": [
+      {
+        "name": "Masood (surname not published)",
+        "title": "Named contact (role not stated)",
+        "linkedin": "",
+        "source_url": "https://svestimatingservices.com/contact-us/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/silicon-valley-construction-services",
+    "company_phone": "",
+    "public_email": "masood@svestimatingservices.com",
+    "contact_source_url": "https://svestimatingservices.com/contact-us/",
+    "notes": "Contact page shows 'Email: Masood at svestimatingservices.com' (written out on the site, recorded as given, not built from a pattern). Company LinkedIn linkedin.com/company/silicon-valley-construction-services/ confirmed. No phone on any page; site footer also shows info@ndiscovered.com (web vendor, not the company)."
+  },
+  {
+    "company_name": "Crowe Tijuana (Crowe Gossler, Crowe Mexico)",
+    "company_domain": "crowe.com",
+    "vendor": "TrackingTime",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "40 users in Tijuana office",
+    "hq_country": "Mexico",
+    "contacts": [
+      {
+        "name": "Daniel Arturo Cano Falomir",
+        "title": "Office Director - Tax Partner, Tijuana",
+        "linkedin": "",
+        "source_url": ""
+      },
+      {
+        "name": "Alejandro Vega",
+        "title": "Project Manager, Crowe Global Tijuana",
+        "linkedin": "",
+        "source_url": "https://trackingtime.co/best-practices/crowe-global-success-story-with-trackingtime.html"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/crowe-mexico",
+    "company_phone": "(664) 686 3191",
+    "public_email": "",
+    "contact_source_url": "https://www.crowe.com/mx/en-us/about-us/our-people/daniel-cano",
+    "notes": "crowe.com/mx returns 403 to curl and WebFetch, so the Tijuana office page, email and still-in-role checks could not be done. TrackingTime case study reconfirms Alejandro Vega (Project Manager, 40 Tijuana staff on TrackingTime). Existing contacts kept."
+  },
+  {
+    "company_name": "Franklin Marketing Co.",
+    "company_domain": "",
+    "vendor": "Clockify",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; franklinmarketing.com resolves but has no readable content, so the domain is not confirmed and not recorded. Nothing found without search."
+  },
+  {
+    "company_name": "Cysha Pty Ltd",
+    "company_domain": "cysha.com.au",
+    "vendor": "Clockify",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "Australia",
+    "contacts": [
+      {
+        "name": "Meha Shah",
+        "title": "Founder & Director",
+        "linkedin": "",
+        "source_url": "https://cysha.com.au/about"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/cysha-design-studio/",
+    "company_phone": "+61 433 685 543",
+    "public_email": "info@cysha.com.au",
+    "contact_source_url": "https://cysha.com.au/",
+    "notes": "onlinejobs.ph posting gives no website; ABN Lookup: CYSHA PTY LTD, ABN 37 653 101 690, active, NSW 2069. cysha.com.au = Cysha Design Studio, interior design/3D visualisation on Sydney's North Shore (matches posting: Sydney residential design studio); founder Meha Shah per About page (read via WebFetch; site 403s curl)."
+  },
+  {
+    "company_name": "Get It Done Marketing",
+    "company_domain": "",
+    "vendor": "Clockify",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; getitdonemarketing.com is an attractions/hospitality marketing firm (founder Eric Fluet, linkedin.com/company/getitdonemkt), which does not match the posting's 'business funding, VA and marketing for HVAC/construction' description, so not recorded. Nothing confirmed."
+  },
+  {
+    "company_name": "Kwittken",
+    "company_domain": "kwtglobal.com",
+    "vendor": "ClickTime",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "50+ tracking (story)",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Jay Gallwitz",
+        "title": "Global Finance Director (per ClickTime case study; still-in-role unverified)",
+        "linkedin": "",
+        "source_url": "https://www.clicktime.com/case-studies/kwittken-drives-increased-productivity-and-employee-utilization-with-clicktime"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/kwtglobal/",
+    "company_phone": "",
+    "public_email": "info@kwtglobal.com",
+    "contact_source_url": "https://www.kwtglobal.com/about",
+    "notes": "Kwittken rebranded as KWT Global (integrated communications agency, NYC One World Trade Center + LA, Chicago, London). The rename is from general knowledge - kwittken.com serves a blank page and kwtglobal.com does not mention the old name, so verify before outreach. KWT Global site uses the Stagwell privacy policy and links to Hunter PR, i.e. part of Stagwell. No phone or named leaders on site."
+  },
+  {
+    "company_name": "Kunder",
+    "company_domain": "",
+    "vendor": "Paymo",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "50 (per Paymo case study)",
+    "hq_country": "Chile",
+    "contacts": [
+      {
+        "name": "Luis Hernan",
+        "title": "COO",
+        "linkedin": "",
+        "source_url": "https://www.paymoapp.com/kunder/"
+      },
+      {
+        "name": "Manuel Ibáñez",
+        "title": "CCO",
+        "linkedin": "",
+        "source_url": "https://www.paymoapp.com/kunder/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "Paymo case study: Kunder, Santiago de Chile, software development, 50 employees, 6 years on Paymo; names COO Luis Hernan and CCO Manuel Ibáñez. Likely site kunder.cl refuses connections (reset/closed) to curl and WebFetch, so domain, phone, email and company LinkedIn left blank."
+  },
+  {
+    "company_name": "Vital Virtuals LLC (Vital Virtuals Global HR Solutions)",
+    "company_domain": "vitalvirtuals.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "~2 core staff per directory snippet (plus placed VAs; not stated)",
+    "hq_country": "United States (Irving, TX)",
+    "contacts": [
+      {
+        "name": "Dr. Harveer Parmar",
+        "title": "CEO / Founder",
+        "linkedin": "",
+        "source_url": "https://vitalvirtuals.com/about-us"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/vitalvirtuals/",
+    "company_phone": "(469) 708-4797",
+    "public_email": "hello@vitalvirtuals.com",
+    "contact_source_url": "https://vitalvirtuals.com/",
+    "notes": "About page: 'Founded in 2023 by Dr. Parmar, a board-certified Family Physician based in Dallas, Texas' (Vital Virtual Global HR Solutions LLC). Company LinkedIn from site footer. No second contact named on site. Company is a healthcare VA staffing provider (an end user of Time Doctor, not a monitoring vendor)."
+  },
+  {
+    "company_name": "Nolters Gold",
+    "company_domain": "nolters.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Ben (surname not published)",
+        "title": "Owner/Founder",
+        "linkedin": "",
+        "source_url": "https://www.onlinejobs.ph/jobseekers/job/paid-ads-specialist-meta-google-gold-jewelry-e-commerce-1736472"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "support@nolters.com",
+    "contact_source_url": "https://www.nolters.com/pages/contact",
+    "notes": "nolters.com home, About, Contact and privacy pages give no owner surname, phone, legal entity or company LinkedIn (contact form + support@nolters.com only)."
+  },
+  {
+    "company_name": "Superb Concepts",
+    "company_domain": "superbconcepts.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Tyler Youmell",
+        "title": "Owner / Founder",
+        "linkedin": "",
+        "source_url": ""
+      },
+      {
+        "name": "William Youmell",
+        "title": "",
+        "linkedin": "",
+        "source_url": ""
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "234-600-7675",
+    "public_email": "",
+    "contact_source_url": "https://superbconcepts.com",
+    "notes": "superbconcepts.com now 301-redirects to superblandscapeco.com; both time out / refuse connections to curl and WebFetch, so nothing could be checked. Existing contacts kept unverified."
+  },
+  {
+    "company_name": "Auraglow",
+    "company_domain": "",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United Kingdom",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; auraglow.com is a teeth-whitening brand (not the UK lighting brand in the posting); auraglow.co.uk returns 403 to curl and WebFetch. Companies House shows several Auraglow entities, none clearly the lighting seller. Nothing confirmed."
+  },
+  {
+    "company_name": "REVIO",
+    "company_domain": "",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United Kingdom",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; joinrevio.com is an HVAC missed-call tool (not this haircare platform); revio.co.uk timed out. Companies House has REVIO LIMITED 17287022 (inc. 19 Jun 2026, Biggin Hill, Kent) and REVIO GROUP LTD 17400065 (inc. Aug 2026, London), either could be the pre-launch startup but nothing ties them to it. Nothing recorded."
+  },
+  {
+    "company_name": "Yum Street",
+    "company_domain": "yumstreet.co.uk",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United Kingdom",
+    "contacts": [
+      {
+        "name": "Himat Bhakar",
+        "title": "Co-founder",
+        "linkedin": "",
+        "source_url": "https://yumstreet.co.uk/our-story/"
+      },
+      {
+        "name": "Gurmail Bhakar",
+        "title": "Co-founder",
+        "linkedin": "",
+        "source_url": "https://yumstreet.co.uk/our-story/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/yum-street/",
+    "company_phone": "07947 892652; 07590 670405",
+    "public_email": "info@yumstreet.co.uk",
+    "contact_source_url": "https://yumstreet.co.uk/",
+    "notes": "onlinejobs.ph posting gives no website; yumstreet.co.uk matches (Southampton event catering with food trucks/Airstreams, founded 2010); read via WebFetch (403 to curl). Our Story: founded by brothers Himat and Gurmail Bhakar. Companies House has YUM STREET LTD 13738618 and YUM STREET EVENTS LIMITED 13738024 (both Southampton area, inc. Nov 2021) and an older YUM STREET CATERING LIMITED in liquidation; officers not checked."
+  },
+  {
+    "company_name": "Firebow Holidays",
+    "company_domain": "firebowholidays.com",
+    "vendor": "Monitask",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United Kingdom",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "+44 7868 811295",
+    "public_email": "info@firebowholidays.com",
+    "contact_source_url": "https://firebowholidays.com",
+    "notes": "onlinejobs.ph posting gives no website; firebowholidays.com matches (group holiday homes in Kent & Sussex). Phone and email from site; no owner named on site and no matching active company on Companies House under 'Firebow' (only FIREBOW LTD, dissolved 2025, London - not linked)."
+  },
+  {
+    "company_name": "Kleidereisen GmbH",
+    "company_domain": "kleidereisen.de",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "Germany",
+    "contacts": [
+      {
+        "name": "Mario Söllner",
+        "title": "Geschäftsführer (Managing Director)",
+        "linkedin": "",
+        "source_url": "https://kleidereisen.de/policies/legal-notice"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "+49 2835 9849500",
+    "public_email": "support@kleidereisen.de",
+    "contact_source_url": "https://kleidereisen.de/policies/legal-notice",
+    "notes": "onlinejobs.ph posting gives no website; kleidereisen.de matches (industrial-style clothes rails/furniture e-commerce). Impressum: Kleidereisen GmbH, Alte Gelderner Straße 14, 47661 Issum; Amtsgericht Kleve HRB21444; Geschäftsführer Mario Söllner; Tel. 02835 9849500."
+  },
+  {
+    "company_name": "Altura Funding",
+    "company_domain": "alturafunding.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "https://fund.alturafunding.com/",
+    "notes": "alturafunding.com returns 403 to curl and WebFetch; no contact or leadership info could be read. Nothing found without search."
+  },
+  {
+    "company_name": "Scare Street",
+    "company_domain": "scarestreet.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "support@scarestreet.com",
+    "contact_source_url": "https://scarestreet.com/policies/privacy-policy",
+    "notes": "onlinejobs.ph posting gives no website; scarestreet.com matches (horror fiction publisher). Privacy policy: operated by Omni Holdings LLC, 30 N Gould St Ste R, Sheridan WY 82801 (registered-agent address). No people, phone or LinkedIn on site."
+  },
+  {
+    "company_name": "Sam Sikes Photography",
+    "company_domain": "samsikesphotography.com",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Sam Sikes",
+        "title": "Owner",
+        "linkedin": "",
+        "source_url": "https://samsikesphotography.com/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "https://samsikesphotography.com/inquire",
+    "notes": "Site confirms Sam Sikes, wedding photography & videography, Memphis TN. Contact is an inquiry form only; no phone, email or LinkedIn on site. Solo/small studio."
+  },
+  {
+    "company_name": "GoShopBlack",
+    "company_domain": "goshopblack.com",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "https://www.linkedin.com/company/goshopblack",
+    "company_phone": "",
+    "public_email": "support@goshopblack.com",
+    "contact_source_url": "https://www.goshopblack.com/contact",
+    "notes": "goshopblack.com contact page gives support@goshopblack.com; company LinkedIn in footer. About page (goshopblack.org/about-goshopblack) names no founder or leaders; no phone. Decision maker not found without search."
+  },
+  {
+    "company_name": "BMH Group",
+    "company_domain": "bmhgroupkc.com",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "+1 816-892-0833",
+    "public_email": "",
+    "contact_source_url": "https://bmhgroupkc.com",
+    "notes": "onlinejobs.ph posting gives no website; bmhgroupkc.com matches (Kansas City-area home buyer since 1998, Midwest; 816 number; posting = KC real estate investment company). No names, email or LinkedIn on home/privacy pages."
+  },
+  {
+    "company_name": "BTS Brands",
+    "company_domain": "",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; btsbrands.com is a commercial-real-estate creative agency, not this Amazon private-label seller (travel accessories + beauty devices), so not recorded. Nothing confirmed."
+  },
+  {
+    "company_name": "Wavely Media",
+    "company_domain": "wavelymedia.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "https://www.linkedin.com/company/wavely-media",
+    "company_phone": "",
+    "public_email": "contact@wavelymedia.com",
+    "contact_source_url": "https://wavelymedia.com",
+    "notes": "onlinejobs.ph posting gives no website; wavelymedia.com matches (media/video publisher behind the Real Body Cams channel; posting mentions copyright-claims work, EST hours). Email (Cloudflare-decoded) and company LinkedIn from home page. No people named."
+  },
+  {
+    "company_name": "Start Small Property",
+    "company_domain": "startsmall.com.au",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "Australia",
+    "contacts": [
+      {
+        "name": "Sean (surname not published)",
+        "title": "Founder & Principal Licensee",
+        "linkedin": "",
+        "source_url": "https://www.startsmall.com.au/about"
+      },
+      {
+        "name": "May (surname not published)",
+        "title": "Director of Operations",
+        "linkedin": "",
+        "source_url": "https://www.startsmall.com.au/about"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "1300 388 886",
+    "public_email": "noworries@startsmall.com.au",
+    "contact_source_url": "https://www.startsmall.com.au/contact",
+    "notes": "onlinejobs.ph posting gives no website; startsmall.com.au = Start Small Property (Queensland property management, co-living specialist; matches posting). Contact page: PO Box 7636 Sippy Downs QLD 4556, phone 1300 388 886, QLD Real Estate licence 4035781. About page gives first names only."
+  },
+  {
+    "company_name": "Premier Vitality",
+    "company_domain": "",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; premiervitality.com 404s and premiervitality.net is a 'Coming Soon' page; neither confirmed. Nothing found without search."
+  },
+  {
+    "company_name": "Welch Products LLC",
+    "company_domain": "welchproductsllc.com",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [
+      {
+        "name": "Todd Welch",
+        "title": "Founder",
+        "linkedin": "",
+        "source_url": "https://welchproductsllc.com/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; welchproductsllc.com (read via WebFetch, 403 to curl) = Amazon Seller Central account management / PPC agency 'established in January 2015 by founder Todd Welch' - matches posting. No phone, email or LinkedIn shown (contact form / schedule-call only)."
+  },
+  {
+    "company_name": "Blazing Boost Srl",
+    "company_domain": "blazingboost.com",
+    "vendor": "Controlio",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "Italy",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "+39 02 87167 055",
+    "public_email": "support@blazingboost.com",
+    "contact_source_url": "https://blazingboost.com",
+    "notes": "onlinejobs.ph posting gives no website; blazingboost.com matches (game boosting services since 2012). Footer: Blazing Boost Srl, Via Zenale 13, 20213 Milano. No people or company LinkedIn on site; Italian registry lookup not done."
+  },
+  {
+    "company_name": "ALBRICE LLC / T&V Tires Inc.",
+    "company_domain": "albrice.com",
+    "vendor": "Hubstaff",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "United States",
+    "contacts": [],
+    "company_linkedin": "",
+    "company_phone": "+1 201-914-6655",
+    "public_email": "info@albrice.com",
+    "contact_source_url": "https://www.albrice.com/",
+    "notes": "onlinejobs.ph posting gives no website; albrice.com = ALBRICE LLC, truck tire casings and used commercial truck tires for retreaders (matches posting). Phone and email from site; no people named on Home/About; T&V Tires Inc. site not found."
+  },
+  {
+    "company_name": "Leio Industrial Co., Ltd.",
+    "company_domain": "",
+    "vendor": "Time Doctor",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "",
+    "hq_country": "China",
+    "contacts": [
+      {
+        "name": "Stephy (surname not published)",
+        "title": "Founder",
+        "linkedin": "",
+        "source_url": "https://www.onlinejobs.ph/jobseekers/job/looking-for-professional-full-time-vitual-assistant-1380884"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "",
+    "contact_source_url": "",
+    "notes": "onlinejobs.ph posting gives no website; posting: 'Hi, I'm Stephy, Founder of Leio Industrial Co., Ltd., a leading pearlescent pigment supplier based in China'. Candidate domain leiopigment.com timed out; leio.com is a parked domain. Nothing confirmed."
+  },
+  {
+    "company_name": "Little Dot Studios",
+    "company_domain": "littledotstudios.com",
+    "vendor": "Timely",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "500",
+    "hq_country": "UK",
+    "contacts": [
+      {
+        "name": "Zara (surname not given)",
+        "title": "Director of Operations",
+        "linkedin": "",
+        "source_url": "https://www.timely.com/little-dot-studios---case-study/"
+      }
+    ],
+    "company_linkedin": "https://www.linkedin.com/company/little-dot-studios-limited",
+    "company_phone": "020 3967 3710 (London)",
+    "public_email": "la@littledotstudios.com",
+    "contact_source_url": "https://www.littledotstudios.com/en-gb/contact",
+    "notes": "Contact page: London, The Old Truman Brewery, 91 Brick Lane, E1 6QL, 020 3967 3710; offices in LA and Munich. Only email shown is la@littledotstudios.com (LA office). About page names no leaders; Zara's surname not found without search. Company LinkedIn reconfirmed."
+  },
+  {
+    "company_name": "IDT Australia",
+    "company_domain": "idtaus.com.au",
+    "vendor": "My Hours",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "~100 tracked",
+    "hq_country": "Australia",
+    "contacts": [
+      {
+        "name": "Mark Simari",
+        "title": "Executive Chair and CEO",
+        "linkedin": "",
+        "source_url": "https://idtaus.com.au/about-us/team/"
+      },
+      {
+        "name": "Jim Sosic",
+        "title": "Chief Operating Officer",
+        "linkedin": "",
+        "source_url": "https://idtaus.com.au/about-us/team/"
+      },
+      {
+        "name": "Kellie Watchman",
+        "title": "Finance and Accounting Manager (per My Hours case study; not on current team page)",
+        "linkedin": "",
+        "source_url": "https://myhours.com/case-study-idt-australia"
+      }
+    ],
+    "company_linkedin": "https://au.linkedin.com/company/idt-australia-ltd",
+    "company_phone": "1300 554 474; +61 3 9801 8888",
+    "public_email": "info@idtaus.com.au",
+    "contact_source_url": "https://idtaus.com.au/contact-us/",
+    "notes": "Executive Team page lists Mark Simari (Executive Chair & CEO), Jim Sosic (COO), Malika Perera (Head of Finance) and others. Kellie Watchman is not on the team page (may have left or be below exec level). Contact page also lists bd@idtaus.com.au and joe.desneves@idtaus.com.au. No personal LinkedIn on site."
+  },
+  {
+    "company_name": "Zagaran",
+    "company_domain": "zagaran.com",
+    "vendor": "Timely",
+    "evidence_type": "Contact enrichment",
+    "status": "",
+    "confidence_score": 0,
+    "employee_count": "30 engineers",
+    "hq_country": "US",
+    "contacts": [
+      {
+        "name": "Benjamin \"Zags\" Zagorsky",
+        "title": "Co-Founder and CTO",
+        "linkedin": "https://www.linkedin.com/in/zagorsky",
+        "source_url": "https://zagaran.com/team/"
+      },
+      {
+        "name": "Josh Zagorsky",
+        "title": "Co-Founder (handles company finances)",
+        "linkedin": "https://www.linkedin.com/in/joshzagorsky",
+        "source_url": "https://zagaran.com/team/"
+      },
+      {
+        "name": "Kevin Fan",
+        "title": "Co-Founder",
+        "linkedin": "https://www.linkedin.com/in/kevinfan",
+        "source_url": "https://zagaran.com/team/"
+      }
+    ],
+    "company_linkedin": "",
+    "company_phone": "",
+    "public_email": "info@zagaran.com",
+    "contact_source_url": "https://zagaran.com/contact-us/",
+    "notes": "CORRECTION: existing record conflated two people. 'Zags' (Timely case-study quote, Co-Founder and CTO) is Benjamin Zagorsky; Josh Zagorsky is a separate co-founder who handles finances. LinkedIn URLs taken from the team page in card order. Contact page: info@zagaran.com, 141 Tremont St. 12th Floor, Boston, MA 02111; no phone and no company LinkedIn on site."
+  }
+]

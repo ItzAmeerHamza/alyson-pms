@@ -15,6 +15,7 @@ import {
   canAdjustPulseTime,
   parseTenantUserId,
   parseWorkspaceId,
+  pulseTenantForbiddenMessage,
   workspaceScope,
 } from '../database/time-doctor-sql';
 import { normalizeWorkTimezone, workDateKey } from '../lib/work-timezone';
@@ -34,6 +35,7 @@ import {
   textLooksLikeOfficeHoliday,
 } from './leave-days';
 import { canonicalCountry, resolveHolidayCountry } from './holiday-country';
+import { resolveLeaveScanPeriod } from './leave-scan-period';
 import type { LeaveScanIngestBatchRequest, LeaveScanJob } from './leave-scan.types';
 
 type TrackableEmployee = {
@@ -78,6 +80,10 @@ export class LeaveService {
   }
 
   private ensureCanManage(user: ScopedAuthUser) {
+    const tenantMsg = pulseTenantForbiddenMessage(user);
+    if (tenantMsg) {
+      throw new ForbiddenException(tenantMsg);
+    }
     if (!canAdjustPulseTime(user)) {
       throw new ForbiddenException('Admin role required for leave');
     }
@@ -875,6 +881,12 @@ export class LeaveService {
       }),
     );
 
+    // A public holiday lowers that team's required hours. It does not grant
+    // everyone the same credit. Time tracked on the day still counts.
+    if (params.leaveType === 'holiday') {
+      return { matched_users: matched.length, credited_users: 0 };
+    }
+
     let creditedUsers = 0;
     for (const emp of matched) {
       const credited = await this.creditLeaveDays({
@@ -1295,19 +1307,8 @@ export class LeaveService {
   // Gmail scan pipeline (AlysonHR intake parity)
   // ---------------------------------------------------------------------------
 
-  private resolveScanPeriod(period?: string): { lookbackDays: number; maxMessages: number; period: string } {
-    const p = String(period || '30d').toLowerCase();
-    const map: Record<string, { lookbackDays: number; maxMessages: number }> = {
-      '7d': { lookbackDays: 7, maxMessages: 80 },
-      '30d': { lookbackDays: 30, maxMessages: 200 },
-      '60d': { lookbackDays: 60, maxMessages: 250 },
-      '90d': { lookbackDays: 90, maxMessages: 300 },
-      '6mo': { lookbackDays: 183, maxMessages: 300 },
-      '12mo': { lookbackDays: 365, maxMessages: 300 },
-      '24mo': { lookbackDays: 730, maxMessages: 300 },
-    };
-    const hit = map[p] || map['30d'];
-    return { ...hit, period: map[p] ? p : '30d' };
+  private resolveScanPeriod(period?: string) {
+    return resolveLeaveScanPeriod(period);
   }
 
   private hrReviewEnabled(): boolean {

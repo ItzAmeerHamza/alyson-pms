@@ -26,11 +26,11 @@ import {
 import {
   SCREENSHOT_IS_VIDEO_MEETING_SQL,
   SCREENSHOT_IS_PARTICIPATING_MEETING_SQL,
-  MEETING_IDLE_SHIELD_MS,
   hasVideoMeetingEvidence,
 } from './meeting-context';
 import { SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL } from './ai-activity-floor';
 import {
+  intersectIntervals,
   intervalContains,
   intervalOverlapMs,
   mergeCapturedAtsIntoIntervals,
@@ -80,6 +80,7 @@ export type ScreenshotActivityRow = {
   window_title?: string | null;
   vision_summary?: string | null;
   ocr_excerpt?: string | null;
+  outside_session?: boolean | null;
 };
 
 @Injectable()
@@ -136,6 +137,32 @@ export class EffectiveTimeService {
   }
 
   /**
+   * Tracked-session spans per user from time_logs rows. An open session runs
+   * to its last proof of life, or to now when there is none yet.
+   */
+  sessionIntervalsFromTimeLogs(
+    rows: Array<{
+      user_id: string | number;
+      start_time: string | Date;
+      end_time?: string | Date | null;
+      last_alive_at?: string | Date | null;
+    }>,
+    nowMs = Date.now(),
+  ): Map<string, TimeInterval[]> {
+    const byUser = new Map<string, TimeInterval[]>();
+    for (const row of rows) {
+      const startMs = new Date(row.start_time).getTime();
+      const endRaw = row.end_time ?? row.last_alive_at ?? null;
+      const endMs = endRaw ? new Date(endRaw).getTime() : nowMs;
+      if (!Number.isFinite(startMs) || !(endMs > startMs)) continue;
+      const key = String(row.user_id);
+      if (!byUser.has(key)) byUser.set(key, []);
+      byUser.get(key)!.push({ startMs, endMs });
+    }
+    return byUser;
+  }
+
+  /**
    * Idle hours per user/day from idle_logs, clipped to work-day boundaries.
    * Periods shorter than MIN_IDLE_REPORT_SECONDS are dropped.
    */
@@ -148,6 +175,13 @@ export class EffectiveTimeService {
     }>,
     tz?: string,
     meetingIntervalsByUser?: Map<string, TimeInterval[]>,
+    /**
+     * Tracked-session spans per user (see sessionIntervalsFromTimeLogs). When
+     * given, only idle inside a session counts. Without it, an idle period that
+     * ran on while the laptop was shut (tracking already stopped) took hours
+     * out of the day's effective time.
+     */
+    sessionIntervalsByUser?: Map<string, TimeInterval[]>,
   ): Map<string, Map<string, number>> {
     const workTz = normalizeWorkTimezone(tz);
     const byUserDay = new Map<string, Map<string, number>>();
@@ -179,12 +213,13 @@ export class EffectiveTimeService {
       }
 
       const meetings = meetingIntervalsByUser?.get(log.user_id) ?? [];
-      const longAfk = endMs - startMs >= MEETING_IDLE_SHIELD_MS;
-      // Leftover Meet tabs that were already floored to 50% must not eat
-      // overnight / AFK idle. Short listen-only pauses can still be clipped.
-      const remaining = longAfk
-        ? [{ startMs, endMs }]
-        : subtractIntervals({ startMs, endMs }, meetings);
+      const tracked = sessionIntervalsByUser
+        ? intersectIntervals({ startMs, endMs }, sessionIntervalsByUser.get(log.user_id) ?? [])
+        : [{ startMs, endMs }];
+      // A participating call is effective for the whole overlap, including
+      // quiet stretches of 10 minutes or more. The desktop still-working
+      // alert is what stops a tab left open; that stop is not idle time.
+      const remaining = tracked.flatMap((piece) => subtractIntervals(piece, meetings));
       for (const piece of remaining) {
         const totalSeconds = Math.round((piece.endMs - piece.startMs) / 1000);
         if (totalSeconds < EffectiveTimeService.MIN_IDLE_REPORT_SECONDS) continue;
@@ -436,10 +471,12 @@ export class EffectiveTimeService {
            AND s.activity_percent < $${thresholdIdx}
            AND NOT ${SCREENSHOT_IS_VIDEO_MEETING_SQL}
            AND NOT ${SCREENSHOT_IS_AI_CONFIRMED_PRODUCTIVE_SQL}
-         ) AS is_low
+         ) AS is_low,
+         (tl.end_time IS NOT NULL AND s.captured_at > tl.end_time) AS outside_session
        FROM time_doctor.screenshots s
        JOIN tenant."user" u ON u.id = s.user_id
        JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+       LEFT JOIN time_doctor.time_logs tl ON tl.id = s.time_log_id
        WHERE ${scope.clause}
          AND s.captured_at >= $${startIdx}::timestamptz
          AND s.captured_at < $${endIdx}::timestamptz
@@ -454,13 +491,16 @@ export class EffectiveTimeService {
         row.window_title,
         `${row.ocr_excerpt || ''}\n${row.vision_summary || ''}`,
       );
-      const pct = Number(row.activity_percent);
+      const pct = row.activity_percent == null ? NaN : Number(row.activity_percent);
       const belowThreshold = Number.isFinite(pct) && pct < lowActivityThreshold;
+      // Shots after their session's end (the minutes an unanswered still-working
+      // alert cuts) are not tracked time, so they cannot be low-activity time.
       return {
         ...row,
         is_meeting,
         is_low:
           !is_meeting &&
+          !row.outside_session &&
           (Boolean(row.is_low) || (Boolean(row.is_meeting) && belowThreshold)),
       };
     });
@@ -560,9 +600,11 @@ export class EffectiveTimeService {
     const timeLogRows = await this.db.query<{
       user_id: string;
       start_time: string;
+      end_time: string | null;
+      last_alive_at: string | null;
       idle_seconds: number | null;
     }>(
-      `SELECT t.user_id::text AS user_id, t.start_time, t.idle_seconds
+      `SELECT t.user_id::text AS user_id, t.start_time, t.end_time, t.last_alive_at, t.idle_seconds
        FROM time_doctor.time_logs t
        WHERE t.user_id = $1
          AND t.start_time < $3::timestamptz
@@ -579,7 +621,12 @@ export class EffectiveTimeService {
       userIdText,
     );
     const idleByDay = this.mergeIdleHours(
-      this.idleHoursFromIdleLogs(idleRows.rows, opts.tz, meetings),
+      this.idleHoursFromIdleLogs(
+        idleRows.rows,
+        opts.tz,
+        meetings,
+        this.sessionIntervalsFromTimeLogs(timeLogRows.rows),
+      ),
       this.idleHoursFromTimeLogs(timeLogRows.rows, opts.tz),
     );
     const lowByDay = await this.lowActivityHoursFromScreenshots(

@@ -22,6 +22,7 @@ import {
   sumPulseDayHours,
   trackedHoursFromLogs,
   weekMonthPaceFromDays,
+  buildPlanningFacts,
 } from './assistant-briefing';
 
 describe('assistant briefing helpers', () => {
@@ -267,11 +268,11 @@ describe('assistant briefing helpers', () => {
     expect(nonEffective).toMatch(/today your non-effective time is 1 hour 6 min/i);
     expect(nonEffective).not.toMatch(/ask me about idle/i);
     const unknown = answerCoachQuestion(stats, 'can you help me with something else?');
-    expect(unknown).toMatch(/i can answer from your recorded day/i);
+    expect(unknown).toMatch(/i can help with your recorded day/i);
     expect(unknown).not.toMatch(/today your effective time is/i);
     expect(answerArithmetic('2+2')).toBe('2 + 2 is 4.');
-    expect(answerCoachQuestion(stats, '2+2')).toBe('2 + 2 is 4.');
-    expect(answerCoachQuestion(stats, 'what is 2 + 2?')).toBe('2 + 2 is 4.');
+    expect(answerCoachQuestion(stats, '2+2')).toMatch(/i am your work coach/i);
+    expect(answerCoachQuestion(stats, 'what is 2 + 2?')).toMatch(/i am your work coach/i);
     expect(retrieveCoachPassages(stats, 'what is my effective time?').join(' ')).toMatch(/effective time/i);
     expect(retrieveCoachPassages(stats, 'What is the capital of France?')).toEqual([]);
     const withCursor = buildStats({
@@ -373,5 +374,62 @@ describe('assistant briefing helpers', () => {
     expect(replyHasInventedHours(stats, 'Your effective time is 7 hours 30 min.')).toBe(false);
     expect(replyHasInventedHours(stats, 'You have 99 hours effective today.')).toBe(true);
     expect(replyHasInventedHours(stats, 'You have 7.5 hours effective today.')).toBe(true);
+  });
+
+  it('public holiday week: target drops 7h, holiday work still counts and puts them ahead', () => {
+    // Mon 19 – Fri 23 Oct 2026, holiday Tue 20, viewing Thu 22 (Mon–Wed done).
+    const day = (date: string, hours: number) => ({
+      date,
+      tracked_hours: hours,
+      adjustment_hours: 0,
+      hours_worked: hours,
+      low_activity_hours: 0,
+      idle_hours: 0,
+      non_effective_hours: 0,
+      effective_hours: hours,
+      below_threshold: false,
+      public_holiday: date === '2026-10-20',
+    });
+    const holiday = ['2026-10-20'];
+    const tookOff = weekMonthPaceFromDays(
+      [day('2026-10-19', 7), day('2026-10-20', 0), day('2026-10-21', 7)],
+      '2026-10-22', 'America/Chicago', '2026-10-22', holiday,
+    );
+    const workedIt = weekMonthPaceFromDays(
+      [day('2026-10-19', 7), day('2026-10-20', 7), day('2026-10-21', 7)],
+      '2026-10-22', 'America/Chicago', '2026-10-22', holiday,
+    );
+    for (const pace of [tookOff, workedIt]) {
+      expect(pace.weekPace?.weeklyTargetHours).toBe(28);
+      expect(pace.weekPace?.completedWeekdays).toBe(2); // Mon + Wed; the holiday is not required
+      expect(pace.weekPace?.remainingWeekdays).toBe(1); // Fri (days after the one viewed)
+      expect(pace.weekPace?.publicHolidayDays).toEqual(holiday);
+      expect(pace.monthPace?.weekdaysInMonth).toBe(21); // 22 weekdays in Oct 2026 − 1 holiday
+    }
+    expect(tookOff.weekPace?.effectiveHours).toBe(14);
+    expect(workedIt.weekPace?.effectiveHours).toBe(21); // the holiday hours count in full
+  });
+
+  it('a public holiday has no daily target and is never "below target"', () => {
+    const stats = buildStats({
+      date: '2026-10-20',
+      timezone: 'America/Chicago',
+      hoursSource: 'pulse_daily_hours',
+      hoursThreshold: 7,
+      publicHoliday: true,
+      trackedHours: 2,
+      hoursWorked: 2,
+      sessionCount: 1,
+      idleHours: 0,
+      lowActivityHours: 0,
+      projects: [],
+      screenshots: emptyScreenshotStats(),
+    });
+    expect(stats.public_holiday).toBe(true);
+    expect(stats.below_effective_target).toBe(false);
+    expect(stats.below_hours_worked_target).toBe(false);
+    const facts = buildPlanningFacts(stats, Date.parse('2026-10-20T15:00:00Z'));
+    expect(facts.some((line) => line.includes('is a public holiday'))).toBe(true);
+    expect(facts.some((line) => line.startsWith('Still needed'))).toBe(false);
   });
 });

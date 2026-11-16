@@ -206,23 +206,20 @@ describe('AssistantService', () => {
     expect(result.briefing.summary).toMatch(/19 hours 12 min effective/i);
   });
 
-  it('uses LLM copy when configured', async () => {
+  it('opens from recorded hours without waiting on the model', async () => {
     const { service, deepseek } = makeService({ configured: true });
     const result = await service.briefing({ id: '4', organization_id: '10' }, '2026-09-17');
-    expect(result.briefing.summary).toBe('LLM summary');
-    expect(deepseek.chatJson).toHaveBeenCalled();
-    const prompt = String(deepseek.chatJson.mock.calls[0][0].userContent);
-    expect(prompt).toContain('FACTS (copy hour labels exactly');
-    expect(prompt).toContain('Tracked (timer): 2 hours');
-    expect(prompt).toContain('This is their first chat message.');
-    expect(prompt).toContain('Month-to-date');
+    expect(result.briefing.summary).toMatch(/total time/i);
+    expect(result.briefing.summary).toContain('2 hours');
+    expect(deepseek.chatJson).not.toHaveBeenCalled();
   });
 
   it('reuses the opening copy when hours have not moved', async () => {
-    const { service, deepseek } = makeService({ configured: true });
+    const { service, deepseek, pulse } = makeService({ configured: true });
     await service.briefing({ id: '4', organization_id: '10' }, '2026-09-17');
     await service.briefing({ id: '4', organization_id: '10' }, '2026-09-17');
-    expect(deepseek.chatJson).toHaveBeenCalledTimes(1);
+    expect(deepseek.chatJson).not.toHaveBeenCalled();
+    expect(pulse.getDailyHours).toHaveBeenCalledTimes(1);
   });
 
   it('restores a super-admin home workspace so desktop Coach does not need the company picker', async () => {
@@ -240,37 +237,57 @@ describe('AssistantService', () => {
     );
   });
 
-  it('answers 2+2 directly instead of quoting recorded hours', async () => {
+  it('does not answer math that is outside recorded time', async () => {
     const { service, deepseek } = makeService({ configured: true });
     const result = await service.chat(
       { id: '4', organization_id: '10' },
       { date: '2026-09-17', message: '2+2' },
     );
-    expect(result.reply).toBe('2 + 2 is 4.');
-    expect(result.reply).not.toMatch(/effective|tracked|idle/i);
+    expect(result.reply).toMatch(/i am your work coach/i);
+    expect(result.reply).not.toMatch(/2 \+ 2 is 4/);
     expect(deepseek.chatJson).not.toHaveBeenCalled();
   });
 
-  it('does not send the time record when the question is not about work', async () => {
+  it('lets the model flag a question outside work as off-topic', async () => {
     const { service, deepseek } = makeService({ configured: true });
     deepseek.chatJson.mockResolvedValueOnce({
-      parsed: {
-        greeting: 'Sure.',
-        summary: 'Paris.',
-        effective_breakdown: '',
-        screenshot_insights: '',
-        suggestions: [],
-      },
-    });
+      parsed: { off_topic: true, greeting: '', summary: '' },
+    } as never);
     const result = await service.chat(
       { id: '4', organization_id: '10' },
       { date: '2026-09-17', message: 'What is the capital of France?' },
     );
-    expect(result.reply).toBe('Paris.');
-    const prompt = String(deepseek.chatJson.mock.calls[0][0].userContent);
-    expect(prompt).toContain('RETRIEVED PASSAGES: none.');
-    expect(prompt).not.toMatch(/Effective time:/);
-    expect(prompt).toContain('What is the capital of France?');
+    expect(result.reply).toMatch(/i am your work coach/i);
+    expect(result.reply).not.toMatch(/paris/i);
+  });
+
+  it('sends advice and wellbeing questions to the model instead of refusing them', async () => {
+    const { service, deepseek } = makeService({ configured: true });
+    for (const message of [
+      'How can I be more productive tomorrow?',
+      'I keep getting distracted, any advice?',
+      'I feel burned out and tired',
+      'Can I hit my monthly target? What do I need per day?',
+    ]) {
+      deepseek.chatJson.mockResolvedValueOnce({
+        parsed: { greeting: 'Sure.', summary: 'Here is a plan:\n- Block 9–11 AM for focused work\n- Take a 5 min break each hour' },
+      } as never);
+      const result = await service.chat({ id: '4', organization_id: '10' }, { date: '2026-09-17', message });
+      expect(result.reply).toContain('\n- Block 9–11 AM');
+    }
+    expect(deepseek.chatJson).toHaveBeenCalledTimes(4);
+  });
+
+  it('gives the model planning numbers so it can answer what is still needed', async () => {
+    const { service, deepseek } = makeService({ configured: true });
+    await service.chat(
+      { id: '4', organization_id: '10' },
+      { date: '2026-09-17', message: 'How many hours do I still need this week to hit my target?' },
+    );
+    const prompt = String((deepseek.chatJson.mock.calls[0] as unknown as [{ userContent: string }])[0].userContent);
+    expect(prompt).toContain('PLANNING');
+    expect(prompt).toMatch(/This week: .* still needed/);
+    expect(prompt).toContain('Still needed for the 7 hours effective daily target');
   });
 
   it('answers a follow-up instead of repeating the month opening', async () => {
@@ -320,7 +337,7 @@ describe('AssistantService', () => {
       { id: '4', organization_id: '10' },
       {
         date: '2026-09-17',
-        message: 'what was I doing in Cursor?',
+        message: 'how did my afternoon compare with my morning?',
         history: [
           { role: 'assistant', content: 'Here is your month so far.' },
           { role: 'user', content: 'what is my effective time today?' },
@@ -331,16 +348,26 @@ describe('AssistantService', () => {
     expect(result.reply).not.toMatch(/today your effective time is/i);
     expect(deepseek.chatJson).toHaveBeenCalledWith(
       expect.objectContaining({
-        temperature: 0.4,
-        maxTokens: 800,
+        temperature: 0.5,
+        maxTokens: 700,
       }),
     );
-    const prompt = String(deepseek.chatJson.mock.calls[0][0].userContent);
+    const prompt = String((deepseek.chatJson.mock.calls[0] as unknown as [{ userContent: string }])[0].userContent);
     expect(prompt).not.toMatch(/Rephrase ANSWER/);
     expect(prompt).not.toMatch(/\nANSWER:/);
-    expect(prompt).toContain('Their latest question: what was I doing in Cursor?');
+    expect(prompt).toContain('Their latest question: how did my afternoon compare with my morning?');
     expect(prompt).toContain('Recent conversation:');
     expect(prompt).toContain('user: what is my effective time today?');
+  });
+
+  it('answers effective time from the record without calling the model', async () => {
+    const { service, deepseek } = makeService({ configured: true });
+    const result = await service.chat(
+      { id: '4', organization_id: '10' },
+      { date: '2026-09-17', message: 'what is my effective time today?' },
+    );
+    expect(result.reply).toMatch(/today your effective time is/i);
+    expect(deepseek.chatJson).not.toHaveBeenCalled();
   });
 
   it('rejects an LLM follow-up that invents hour totals', async () => {

@@ -1,0 +1,1189 @@
+[
+ {
+  "company_name": "Rise25",
+  "company_domain": "rise25.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "11-50 (LinkedIn)",
+  "hq_country": "USA",
+  "contacts": [
+   {
+    "name": "Karl Hughes",
+    "title": "CEO, The Podcast Consultant (acquirer of Rise25)",
+    "linkedin": "https://www.linkedin.com/in/karllhughes/",
+    "source_url": "https://rise25.com/hr-recruiting/"
+   },
+   {
+    "name": "Dr. Jeremy Weisz",
+    "title": "Co-founder, Rise25",
+    "linkedin": "",
+    "source_url": "https://www.linkedin.com/company/rise25"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/rise25",
+  "company_phone": "312-884-1197",
+  "public_email": "support@rise25.com",
+  "contact_source_url": "https://rise25.com/hr-recruiting/",
+  "notes": "Added company LinkedIn (linkedin.com/company/rise25, ~19.6k followers, 11-50 staff, Tiburon CA per LinkedIn snippet). LinkedIn snippet still lists John Corcoran and Jeremy Weisz as co-founders; existing contacts kept from input (acquisition by The Podcast Consultant per input). Not re-verified Karl Hughes is still CEO beyond input."
+ },
+ {
+  "company_name": "Good Work",
+  "company_domain": "simplygoodwork.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "10+",
+  "hq_country": "USA (Dallas, TX; remote team)",
+  "contacts": [
+   {
+    "name": "James Brugner",
+    "title": "CEO / Owner-Investor",
+    "linkedin": "https://www.linkedin.com/in/james-brugner/",
+    "source_url": "https://www.simplygoodwork.com/about"
+   },
+   {
+    "name": "Ariel Kidwell",
+    "title": "Director of Strategy (formerly Studio Manager)",
+    "linkedin": "",
+    "source_url": "https://www.getharvest.com/forecast/customers/good-work"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/good-work-llc",
+  "company_phone": "+1 214.890.4111",
+  "public_email": "hello@simplygoodwork.com",
+  "contact_source_url": "https://www.simplygoodwork.com/contact",
+  "notes": "Identified domain simplygoodwork.com (Craft CMS dev shop, Dallas, founded 2014). Founder Garrett Winder sold the agency in 2024 (he now runs Better Than Good); current owner/CEO James Brugner (ex-Oracle) per site About page snippet and his LinkedIn headline 'James Brugner - Good Work'. Email/phone fetched directly from contact page. Company LinkedIn page from search result 'Good Work' (good-work-llc) - matches by name; not opened."
+ },
+ {
+  "company_name": "4impact Philippines",
+  "company_domain": "4impact.com",
+  "vendor": "Replicon",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "11 (PH unit); group larger",
+  "hq_country": "Australia (Brisbane HQ; Manila office)",
+  "contacts": [
+   {
+    "name": "Chris Eldridge",
+    "title": "CEO & Co-founder",
+    "linkedin": "",
+    "source_url": "https://open.spotify.com/episode/60JrL3eqbRwCFlqpJjFYHh"
+   },
+   {
+    "name": "Helen Jones",
+    "title": "Talent Acquisition Manager",
+    "linkedin": "",
+    "source_url": "https://rocketreach.co/4impact-management_b5c456e8f42e0df2"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/4impactmanila",
+  "company_phone": "1300 112 100; +61 7 3177 1400",
+  "public_email": "connect@4impact.com.au",
+  "contact_source_url": "https://www.4impact.com/contact",
+  "notes": "Corrected CEO name: Chris (Christopher) Eldridge, not 'Christina' - confirmed CEO & co-founder via Evolved Leadership podcast episode. A search summary mentioned linkedin.com/in/christopherpeldridge but that URL was not shown as a result link, so left blank. Group LinkedIn also exists: linkedin.com/company/4impact. Phone/email/addresses (Brisbane HQ Level 9/410 Queen St; Manila office Mandaluyong) fetched from contact page. No COO found; second contact is talent acquisition (name/title from RocketReach, no contact data copied)."
+ },
+ {
+  "company_name": "xAI (now SpaceXAI, part of SpaceX)",
+  "company_domain": "x.ai",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "thousands incl. AI tutors",
+  "hq_country": "US (Palo Alto, CA)",
+  "contacts": [
+   {
+    "name": "Elon Musk",
+    "title": "CEO / founder",
+    "linkedin": "",
+    "source_url": "https://en.wikipedia.org/wiki/XAI_(company)"
+   },
+   {
+    "name": "Michael Nicolls",
+    "title": "President, xAI (from Apr 2026; ex-VP Starlink)",
+    "linkedin": "",
+    "source_url": "https://en.wikipedia.org/wiki/XAI_(company)"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/xai",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.linkedin.com/company/xai",
+  "notes": "SpaceX acquired xAI Feb 2026 (CNN 2026-02-02); per Wikipedia snippet xAI was dissolved as a separate company on 2026-07-06 and rebranded SpaceXAI, an AI division of SpaceX. Not marked DO_NOT_TARGET (operations continue), but a mega-enterprise unlikely to be a realistic Tavilo prospect. CFO Anthony Armstrong departed. Phone/emails seen only on data-broker/complaint sites (not copied); x.ai privacy page returned 403."
+ },
+ {
+  "company_name": "RapidSeedbox",
+  "company_domain": "rapidseedbox.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "",
+  "hq_country": "Canada / Israel (remote)",
+  "contacts": [
+   {
+    "name": "Yuli Azarch",
+    "title": "CEO & Co-Founder",
+    "linkedin": "https://ca.linkedin.com/in/yuli-azarch",
+    "source_url": "https://ca.linkedin.com/in/yuli-azarch"
+   },
+   {
+    "name": "Ognjen Kutlaca",
+    "title": "Chief of Staff",
+    "linkedin": "",
+    "source_url": "https://theorg.com/org/rapidseedbox"
+   },
+   {
+    "name": "Eliran Mukdasi",
+    "title": "Co-founder",
+    "linkedin": "",
+    "source_url": "https://www.rapidseedbox.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/rapidseedbox",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.rapidseedbox.com/contact",
+  "notes": "Yuli Azarch still CEO & Co-Founder per LinkedIn headline. Added Chief of Staff (theorg) and co-founder Eliran (About page names 'Yuli and Eliran'; surname Mukdasi from search summary only). Also Ruslan Garayev, Head of IT Operations (theorg). Contact page has only a Cloudflare-obfuscated support email and live chat; no phone published on site. A phone (303) 952-0447 appears only via ZoomInfo - not copied."
+ },
+ {
+  "company_name": "RocketCare (now FONDERIE)",
+  "company_domain": "fonderieagency.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "~7 listed on About page",
+  "hq_country": "Netherlands",
+  "contacts": [
+   {
+    "name": "Dani Rijff",
+    "title": "Founder & Head of Client Strategy",
+    "linkedin": "https://www.linkedin.com/in/dani-rijff/",
+    "source_url": "https://www.fonderieagency.com/about"
+   },
+   {
+    "name": "Niels (surname not published)",
+    "title": "Co-Founder & Managing Director",
+    "linkedin": "",
+    "source_url": "https://www.fonderieagency.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/fonderie/",
+  "company_phone": "",
+  "public_email": "hello@fonderieagency.com",
+  "contact_source_url": "https://www.fonderieagency.com/contact",
+  "notes": "Founder surname found: Dani Rijff (LinkedIn result 'Dani Rijff - FONDERIE'; About page says Dani founded RocketCare in 2022, rebranded FONDERIE 2024). Both founders still listed on About page. Niels surname not published (a 'Niels Floors' LinkedIn appeared in search but no link to Fonderie - not used). No phone on About page; none found."
+ },
+ {
+  "company_name": "Integra Software Services",
+  "company_domain": "integranxt.com",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "3000+ (per LinkedIn/press summary; input 5000)",
+  "hq_country": "India (Puducherry)",
+  "contacts": [
+   {
+    "name": "Sriram Subramanya",
+    "title": "Founder, Managing Director & CEO",
+    "linkedin": "https://www.linkedin.com/in/sriramsubramanya/",
+    "source_url": "https://integranxt.com/"
+   },
+   {
+    "name": "Anu (Anuradha) Sriram",
+    "title": "Co-Founder & Joint Managing Director",
+    "linkedin": "https://www.linkedin.com/in/anu-sriram-84a74218/",
+    "source_url": "https://www.linkedin.com/in/anu-sriram-84a74218/"
+   },
+   {
+    "name": "Venkatesan Meenakshi Sundaram",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://rocketreach.co/integra-software-services-private-ltd-profile_b5c5c617f42e0e55"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/integra-software-services-pvt-ltd",
+  "company_phone": "+91 413 421 2124 (directory listing)",
+  "public_email": "",
+  "contact_source_url": "https://www.mapsofindia.com/whitepages/businesses/index/integra-software-services-pvt-ltd-puducherry",
+  "notes": "CEO confirmed on integranxt.com homepage ('Integra's Founder, MD & CEO'). Sriram's LinkedIn result headline shows 'Confederation of Indian Industry' (he holds a CII role) but name+context match Integra. Anu Sriram LinkedIn headline 'Integra Software Services Pvt Ltd'. COO name from data-broker snippet (names only). Site has only a contact form; /contact-us 404. Phone from a public business directory snippet (not company site) - verify; marketing@integra.co.in seen in a directory snippet only, not recorded. Address 100 Feet Rd, ECR, Puducherry 605008."
+ },
+ {
+  "company_name": "GoLean Health (GoLean Healthcare)",
+  "company_domain": "golean.health",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "2-10 (LinkedIn snippet)",
+  "hq_country": "United States (The Colony / Plano, TX)",
+  "contacts": [
+   {
+    "name": "Dr. Rishin Shah",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/rishin-shah/",
+    "source_url": "https://www.crunchbase.com/organization/golean-health"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/golean-health",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://golean.health/",
+  "notes": "Rishin Shah still shown as Founder & CEO (search summaries of Crunchbase/LinkedIn). His LinkedIn headline shows 'Prime Heart and Vascular' (he is also a practicing cardiologist). Company LinkedIn found (278 followers). Site lists address 5816 Austin Waters, The Colony, TX 75056; the only phone on the site is a placeholder '123-456-7890' - not recorded. No public email found; no second exec found."
+ },
+ {
+  "company_name": "Vital Virtuals LLC (Vital Virtuals Global HR Solutions)",
+  "company_domain": "vitalvirtuals.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "United States (Irving, TX)",
+  "contacts": [
+   {
+    "name": "Dr. Harveer Parmar",
+    "title": "CEO / Founder",
+    "linkedin": "https://www.linkedin.com/in/harveer-parmar-39b51549/",
+    "source_url": "https://vitalvirtuals.com/about-us"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "hello@vitalvirtuals.com",
+  "contact_source_url": "https://vitalvirtuals.com/",
+  "notes": "Identified domain vitalvirtuals.com (doctor-owned medical/dental VA provider founded 2023, PH workforce). CEO Dr. Harveer Parmar, board-certified family physician (About page + LinkedIn result 'Harveer Parmar - Vital Virtuals Global HR Solutions'). Email and mailing address PO Box 631066 Irving TX 75063 from site. Site links a LinkedIn page but the URL was not visible; BBB profile exists (bbb.org/us/tx/irving/profile/virtual-assistant/vital-virtuals-global-hr-solutions-llc-0875-91351026). No phone found."
+ },
+ {
+  "company_name": "Brivity VA (PLACE)",
+  "company_domain": "brivityva.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "~62 on SignalHire",
+  "hq_country": "United States (Bellingham, WA)",
+  "contacts": [
+   {
+    "name": "Ben Kinney",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://brivityva.com/real-estate-virtual-assistant-companies/"
+   },
+   {
+    "name": "Bryce Waldron",
+    "title": "Senior Director of International Operations",
+    "linkedin": "",
+    "source_url": "https://www.signalhire.com/overview/brivity-va/employees"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/brivityva",
+  "company_phone": "866-295-3322",
+  "public_email": "sales@brivityva.com",
+  "contact_source_url": "https://brivityva.com",
+  "notes": "Founder Ben Kinney confirmed on brivityva.com page (founded Brivity 2013, Brivity VA 2019). Second contact Bryce Waldron (ops director) from search summary of SignalHire - names only. Parent Brivity president David Wiggs. No personal LinkedIn verified."
+ },
+ {
+  "company_name": "Optimistic Healthcare Solutions (OHC Pharmacy)",
+  "company_domain": "optimistichealthcare.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 55,
+  "employee_count": "",
+  "hq_country": "United States (Houston, TX)",
+  "contacts": [
+   {
+    "name": "Deshavonna Jasmine",
+    "title": "Authorized official (NPI registry)",
+    "linkedin": "",
+    "source_url": "https://optimistichealthcare.com/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 800-674-4440",
+  "public_email": "info@optimistichealthcare.com",
+  "contact_source_url": "https://optimistichealthcare.com/",
+  "notes": "Added public email info@optimistichealthcare.com and address 14520 Memorial Dr #22, Houston TX 77079 from company homepage (describes itself as a medical/surgical equipment supplier in Texas). Site names no leadership; existing NPI authorized official kept but not re-verified (no exec title found). Name collision: a different 'Optimistic Healthcare Solutions' (optimistichealthcaresolutions.com, Indian contact center, CEO Gauri Shetty) exists - NOT this company. Web search budget ran out during this record, so no LinkedIn lookup was possible."
+ },
+ {
+  "company_name": "Nebroo (GA Trading LLC)",
+  "company_domain": "nebroo.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "11-50",
+  "hq_country": "United States (mail address Cheyenne, WY)",
+  "contacts": [
+   {
+    "name": "Razvan Iancu",
+    "title": "Chief of Staff",
+    "linkedin": "https://www.linkedin.com/in/razvan-iancu-2b0819a1/",
+    "source_url": "https://www.linkedin.com/in/razvan-iancu-2b0819a1/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 (512) 645-1495",
+  "public_email": "info@nebroo.com",
+  "contact_source_url": "https://nebroo.com/pages/about-us",
+  "notes": "About page names no founders/leaders (just 'Nebroo, a new tech startup', GA TRADING LLC, 1021 E Lincolnway Suite #7892, Cheyenne WY 82001 mail-only); email and phone reconfirmed there. Search for founder/CEO returned nothing relevant; company LinkedIn not found. Existing Chief of Staff contact kept (not re-verified)."
+ },
+ {
+  "company_name": "IdeaRocket",
+  "company_domain": "idearocketanimation.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "7 on team page",
+  "hq_country": "US (New York; mailing address Miami, FL)",
+  "contacts": [
+   {
+    "name": "William Gadea",
+    "title": "Founder & Creative Director",
+    "linkedin": "https://www.linkedin.com/in/william-gadea-b2a8543/",
+    "source_url": "https://idearocketanimation.com/about/"
+   },
+   {
+    "name": "Maité Colombatto",
+    "title": "Producer",
+    "linkedin": "https://www.linkedin.com/in/maitecolombatto/",
+    "source_url": "https://idearocketanimation.com/about/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/2422025",
+  "company_phone": "(212) 695-7240",
+  "public_email": "",
+  "contact_source_url": "https://idearocketanimation.com/about/",
+  "notes": "William Gadea still Founder & Creative Director per About page. Second contact: Producer Maité Colombatto (LinkedIn linked from the About page) - closest to an ops role; Paula Beauchamp is Account Executive. Phone and address (382 NE 191st St PMB 74739, Miami FL 33179) from About page. Contact page has only a form; no public email."
+ },
+ {
+  "company_name": "TGP International",
+  "company_domain": "tgpinternational.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "11-50 (LinkedIn)",
+  "hq_country": "United Kingdom (5 offices incl. UAE, Saudi Arabia)",
+  "contacts": [
+   {
+    "name": "Simon Wright",
+    "title": "Founder & Chairman",
+    "linkedin": "https://www.linkedin.com/in/simon-wright-tgp/",
+    "source_url": "https://www.tgpinternational.com/about"
+   },
+   {
+    "name": "Ryan Waddell",
+    "title": "Head of Operations",
+    "linkedin": "https://www.linkedin.com/in/ryan-waddell-82b2a02a/",
+    "source_url": "https://www.tgpinternational.com/about"
+   },
+   {
+    "name": "Stephanie Abou Jaoude",
+    "title": "Chief of Staff",
+    "linkedin": "https://www.linkedin.com/in/stephanie-abou-jaoude-55b09528/",
+    "source_url": "https://www.tgpinternational.com/about"
+   }
+  ],
+  "company_linkedin": "https://uk.linkedin.com/company/tgpinternational",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.tgpinternational.com/about",
+  "notes": "About page (fetched) lists Simon Wright as Founder & Chairman with LinkedIn, plus partners, Chief of Staff, Head of Operations, CFO Jaideep Singh. Stephen Gates (CEO in input) is NOT listed on the current About page - possibly left; dropped and replaced by Head of Ops. No phone/email on About or homepage; /contact returned 404."
+ },
+ {
+  "company_name": "Heeeper",
+  "company_domain": "heeeper.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "Ukraine",
+  "contacts": [
+   {
+    "name": "Dmytro Koval",
+    "title": "CEO, Co-owner",
+    "linkedin": "https://www.linkedin.com/in/dmytro-koval-3481b61a7/",
+    "source_url": "https://hubstaff.com/customers/heeeper"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/heeeper",
+  "company_phone": "",
+  "public_email": "contact@heeeper.com; ceo@heeeper.com",
+  "contact_source_url": "https://www.heeeper.com/contact",
+  "notes": "Phone still not found: neither the contact page nor homepage lists one (they use a booking calendar link and form). Contact page also publishes ceo@heeeper.com. Input's duplicate second contact 'Dmytro, Founder & CEO' is the same person; removed. Web search budget exhausted, so no extra Clutch lookup."
+ },
+ {
+  "company_name": "SL Communications",
+  "company_domain": "slcommunicationpanama.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 55,
+  "employee_count": "~6 (data-broker snippet)",
+  "hq_country": "Panama",
+  "contacts": [
+   {
+    "name": "Stephanie Lombardo",
+    "title": "Managing Director / Founder",
+    "linkedin": "",
+    "source_url": "https://hubstaff.com/customers/sl-communications"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+507 385-4123 (per search snippet of company site; not fetched)",
+  "public_email": "",
+  "contact_source_url": "https://slcommunicationpanama.com/index.html",
+  "notes": "DUPLICATE of the 'SL Communication (SL Estudio de Comunicacion)' record in this batch - same Hubstaff case study. Input domain slcommunications.com looks wrong (TLS error on fetch); Hubstaff case study lists 'slcommunicationspanama.com' which does not resolve; the working domain from the earlier wave is slcommunicationpanama.com (403/Cloudflare to our fetcher). Stephanie Lombardo is the Managing Director quoted in the case study. Phone carried over from the duplicate record's search snippet; personal email from that snippet deliberately not copied here. No LinkedIn found; web search budget exhausted."
+ },
+ {
+  "company_name": "Viral Growth Media",
+  "company_domain": "viralgrowthmedia.io",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "",
+  "hq_country": "United States (Tampa, FL)",
+  "contacts": [
+   {
+    "name": "Laura Fiorella Egocheaga",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://viralgrowthmedia.io/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "813-592-3559",
+  "public_email": "Laura@ViralGrowthMedia.com",
+  "contact_source_url": "https://viralgrowthmedia.io/",
+  "notes": "Decision maker found on homepage: founded by Laura Fiorella Egocheaga (the public email Laura@ already in input matches). Tampa FL growth-marketing agency for B2B firms. No personal or company LinkedIn URL visible; web search budget exhausted so not looked up."
+ },
+ {
+  "company_name": "Brickwork (formerly Sales Empowerment Group)",
+  "company_domain": "brick.work",
+  "vendor": "Prodoscore",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "",
+  "hq_country": "United States (Chicago, IL)",
+  "contacts": [
+   {
+    "name": "Matt Reilly",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://brick.work/about-us"
+   },
+   {
+    "name": "Heather Benson",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://brick.work/about-us"
+   },
+   {
+    "name": "Michelle Kerr Stenzel",
+    "title": "Chief Human Resources Officer",
+    "linkedin": "",
+    "source_url": "https://brick.work/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/brickwork-gtm/",
+  "company_phone": "312-283-4653",
+  "public_email": "info@brick.work",
+  "contact_source_url": "https://brick.work/contact-us",
+  "notes": "Matt Reilly still CEO on About page. Joe Pfeiffer (GM in input) no longer on the leadership list - replaced with COO Heather Benson and CHRO Michelle Kerr Stenzel. Phone, email and address (10 South Riverside Plaza, Suite 875, Chicago IL 60606) from contact page. Personal LinkedIns not on site; not searched (budget exhausted)."
+ },
+ {
+  "company_name": "SL Communication (SL Estudio de Comunicacion)",
+  "company_domain": "slcommunicationpanama.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 55,
+  "employee_count": "~6 (RocketReach/Lusha snippet)",
+  "hq_country": "Panama",
+  "contacts": [
+   {
+    "name": "Stephanie Lombardo",
+    "title": "Founder / Managing Director (CEO)",
+    "linkedin": "",
+    "source_url": "https://hubstaff.com/customers/sl-communications"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+507 385-4123 (per search snippet of company site; not fetched)",
+  "public_email": "stephanie@slcommunicationpanama.com (per search snippet of company site; not fetched directly)",
+  "contact_source_url": "https://slcommunicationpanama.com/index.html",
+  "notes": "Same company as the 'SL Communications' record (merge). Stephanie Lombardo reconfirmed as Managing Director in the Hubstaff case study (fetched). Company site still 403 to our fetcher; phone/email kept from the earlier wave's search snippet - verify before use. No second contact or LinkedIn found; web search budget exhausted."
+ },
+ {
+  "company_name": "SageStone Inc",
+  "company_domain": "sagestoneinc.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "2-9 (GoodFirms)",
+  "hq_country": "United States (remote-first)",
+  "contacts": [
+   {
+    "name": "Jesel Cura",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://sagestoneinc.com/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 (214) 945-2234",
+  "public_email": "hello@sagestoneinc.com",
+  "contact_source_url": "https://sagestoneinc.com/",
+  "notes": "Company site (fetched) names founder Jesel Cura (personal site jeselcura.me, behind Vercel login) and publishes phone + email. Remote VA / customer-support outsourcing provider ('150+ teams supported'). GitHub org github.com/sagestoneinc confirms website. No LinkedIn found."
+ },
+ {
+  "company_name": "Pubsphere",
+  "company_domain": "pubsphere.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "30+ (case study)",
+  "hq_country": "Canada (Laval, QC)",
+  "contacts": [
+   {
+    "name": "Stéphane Bernier",
+    "title": "President",
+    "linkedin": "",
+    "source_url": "https://hubstaff.com/customers/pubsphere"
+   },
+   {
+    "name": "Philippe Chenard-Cox",
+    "title": "Design & CAD Supervisor (Hubstaff champion)",
+    "linkedin": "",
+    "source_url": "https://hubstaff.com/customers/pubsphere"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/pubsphere-inc.",
+  "company_phone": "Canada 1-514-750-3133 / 1-877-750-3134; USA 1-702-551-0976; Europe +33 9 80091917",
+  "public_email": "canada@pubsphere.com; usa@pubsphere.com; europe@pubsphere.com",
+  "contact_source_url": "https://www.pubsphere.com/en/contact",
+  "notes": "Added company LinkedIn (linked from contact page). Phones/emails reconfirmed; address 6545 rue Ernest Cormier, Laval QC H7C 0B1. Site has no leadership page, so President Stéphane Bernier could not be re-verified on the site. No personal LinkedIn found (search budget exhausted)."
+ },
+ {
+  "company_name": "Digital Strategy Consulting / Digital Training Academy",
+  "company_domain": "digitaltrainingacademy.com",
+  "vendor": "Monitask",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "~11 (ContactOut)",
+  "hq_country": "UK (London)",
+  "contacts": [
+   {
+    "name": "Danny Meadows-Klue",
+    "title": "Founder & CEO, Digital Strategy Consulting; President, Digital Training Academy",
+    "linkedin": "https://www.linkedin.com/in/dannymeadowsklue/",
+    "source_url": "http://www.digitaltrainingacademy.com/"
+   },
+   {
+    "name": "Tim F. (surname not shown)",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": "https://www.capterra.com/p/163622/Monitask/reviews/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "admissions@digitaltrainingacademy.com",
+  "contact_source_url": "http://www.digitaltrainingacademy.com/",
+  "notes": "Capterra review by Tim F., COO at Digital Strategy Consulting & Digital Training Academy, dated 2025-10-10, 5 stars (confirms Monitask use; mentions screenshot discomfort). Company site failed to fetch (SSL protocol error) so phone/company LinkedIn could not be checked; web search budget exhausted. Not identifying the reviewer beyond what Capterra shows."
+ },
+ {
+  "company_name": "Squared Away",
+  "company_domain": "gosquaredaway.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 55,
+  "employee_count": "",
+  "hq_country": "United States (remote)",
+  "contacts": [
+   {
+    "name": "Michelle (surname not published on site)",
+    "title": "CEO & Co-founder",
+    "linkedin": "",
+    "source_url": "https://www.gosquaredaway.com/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.gosquaredaway.com/contact",
+  "notes": "Domain gosquaredaway.com found via Himalayas company page. Remote executive-assistant agency staffed by military spouses. About page names only 'Michelle, our CEO & Co-founder' (no surname). Contact page is a form only - no email/phone. Web search budget exhausted, so surname/LinkedIn not looked up."
+ },
+ {
+  "company_name": "MarketsandMarkets",
+  "company_domain": "marketsandmarkets.com",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "India (Pune) / United States",
+  "contacts": [
+   {
+    "name": "Sandeep Sugla",
+    "title": "Founder, CEO & Chairman",
+    "linkedin": "",
+    "source_url": "https://www.marketsandmarkets.com/people.asp"
+   },
+   {
+    "name": "Krishnan Chatterjee",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.marketsandmarkets.com/people.asp"
+   },
+   {
+    "name": "Sulakshana Patankar",
+    "title": "Chief People Officer",
+    "linkedin": "",
+    "source_url": "https://www.marketsandmarkets.com/people.asp"
+   },
+   {
+    "name": "Aashish Mehra",
+    "title": "Chief Research Officer",
+    "linkedin": "https://www.linkedin.com/in/mehraaashish/",
+    "source_url": "https://www.marketsandmarkets.com/people.asp"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/marketsandmarkets",
+  "company_phone": "+1-888-600-6441 (US/Canada); +44-800-368-9399 (UK)",
+  "public_email": "",
+  "contact_source_url": "https://www.marketsandmarkets.com/contact.asp",
+  "notes": "Sandeep Sugla confirmed still Founder, CEO & Chairman on the People page; added COO Krishnan Chatterjee and Chief People Officer Sulakshana Patankar (also Milan Rao COO & CRO, Kavita Sheen SVP HR). Contact page email is encoded/form-only, so no public email recorded. CEO LinkedIn not found (search budget exhausted)."
+ },
+ {
+  "company_name": "Autism Parenting Magazine",
+  "company_domain": "autismparentingmagazine.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "",
+  "hq_country": "UK (London registered address)",
+  "contacts": [
+   {
+    "name": "Mark Blakey",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/markblakey/",
+    "source_url": "https://www.linkedin.com/in/markblakey/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/autism-parenting-magazine",
+  "company_phone": "+44 (0)203 290 9176",
+  "public_email": "",
+  "contact_source_url": "https://www.autismparentingmagazine.com/contact-us/",
+  "notes": "Phone and address (Autism Parenting Magazine Limited, Kemp House, 160 City Road, London EC1V 2NX) from contact page. Three emails are on the page but Cloudflare-obfuscated, so not recorded. About page 404; no second contact found. Founder not re-verified (no search budget)."
+ },
+ {
+  "company_name": "Causify.AI",
+  "company_domain": "causify.ai",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 90,
+  "employee_count": "",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Joel Sherlock",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/joelsherlock/",
+    "source_url": "https://causify.ai/about"
+   },
+   {
+    "name": "Dr. GP Saggese",
+    "title": "Co-Founder & CTO",
+    "linkedin": "https://www.linkedin.com/in/gpsaggese/",
+    "source_url": "https://causify.ai/about"
+   },
+   {
+    "name": "Dr. Paul Smith",
+    "title": "Co-Founder & CSO",
+    "linkedin": "https://www.linkedin.com/in/drpaulsmith/",
+    "source_url": "https://causify.ai/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://causify.ai/about",
+  "notes": "All three leaders and their LinkedIn URLs taken verbatim from links on causify.ai/about (still in role). Homepage has a LinkedIn icon but the company page URL was not exposed; no phone/email published (demo form only)."
+ },
+ {
+  "company_name": "The Sterling Firm, A Professional Law Corporation",
+  "company_domain": "thesterlingfirm.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "",
+  "hq_country": "United States (Santa Monica, CA)",
+  "contacts": [
+   {
+    "name": "Justin Sterling, Esq.",
+    "title": "Founder & Principal Attorney",
+    "linkedin": "",
+    "source_url": "https://thesterlingfirm.com/contact-us/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/the-sterling-firm",
+  "company_phone": "310-498-2750; toll free (844) 443-8534",
+  "public_email": "justin@thesterlingfirm.com",
+  "contact_source_url": "https://thesterlingfirm.com/contact-us/",
+  "notes": "Contact page (fetched) publishes justin@thesterlingfirm.com, phones, fax 310-362-8608, address 2219 Main St Unit #790, Santa Monica CA 90405, and company LinkedIn. Justin Sterling (CA Bar 290642) still the responsible attorney. No other staff named; no personal LinkedIn found."
+ },
+ {
+  "company_name": "The Mooshekh Law Firm, PC",
+  "company_domain": "ml-pc.com",
+  "vendor": "ActivTrak",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "6 on team page (plus offshore VAs)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Alan Mooshekh",
+    "title": "Senior Attorney / Principal",
+    "linkedin": "https://www.linkedin.com/in/alanmooshekh/",
+    "source_url": "https://ml-pc.com/about-us"
+   },
+   {
+    "name": "Ninebra Mooshekh",
+    "title": "Operations Manager",
+    "linkedin": "",
+    "source_url": "https://ml-pc.com/about-us"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(888) 500-3010",
+  "public_email": "info@ml-pc.com",
+  "contact_source_url": "https://ml-pc.com/about-us",
+  "notes": "Both contacts still on About page. Company LinkedIn page still not found - site does not link one; search budget exhausted."
+ },
+ {
+  "company_name": "GeBBS Healthcare Solutions",
+  "company_domain": "gebbs.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "US/India",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Nothing new could be verified: gebbs.com (home, about, leadership) returns 403 to our fetcher, Wikipedia has no article, and the session's web search budget was exhausted. ProHance case study page names no person/date. Recall (unverified, do not use without checking gebbs.com/leadership): the CEO has been Nitin Thakor. Needs a retry with search."
+ },
+ {
+  "company_name": "Befree Business Resourcing LLP",
+  "company_domain": "",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 40,
+  "employee_count": "",
+  "hq_country": "India",
+  "contacts": [
+   {
+    "name": "Vasant Darji",
+    "title": "Group Manager (COE)",
+    "linkedin": "",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "ProHance testimonial reconfirmed (Vasant Darji, Group Manager COE, Befree Business Resourcing LLP); no website named. Likely the Indian delivery arm of Befree (befree.com.au, Australian accounting outsourcing) but befree.com.au failed to fetch (TLS error), so the link is unconfirmed and domain left blank. No exec found; search budget exhausted."
+ },
+ {
+  "company_name": "No Sweat Work Media CC (NoSweat)",
+  "company_domain": "nosweat.co.za",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "South Africa (Hartbeespoort, North West)",
+  "contacts": [
+   {
+    "name": "Sebastian van 't Hoff",
+    "title": "Co-founder & CEO (Information Officer)",
+    "linkedin": "",
+    "source_url": "https://www.nosweat.co.za/paia-manual"
+   },
+   {
+    "name": "Wilfred Greyling",
+    "title": "Co-founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/nosweat.co.za",
+  "company_phone": "+27 81 818 2053",
+  "public_email": "sebastian@nosweat.co.za",
+  "contact_source_url": "https://www.nosweat.co.za/paia-manual",
+  "notes": "PAIA manual (fetched) still names Sebastian van 't Hoff as Information Officer/head with email, phone and address R512, Hartbeespoort 0240; entity No Sweat Work Media CC reg. 2009/090625/23. Personal LinkedIn not found (search budget exhausted)."
+ },
+ {
+  "company_name": "SnappyCX",
+  "company_domain": "snappycx.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "",
+  "hq_country": "US (Dallas, TX)",
+  "contacts": [
+   {
+    "name": "Tunde Oladipupo",
+    "title": "Co-Founder",
+    "linkedin": "https://www.linkedin.com/in/simplytunde/",
+    "source_url": "https://snappycx.com/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/snappycx",
+  "company_phone": "+1 469-888-6629",
+  "public_email": "",
+  "contact_source_url": "https://snappycx.com/",
+  "notes": "Homepage reconfirmed phone and address 7522 Campbell Rd, Dallas TX 75248; email only via contact form (no public email). No second contact named on site; search budget exhausted."
+ },
+ {
+  "company_name": "Stonewave",
+  "company_domain": "stonewave.net",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 75,
+  "employee_count": "11-50",
+  "hq_country": "Greece (Thessaloniki)",
+  "contacts": [
+   {
+    "name": "Georgios Chatzopoulos",
+    "title": "Founder",
+    "linkedin": "https://www.linkedin.com/in/georgios-chatzopoulos-2855b143/",
+    "source_url": "https://everhour.com/customers/stonewave"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/stonewave",
+  "company_phone": "+30 2310 221 500",
+  "public_email": "",
+  "contact_source_url": "https://stonewave.net/contact",
+  "notes": "Contact page lists an email but it is Cloudflare-obfuscated (not recorded); phone and address Papakyriazi 24, 54645 Thessaloniki reconfirmed. No people named on site, so no second contact."
+ },
+ {
+  "company_name": "Total Commerce (Fresh Prints)",
+  "company_domain": "freshprints.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 60,
+  "employee_count": "",
+  "hq_country": "United States (New York, NY)",
+  "contacts": [
+   {
+    "name": "Lizzie Sivitz",
+    "title": "VP of Art, Fresh Prints",
+    "linkedin": "",
+    "source_url": "https://www.freshprints.com/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 (929) 565-6850",
+  "public_email": "hi@freshprints.com",
+  "contact_source_url": "https://www.freshprints.com/",
+  "notes": "Himalayas job (fetched) confirms Total Commerce is 'an ecommerce agency within Fresh Prints' and lists Harvest among required tools. Fresh Prints site names no founder/CEO; only VP of Art found (not an ideal buyer). Address Fresh Prints LLC, 150 West 25th St Suite #501, New York NY 10001. Founder/CEO and LinkedIn not found - search budget exhausted."
+ },
+ {
+  "company_name": "IDEOM",
+  "company_domain": "ideom.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "9 on team page",
+  "hq_country": "USA (Staten Island NY / Harrisburg PA)",
+  "contacts": [
+   {
+    "name": "Ed Kabatsky",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/ideom/",
+    "source_url": "https://ideom.com/"
+   },
+   {
+    "name": "Eduard Lukyanov",
+    "title": "Scrum Master",
+    "linkedin": "",
+    "source_url": "https://ideom.com/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/ideomllc",
+  "company_phone": "",
+  "public_email": "info@ideom.net",
+  "contact_source_url": "https://ideom.com/",
+  "notes": "Ed Kabatsky still Founder, CEO on homepage. No exec besides him; second contact is the Scrum Master (delivery lead). No phone published on site."
+ },
+ {
+  "company_name": "Site Masters Junk Removal",
+  "company_domain": "thesitemasters.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "",
+  "hq_country": "United States (Tampa, FL)",
+  "contacts": [
+   {
+    "name": "Art Reisinger",
+    "title": "Owner",
+    "linkedin": "https://www.linkedin.com/in/art-reisinger/",
+    "source_url": "https://www.linkedin.com/in/art-reisinger/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sitemastersjunkremoval",
+  "company_phone": "727-591-7483",
+  "public_email": "info@thesitemasters.com",
+  "contact_source_url": "https://thesitemasters.com/contact/",
+  "notes": "Contact page reconfirmed phone/email and address 11928 Sheldon Rd Suite 109, Tampa FL 33626 (veteran owned). No staff named on site, so no second contact; /about 404."
+ },
+ {
+  "company_name": "ALP Consulting",
+  "company_domain": "alp.consulting",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "India",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "ProHance case-study page (slug 'alp-consulting-deficit-reduction') describes only 'a leading HR and Payroll Outsourcing Company in India' (9% deficit-hours reduction, PDF dated Dec'24) - the company name is not in the page text. alp.consulting returns 403; search budget exhausted. No contacts found."
+ },
+ {
+  "company_name": "Front Runner Films",
+  "company_domain": "frontrunnerfilmsllc.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 55,
+  "employee_count": "",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Tyler Nimmons",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://frontrunnerfilmsllc.com/contact"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(208) 336-6594",
+  "public_email": "info@frontrunnerfilmsllc.com",
+  "contact_source_url": "https://frontrunnerfilmsllc.com/contact",
+  "notes": "Company site failed to fetch (TLS handshake failure), so nothing could be re-verified or added; existing values carried from input. Search budget exhausted."
+ },
+ {
+  "company_name": "Social Revolt",
+  "company_domain": "socialrevoltagency.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "10",
+  "hq_country": "US (Dallas, TX)",
+  "contacts": [
+   {
+    "name": "Marty Martinez",
+    "title": "CEO (Co-Founder)",
+    "linkedin": "",
+    "source_url": "https://socialrevoltagency.com/about/"
+   },
+   {
+    "name": "Harrison Blum",
+    "title": "Co-Founder",
+    "linkedin": "",
+    "source_url": "https://www.getharvest.com/customers/social-revolt"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/socialrevoltagency/",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://socialrevoltagency.com/contact",
+  "notes": "About page now shows only Marty Martinez, as CEO - moved him to decision maker. Harrison Blum (co-founder in the Harvest story) is not on the current About page; may have stepped back - verify. Contact page has address 400 N. Ervay St. #130042, Dallas TX 75313 but no phone or email."
+ },
+ {
+  "company_name": "3angleTech",
+  "company_domain": "3angle.tech",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "~20",
+  "hq_country": "Romania (Bucharest)",
+  "contacts": [
+   {
+    "name": "Ionut-Cristian Paraschiv",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://toggl.com/customers/3angletech"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/3angletech",
+  "company_phone": "",
+  "public_email": "contact@3angle.tech",
+  "contact_source_url": "https://3angle.tech/contact",
+  "notes": "Toggl story reconfirmed Ionut-Cristian Paraschiv (Founder). Contact page: address 6D Regiei Blvd, Bucharest; no phone listed and no team named, so no second contact. Personal LinkedIn not found (search budget exhausted)."
+ },
+ {
+  "company_name": "Impekable",
+  "company_domain": "impekable.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 80,
+  "employee_count": "20",
+  "hq_country": "US (San Francisco; Sydney office)",
+  "contacts": [
+   {
+    "name": "Pek Pong",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://impekable.com/about/"
+   },
+   {
+    "name": "Amjad Sidqi",
+    "title": "General Manager",
+    "linkedin": "",
+    "source_url": "https://impekable.com/about/"
+   },
+   {
+    "name": "Angela Wells",
+    "title": "Senior Project Manager (Toggl story)",
+    "linkedin": "",
+    "source_url": "https://toggl.com/customers/impekable"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 650 933 5102",
+  "public_email": "sales@impekable.com",
+  "contact_source_url": "https://impekable.com/contact-us",
+  "notes": "Added real decision makers from About page: Founder Pek Pong and GM Amjad Sidqi (also Venki Arunachalam, MD Australia). Existing Angela Wells (PM) kept as third. Offices: 2261 Market St STE 10822, San Francisco CA 94114; 81 Campbell St, Surry Hills NSW 2010. No LinkedIn URLs on site."
+ },
+ {
+  "company_name": "Duchess & Alleycat",
+  "company_domain": "duchessandalleycat.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 70,
+  "employee_count": "14",
+  "hq_country": "United Kingdom (Glasgow)",
+  "contacts": [
+   {
+    "name": "Leah Benrimoj",
+    "title": "Director",
+    "linkedin": "",
+    "source_url": "https://www.duchessandalleycat.com/contact"
+   }
+  ],
+  "company_linkedin": "https://uk.linkedin.com/company/duchessandalleycat",
+  "company_phone": "+44 (0)20 8036 6500",
+  "public_email": "hello@duchessandalleycat.com",
+  "contact_source_url": "https://www.duchessandalleycat.com/contact",
+  "notes": "Contact page reconfirmed email/phone; address Block 2, Units J-K, Citylink Industrial Estate, Govan, Glasgow G51 3HD. Neither contact nor About page names staff, so director could not be re-verified and no second contact found; search budget exhausted (Companies House lookup needs search)."
+ },
+ {
+  "company_name": "NMCO Studio",
+  "company_domain": "nmcostudio.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 85,
+  "employee_count": "10-20",
+  "hq_country": "US (Las Cruces, NM)",
+  "contacts": [
+   {
+    "name": "Lucky Gonzalez",
+    "title": "Founder & CEO",
+    "linkedin": "",
+    "source_url": "https://nmcostudio.com/contact"
+   },
+   {
+    "name": "Christina (Tina) Ballew",
+    "title": "Founder & Chief Creative Officer",
+    "linkedin": "https://www.linkedin.com/in/tina-ballew-b01638b1/",
+    "source_url": "https://nmcostudio.com/contact"
+   },
+   {
+    "name": "Dawn Franco",
+    "title": "Studio manager (per Clockify story)",
+    "linkedin": "https://www.linkedin.com/in/dawn-franco-the-creative-solution/",
+    "source_url": "https://clockify.me/customer-stories/nmco-studio"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/nmco-studio/",
+  "company_phone": "(575) 618-6626",
+  "public_email": "",
+  "contact_source_url": "https://nmcostudio.com/contact",
+  "notes": "Contact page lists Lucky Gonzalez as Founder & CEO (now decision maker) and Christina Ballew as Founder & CCO (still in role). Dawn Franco is NOT in the current staff list on the contact page - may have left; kept last, verify. Address 1335 S Solano Dr, Las Cruces NM 88001. No public email (form only)."
+ },
+ {
+  "company_name": "Activation Agents AI (OASIS)",
+  "company_domain": "activationagents.ai",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 35,
+  "employee_count": "",
+  "hq_country": "",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://activationagents.ai/",
+  "notes": "OnlineJobs.ph post (2026-09-06, part-time appointment setter, Hubstaff for hours) names employer 'OASIS (operating as Activation Agents AI)', no website or people. activationagents.ai sells licensed AI SMS/WhatsApp agent business models and shows sales 'closed under OASIS7D', so the domain match looks right but is unconfirmed. The site names no founders, phone, email or address (waitlist only; /privacy 404). Business-opportunity/licensing model with an earnings disclaimer - low-quality prospect."
+ },
+ {
+  "company_name": "Raven International Group",
+  "company_domain": "",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 20,
+  "employee_count": "",
+  "hq_country": "Australia (per job post)",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Job post (fetched) reconfirmed: Raven International Group, Australia, Senior Accounts Officer, uses Hubstaff + Xero, construction industry; no website or people named. raveninternationalgroup.com.au does not resolve; finding the domain/ABN needs web search (budget exhausted). Nothing found."
+ }
+]

@@ -193,3 +193,40 @@ describe('lowActivityHoursFromRows', () => {
     );
   });
 });
+
+describe('loadScreenshotActivityRows', () => {
+  it('does not count shots taken after their session ended (alert cut) as low activity', async () => {
+    const shot = {
+      user_id: '1228',
+      activity_date: '2026-10-14',
+      activity_percent: 0,
+      app_name: 'Code',
+      window_title: 'main.ts',
+      vision_summary: null,
+      ocr_excerpt: '',
+      is_meeting: false,
+      is_low: true,
+    };
+    let sql = '';
+    const db = {
+      query: async (text: string) => {
+        sql = text;
+        return {
+          rows: [
+            { ...shot, captured_at: '2026-10-14T15:10:30.000Z', outside_session: false },
+            { ...shot, captured_at: '2026-10-14T15:20:30.000Z', outside_session: true },
+          ],
+        };
+      },
+    };
+    const rows = await new EffectiveTimeService(db as never).loadScreenshotActivityRows(
+      { workspaceId: 511 },
+      '2026-10-14T05:00:00.000Z',
+      '2026-10-15T05:00:00.000Z',
+      10,
+      '1228',
+    );
+    expect(sql).toContain('LEFT JOIN time_doctor.time_logs tl ON tl.id = s.time_log_id');
+    expect(rows.map((r) => r.is_low)).toEqual([true, false]);
+  });
+});

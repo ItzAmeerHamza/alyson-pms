@@ -53,7 +53,7 @@ describe('non-effective time — Mac and Windows Pulse', () => {
     expect(result.non_effective_hours).toBe(0);
   });
 
-  it('clips short idle inside a meeting and keeps AFK idle of 10+ minutes', () => {
+  it('clips idle inside a meeting, including quiet stretches of 10+ minutes', () => {
     const meetStart = Date.parse('2026-08-26T14:00:00Z');
     const meetings = new Map([
       ['1196', [{ startMs: meetStart, endMs: meetStart + min(120) }]],
@@ -85,7 +85,7 @@ describe('non-effective time — Mac and Windows Pulse', () => {
       'America/Chicago',
       meetings,
     );
-    expect(longAfk.get('1196')?.get('2026-08-26')).toBeCloseTo(110 / 60, 5);
+    expect(longAfk.get('1196')?.get('2026-08-26') ?? 0).toBe(0);
     expect(splitHours(2, 0, 0).non_effective_hours).toBe(0);
   });
 
@@ -111,7 +111,7 @@ describe('non-effective time — Mac and Windows Pulse', () => {
     expect(isVideoMeetingScreenshot('Microsoft Word', 'Notes.docx')).toBe(false);
   });
 
-  it('dual-screen AFK of 10+ minutes during a leftover meeting still counts as idle', () => {
+  it('dual-screen quiet time inside a meeting stays effective', () => {
     const meetStart = Date.parse('2026-09-04T12:30:00Z');
     const meetings = new Map([
       ['1203', [{ startMs: meetStart, endMs: meetStart + min(60) }]],
@@ -128,7 +128,7 @@ describe('non-effective time — Mac and Windows Pulse', () => {
       'Asia/Karachi',
       meetings,
     );
-    expect(byUser.get('1203')?.get('2026-09-04')).toBeCloseTo(47 / 60, 5);
+    expect(byUser.get('1203')?.get('2026-09-04') ?? 0).toBe(0);
     expect(splitHours(1, 0, 0).non_effective_hours).toBe(0);
   });
 

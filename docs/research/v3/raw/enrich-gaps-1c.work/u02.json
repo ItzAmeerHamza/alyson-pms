@@ -1,0 +1,12 @@
+{
+"6": {"confidence_score": 75,
+ "contacts": [
+  {"name": "Ryan Davis", "title": "CEO & Co-Founder", "linkedin": "https://www.linkedin.com/in/ryandavisatdod/", "source_url": "https://www.linkedin.com/in/ryandavisatdod/"},
+  {"name": "Raleigh Hobson", "title": "Chief Operating Officer (oversees marketing, business development and recruiting)", "linkedin": "https://www.linkedin.com/in/raleighhobson/", "source_url": "https://dietitiansondemand.com/meet-staffing-team/"},
+  {"name": "Lyndel Schuster", "title": "Chief People Officer (HR, payroll, compliance, business operations)", "linkedin": "", "source_url": "https://dietitiansondemand.com/meet-staffing-team/"}],
+ "notes": "Ryan Davis still CEO & Co-Founder per LinkedIn search title. COO Raleigh Hobson and CPO Lyndel Schuster from search summary of the company's 'Meet our staffing team' page (site returns 403 to direct fetch, so not opened). Hobson LinkedIn from search result 'Raleigh Hobson - Dietitians On Demand'. Company LinkedIn page, phone and email NOT found: site blocks fetching and the session's web-search budget ran out before those queries."},
+"7": {"confidence_score": 55,
+ "notes": "Mohammed Douglas re-confirmed as Co-founder via Apploye case study (no newer data). douglasacademy.ca returns 403 to all fetches, and the session web-search budget was exhausted, so no LinkedIn, second contact, company LinkedIn or email could be found. Phone (289) 800-3888 from earlier list kept, not re-verified."},
+"8": {"confidence_score": 75,
+ "notes": "Randall Averitte still Founder & CEO per site About page (LinkedIn link on that page matches). Remote Raven About page lists no other leaders; theorg.com has no org chart. Second contact not found (web-search budget exhausted)."}
+}

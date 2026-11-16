@@ -1,0 +1,20 @@
+[
+{"idx":5,"vendor":"DeskTime","status":"POSSIBLE","confidence_score":20,
+ "status_reason":"TheirStack only; company site (Dubai company-formation services) live but no DeskTime or tracking mention; office-based firm.",
+ "company_phone":"+971 4 4303080","contact_source_url":"https://uae-eu.com",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: uae-eu.com live (Platinum Tower, JLT, Dubai; 20+ years corporate services). Searches '\"Europe Emirates Group\" DeskTime' and '\"Europe Emirates Group\" uae-eu.com' found nothing linking DeskTime. Office-based service firm, so no further contact research."},
+{"idx":6,"vendor":"Work Examiner","status":"POSSIBLE","confidence_score":15,
+ "status_reason":"TheirStack only; FQHC health center; no job ad, policy or document naming Work Examiner. Likely IT web-filtering mention, not staff time tracking.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Henry J. Austin\" \"Work Examiner\"' and '\"Henry J. Austin Health Center\" IT job web filtering monitoring software' returned nothing relevant. In-person clinical workforce (~135 staff, Trenton NJ) - weak fit, no contact research."},
+{"idx":7,"vendor":"Time Doctor","status":"POSSIBLE","confidence_score":30,
+ "status_reason":"TheirStack only; no job ad, review or page naming Time Doctor.",
+ "public_email":"support@yourdoctors.online","contact_source_url":"https://yourdoctors.online/contact-us/",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Your Doctors Online\" \"Time Doctor\" OR timedoctor job' and '\"Your Doctors Online\" careers remote customer support job' found nothing. Contact page fetched: support@yourdoctors.online, no phone. CEO Raihan Masroor kept from input (role not re-confirmed this round; LinkedIn appeared in an earlier search result)."},
+{"idx":8,"vendor":"Time Doctor","status":"POSSIBLE","confidence_score":20,
+ "status_reason":"TheirStack only; likely keyword collision (ClearCourse group owns healthcare/practice software, 'doctor' wording in job text). No evidence of the tracking product.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"ClearCourse\" \"Time Doctor\"' and 'ClearCourse job \"Time Doctor\" OR \"TimeDoctor\" healthcare software' returned only vendor/review pages. UK software group, office/hybrid - no contact research."},
+{"idx":9,"vendor":"Hubstaff","status":"POSSIBLE","confidence_score":20,
+ "status_reason":"TheirStack only; Brainwonders job ads found (career counsellor, HR executive, field executive) are in-office roles with no Hubstaff mention.",
+ "second_source_url":"https://builtin.com/job/career-counsellor/7251956",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Brainwonders\" Hubstaff' and 'Brainwonders career counsellor job time tracking OR Hubstaff OR work from home' - no Hubstaff link; roles are in-office/field (Mumbai), weak fit. No new contact research."}
+]

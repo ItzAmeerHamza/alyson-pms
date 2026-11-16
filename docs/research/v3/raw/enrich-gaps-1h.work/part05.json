@@ -1,0 +1,45 @@
+[
+{"company_name": "DTiQ",
+ "contacts": [
+  {"name": "JL Valente", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/jlvalente/", "source_url": "https://www.dtiq.com/leadership"},
+  {"name": "Kate Kosewski", "title": "VP of Human Resources", "linkedin": "https://www.linkedin.com/in/kkosewski/", "source_url": "https://www.dtiq.com/leadership"},
+  {"name": "Krzysztof Osinski", "title": "Chief Product and Technology Officer", "linkedin": "https://www.linkedin.com/in/krzysztofosinski/", "source_url": "https://www.dtiq.com/leadership"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/dtiq/", "company_phone": "800-933-8388 (24/7 support, US & Canada)", "public_email": "support@dtiq.com", "contact_source_url": "https://www.dtiq.com/contact/support",
+ "hq_country": "United States (Marlborough, MA)",
+ "notes": "JL Valente is still CEO. The previous second contact, Joe Mignone (Chief Customer Officer), is NOT on the current leadership page; Michael Pellicano is now SVP Customer Experience. Kate Kosewski (VP HR) and Krzysztof Osinski (CPTO) were added in his place. All LinkedIn URLs are linked from the leadership page. The phone and email are support lines, as the site routes sales through forms. HQ: 11 Apex Drive, Suite 300A #108, Marlborough, MA 01752; offices also in Gliwice (PL) and Braeside (AU)."},
+{"company_name": "Execube Digital", "company_domain": "execubedigital.com",
+ "contacts": [
+  {"name": "Ripple Nagpal", "title": "CEO (per Workstatus testimonial)", "linkedin": "", "source_url": "https://www.workstatus.io/"}
+ ],
+ "company_phone": "+91 81303 50268", "contact_source_url": "https://execubedigital.com/",
+ "hq_country": "India (Noida)",
+ "notes": "The Workstatus homepage testimonial still names Ripple Nagpal, CEO. The site, execubedigital.com, gives the phone, a registered office at Aykon Tower, Sector-135, Noida 201304 and a corporate office at A-3, Sector-4, Noida 201301. No email is shown, and the contact-us URL returns 404. The company LinkedIn page linked from the site matches the existing one. No team page; the search budget was exhausted, so no personal LinkedIn or second contact."},
+{"company_name": "Caprae Capital Partners",
+ "contacts": [
+  {"name": "Kevin Hong", "title": "Founder & Managing Partner", "linkedin": "https://www.linkedin.com/in/kevinhshong", "source_url": "https://capraecapital.com/team/"},
+  {"name": "Zackary Beckham", "title": "Founder", "linkedin": "", "source_url": "https://capraecapital.com/team/"},
+  {"name": "Eric Nehrlich", "title": "Chief of Staff", "linkedin": "", "source_url": "https://capraecapital.com/team/"}
+ ],
+ "public_email": "partners@capraecapital.com", "contact_source_url": "https://capraecapital.com/contact/",
+ "notes": "Kevin Hong is still listed as Founder on the team page. Zackary Beckham, the Destroy Drive case-study contact, is also listed there as a Caprae Founder; his LinkedIn (linkedin.com/in/zackarybeckham) now shows ITSco, so that URL was not attached here. The email is from the contact page. The site lists no phone or address and links a sister site, capraecapitalpartners.com."},
+{"company_name": "Habitium",
+ "contacts": [
+  {"name": "Jaume Riutord Fe", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/jaume-riutord/", "source_url": "https://resources.timedoctor.com/case-studies/habitium/"},
+  {"name": "Xavier Vidal", "title": "Co-founder & COO", "linkedin": "https://www.linkedin.com/in/xavier-vidal-67b005189/", "source_url": "https://resources.timedoctor.com/case-studies/habitium/"}
+ ],
+ "public_email": "contacto-es@habitium.com; contact-ie@habitium.com", "contact_source_url": "https://support.habitium.com/article/184-habitiums-telephone-number",
+ "notes": "There is NO PUBLIC PHONE: the support article states Habitium 'does not offer telephone support' and handles customer service only by email. company_phone is therefore deliberately blank. The English/Irish support address contact-ie@habitium.com was added. Existing contacts were kept; habitium.com returns 403 and the search budget was exhausted, so the still-in-role check could not be repeated."},
+{"company_name": "Acusis",
+ "contacts": [],
+ "notes": "LIKELY DEFUNCT or rebranded: acusis.com does not resolve (www: ENOTFOUND) and the bare domain refuses connections. The ProHance case study names no Acusis staff. Not marked DO_NOT_TARGET because no closure or acquisition was confirmed (the search budget was exhausted). Verify before any outreach."},
+{"company_name": "Kemok",
+ "contacts": [
+  {"name": "Diego B. Leal", "title": "Co-founder & CEO", "linkedin": "https://www.linkedin.com/in/diegobleal/", "source_url": "https://kemok.io/en/"}
+ ],
+ "company_phone": "+502 2302-2213", "public_email": "info@kemok.io", "contact_source_url": "https://kemok.io/en/",
+ "notes": "The phone and email are from the kemok.io homepage. Address: Edificio Empresarial Zona Pradera, Torre II Oficina 1108, zona 10, Guatemala City 01010. The site says it has 20+ data professionals in 4 countries. The site has no team page and no LinkedIn links, so the existing CEO was kept but not re-checked and no second contact was found."},
+{"company_name": "FBA Prep 4U",
+ "contacts": [],
+ "notes": "The site (home and About pages) names no owner; it says only that the founders were Amazon sellers (private label from 2016, wholesale from 2018). A testimonial mentions a team lead called 'Amanda' (no surname). Address: 1685 Taylor Rd, Gahanna, OH 43230; the phone and email were re-confirmed. The site links only Facebook, no LinkedIn. The Ohio SOS registry needs search, which was not available."}
+]

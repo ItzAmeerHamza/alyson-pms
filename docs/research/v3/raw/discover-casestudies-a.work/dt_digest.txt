@@ -1,0 +1,400 @@
+######## pages/desktime.com__case-studies__adverbum.txt
+URL: https://desktime.com/case-studies/adverbum
+TITLE: Eliminating repetitive tasks & setting priorities
+META: <meta name="description" content="Here’s how AD VERBUM identifies workflow bottlenecks and maintains productivity in a global translation team.">
+META: <meta property="og:title" content="DeskTime | Eliminating repetitive tasks & setting priorities">
+Eliminating repetitive tasks & setting priorities
+Boosting efficiency across 25 in-house staff and 1.3K freelancers
+“It is not the time you spend at the office that makes you the most productive employee. It’s what you manage to do in that time,” says Zelma Diana Vidina, Managing Director of AD VERBUM Ltd.
+AD VERBUM is a leading Northern European translation and localization company working for hundreds of customers around the globe in more than 70 target languages. AD VERBUM employs 25 in-house staff in Latvia and Bulgaria and close to 1,300 professional linguists globally.
+Productivity tracking is a challenge for such an international team spread across many countries. To monitor the progress of its worldwide employees, AD VERBUM uses a variety of project management tools and applications. Zelma Diana Vidina points out that the company’s staff have to be highly skilled and agile to use and apply all these different tools. She explains:
+“Currently at AD VERBUM we use 36 different translation and localization software tools in addition to the basic software like MS Windows, etc. This means that we really need to keep track of all our activities to see where our working hours are being spent.” DeskTime is used for AD VERBUM’s in-house staff in its two offices in Latvia and Bulgaria. Meanwhile, freelance linguists use a different TMS (Translation Management System) and work according to deadlines set by the Project Management Department.
+Time tracking helps to focus on the most important tasks
+“Several years ago, it became clear that we needed to find some sort of automated solution to monitor how we do things in the company - most importantly, what works well and what can be improved,” Zelma Diana Vidina explains. “We tested several solutions, but in the end we decided to go with DeskTime because we found it more user-friendly than other similar apps.
+At AD VERBUM we are big fans of Lean Six Sigma , and DeskTime is part of this continuous process. We work in a fast-changing and very competitive global industry, so we need to keep track of all our resources – human and others – to keep up with the best.
+
+######## pages/desktime.com__case-studies__antino-labs.txt
+URL: https://desktime.com/case-studies/antino-labs
+TITLE: Maintaining productivity - Antino Labs case study
+META: <meta name="description" content="Here’s how Antino Labs improved team consistency, accountability, and transparency across a growing 55-person development team.">
+META: <meta property="og:title" content="DeskTime | Maintaining productivity - Antino Labs case study">
+Maintaining productivity - Antino Labs case study
+How Antino Labs increased productivity from 85% to 95% with DeskTime.
+Three years ago while working as a freelance software developer, Vinay Krishna Gupta started to use DeskTime to track his own time spent on different clients' projects. A year later, he co-founded Antino Labs where he continued to use DeskTime with his team.
+Antino Labs is an IT company that builds high-performing web and mobile apps with the help of the latest cutting edge technologies. Over the last two years, the team has grown to 55 people, the majority of whom are developers.
+As for Vinay himself, he is not only the co-founder of the company but also a hands-on CEO. He spends his workday on communicating with clients, managing his partly in-office, partly remote team, and, if necessary, helping the team with software development tasks.
+Higher productivity and a stronger company culture
+There were three key reasons why Vinay decided to use DeskTime with his Antino Labs team.
+“The first reason was productivity . On DeskTime, we can quickly check each employee's productivity. Like how much time they've actually spent working during the day.” The second reason for using time tracking was to ensure ''consistency'' or, in other words, to make sure that people work a certain amount of hours a day and spend these hours on productive work.
+And the third and final reason was to build a company culture where everyone is accountable and follow basic company policies and where there is transparency in workflow management.
+''When your team is small, you can easily see what project has been assigned to which person,'' Vinay explains. ''But when your team grows, you definitely need a tool like DeskTime where you can see who is working on what task.''
+These three things – productivity, consistency, and strong company culture – became especially important during the Covid-19 crisis when the entire team switched to remote work. In the meantime, the crisis allowed Vinay to notice his team's dedication to the company:
+While working from home, people were actually working more and
+######## pages/desktime.com__case-studies__brain-station-23.txt
+URL: https://desktime.com/case-studies/brain-station-23
+TITLE: Empowering your employees with time tracking
+META: <meta name="description" content="Here’s how Brain Station 23 uses time data to benchmark performance and help employees grow at their own pace.">
+META: <meta property="og:title" content="DeskTime | Empowering your employees with time tracking">
+Empowering your employees with time tracking
+Tracking time to empower 300+ developers, not control them
+Brain Station 23 is a software development company that creates web and mobile applications, as well as custom IT solutions such as enterprise applications, big data & cloud-based technologies, and more. Their clients include small- and medium-sized businesses from all over the world – from The Netherlands, Denmark, and the UK, to Canada and the US.
+The company is based in Bangladesh, and since 2006 it has grown to a team of 300+ people, most of whom are software engineers. The team is led by its founder and CEO Raisul Kabir who stresses: I'm a '' theory Y manager '' who prefers a laid back and transparent management style.
+When starting Brain Station 23, Raisul had an open mind and a flexible attitude towards things like working hours and office policies. ''People would sometimes come to work late and sometimes they would come early. And that's fine – I trust my people and that they do their work well.''
+However, because of some arguable situations with the company's clients, Raisul decided to start using time tracking software .
+''Sometimes the client would say that my developers aren't doing enough, but I didn't have any way to check whether that's true and I should motivate my people to put in more effort, or whether that was just a misunderstanding. I wasn't able to defend my people. I needed the third opinion, so I started to look for a time tracking tool.'' Time tracking is not for controlling people, but helping them grow
+Looking for time tracking software, Raisul came across several solutions. However, he felt that his management philosophy matched best with the one promoted by DeskTime – that time tracking is not for controlling people, but for helping them become better at what they do.
+'' Time monitoring software is like nuclear energy – you can use it to build a nuclear bomb or you can use it to build a nuclear reactor. A nuclear reactor is valuable and helpful, while a nuclear bomb can destroy people,'' Raisul explains, and he says that he sees time tracking in the same way.
+If used corr
+######## pages/desktime.com__case-studies__brian-tankersley.txt
+URL: https://desktime.com/case-studies/brian-tankersley
+TITLE: How to keep yourself accountable with DeskTime
+META: <meta name="description" content="Here’s how Brian improved his productivity, prevented time waste, prioritized tasks, and maintained a healthy work-life balance using DeskTime.">
+META: <meta property="og:title" content="DeskTime | How to keep yourself accountable with DeskTime">
+How to keep yourself accountable with DeskTime
+Taking control of your time
+When discussing time tracking, we often look at it from the perspective of teams – how managers can make sure their employees stay productive and focus on their tasks. But time tracking is not just for teams; it can provide many benefits if you do it just for yourself as a freelancer or self-employed businessperson. This is precisely what accounting consultant Brian F. Tankersley has proved – he uses DeskTime to keep himself accountable, set the right priorities, and ensure a healthy work-life balance.
+Brian is a certified accounting and technology expert who consults companies on all aspects of setting up accounting tech at their workplaces. When you're your own boss, like Brian, you're completely in charge of your own time and priorities. So you need to find a way to keep yourself accountable about how you spend and organize your work hours.
+Given these needs, this is exactly how Brian started to use DeskTime about seven years ago. Initially, he used a different time tracker, but the previous tool changed its functionality. Brian started looking for an alternative solution that would fit his requirements and came upon DeskTime on a review site. He gave DeskTime a try and hasn't looked back since.
+See what eats up your time
+DeskTime helps Brian organize his work in several ways. Primarily, it allows him to see where exactly his time goes throughout the work day. By tracking his activities, Brian can look back at the data and understand how much time was spent on a particular project, which helps with billing and estimation for similar projects in the future.
+From a broader perspective, keeping track of how long he's worked on certain projects and his earnings also tells Brian how much revenue he should generate in the future. With a more accurate understanding of a project's timeline and how much he should charge for it, Brian can ensure that his business can continue to grow and succeed.
+"DeskTime keeps me on target for goals – I know how much time I need to spend working on things and how m
+######## pages/desktime.com__case-studies__diversity-travel.txt
+URL: https://desktime.com/case-studies/diversity-travel
+TITLE: Process improvement with DeskTime - a case study
+META: <meta name="description" content="DeskTime helps DGI track performance, identify training needs, and increase efficiency, contributing to a 98% client retention rate.">
+META: <meta property="og:title" content="DeskTime | Process improvement with DeskTime - a case study">
+Process improvement with DeskTime - a case study
+Increasing productivity across 8 departments
+“We’ve found that our people take a lot of pride in being able to demonstrate high productivity. Some teams have even had internal mini competitions based on the stats,” says Przemek Koszka, the Director of Technology at Diversity Travel.
+Diversity Travel is a travel management company that provides 24/7 service, unique travel technology and specialist fares to the academic, charity and public sector markets.
+Diversity has an expanding team of dedicated travel professionals providing expert support from their offices in Europe, North America, and Australasia.
+Process improvement across different departments
+Diversity Travel uses DeskTime differently in each of its 8 departments that employ 148 staff in total. “The variety of applications is one of the key reasons why we invested in DeskTime. It helps us retain our position as one of the leading specialist global travel management companies,” Przemek explains.
+Some departments use DeskTime as a timekeeping tool, some as a monitoring app and others focus on the productivity side of things. The company’s Operations and IT departments are good examples of very different, yet equally effective use of DeskTime.
+For example, the Operations team uses DeskTime for monitoring and improvement:
+Lateness tracking
+Remote team monitoring
+Core application usage
+The IT department, on the other hand, focuses on productivity - e.g. which applications developers spend the most time on. Later the teams can discuss ways to improve their working patterns, for example:
+Frequently looking at and reading PDFs may indicate that teams or individuals require additional training
+Spending a lot of time in emails suggests that projects are not managed via other tools etc.
+“The data DeskTime provides helps us understand and improve our processes, which ultimately benefits our teams and our customers, and helps us maintain our 98% client retention rate.” DeskTime brings out the best in our staff
+Before rolling DeskTime out, the company had numerous conversations wi
+######## pages/desktime.com__case-studies__excellent-webworld.txt
+URL: https://desktime.com/case-studies/excellent-webworld
+TITLE: Doubling productivity with DeskTime: a case study
+META: <meta name="description" content="Here’s how Excellent WebWorld accelerated productivity 2x and managed 900+ projects more efficiently.">
+META: <meta property="og:title" content="DeskTime | Doubling productivity with DeskTime: a case study">
+Doubling productivity with DeskTime: a case study
+From time loss to 100% productivity
+Excellent WebWorld is an award-winning, full-stack app development company, established in 2011. They’ve since made 600+ clients happy and carried out more than 900 projects. Excellent WebWorld (EWW) is based in India and the USA, yet works with clients from the UK, Australia, Hong Kong, and Canada as well. Their clients vary from startups to established brands, a diversity that they can serve thanks to the highly customized approach they take with each client.
+Alongside being a passionate team that aims for nothing but excellent results and client satisfaction, EWW keeps its employees' well-being their top priority:
+“We understand that if you are going to work 8 hours a day in one place, that place needs to be motivating”. To bring more motivation to its employees, the company decided to implement time tracking software as a part of their work organization. DeskTime was their top choice.
+Why high productivity is a must in the IT industry
+The company has been using the DeskTime app since December 2019. By now, nearly all of the company’s employees (65 out of 75) are using it. EWW has 9 different teams and time tracking is used by all of them. Time tracking helps to make sure that the teams perform as efficiently as they possibly can.
+When asked about why the company chose to start tracking time at work, EWW Digital Marketing Manager, Sanjay Shah, said that for a company working in the IT industry, it was crucial to make the most out of every second of their working time. Their particular industry comes along with a relatively high level of competition. As more than 40,000 IT companies are present in India, that clearly describes the competitive level. As a result, the team's performance needed to be efficient, otherwise, they ran the risk of losing clients to other skilful companies. That’s why it was clear that Excellent WebWorld needs time tracking software.
+There were quite a few options, but DeskTime caught EWW’s eye immediately. Asked about how they got started, Sanjay tells us that the system administrator (wh
+######## pages/desktime.com__case-studies__grabon.txt
+URL: https://desktime.com/case-studies/grabon
+TITLE: Introducing more structured working habits
+META: <meta name="description" content="Here’s how GrabOn improved task completion, team accountability, and structured work habits with DeskTime.">
+META: <meta property="og:title" content="DeskTime | Introducing more structured working habits">
+Introducing more structured working habits
+Making every hour count at GrabOn
+Meet GrabOn – a trusted brand and pioneer in India’s affiliate e-commerce industry. As a market leader in the country’s coupons and deals space, the company is known for maintaining high-quality standards through its unique user interface and user experience. Today, GrabOn is the top player in the coupons and deals industry in India.
+Behind every successful company is a team that is passionate about what they do. GrabOn's team consists of 70 employees working in 12 teams – many of whom use DeskTime. With more than 4000+ merchant partnerships and counting, the GrabOn team works effortlessly to help users save valuable resources on everything from home goods, clothing, and food to travel, health, and much more.
+Time tracking as a way to save valuable resources
+As the old saying goes: “Time is money.” And saving time means saving money which is a philosophy that GrabOn holds dear. So it came as no surprise that a company working in the field of saving money for others opted for a time and money-saving tool for themselves as well. By partnering up with DeskTime, GrabOn aimed to boost their overall productivity and efficiency ratings and keep everyone on the team accountable.
+As GrabOn's Director of Product Marketing Raghu Prodduturi notes:
+“We started using DeskTime to enable self-accountability and improve productivity. Too much time was being wasted to ensure employees stay productive, and we saw it as something that could be easily automated.” DeskTime's time tracking and management software offered them just what they needed – a fully automated time management solution that works equally well in a remote and in-office setting.
+Increased performance and better time management
+When asked if there were any surprises or striking conclusions after implementing DeskTime in their office, Raghu replies affirmatively. GrabOn follows objectives and key results (OKR), and DeskTime's Project and Task tracking turned out to be one of the most useful features in the toolkit since it was able to produce an impartial and precise analysis of how task deadlines w
+######## pages/desktime.com__case-studies__hastech.txt
+URL: https://desktime.com/case-studies/hastech
+TITLE: Boosting productivity through remote work
+META: <meta name="description" content="Discover how HasTech leveraged DeskTime to complete more projects on time and drive revenue growth">
+META: <meta property="og:title" content="DeskTime | Boosting productivity through remote work">
+Boosting productivity through remote work
+How HasTech saves $2K monthly with time tracking
+HasTech is a team of experienced web designers and developers. Founded in 2015 in Bangladesh, HasTech offers various WordPress, Shopify, and HTML products and product packages as well as web design and development. Its three top-selling countries are USA, India, and UK, yet overall the company sells its products to customers in more than 80 countries. A variety of 1,000+ product types and services have reached more than 150,000 customers since the company's inception.
+HasTech’s history with remote work
+HasTech “met” DeskTime in April of 2020, just when it became clear that the pandemic is going to stick around for a while and that remote work may become the “normal” setting for a long time. However, it wasn’t the first time the company had moved its employees to a remote environment.
+Aslam Hasib, the managing director of HasTech, shares that when the company was founded employees were working remotely for some time and only later decided to move to an office environment. The reason for the move was the lack of a remote employee monitoring solution, as there were concerns that the employees may be underperforming. The managing director explains that if he had heard about time tracking software solutions back then, it might have been a game-changer. As the company’s work was mostly project-based, the biggest issue was the time spent on finishing the projects.
+“The normal working time on a project for us is 20–30 days. Back then it took 60 days for some of my employees to finish their work. We lost many customers because the actual project length ended up being twice the estimated length. Eventually, we decided to move into an office to increase productivity and efficiency.” As the company moved to an office environment the situation improved. Yet the management team was still unable to get hold of how employees were spending their work hours. HasTech management tried to pay regular visits to their employees’ desks but, as the company had already grown by the time, that kind of monitoring wasn’t efficient and didn’t leave a positive impact on 
+######## pages/desktime.com__case-studies__hire-live-support.txt
+URL: https://desktime.com/case-studies/hire-live-support
+TITLE: How this team of 100+ people increased their efficiency by 20%
+META: <meta name="description" content="See how Hire Live Support increased output, enhanced time management, and aligned employee performance with company goals.">
+META: <meta property="og:title" content="DeskTime | How this team of 100+ people increased their efficiency by 20%">
+How this team of 100+ people increased their efficiency by 20%
+How this team of 100+ people increased their efficiency by 20%
+Founded in 2009, Hire Live Support is a privately held company that offers BPO (Business Process Outsourcing) and e-commerce solutions all over the globe with its roots in the United States and Pakistan.
+'The team of Hire Live Support processes over a million customer interactions each year via live chat, inbound and outbound calls, emails, etc. Besides customer support, the company also offers services like digital marketing, web development, social media management, content writing, graphic designing, and others,' explains Sam Davis, the Operational Director at HLS.
+Almost a year ago, the company decided to start using time tracking software to enhance employees productivity and better resource allocation. After testing several options, they went with DeskTime.
+'DeskTime was more convenient than other solutions we tried. We installed the app and noticed right away that the reporting feature is great and fits our needs.' The reason why Hire Live Support decided to start tracking their employees' time was simple - they noticed that the team could be more efficient and that human resources were not fully utilized. For example, some employees were taking long breaks and there were other unproductive activities during work hours.
+'We implemented a time tracking system and defined an internal policy - if you have an eight-hour shift, you need to have at least seven hours productive time,' Sam tells us.
+The company saw results right away. According to Sam, people became more efficient and started to manage their time better. 'When we introduced DeskTime, some people, of course, were not happy,' Sam says and notes that the management handled the situation well. At Hire Live Support, DeskTime is now used to manage the company's bonus and appraisal system. That is - employees who use their desk time productively, get bonuses and receive more appraisals.
+'There are people who work hard, and we decided to reward them with extra money. When o
+######## pages/desktime.com__case-studies__mapon.txt
+URL: https://desktime.com/case-studies/mapon
+TITLE: How Mapon keeps flexible work balanced while serving 35K+ clients
+META: <meta name="description" content="See how Mapon uses DeskTime to support flexible work, balance workloads, and help employees stay accountable for their time.">
+META: <meta property="og:title" content="DeskTime | How Mapon keeps flexible work balanced while serving 35K+ clients">
+How Mapon keeps flexible work balanced while serving 35K+ clients
+How Mapon keeps flexible work balanced while serving 35K+ clients
+Giving employees flexibility over where and when they work also means giving them the tools to find a healthy balance. That matters at Mapon, one of Northern Europe’s leading fleet management and asset tracking solution providers. With more than 20 years in business, 35,000+ active clients, and over 400,000 vehicles using its solutions, the company has grown into an international operation with teams and offices across Europe.
+Hybrid work and flexible hours are part of that environment, particularly in Latvia, where much of Mapon’s development team is based. DeskTime helps employees keep track of their own hours and working habits, while giving managers useful visibility into capacity and workload when they need it.
+Rather than using DeskTime primarily to monitor performance, Mapon sees it as a way to support self-accountability and maintain a healthy balance. Employees have the freedom to organize their work, while both they and their managers have a clearer picture of when workloads may need adjusting.
+How can time tracking tools help with capacity planning?
+Elizabete, part of Mapon’s People team, says one way Mapon uses DeskTime is to understand whether employees’ workloads match their available capacity.
+Managers are not expected to constantly monitor DeskTime, and HR doesn’t routinely follow individual employee data either. Instead, team leads decide when the information is useful, with some choosing to review it weekly.
+Recently, DeskTime helped highlight two very different situations at Mapon.
+“One of our team leads noticed that one employee had been working fewer hours than expected,” Elizabete tells us, “while another had been working significantly more. Both were signs that it was worth taking a closer look at their workloads.” Having this visibility makes it easier to spot when someone may have room to take on more or, on the other hand, may already have too much on their plate. It gives managers a reason to check in a
+######## pages/desktime.com__case-studies__montway.txt
+URL: https://desktime.com/case-studies/montway
+TITLE: Montway - a payroll management case study
+META: <meta name="description" content="Here’s how Montway automated payroll reporting and ensured precise hour tracking for hourly and salaried staff.">
+META: <meta property="og:title" content="DeskTime | Montway - a payroll management case study">
+Montway - a payroll management case study
+Montway transforms payroll efficiency for 20 departments
+Montway Auto Transport is one of the largest and most reputable auto transport companies in the US. Montway's mission is to deliver 5-star vehicle-shipping experience by blending innovative logistics solutions with the team's excellent service. Montway's approach has earned the company countless satisfied customers in the moving and relocation, dealership, auctions, and the OEM industry sector.
+What started in a small, 2-bedroom apartment in Chicago in 2006 has now grown into a global business with 260 employees across the US, Bulgaria, and Macedonia. In 2015 and 2016, Montway was named among the fastest-growing private companies in America by Inc.
+“We have 25 teams and 20 different departments, and for the last 2 years, everyone in the company has been using DeskTime,” says Zheni Ivanova, payroll specialist at Montway.
+The ultimate goal of Montway is to become the standard by which all vehicle-shipping is measured. In order to achieve that, Montway is very technologically inclined. “We're very pro-software, and DeskTime was the best way to track what our employees do and how productive they are.”
+Zheni reveals that there are different time keeping requirements for each department and even country. As an example, there are no overtime regulations in Bulgaria and Macedonia. Or, some employees are paid on an hourly basis, others – on a monthly salary one. Even then, DeskTime easily keeps track of every process and employee.
+For Zheni and the rest of the payroll team, DeskTime is an indispensable tool that helps keep everyone's paycheck on track.
+“Through the years, we've looked into other payroll software options and their time and attendance modules.But to be honest, we could not find a better solution for our goals than DeskTime.” Among the main reasons Montway uses DeskTime, Zheni names:
+Accurately recording working hours
+No clocking in and out every day and every break – DeskTime simply does this for every employee automatically
+From a payroll perspective – when using DeskTime, there's no need to round up or down the 
+######## pages/desktime.com__case-studies__nexus-auto-transport.txt
+URL: https://desktime.com/case-studies/nexus-auto-transport
+TITLE: How DeskTime help Nexus Auto Transport promote professional growth
+META: <meta name="description" content="Here’s how Nexus Auto Transport improved workflow clarity, remote team coordination, and employee development using DeskTime.">
+META: <meta property="og:title" content="DeskTime | How DeskTime help Nexus Auto Transport promote professional growth">
+How DeskTime help Nexus Auto Transport promote professional growth
+Productivity that puts people first
+What would you do if you had to get your car from one side of the country to another but didn't have the time to take on the drive yourself? Enter Nexus Auto Transport – a vehicle shipping company that'll get the job done for you.
+Nexus is one of the most trusted and fastest-growing car transport providers in the US, offering an all-inclusive service. The company takes particular pride in its customer service which sets them apart in the competitive industry. And Nexus approaches team management with the same mindset of putting the people front and center, too.
+“We’re a people-first company. We always have been. And with the help of tools like DeskTime, we’re able to make advancements without sacrificing the personal touch that got us where we are today.” – Nexus owner George Arkin Managing a growing global team
+The company was founded in 2015 as a single-person operation in Chicago and has now grown into a team of 77 across five countries. Nexus works with car dealers, online car auction providers, household moving services, and clients from various backgrounds. So keeping things organized in a company with so many moving parts (literally and figuratively) brings its own set of challenges where precision is always the key. DeskTime helps the company strike a balance and make strides without sacrificing the people-first approach.
+According to Arkin, DeskTime’s productivity and time-keeping tools are essential to improve teamwork, whether in their customer service department or web development team. “Without the help of DeskTime, things would be a lot harder for us. We want results, of course. But we also want to be fair and understanding of the needs of our diverse employee base.”
+Nexus has been using DeskTime to track time for seven years now, and the app has become an indispensable part of Nexus' workday. It has replaced the previous clocking in/out system , eliminating opportunities for timecard cheating. In addition to that, the automat
+######## pages/desktime.com__case-studies__nton.txt
+URL: https://desktime.com/case-studies/nton
+TITLE: NtoN Replaces Clockify with DeskTime for Global Team Tracking
+META: <meta name="description" content="See how NtoN, a 150-person outsourcing company, uses DeskTime data to improve processes and support employees.">
+META: <meta property="og:title" content="DeskTime | NtoN Replaces Clockify with DeskTime for Global Team Tracking">
+NtoN Replaces Clockify with DeskTime for Global Team Tracking
+How NtoN replaced Clockify with automatic time tracking
+Company: NtoN
+Industry: Back-office processing
+Company size: 150 employees
+Team structure: 20 globally distributed teams
+Previous tool: Clockify
+Main DeskTime use: Automatic activity tracking and operational reporting
+Time using DeskTime: One year
+NtoN is an Australian back-office processing company with approximately 150 employees working in 20 teams around the world. The company offers full-service business process outsourcing, currently managing more than 280 business functions for companies that find their resources consumed by repetitive tasks.
+Being a company that helps other businesses gain control over time and other resources, efficiency and productivity have always been essential to NtoN’s own team. Besides, managing 20 teams around the world requires more than knowing when people begin and end their workdays. The company also needs to understand which tools employees use, whether established processes are being followed, and where workflows may be breaking down.
+Prior to DeskTime, NtoN used Clockify, but its reliance on employee-entered information no longer suited the company’s needs. Looking for more consistent data and less manual input, NtoN switched to DeskTime’s automatic time tracking.
+Replacing one time tracker with another, however, is only part of the story. NtoN had to introduce a new time tracking tool to 150 people without undermining their trust. Here’s how the company did it.
+Why NtoN switched from Clockify to DeskTime
+It’s been a year since NtoN decided to replace Clockify with DeskTime. For those not familiar with the various time tracking tools out there, Clockify is a manual timesheet app known for its simplicity. For small teams the app could be a great option, but companies with many employees, especially if scattered around the world, and growing time tracking needs may require a more elaborate solution.
+That was the case for NtoN. The company needed visibility into the tools and software employees were using, a feature that Clockify
+######## pages/desktime.com__case-studies__on-the-map-marketing.txt
+URL: https://desktime.com/case-studies/on-the-map-marketing
+TITLE: On The Map Marketing - a productivity case study
+META: <meta name="description" content="Discover how DeskTime helped On The Map Marketing monitor project hours, manage remote days, and create a bonus system based on real data.">
+META: <meta property="og:title" content="DeskTime | On The Map Marketing - a productivity case study">
+On The Map Marketing - a productivity case study
+From time logs to performance visibility across 50+ employees
+On The Map Marketing is a digital marketing agency with more than 50 employees across Miami, Los Angeles and Riga, Latvia. Kaspars Milbergs is the CTO of the company, and he also runs the Riga office.
+'A few years ago, I had the chance to open the On The Map Marketing office in Riga. Today, my main tasks include making sure that all technical solutions run smoothly, creating new tools for our customers, as well as managing our team of 17 people who are based here,' he tells us.
+The company started to use time tracking software when they were opening up their Riga office. As Kaspars tells us, he, first of all, wanted to understand how much time he himself spends on different tasks, and then - for managing his remote employees.
+The team has been using DeskTime for half a year now. 'For two years, we used Timecamp, but then the software became overly complicated and we started to notice many bugs. Their web version became difficult to use - it was freezing all the time. So, we started to look for an alternative, and in January 2019, we switched to DeskTime,' Kaspars says.
+The team of On The Map Marketing uses DeskTime for productivity tracking . This way, they have a detailed view of how many hours employees have spent on projects and how to plan work ahead more effectively. Then, they use the tracked data for calculating salary bonuses. 'Every month, we pay a bonus to our most productive employee,' he explains. At the end of the month, they make productivity reports available to everyone, so people can see how have they done when compared to others. According to Kaspars, that creates positive competition between the employees, and the company benefits from that.
+They also use DeskTime to keep an eye on their remote employees. 'Our employees can have remote days, but then we want to make sure that they're actually on tasks.'
+Everyone in the team is required to work at least 35 hours a week, even though the standard workweek is 40 hours. However, the best dev
+######## pages/desktime.com__case-studies__paperlust.txt
+URL: https://desktime.com/case-studies/paperlust
+TITLE: Time tracking with DeskTime – customer story by Paperlust
+META: <meta name="description" content="Here’s how Paperlust leveraged detailed time reports to spot unproductive hours, allocate resources, and optimize processes.">
+META: <meta property="og:title" content="DeskTime | Time tracking with DeskTime – customer story by Paperlust">
+Time tracking with DeskTime – customer story by Paperlust
+How Paperlust boosted operational efficiency across 9 departments
+Meet Paperlust – an Australian stationery company where local artists create custom designs printed on a luxe paper stock. It was founded in 2014 with an idea to support local artists and bring custom paper products including wedding invitations, birthday invitations, graduation invitations, and more to people who love good design.
+Today, Paperlust is a successful company that markets their designs globally and has been named one of Westpac’s Businesses of Tomorrow for 2017 – an award that “recognizes and supports great Australian businesses today, with a clear vision for tomorrow.”
+Behind every successful company, is a team that is passionate about what they do. Paperlust's team consists of 45 employees working in 9 departments – and they all use DeskTime.
+Paperlust's technical director Arief Widyananda tells how they came to the idea of using time tracking software in their company:
+“We wanted to have a tool that is automatic and allows everyone to tap in and out of the office without the manual input of information.” “In addition to that, we were interested to see how much time our teams spend on specific projects, apps, and websites so they can find the balance between being productive and being creative.”
+And so, 2 years ago Paperlust started to use DeskTime – and they've never looked back.
+“DeskTime helps us ensure an easy clock in and tracks time anytime and anywhere, which is helpful if a company implements a remote working policy as we do.” “Additionally, when we're working with third-party clients, we can easily create a login for them so they can see how transparent and optimal our work is.”
+When asked which DeskTime features Paperlust's team enjoys the most Arief says that it's the report feature where you can create detailed reports without much effort.
+Arief has also noticed that DeskTime helps many of the company's departments. “From the project management perspective, we can see how long our teams have been working on specific tasks.
+######## pages/desktime.com__case-studies__riseup-labs.txt
+URL: https://desktime.com/case-studies/riseup-labs
+TITLE: How Riseup Labs boosted its productivity during the pandemic
+META: <meta name="description" content="Here’s how Riseup Labs boosted team efficiency, optimized workflows, and increased punctuality by 50% using DeskTime.">
+META: <meta property="og:title" content="DeskTime | How Riseup Labs boosted its productivity during the pandemic">
+How Riseup Labs boosted its productivity during the pandemic
+Smarter work, higher productivity
+Meet Riseup Labs – an information and communications technology company based in Bangladesh with over a decade of experience creating different tech solutions (websites, apps, games, and much more). Founded in 2009, Riseup Labs now employs a team of around 80, which includes software engineers, digital marketing experts, designers, and more. The team is spread across 11 departments, and since the company offers a wide range of services, everyone's typical workday can look quite different from their colleagues.
+Adjusting to the changes brought by the pandemic
+So how do you make sure that everyone stays on the same page when it comes to projects and maintains productivity throughout the work week? This question became particularly urgent for Riseup Labs when the COVID-19 pandemic started. Like so many other companies worldwide, the team at Riseup Labs had to suddenly and rapidly shift to remote work. This kind of unexpected change naturally came with lots of adjustments, and one thing that became apparent was that employee productivity experienced a dip when they started working from their homes.
+Khondaker Zahin Fuad , Riseup Labs Digital Marketing Executive, says that once the managers realized that they needed to identify the cause of the productivity decrease, they decided that time tracking software could be the answer. When it came to choosing the right tool for their team, Riseup Labs listened to a personal recommendation. The need to understand what was happening with the team was urgent, so there wasn't much time for lengthy research. Instead, Riseup Labs relied on word-of-mouth: a friend of the company's CEO had experience using DeskTime in his own company and suggested it as a tool that could bring results.
+So in April 2021, Riseup Labs started using DeskTime to see if it could help change the downward productivity trend. Asked how DeskTime was introduced to the team and what their reactions were, Khondaker says that while the introduction was quite sudden, everyone qu
+######## pages/desktime.com__case-studies__roadgames.txt
+URL: https://desktime.com/case-studies/roadgames
+TITLE: How Roadgames made time tracking employee-friendly
+META: <meta name="description" content="Using DeskTime, Roadgames implemented flexible hours, workations, and productive time tracking for all employees.">
+META: <meta property="og:title" content="DeskTime | How Roadgames made time tracking employee-friendly">
+How Roadgames made time tracking employee-friendly
+Trust and flexibility powered by automatic time tracking
+Imagine your office job was creating adventures all over the world. Sounds like the dream, right? But let’s be honest, for most of us, that’s as far as it will go—unless, of course, you’re on the Roadgames team. In that case, developing exciting adventures is your daily mission.
+Whether it’s for team-building events, company anniversaries, or just friends looking to do something fun together, Roadgames combines fun scavenger hunts with educational tours and allows people to see their city through a new lens.
+But Roadgames isn’t just creating feel-good experiences for other teams; as a company, it strives to build the best possible working environment for its employees, too. Since its founding, Roadgames has worked to introduce many employee well-being policies for its team. Believe it or not, many of these policies rely on effective time tracking.
+Yeah, we know what you’re thinking. Can a time tracking app really benefit employees? It can, actually, and more than you’d expect. But let’s not get ahead of ourselves. Let’s start at the beginning.
+Where it all started
+Much like DeskTime, Roadgames began as an internal tool meant only for the employees of a Riga-based IT hub called Draugiem Group. Over the years, it transformed into an independent company with a small but passionate team and a worldwide presence. Right now, the company provides scavenger hunt games all across the globe, from Latvia to Egypt, from Spain to Japan.
+From the very beginning, Roadgames knew DeskTime and time tracking would be part of the company culture. But the team wasn’t looking for a way to micromanage, in fact, it was the exact opposite.
+“We see it as a self-accountability tool,” says Dāvis Kurēns, the CEO of Roadgames, “Something that allows employees to keep track of when they arrive to the office, or how many hours they’ve worked.”
+Dāvis himself admits that he wasn’t always such a fan of DeskTime. When he began working at Roadgames two years ago, he was initially skeptical.
+“When I heard of time tracking, my 
+######## pages/desktime.com__case-studies__setupad.txt
+URL: https://desktime.com/case-studies/setupad
+TITLE: Improving & maintaining productivity - a case study
+META: <meta name="description" content="DeskTime allows Setupad to track performance and support employee development across two offices in different countries.">
+META: <meta property="og:title" content="DeskTime | Improving & maintaining productivity - a case study">
+Improving & maintaining productivity - a case study
+Maintaining 80%+ productivity across remote teams
+'Being able to know where my employees are and how they're doing has always been important to me,' says Toms Panders, the co-founder and CEO of Setupad.
+Setupad is a marketing and advertising company based in Europe. The team of 6 is split among two locations in two countries, which, according to Toms, makes many everyday team managing tasks challenging.
+'With two offices in different countries, it’s physically impossible to be in two places at once. As soon as we opened our second location, team management became a challenge, and I started to feel that I'm losing control over what's going on in the company.'
+That's when Toms decided to look for time tracking and employee management software.
+Choosing the right time tracking software
+'As a manager, I wanted to know if my employees are at work and if they're working on the right tasks. But how do you do it when you're located in another office, hundreds of kilometers away from your team members?
+Of course, I could have asked my employees every day: 'Hey, are you at work today? are you in the office today?' But that would be just annoying! I didn't want my team to feel insecure, and I didn't want to come out as a control freak.
+I made a decision to use a time tracking software that would let me unobtrusively check on my team and see if my employees are at work during our office hours.' Before choosing DeskTime, Toms tried other time tracking software. In the end, he went with DeskTime for several reasons:
+'I personally tried some time tracking software to understand how each of them works and what data each app gathers. What I was looking for was software that would punch in employee arrival and leaving times, as well as track computer using time.
+After some research, I decided to stick with DeskTime. It had all the features that I was looking for, such as app and URL tracking, reports, etc.
+With DeskTime I was able to see how productive my employees are and how much work time they spend on work-related applications - that’s something many 
+######## pages/desktime.com__case-studies__skrivanek.txt
+URL: https://desktime.com/case-studies/skrivanek
+TITLE: How Skrivanek got its team on board with time tracking
+META: <meta name="description" content="With DeskTime, Skrivanek gave employees flexible, remote work freedom while gaining accurate insights into performance and time management.">
+META: <meta property="og:title" content="DeskTime | How Skrivanek got its team on board with time tracking">
+How Skrivanek got its team on board with time tracking
+Empowering productivity anywhere
+Choosing the right words can make all the difference—nobody knows that better than Skrivanek .
+Skrivanek , a tech-powered language solutions agency, has been in business for around 30 years, providing translation and localization services in more than 80 languages. During those three decades, it has grown from a small office in Prague to a global leader in the language industry, with a team of 300 employees and branches in 10+ countries.
+With that kind of scale, it’s crucial to Skrivanek that employees perform to the highest standards while also having the freedom to work at a time and place they feel most productive. But here’s the inevitable question: how can you allow your employees to work from anywhere without compromising their productivity?
+The answer? DeskTime.
+How did Skrivanek decide on DeskTime?
+While most companies began thinking about productivity and time tracking only after the pandemic hit, Skrivanek was way ahead of the game. How long has it been since Skrivanek introduced DeskTime?
+“It’s been with us for so long that it’s already hard to remember,” says Arturs, the company’s Business Development Manager, “We started using DeskTime long before the pandemic started. I suppose it’s been more than five years.”
+He says the company outlined three main reasons for introducing time tracking:
+Skrivanek wanted to give its employees more flexibility and allow them to work from home. A time tracking app allowed employees to work from anywhere they felt comfortable.
+A time tracking app would be a safety net for managers, allowing them to monitor everyone’s work habits. Managers could ensure people started their shifts (especially crucial for customer service team members) at the agreed-upon time and check if someone was overworked or slacking off a little too much.
+It was enormously important to Skrivanek that DeskTime worked as a self-tracking tool rather than a disciplinary tool. Employees could see their own productivity habits and understand what tasks took up the mo
+######## pages/desktime.com__case-studies__truesix.txt
+URL: https://desktime.com/case-studies/truesix
+TITLE: DeskTime helps us earn more with confidence
+META: <meta name="description" content="DeskTime helps this content marketing agency track hours, justify billable work, and optimize schedules without controlling employees.">
+META: <meta property="og:title" content="DeskTime | DeskTime helps us earn more with confidence">
+DeskTime helps us earn more with confidence
+Using DeskTime to boost billing transparency
+“We don't use time tracking to control our employees. Rather, it's a tool that boosts self-accountability and billing transparency,“ say Krista Krumina and Julia Gifford, the co-founders of TrueSix.
+TrueSix is a strategic content marketing and advertising agency based in Latvia, North Europe. The company was born when the co-founders Krista Krumina and Julia Gifford decided to quit working solo and join forces, combining their knowledge and experience in content creating and international PR.
+Now, the team has doubled its size, found its home in a coworking space in the heart of Riga, the capital of Latvia, and has been using DeskTime for two years to track time and expenses, as well as boost productivity.
+“We used DeskTime for time tracking right from the get-go - even when it was just the two of us working in Julia's apartment,” reveals Krista. “We found that it's a great way to comprehend how many hours we've put in for all the different tasks. And tracking time with DeskTime helps tremendously to write out accurate invoices to our clients.”
+Transparent invoices without the guilt
+One of the features that Krista and Julia appreciate the most is the fact that time tracking with DeskTime is 100% automatic and doesn't require any manual input at all.
+“Another useful feature is document title tracking that lets you know which tasks your team is working on - and how many hours you've spent on that specific task,” says Krista. “As writers, we spend a lot of our time using Google Docs. But instead of just displaying the total time spent on that program, DeskTime will record titles of documents and time spent on each one of them individually.”
+Julia agrees that DeskTime greatly improves billing transparency. While you know how many hours were spent on that especially tricky landing page, the client isn't aware of that - and they want proof. “So, in a way, DeskTime allows us to justify billable hours and eventually earn more without us feeling guilty,” Julia adds jokingly.
+Regaining control of your schedule
+“I
+######## pages/web.archive.org__web__2025__https_____desktime.com__case-studies__delonix.txt
+URL: https://web.archive.org/web/2025/https://desktime.com/case-studies/delonix
+TITLE: Attendance management with DeskTime - a case study
+META: <meta name="description" content="">
+META: <meta property="og:title" content="DeskTime | Attendance management with DeskTime - a case study">
+----
+Attendance management with DeskTime - a case study
+Support
+DeskTime
+🍪 Allow functional cookies?
+We use Zendesk messaging software for easy communication with our clients. Zendesk uses cookies to interact with website visitors and provide chat history.
+See our Privacy Policy for more info. You can change your cookie preferences at any time in our Cookie Settings .
+Allow & continue to chat
+Features
+Time Tracking
+Productivity insights
+Integrations & API
+Analytics & reports
+Workforce management
+Time Tracking
+Automatic time tracking
+Effortless time tracking with our desktop app
+Project time tracking
+Track time and progress of specific tasks and projects
+Manual and offline time tracking
+Track time manually and see when employees take breaks from working
+Private time
+Let users take a break from tracking when needed
+See all features
+Productivity insights
+Productivity calculation
+Get data about your employees’ productivity
+Screenshots
+Get proof-of-work in cases of questionable productivity or integrity
+URL & app tracking
+See what sites and apps your employees visit
+Document title tracking
+Keep track of document titles and email subjects
+Customizable settings
+Personalize DeskTime to fit your exact needs
+Notifications
+Receive notifications about important activity updates
+See all features
+Integrations & API
+Jira
+Asana
+Outlook
+Google Calendar
+GitLab
+Trello
+Zapier
+More about integrations & API
+Analytics & reports
+Reports
+Get in-depth data about your team’s performance
+Admin dashboard
+Gain insights about your employees' work hours and productivity levels
+User dashboard
+See your team’s overall activities and performance
+Exports
+Download and save tracked data
+See all features
+Workforce management
+Shift scheduling
+Plan and manage employee shifts in one place
+Absence calendar
+See who’s sick, on vacation, OOO and more
+Attendance management
+See how much time your employees spend working
+Employee directory
+Easily find another colleague’s contact information
+See all features
+Solutions
+For managers
+Performance evaluation
+Employee monitoring
+Transparency & accountability
+Oversee remote work
+Productivity & efficiency
+For employees
+Employee well-being
+Work-life balance
+Burnout prevention
+Hybrid w

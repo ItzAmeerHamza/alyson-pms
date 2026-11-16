@@ -23,7 +23,11 @@ import {
   workDayBoundsMs,
 } from '../lib/work-timezone';
 import { sqlPausedVisibleThrough } from '../lib/paused-roster';
-import { matchesTeamLeave, TEAM_LEAVE_ALL_TEAMS } from '../leave/leave-days';
+import {
+  matchesTeamLeave,
+  publicHolidayDateKeys,
+  TEAM_LEAVE_ALL_TEAMS,
+} from '../leave/leave-days';
 import {
   PACING_LEAVE_HOURS_PER_DAY,
   PACING_TARGET_HOURS_PER_WORKDAY,
@@ -31,10 +35,13 @@ import {
   addCalendarDays,
   computePacingRowMetrics,
   employmentWeekdays,
+  excludeDateKeys,
   lastDayOfMonth,
   leaveHoursFromFraction,
   mondayKey,
+  pacingTargetForWeekdays,
   round2,
+  sampleDaysWithHolidayWork,
   weeklySampleKeys,
   weekdayKeysInclusive,
 } from './pacing-math';
@@ -228,15 +235,18 @@ export class PacingService {
   }
 
   /**
-   * Leave day-fraction map per user (personal ∪ team, max fraction per day).
-   * Credit hours = fraction × 8 (HR pacing leave rule).
+   * Personal and non-holiday team leave, plus public-holiday weekdays per user.
+   * Holiday weekdays are not a leave credit. They drop out of the hours target.
    */
   private async fetchLeaveFractionByUserDay(
     user: ScopedAuthUser,
     employees: EmpRow[],
     rangeStart: string,
     rangeEnd: string,
-  ): Promise<Map<string, Map<string, number>>> {
+  ): Promise<{
+    leaveFrac: Map<string, Map<string, number>>;
+    holidayDays: Map<string, Set<string>>;
+  }> {
     const scope = workspaceScope(user, 'e');
     const personal = await this.db.query<{
       user_id: string;
@@ -261,10 +271,11 @@ export class PacingService {
       location: string;
       country: string | null;
       team: string;
+      leave_type: string;
       start_date: string;
       end_date: string;
     }>(
-      `SELECT t.location, t.country, t.team,
+      `SELECT t.location, t.country, t.team, t.leave_type,
               t.start_date::text AS start_date,
               t.end_date::text AS end_date
          FROM time_doctor.team_leave_events t
@@ -298,8 +309,20 @@ export class PacingService {
       for (const day of days) bump(ev.user_id, day, perDay);
     }
 
+    const holidayDays = new Map<string, Set<string>>();
+    const otherTeam = team.rows.filter((ev) => ev.leave_type !== 'holiday');
+    const holidays = team.rows
+      .filter((ev) => ev.leave_type === 'holiday')
+      .map((ev) => ({
+        country: ev.country,
+        location: ev.location,
+        team: ev.team === TEAM_LEAVE_ALL_TEAMS ? TEAM_LEAVE_ALL_TEAMS : ev.team,
+        startDate: ev.start_date.slice(0, 10),
+        endDate: ev.end_date.slice(0, 10),
+      }));
+
     for (const emp of employees) {
-      for (const ev of team.rows) {
+      for (const ev of otherTeam) {
         if (
           !matchesTeamLeave({
             employeeCountry: emp.country,
@@ -318,9 +341,18 @@ export class PacingService {
           bump(emp.id, day, 1);
         }
       }
+      const days = publicHolidayDateKeys({
+        employeeCountry: emp.country,
+        employeeLocation: emp.location,
+        employeeTeam: emp.department,
+        holidays,
+        rangeStart,
+        rangeEnd,
+      });
+      if (days.length) holidayDays.set(emp.id, new Set(days));
     }
 
-    return byUser;
+    return { leaveFrac: byUser, holidayDays };
   }
 
   private sumMapDays(dayMap: Map<string, number> | undefined, days: string[]): number {
@@ -331,8 +363,9 @@ export class PacingService {
   }
 
   /**
-   * Leave is a floor per day: credit only the hours still needed after tracked time.
-   * Work 2h on a holiday → +6h pacing credit (to 8h). Work 9h → +0h, keep the 9h.
+   * Personal leave credit is added in full. Tracked time is kept.
+   * Work 2h on an 8h leave day → +8h, day total 10h. Other adjustments sit on top.
+   * Public holidays never reach here: they are removed from the target instead.
    */
   private leaveHoursForDays(
     leaveMap: Map<string, number> | undefined,
@@ -377,7 +410,7 @@ export class PacingService {
     const employees = await this.loadEmployees(user, weekSunday, workTz);
     const tracked = await this.fetchTrackedByUserDay(user, weekMonday, rollup, workTz);
     const otherAdj = await this.fetchOtherAdjByUserDay(user, weekMonday, rollup);
-    const leaveFrac = await this.fetchLeaveFractionByUserDay(
+    const { leaveFrac, holidayDays } = await this.fetchLeaveFractionByUserDay(
       user,
       employees,
       weekMonday,
@@ -389,26 +422,32 @@ export class PacingService {
         const started = emp.started_on;
         if (started && started > rollup) return null;
 
+        const holidays = holidayDays.get(emp.id) ?? new Set<string>();
         const empElapsed = employmentWeekdays(elapsedWeekdays, started);
-        const empRemaining = employmentWeekdays(remainingWeekdays, started);
-        const empSample = employmentWeekdays(sampleKeysBase, started);
-        // Weekly target stays 35 unless employee started mid-week → prorate by employment weekdays in Mon–Fri
-        const empWeekWorkdays = employmentWeekdays(
-          weekdayKeysInclusive(weekMonday, weekFriday),
-          started,
+        const empRemaining = excludeDateKeys(
+          employmentWeekdays(remainingWeekdays, started),
+          holidays,
         );
-        const targetHours =
-          empWeekWorkdays.length >= 5
-            ? WEEKLY_HOURS_TARGET
-            : round2(empWeekWorkdays.length * PACING_TARGET_HOURS_PER_WORKDAY);
+        const empSample = sampleDaysWithHolidayWork(
+          employmentWeekdays(sampleKeysBase, started),
+          holidays,
+          (day) => tracked.get(emp.id)?.get(day) ?? 0,
+        );
+        const empWeekWorkdays = excludeDateKeys(
+          employmentWeekdays(weekdayKeysInclusive(weekMonday, weekFriday), started),
+          holidays,
+        );
+        const targetHours = empWeekWorkdays.length >= 5
+          ? WEEKLY_HOURS_TARGET
+          : pacingTargetForWeekdays(empWeekWorkdays.length);
 
-        if (targetHours <= 0) return null;
+        if (targetHours <= 0 && holidays.size === 0) return null;
 
         const trackedMap = tracked.get(emp.id);
         const adjMap = otherAdj.get(emp.id);
         const leave = this.leaveHoursForDays(
           leaveFrac.get(emp.id),
-          empElapsed,
+          excludeDateKeys(empElapsed, holidays),
           trackedMap,
         );
 
@@ -442,6 +481,13 @@ export class PacingService {
           started_on: started,
           manager_id: emp.manager_id,
           leaveDays: leave.leaveDays,
+          holidayDates: [...holidays].sort(),
+          // Already inside hoursWorkedLogged; shown on its own so HR can see
+          // (and reward) holiday work. Never added on top.
+          holidayHoursWorked: this.sumMapDays(
+            trackedMap,
+            empElapsed.filter((d) => holidays.has(d)),
+          ),
           remainingWorkDays: empRemaining.length,
           elapsedWorkDays: empElapsed.length,
           totalWorkDays: empWeekWorkdays.length,
@@ -523,7 +569,7 @@ export class PacingService {
     const employees = await this.loadEmployees(user, periodEnd, workTz);
     const tracked = await this.fetchTrackedByUserDay(user, periodStart, rollup, workTz);
     const otherAdj = await this.fetchOtherAdjByUserDay(user, periodStart, rollup);
-    const leaveFrac = await this.fetchLeaveFractionByUserDay(
+    const { leaveFrac, holidayDays } = await this.fetchLeaveFractionByUserDay(
       user,
       employees,
       periodStart,
@@ -535,24 +581,35 @@ export class PacingService {
         const started = emp.started_on;
         if (started && started > rollup) return null;
 
-        const empAll = employmentWeekdays(allWeekdays, started);
+        const holidays = holidayDays.get(emp.id) ?? new Set<string>();
+        const empAll = excludeDateKeys(employmentWeekdays(allWeekdays, started), holidays);
         const empElapsed = employmentWeekdays(elapsedWeekdays, started);
-        const empRemaining = employmentWeekdays(remainingWeekdays, started);
-        const targetHours = round2(empAll.length * PACING_TARGET_HOURS_PER_WORKDAY);
-        if (targetHours <= 0) return null;
+        const empRemaining = excludeDateKeys(
+          employmentWeekdays(remainingWeekdays, started),
+          holidays,
+        );
+        const targetHours = pacingTargetForWeekdays(empAll.length);
+        if (targetHours <= 0 && holidays.size === 0) return null;
 
         const trackedMap = tracked.get(emp.id);
         const adjMap = otherAdj.get(emp.id);
         const leave = this.leaveHoursForDays(
           leaveFrac.get(emp.id),
-          empElapsed,
+          excludeDateKeys(empElapsed, holidays),
           trackedMap,
         );
 
         const hoursWorkedLogged = this.sumMapDays(trackedMap, empElapsed);
         const otherAdjustmentHours = this.sumMapDays(adjMap, empElapsed);
 
-        const dailyHoursSample = empElapsed.map((d) =>
+        const dailyHoursSample = sampleDaysWithHolidayWork(
+          empElapsed,
+          holidays,
+          (day) =>
+            (trackedMap?.get(day) ?? 0) +
+            (leave.byDay.get(day) ?? 0) +
+            (adjMap?.get(day) ?? 0),
+        ).map((d) =>
           round2(
             (trackedMap?.get(d) ?? 0) +
               (leave.byDay.get(d) ?? 0) +
@@ -579,6 +636,13 @@ export class PacingService {
           started_on: started,
           manager_id: emp.manager_id,
           leaveDays: leave.leaveDays,
+          holidayDates: [...holidays].sort(),
+          // Already inside hoursWorkedLogged; shown on its own so HR can see
+          // (and reward) holiday work. Never added on top.
+          holidayHoursWorked: this.sumMapDays(
+            trackedMap,
+            empElapsed.filter((d) => holidays.has(d)),
+          ),
           remainingWorkDays: empRemaining.length,
           elapsedWorkDays: empElapsed.length,
           totalWorkDays: empAll.length,
@@ -682,6 +746,8 @@ export class PacingService {
           ? (r as { monthProgressPct?: number }).monthProgressPct
           : undefined,
       status: r.status,
+      holidayDates: Array.isArray(r.holidayDates) ? r.holidayDates : [],
+      holidayHoursWorked: Number(r.holidayHoursWorked) || 0,
     }));
 
     const mail = buildPacingDigestEmail({

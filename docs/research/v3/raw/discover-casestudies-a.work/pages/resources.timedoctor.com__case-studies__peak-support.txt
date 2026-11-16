@@ -1,0 +1,218 @@
+URL: https://resources.timedoctor.com/case-studies/peak-support/
+TITLE: Remote team operations evolution for Peak Support :Time Doctor
+META: <meta name="description" content="Discover how Time Doctor enhanced visibility into remote team productivity for Peak Support, a leader in customer support and BPO." />
+META: <meta property="og:title" content="Remote team operations evolution for Peak Support :Time Doctor" />
+META: <meta property="og:description" content="Discover how Time Doctor enhanced visibility into remote team productivity for Peak Support, a leader in customer support and BPO." />
+META: <meta property="article:published_time" content="2023-12-19T07:30:16+00:00" />
+META: <meta property="article:modified_time" content="2024-08-15T01:52:22+00:00" />
+LD: datePublished=2023-12-19T07:30:16+00:00
+LD: dateModified=2024-08-15T01:52:22+00:00
+LD: datePublished=2023-12-19T07:30:16+00:00
+LD: dateModified=2024-08-15T01:52:22+00:00
+----
+Remote team operations evolution for Peak Support :Time Doctor 
+ View a demo 
+ Product 
+ How it works 
+ Feature overview 
+ Integrations 
+ Get started 
+ Use case 
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Solutions 
+ Industry 
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Workforce 
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Pricing 
+ Resources 
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Login 
+ Get a demo 
+ Try it free 
+ Resources 
+ Case Studies 
+ How Time Doctor became a game-changer for Peak Support’s remote operations
+ Case Studies 
+ How Time Doctor became a game-changer for Peak Support’s remote operations
+ At a glance
+ Peak Support offers customer support, sales and back-office operations, and business process outsourcing, delivered by a 100% remote team located in both the Philippines and the U.S. The company’s leadership team met while working at an acclaimed business messaging app that was eventually acquired: an experience that cemented their belief that prompt customer service is a valuable business asset.
+ Founded
+ 2015
+ Company Size
+ 101 – 500
+ Industry
+ Business Process Outsourcing
+ Location
+ US
+ Work Type
+ Remote
+ The challenges
+ Peak Support, a multinational BPO, wanted to accurately understand how its remote team spend their time so they could eliminate waste, boost productivity and output, and better prove their value to their clients.
+ With a remote-first model in place since it launched in 2015, Peak Support and its clients experienced almost no disruption due to the COVID-19 pandemic. Instead, it decided to double- down on its efforts to streamline workflows, enhance service quality, and improve accountability and transparency for clients.
+ Increased visibility to prevent client churn
+ Chief Financial Officer Daniel Gutierrez said Peak Support needed increased visibility of the productivity and outputs being achieved by its remote employees working across multiple shifts in order to identify and close any performance gaps.
+ Accurate time tracking to demonstrate value
+ Peak Support also wanted more accurate time tracking data to demonstrate value when billing for its outsourcing services, to both retain clients and secure new business. Gutierrez said better operational metrics was another priority, to optimize company-wide performance, costs, and processes.
+ The solutions
+ Peak Support adopted Time Doctor in 2021, with an initial test that included around 100 team members. Compared to other productivity monitoring tools it had tried, Time Doctor more closely dovetailed with Peak Support’s existing team management and client billing processes due to its ease of integration and built-in customizable reports.
+ Not only do team leads find the solution easy-to-use to monitor a remote workforce, proof of work data supports transparent billing that inspires client loyalty.
+ Peak Support has improved visibility into how much time staff spend on meaningful (and billable!) actions for clients, on offline tasks or in meetings, or on non-profitable admin chores. Peak support also uses Time Doctor to measure outputs such as the number of hours spent on each unique billing code or line of business, which can be customized to each client.
+ It’s very important to be able to track productivity and Time Doctor enables us to do this in a way that relates directly back to our clients. We can not only show them the hours worked but there is a level of confidence they can have knowing that we can verify productivity levels during those hours.
+ Daniel Gutierrez
+ Peak Support
+ The results
+ Increased accountability has led to widespread productivity and performance gains. Peak Support has used insights from Time Doctor to
+ Simplify payroll compliance
+ Reliable data about when people actually worked is exported from Time Doctor to a custom solution that identifies different pay rates for overtime, holidays and other leave or tax requirements specific to the rules that apply in each employee’s location.
+ Improve people and performance management
+ Automated visibility of productive time and inactive time, work patterns, and outputs, helps team leaders to assess quantifiable aspects of a worker’s performance and identify time management issues so they can initiate helpful conversations and interventions.
+ Reassure clients with transparent billing
+ Being able to share reports from Time Doctor that account for every hour billed helps Peak Support to maintain trust with clients. Perceived value is further boosted by the fact that Time Doctor enables time to be categorised against multiple projects or lines of business, for faster internal cost allocation by clients.
+ Having a non-intrusive means to see how employees spend their workday lets Peak Support evaluate the contribution of each employee, actively manage time-critical work, and discover and correct performance gaps. Automated alerts help managers do so effectively.
+ Precise time tracking also offers a practical way for Peak Support to enhance the employee experience by flagging potential burnout and ensuring people are paid fairly and recognized for what they do.
+ With validation that Time Doctor makes sense for its business long-term, Gutierrez said Peak Support would expand the solution’s adoption across its full workforce.
+ Giving our leads the ability to access that data and follow up with their team members is improving productivity across the board.
+ Daniel Gutierrez
+ Peak Support
+ Related Case Studies
+ View all Case Studies 
+ Case Studies 
+ Leading US health insurance company boosts productivity and saves $1M with Time Doctor 
+ Case Studies 
+ Healthcare industry outsourcer Dentistry Support® sees 85% increase in employee efficiency with Time Doctor 
+ Case Studies 
+ How SmartBuyGlasses Enhanced Productivity and Payroll Management with Time Doctor 
+ Case Studies 
+ Eufonie achieves 30% productivity boost — How Time Doctor transformed remote work management 
+ Other Resource Types
+ Webinars 
+ Podcasts 
+ Guides & Reports 
+ Customer Training 
+ Products
+ Features 
+ Pricing 
+ Integrations 
+ Get started 
+ Use Case
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Time Tracking 
+ Payroll 
+ Time Management 
+ Screen Monitoring 
+ Attendance 
+ Accountability 
+ Profitability 
+ Empowering Employees 
+ Industry
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Workforce Type
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Resources
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Benchmarking Tool 
+ Help
+ Contact us 
+ Help Center 
+ FAQs 
+ Uptime Status 
+ Company
+ About us 
+ Jobs 
+ Partner Program 
+ Privacy Policy 
+ Terms of Service 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube 
+ Products
+ Features 
+ Pricing 
+ Integrations 
+ Get started 
+ Use Case
+ Productivity Analytics 
+ Employee Monitoring 
+ Workforce Analytics 
+ Distributed Workforce 
+ Time Tracking 
+ Payroll 
+ Time Management 
+ Screen Monitoring 
+ Attendance 
+ Accountability 
+ Profitability 
+ Empowering Employees 
+ Industry
+ CX & Contact Center 
+ BPO & KPO 
+ Staff Leasing 
+ Technology Companies 
+ Agencies 
+ Resources
+ Resources Hub 
+ Case studies 
+ Blog 
+ Webinars 
+ Guides 
+ Podcasts 
+ Benchmarking Tool 
+ Company
+ About us 
+ Jobs 
+ Partner Program 
+ Privacy Policy 
+ Terms of Service 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube 
+ Workforce Type
+ Remote 
+ Hybrid 
+ In-Office 
+ Enterprise 
+ Help
+ Contact us 
+ Help Center 
+ FAQs 
+ Uptime Status 
+ LinkedIn 
+ Facebook 
+ Instagram 
+ X 
+ YouTube

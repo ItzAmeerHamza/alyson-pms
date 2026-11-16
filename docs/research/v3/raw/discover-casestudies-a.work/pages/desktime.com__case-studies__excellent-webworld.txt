@@ -1,0 +1,533 @@
+URL: https://desktime.com/case-studies/excellent-webworld
+TITLE: Doubling productivity with DeskTime: a case study
+META: <meta name="description" content="Here’s how Excellent WebWorld accelerated productivity 2x and managed 900+ projects more efficiently.">
+META: <meta property="og:title" content="DeskTime | Doubling productivity with DeskTime: a case study">
+META: <meta name="msvalidate.01" content="7E7149BB0536D28D683B219D73FAAF68" />
+----
+Doubling productivity with DeskTime: a case study 
+ Support 
+ DeskTime
+ 🍪 Allow functional cookies?
+ We use Zendesk messaging software for easy communication with our clients. Zendesk uses cookies to interact with website visitors and provide chat history.
+ See our Privacy Policy for more info. You can change your cookie preferences at any time in our Cookie Settings .
+ Allow & continue to chat
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing
+ Demo
+ Intro call
+ Start free trial
+ Log in
+ en 
+ English
+ Español
+ document.getElementsByTagName('body')[0].classList.toggle('overflow-hidden'))"
+ >
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing 
+ Demo 
+ Intro call 
+ Start free trial
+ Log in
+ From time loss to 100% productivity
+ Excellent WebWorld is an award-winning, full-stack app development company, established in 2011. They’ve since made 600+ clients happy and carried out more than 900 projects. Excellent WebWorld (EWW) is based in India and the USA, yet works with clients from the UK, Australia, Hong Kong, and Canada as well. Their clients vary from startups to established brands, a diversity that they can serve thanks to the highly customized approach they take with each client.
+ Alongside being a passionate team that aims for nothing but excellent results and client satisfaction, EWW keeps its employees' well-being their top priority:
+ “We understand that if you are going to work 8 hours a day in one place, that place needs to be motivating”. To bring more motivation to its employees, the company decided to implement time tracking software as a part of their work organization. DeskTime was their top choice.
+ Why high productivity is a must in the IT industry
+ The company has been using the DeskTime app since December 2019. By now, nearly all of the company’s employees (65 out of 75) are using it. EWW has 9 different teams and time tracking is used by all of them. Time tracking helps to make sure that the teams perform as efficiently as they possibly can.
+ When asked about why the company chose to start tracking time at work, EWW Digital Marketing Manager, Sanjay Shah, said that for a company working in the IT industry, it was crucial to make the most out of every second of their working time. Their particular industry comes along with a relatively high level of competition. As more than 40,000 IT companies are present in India, that clearly describes the competitive level. As a result, the team's performance needed to be efficient, otherwise, they ran the risk of losing clients to other skilful companies. That’s why it was clear that Excellent WebWorld needs time tracking software.
+ There were quite a few options, but DeskTime caught EWW’s eye immediately. Asked about how they got started, Sanjay tells us that the system administrator (who was tasked with finding a suitable time tracking software for the company) didn't even make use of the 14-day free trial – they signed up right away.
+ “And since that, our productivity levels have increased twofold”. A spike in productivity and motivated workers
+ The company has a well-established work/break policy to guide their day. A typical workday is 9 hours long which includes a one-hour long break. Before implementing DeskTime, they found that the generous break time tended to be taken advantage of and significantly lengthened. Without available data, they were unable to address this issue with their team. Although the pattern was clear – the abuse of break time left a negative effect on workers’ accomplishments and work performance overall.
+ After implementing DeskTime, the average productive time of the company’s employees has increased significantly. Having time tracking software as a part of their daily routine has mobilized EWW’s employees for more efficient work performance. Sanjay adds that over the last 3 months, the company’s productivity rate has grown to 100% – a dream come true for any employer.
+ “Through DeskTime, we aim to increase consistency, productivity, opportunities and skills of our employees.” In terms of employees’ reaction to time tracking, Sanjay tells us that now, after employees have seen the increased productivity and efficiency of their performance, DeskTime has won over the team. Despite a few critics, Sanjay says that at the end of the day they all see the positive outcome of using DeskTime.
+ But for EWW, employee motivation doesn't stop at 100% productivity. The company pays close attention to its employees’ comfort and well-being when it comes to their office environment . At the end of January 2020, EWW celebrated its move to a brand new office. The new space was designed to boost employees’ creativity, add more joy to their work routine, and overall make them feel like home. The crowning jewel – the games room outfitted with gaming consoles, chess, board games, and more. How awesome is that?
+ Employee awareness benefits the quality of work
+ Excellent WebWorld's favorite DeskTime feature is – automated screenshots . Sanjay says that it helps their employees to remain conscious of their work. The consciousness while working has significantly raised the quality of the company’s output: “You can say that there are two main benefits – one is the security of work and the other one is productivity”.
+ “We use DeskTime not to be strict with the employees, but to ease their work management” - Paresh Sagar, the CEO of Excellent Webworld The automated screenshots feature is preferred by EWW for another reason. Sanjay says that it’s highly effective when it comes to spotting employees who are struggling with their work tasks and maybe lack the nerve to ask for guidance and mentoring. This DeskTime feature is used as a helping hand to notice such situations. The company then can assist its employees with their performance, which, in the long run, results in higher self-esteem of those working at EWW. Moreover, Sanjay tells us that employees tend to feel more goal-oriented as they feel taken care of and valued.
+ The company further added that sometimes it may happen that high performers of the company may go unnoticed, and that’s where DeskTime helped them a lot. Thanks to tracked work time activities, praise and incentives can be accordingly awarded. Sanjay says that DeskTime helped them to make fair decisions on the working patterns of employees.
+ Work in the time of coronavirus
+ As for many companies around the globe, EWW has been taken by surprise by the COVID-19 virus and its accompanying restrictions. Consequently, they've had to move their operations out of the office. Sanjay says that having already been DeskTime users was a significant help in transitioning to a remote environment.
+ “The DeskTime was best put to use during the COVID-19 lockdown as the whole staff has switched to remote work.” Excellent WebWorld was able to continue serving their clients despite a global pandemic, thanks to both the digital nature of the business, as well as because the team was already familiar with DeskTime and was able to swiftly move to a remote environment, maintaining their in-office productivity goals.
+ In conclusion
+ Excellent WebWorld has shown that the combination of their approach towards clients and a goal-oriented workforce brings results. The company was named Top Mobile App Development Company by Clutch in 2019, Top App Development Company in Canada by GoodFirms, and Best eCommerce Development Company by TopDevelopers. And with the soaring productivity rates that EWW has attained after starting to use DeskTime, there is undoubtedly more success to come.
+ Using DeskTime has helped Excellent WebWorld employees mobilize their performance and make sure that their work quality is on-point. In the IT industry, where maintaining high levels of productivity and efficiency can result in standing out from a busy crowd, a helping hand with raising performance levels can be crucial. EWW is sure that time tracking can only benefit in this case, and that DeskTime has played an instrumental role in raising company productivity levels to 100%.
+ A time tracker that won’t interrupt your team’s workflow. Ever.
+ Forget manual entries and distractions. With DeskTime, time tracking runs on autopilot—zero effort needed.
+ Start free trial
+ Book an Intro
+ Features
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Solutions
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Resources
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Contacts
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ A hassle-free automatic time tracker. Set it and forget it.
+ © 2011 - 2026 DeskTime

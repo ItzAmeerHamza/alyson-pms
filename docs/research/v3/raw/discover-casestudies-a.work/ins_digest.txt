@@ -1,0 +1,1169 @@
+######## pages/insightful.io__customer__axiz.txt
+URL: https://www.insightful.io/customer/axiz
+TITLE: How Axiz Built a Decision Infrastructure with Insightful
+META: <meta content="Axiz got real-time insights into people and productivity. The result: system-wide decisions and real, actionable reporting for their executive committee." name="description">
+META: <meta content="How Axiz Built a Decision Infrastructure with Insightful" property="og:title">
+META: <meta content="Axiz got real-time insights into people and productivity. The result: system-wide decisions and real, actionable reporting for their executive committee." property="og:description">
+META: <meta content="Axiz got real-time insights into people and productivity. The result: system-wide decisions and real, actionable reporting for their executive committee." name="twitter:description">
+How Axiz Built a Decision Infrastructure with Insightful
+Axiz
+Africa
+IT Hardware/Software Distribution
+~500
+Hybrid
+How Axiz Built a Decision Infrastructure Around Real-Time Data Insights
+Insightful didn't just give Axiz better data. It gave the business a system their executive committee relies on to make bottom-line decisions. What started as a fix for an unreliable time-tracking tool has become the foundation for a company-wide productivity transformation.
+Africa
+IT Hardware/Software Distribution
+~500
+Hybrid
+The Company
+Axiz (Pty) Ltd is a leading technology distributor in Africa, with a presence in more than 15 countries across the continent. With over three decades of industry experience, Axiz connects technology vendors and channel partners, helping businesses deploy, manage, and scale IT solutions. Headquartered in Johannesburg, South Africa, Axiz provides a broad portfolio of hardware, software, cloud, and services solutions, enabling secure collaboration, application access, and digital transformation for organizations across Africa.
+THE CHALLENGE
+An Unreliable Foundation for Decision-Making
+As a technology-driven distributor, Axiz expected its internal systems to match its innovation. However, a legacy platform made reporting inefficient, delivering cumbersome outputs that lacked the accuracy and detail needed for informed decision-making.
+That's where Magda Bekker comes in. With more than two decades of experience spanning Sales Operations and, more recently, Systems & Processes, she has built a reputation for bridging the gap between business requirements and technical capabilities.
+When she stepped into her role as Business Systems Process & Project Manager, she inherited that legacy system along with a vast repository of employee data that delivered little meaningful value. Information was fragmented across multiple sources, difficult to interpret, and disconnected from key business objectives.
+Reporting was equally challenging, with data sc
+######## pages/insightful.io__customer__caduceus-health.txt
+URL: https://www.insightful.io/customer/caduceus-health
+TITLE: How Caduceus Slashed Call Abandonment with Insightful
+META: <meta content="Discover how Caduceus Health reduced call abandonment to 3% and boosted productivity with Insightful's real-time workforce analytics." name="description">
+META: <meta content="How Caduceus Health Achieved a 3% Call Abandonment Rate" property="og:title">
+META: <meta content="Caduceus Health used Insightful to cut call abandonment from 14% to 3%, improve workflows by 20%, and engage employees through real-time performance insights." property="og:description">
+META: <meta content="Caduceus Health used Insightful to cut call abandonment from 14% to 3%, improve workflows by 20%, and engage employees through real-time performance insights." name="twitter:description">
+How Caduceus Slashed Call Abandonment with Insightful
+Caduceus Health
+200+
+Hybrid
+Remote Work Management
+Call Center QA
+“Risk” without Risk: How Caduceus Health Gained a 3-4x Efficiency Edge to Guarantee Outcomes
+Imagine telling clients “we only bill for outcomes,” or allowing employees to work the exact schedule that fits them best. That's now the reality for Caduceus Health. They leveraged Insightful’s workforce analytics to:
+Transition to outcome-based billing, with guaranteed-pricing client contracts
+Offer a rare flex schedule to their remote workforce
+Boost productivity by 20%
+Increase employee engagement by 30%
+Cut call abandonment from 14% to 3%
+Make their team 3-4x more efficient than competitors
+200+
+Hybrid
+Company Profile
+Caduceus Health is a leading US-based revenue cycle management company specializing in patient billing, inquiries, and scheduling for major healthcare providers. They focus on streamlining healthcare operations to improve financial performance and patient experience. In 2025, their team of 200+ remote-only employees posted $1.6 billion for their clients.
+THE CHALLENGE
+Optimize WFH Output and Confidently Shift to Outcome-Based Billing
+Caduceus Health's value proposition to clients is rooted in efficiencies: we do the messy admin work, you focus on patient care. But with an expanding WFH policy and no system in place to see where productive time was breaking down, the company was against a wall. They had:
+No infrastructure to support WFH transition
+No visibility into what remote and call center staff were actually doing
+No ability to spot bottlenecks and reallocate work at scale
+Fiercely-priced competition from overseas service providers was pushing the company to further optimize operations. They needed to find a way to deeply understand workforce productivity, from validating employees’ paid work hours to spotting process inefficiencies slowing down output.
+On top of that, the company noticed a troubling pattern of young, talente
+######## pages/insightful.io__customer__fatcat-coders.txt
+URL: https://www.insightful.io/customer/fatcat-coders
+TITLE: How FatCat Coders Achieved Productivity in 6-Hour Workdays
+META: <meta content="Discover how FatCat Coders used Insightful to enhance remote work transparency, boost productivity, and enable flexible six-hour workdays." name="description">
+META: <meta content="How FatCat Coders Achieved High Productivity in 6-Hour Workdays" property="og:title">
+META: <meta content="Learn how FatCat Coders utilized Insightful to gain remote work transparency, boost productivity, and offer flexible six-hour workdays, leading to happier and more efficient employees." property="og:description">
+META: <meta content="Learn how FatCat Coders utilized Insightful to gain remote work transparency, boost productivity, and offer flexible six-hour workdays, leading to happier and more efficient employees." name="twitter:description">
+How FatCat Coders Achieved Productivity in 6-Hour Workdays
+FatCat Coders
+Europe
+Technology
+25+
+Hybrid
+Remote Work Management
+How FatCat Coders Make a Six-Hour Workday Productive
+Learn how Insightful helped FatCat Coders utilize remote work transparency to increase productivity and cut down on hours worked.
+Unbalanced Work Allocation
+Lacking Work Transparency
+Needed More Accountability
+Optimized Workloads
+Increased Employee Flexibility
+Enhanced Visibility & Productivity
+Europe
+Technology
+25+
+Hybrid
+Losing Track When Working Remotely
+Difficulty managing distributed teams.
+Lack of visibility into remote work.
+Lack of understanding of workload capacity & productivity.
+Unable to set realistic goals and measure productivity.
+Searching for a way to replace time-consuming constant check-ins.
+The Challenge: A Lack of Remote Work Transparency
+Zoran Lazic, founder of FatCat Coders , a software development company, knew that work flexibility leads to more engaged, happy, and productive employees.
+Lazic envisioned a flexible workplace where employees could work on their terms. An environment where tasks successfully completed was the key metric, not a rigid 8-hour work day.
+But, like most workplaces, constant distractions hindered productivity at FatCat Coders. Making matters worse, when FatCat Coders transitioned to remote work, company leaders lost visibility into workloads and capacity.
+Remote work became messy. Keeping remote employees on task required constant, time-consuming check-ins. This hampered business growth and prevented the flexible, engaged workplace Lazic envisioned.
+From Uncertainty to Clarity With the Help of Insightful
+FatCat Coders’s managers tried traditional tracking tools without success. After a demo of Insightful, it was clear that Insightful would provide them with the full remote work visibility they’d been searching for.
+The platform also enabled FatCat Coders managers to se
+######## pages/insightful.io__customer__from-spend-to-roi.txt
+URL: https://www.insightful.io/customer/from-spend-to-roi
+TITLE: Proving AI ROI: Financial Enterprise Case Study | Insightful
+META: <meta content="Discover how a global financial enterprise used Insightful to track AI adoption, measure performance, and prove the ROI of their GenAI investments." name="description">
+META: <meta content="Success Story: How a Global Enterprise Proved Its GenAI ROI with Insightful" property="og:title">
+META: <meta content="See how this global financial enterprise turned invisible GenAI activity into a defensible ROI story across 78,000 cases. Learn how they tracked AI adoption and justified spend with Insightful." property="og:description">
+META: <meta content="See how this global financial enterprise turned invisible GenAI activity into a defensible ROI story across 78,000 cases. Learn how they tracked AI adoption and justified spend with Insightful." name="twitter:description">
+Proving AI ROI: Financial Enterprise Case Study | Insightful
+From spend to ROI
+Financial Services
+15,000+
+Hybrid
+AI Adoption
+Workflow Optimization
+How a Global Financial Intelligence Enterprise Proved Its AI Investment Was Paying Off
+See how one enterprise turned invisible GenAI activity into a defensible ROI story for leadership, across 78,000 cases and every single product line. The company used Insightful’s Workflow Optimization to:
+Map how AI is transforming its processes end-to-end
+Measure GenAI tool adoption across its workforce, broken down by task type and complexity
+Justify its AI spend and specialist headcount by linking them directly to outcomes
+Achieve a 3.6% reduction in average handle time across 500+ daily cases
+Financial Services
+15,000+
+Hybrid
+Company Overview:
+The enterprise at the center of this story is a global leader in financial intelligence and risk assessment. It serves industries like insurance, banking, and corporate finance that depend on accurate data to make high-stakes decisions.
+The company’s customer service operation spans the Americas, EMEA, and APAC, supporting a wide portfolio of products. Each one requires highly skilled specialists to handle complex, high-judgment cases using Salesforce Service Cloud and its embedded Einstein AI tools.
+THE CHALLENGE
+No Visibility, No Benchmarks, No Way to Prove AI Was Working
+Senior leadership was asking hard questions about AI’s impact on costs and headcount. The company had invested heavily in Salesforce Service Cloud licenses and Einstein AI add-ons, along with Microsoft Copilot. Yet no one knew what share of cases were actually being handled with AI. Handle time had never been broken down by product line. And reports were being assembled manually by a single senior specialist.
+The assumption from outside the team was that the data would show AI licenses could be cut. The
+######## pages/insightful.io__customer__h-co.txt
+URL: https://www.insightful.io/customer/h-co
+TITLE: How H&CO Turned 200,000 Hours Into Results with Insightful
+META: <meta content="H&CO eliminated manual timesheets, surfaced meeting waste, and moved work to the right teams, putting 200,000+ hours a year to better use for clients." name="description">
+META: <meta content="" property="og:title">
+META: <meta content="" property="og:description">
+META: <meta content="" name="twitter:description">
+How H&CO Turned 200,000 Hours Into Results with Insightful
+H&CO
+Professional Services
+1,300+
+Hybrid
+How H&CO Put 200,000 Hours Back Into Its Clients and Its People
+With Insightful’s actionable data and automatic time tracking, H&CO reclaimed over 200,000 hours a year to improve client service and support its teams. That’s the power of shifting workforce management from reactive to proactive.
+Professional Services
+1,300+
+Hybrid
+The Company
+H&CO is a global expansion business services platform that helps companies and investors establish, operate, manage, and grow businesses across international markets. Founded in 1992 and headquartered in Miami, Florida, the firm brings together entity and trust management, human capital solutions, technology, U.S. tax and accounting, global tax and accounting, and global expansion advisory in a single coordinated platform. With more than 1,500 professionals across more than 30 countries, H&CO serves over 25,000 clients worldwide.
+THE CHALLENGE
+Three Hours a Week, Per Person,
+Going Nowhere
+For H&CO, work moves fast. Teams are distributed across time zones. Leadership expects both operational discipline and strategic growth. Client engagements demand high-quality output.
+Even though most of H&CO’s services are billed on a fixed, value-based price rather than by the hour, the firm still managed workforce time the way many professional services organizations do, through manual timesheets. It worked until it didn’t.
+Managers realized timesheet entry was consuming three hours per employee every week. Employees were clear too. Filling out timesheets was their least favorite, lowest-value task.
+That context is what made the manual timesheet so hard to defend. For most of their work, the hours employees logged would never appear on a client bill. The firm needed the measurement, but self-reported timesheets delivered it slowly and inaccurately. The effort drained time without serving a client.
+Across the workforce, that added up to more than 200,000 hours per year spent not on strategic output, but on administrative overhead that produced data nobody fully trusted.
+The self-reported nature of timesheets introduced a second problem: accuracy. Employees estimated, rounded, and retrospectively filled in work they had completed days earlier. The data flowing into leadership reports was, a
+######## pages/insightful.io__customer__leading-us-bank.txt
+URL: https://www.insightful.io/customer/leading-us-bank
+TITLE: How a Leading US Bank Saved $2.5M Using Insightful's Analysis
+META: <meta content="Discover how a leading US bank uncovered $2.5M in contractor savings using Insightful’s workforce analytics platform. Increase efficiency and reduce costs with data-driven insights." name="description">
+META: <meta content="US Bank Saves $2.5M in 3 Months with Insightful's Workforce Analytics" property="og:title">
+META: <meta content="A leading US bank achieved $2.5M in contractor savings within three months by leveraging Insightful's workforce analytics. Learn how increased transparency and efficiency drive substantial cost savings." property="og:description">
+META: <meta content="A leading US bank achieved $2.5M in contractor savings within three months by leveraging Insightful's workforce analytics. Learn how increased transparency and efficiency drive substantial cost savings." name="twitter:description">
+How a Leading US Bank Saved $2.5M Using Insightful's Analysis
+Leading US Bank
+Financial Services
+7,500+
+Hybrid
+Contractor Management
+A Leading US Bank Unearths $2.5 Million in Contractor Savings in Just 3 Months
+Learn how this leading US bank unlocked hidden savings with the help of Insightful’s workforce and capacity analysis.
+Lack of Workforce Visibility
+Contractor Underutilization
+Overpayment for Services
+Higher Contractor ROI
+More Efficient Workflows
+Increased Accountability
+Financial Services
+7,500+
+Hybrid
+Unaccountable Contractors Weigh Down Profits
+Lacking transparency into contractor work activity.
+Delayed project and task completion.
+Unaccountable external workforce.
+Overpayment for contracting services.
+Underutilization of contractors due to overstaffing.
+The Challenge: Contractor Inefficiencies Lead to Large Cost Overruns
+A leading US bank had a big problem: Their team of 3,000 IT contractors lacked accountability and was costing the company millions of dollars. This was due to company leaders not having transparency into daily work activity.
+Were they even getting a positive return on the millions of dollars they were investing in contractors? At the time, they had no way to tell.
+The bank’s operations depended on an external workforce. But there was a disconnect between contractor work being done and what the bank was being billed by the outsourcing firms providing the contractors. Compounding the issue was the fact that the billing data provided by these firms was unverifiable and worthless.
+The bank adopted Insightful’s leading work analytics platform to properly understand contractor work activity, utilization, and payment for services – and what they discovered transformed their contractor ROI.
+In-Depth Data Gets Contractors to Deliver on Cost-Effectiveness
+To begin, the bank’s leaders
+######## pages/insightful.io__customer__luckwell.txt
+URL: https://www.insightful.io/customer/luckwell
+TITLE: How Luckwell Unified Productivity & Time Data | Insightful
+META: <meta content="Learn how Luckwell used Insightful to improve workforce visibility, compliance, and decision-making." name="description">
+META: <meta content="How Luckwell Unified Productivity & Time Data | Insightful" property="og:title">
+META: <meta content="Learn how Luckwell used Insightful to improve workforce visibility, compliance, and decision-making." property="og:description">
+META: <meta content="Learn how Luckwell used Insightful to improve workforce visibility, compliance, and decision-making." name="twitter:description">
+How Luckwell Unified Productivity & Time Data | Insightful
+Luckwell
+USA and Philippines
+BPO
+100+
+Hybrid
+Remote Work Management
+Luckwell Achieves Remote Workforce Visibility and Compliance with Insightful
+See how Luckwell used Insightful to unify productivity, time, and security data and improve workforce visibility, compliance, and trust across HR, IT, Operations and Facilities.
+Manual reporting slowed operations and decision-making
+HR and operations questioned the reliability of workforce evidence
+Multiple monitoring tools created data gaps and inconsistent oversight
+Instant access to trusted, audit-ready productivity and attendance data
+Unified visibility across remote and office-based teams
+Stronger compliance and cybersecurity with centralized monitoring
+USA and Philippines
+BPO
+100+
+Hybrid
+Company Overview:
+Luckwell Solutions is a California-based healthcare-focused BPO with delivery teams in the Philippines. The company supports U.S. home health agencies by providing administrative, QA, and IT services that help clients scale efficiently while maintaining operational and compliance standards.
+Services:
+Administrative support, quality assurance services, IT support services, workforce operations for U.S. healthcare organizations, primarily home health agencies.
+Before Insightful, our evidence didn’t always carry weight. Now, when the data comes from Insightful, it speaks for itself.
+Terei Asido
+Senior Director, IT Systems and Cybersecurity, Data Privacy Officer, Luckwell Business Solutions
+THE CHALLENGE
+Manual Reporting and Fragmented Tools Slowed Decisions and Visibility
+When Terei joined Luckwell Business Solutions, he needed to pilot a transformation. Leading a team responsible for remote monitoring, productivity, and attendance insights, he had to turn raw data into actionable intelligence. These insights would become the engine behind smarter resource planning, precise attendance tracking, and stronger performance management. Thanks to Terei and his team, leadership gained the confidence to make data-driven decisions, keeping operations seamless and efficient, no matter where the workforce was
+######## pages/insightful.io__customer__mercor.txt
+URL: https://www.insightful.io/customer/mercor
+TITLE: Mercor Scales Global Teams with Insightful's Work Data
+META: <meta content="Discover how Mercor streamlined performance, billing, and global team management using Insightful’s real-time work data platform." name="description">
+META: <meta content="How Mercor Used Insightful to Power Global Engineering Ops" property="og:title">
+META: <meta content="Mercor made Insightful its operational backbone—scaling global teams, optimizing performance, and billing clients confidently with trusted work data." property="og:description">
+META: <meta content="Mercor made Insightful its operational backbone—scaling global teams, optimizing performance, and billing clients confidently with trusted work data." name="twitter:description">
+Mercor Scales Global Teams with Insightful's Work Data
+Mercor
+Technology
+30,000+
+Hybrid
+Billing & Invoicing
+Minimizing Work Fraud While Hyperscaling: How Mercor Grew To 30,000+ Contractors Without Losing Millions
+By partnering with Insightful, this labor marketplace achieves hyperscale while preventing work fraud that would otherwise cost them millions.
+Work fraud that could cost up to $9 million per week is prevented
+Six-figure savings in engineering staff cost
+Technology
+30,000+
+Hybrid
+Mercor, a labor marketplace that connects skilled human contractors to AI labs and tech companies, is among the many AI-focused enterprises that are hyperscaling. Unfortunately, workforce fraud is rising simultaneously. A recent survey indicated 41% of IT, cybersecurity, risk, and fraud leaders know their companies have hired and onboarded a fraudulent candidate. Mercor had seen this work fraud occur firsthand in their contractor workforce when they chose to implement workforce analytics software.
+Mercor partnered with Insightful to solve this core issue inside the business: AI hyperscale workforce fraud prevention. By preventing fraudulent contractors in their marketplace from collecting payment for work not completed, Mercor saves up to $9 million per week in workforce fraud.
+The Challenge: Reliability at Hyperscale
+Remote work in a world of AI deep fakes and hallucinated content has created a new headache for employers: ensuring the work completed by their contract workforces is real and verifiable.
+Shaun VanWeelden, Managing Director at Mercor said, “At our scale, it was really important that we had a product that we could systematically track time for all participants on our platform.” Managing a global contractor workforce of tens of thousands of engineers, reviewers, and domain experts across multiple time zones generates massive, concurrent streams of activity data — far beyond what legacy systems can reliably process.
+Insightful is built on the Google Cloud Platform’s leading cloud infrastru
+######## pages/insightful.io__customer__national-law-firm.txt
+URL: https://www.insightful.io/customer/national-law-firm
+TITLE:
+META: <meta content="" name="description">
+META: <meta content="" property="og:title">
+META: <meta content="" property="og:description">
+META: <meta content="" name="twitter:description">
+National Law Firm
+Legal Services
+700 employees
+Remote
+A National Law Firm Turned Work Data Into Seven-Figure Savings with Insightful
+Insightful helped the firm identify improvement opportunities in every team, use existing capacity more effectively, and protect its hardest-working employees.
+Results with Insightful:
+Over seven figures in savings
+Cut performance review cycles by 20-30 hours per employee
+Higher caseload and output per employee
+Overall reduction in errors
+Higher client satisfaction scores
+Legal Services
+700 employees
+Remote
+About the Company
+This leading law firm provides legal services to hundreds of banks and financial institutions across the United States. Its approximately 700 employees provide mortgage, financial, and real estate legal services that help clients manage complex regulatory requirements and high-volume caseloads.
+The Challenge
+Scaling a 700-employee Remote Workforce Without a Clear View of Capacity
+When a national law firm moved from 100% office-based work to fully remote operations, its leaders needed a clear picture of whether the new model was working. With approximately 700 employees serving financial institutions across the U.S., small gaps in workload allocation were affecting capacity, quality, and client service.
+Teams frequently reported that they were out of capacity and needed additional hires. Leadership suspected that the firm had sufficient headcount but lacked a reliable, unified view of how work was being allocated.
+This left senior leaders heavily dependent on managers’ assessments, even as they questioned whether some teams were being managed effectively. They couldn’t say with confidence whether a team needed more staff, better workflows, or simply more effective leadership.
+At the same time, the firm faced a persistent problem conducting employee performance evaluations. The firm’s legacy process relied on cobbled-together daily logs and didn’t provide a clear picture of workload and capacity across teams. Investigating a single performance concern could take 20 to 30 hours, involve three to five people, and require data from at least seven different sources. That meant hugely delayed decision making, all while pulling key employees away from their regular responsibilities.
+The firm needed a solution that could provide a consistent view of workload, capacity, and performance across its remote individuals and teams. With improved work insights, leadership could better evaluate staffing requests, understand how effectively managers were distributing wo
+######## pages/insightful.io__customer__oklahoma-heart-hospital.txt
+URL: https://www.insightful.io/customer/oklahoma-heart-hospital
+TITLE: 80 Hours to 30 Mins: How an IT Team Reshaped Assessments
+META: <meta content="Discover how Insightful prepared Oklahoma Heart Hospital's IT team for hybrid work, and cut an 80-hour assessment drain down to 30 minutes." name="description">
+META: <meta content="80 Hours to 30 Mins: How an IT Team Reshaped Assessments" property="og:title">
+META: <meta content="Discover how Insightful prepared Oklahoma Heart Hospital's IT team for hybrid work, and cut an 80-hour assessment drain down to 30 minutes." property="og:description">
+META: <meta content="Discover how Insightful prepared Oklahoma Heart Hospital's IT team for hybrid work, and cut an 80-hour assessment drain down to 30 minutes." name="twitter:description">
+80 Hours to 30 Mins: How an IT Team Reshaped Assessments
+Oklahoma Heart Hospital
+1000+
+Hybrid
+Remote Work Management
+How a Hospital’s Tech Team Cut Assessments from 80 Hours to 30 Minutes with Insightful
+Oklahoma Heart Hospital helped set the standard as an “all-digital” healthcare facility, thanks to the talents of their 85-person IT team. Yet when it came down to productivity assessment, IT stack oversight, and home office preparedness, they lacked actionable data. Discover how Insightful transformed the back-office heroes at OHH into a thriving hybrid team with exceptional results:
+Cut productivity evaluations from 80 hours to 30 minutes
+Rightsized IT stack based on data, not guesswork
+Enabled a “culture of shared responsibility” and mentorship
+1000+
+Hybrid
+Company Profile
+Oklahoma Heart Hospital is a physician-owned, two hospital health system located in Oklahoma City, providing lifesaving cardiac interventions and comprehensive surgical care. These hospitals are supported by a dedicated IT team who enhance healthcare delivery through innovative technology. The IT team has supported OHH’s status as a pioneering "all-digital" facility since 2002, notably leading its complete transition to the Epic Electronic Health Record (EHR) in July 2024.
+CHALLENGE
+Win the IT Talent Battle and Ditch the 80-Hour Assessment Drain
+Oklahoma Heart Hospital’s CIO Dave Miles manages a team of talented IT professionals, experienced in both clinical systems administration as well as network and infrastructure architecture. His team’s coveted skills meant he often found himself competing to keep his own people.
+With promotional levels and pay raises in place, the long-term compensation package was attractive. Still, employees longed for a hybrid model that included work flexibility, not just financial incentive. His team felt happier working from home; fewer distractions, zero commutes, and more opportunities for deep focus time.
+Yet OHH remained technically unprepared for the transition to remote
+######## pages/insightful.io__customer__pe-backed-software-company.txt
+URL: https://www.insightful.io/customer/pe-backed-software-company
+TITLE: 40% Productivity Lift: Proving Engagement Drives Profit
+META: <meta content="Learn how a PE-backed software company used Insightful’s work intelligence to lift productivity 40% and show the “service-profit chain” in action." name="description">
+META: <meta content="40% Productivity Lift: Proving Engagement Drives Profit" property="og:title">
+META: <meta content="Learn how a PE-backed software company used Insightful’s work intelligence to lift productivity 40% and show the “service-profit chain” in action." property="og:description">
+META: <meta content="Learn how a PE-backed software company used Insightful’s work intelligence to lift productivity 40% and show the “service-profit chain” in action." name="twitter:description">
+40% Productivity Lift: Proving Engagement Drives Profit
+PE-Backed Software Company
+Software
+700+
+Remote
+Remote Work Management
+How a PE-Backed Software Company Lifted Productivity 40% by Proving Engagement Drives Profit
+By partnering with Insightful, a PE-backed software company moved from gut-feel management to data-driven leadership, and proved that team engagement directly drives productivity at scale:
+40% increase in productivity since Insightful implementation
+Proved the “service-profit chain” across 700 employees: engagement drove productivity, productivity drove profitability
+Translated productivity and ARR-per-employee metrics directly into EBITDA
+Built the evidence base necessary for their AI transformation
+Software
+700+
+Remote
+About
+The company at the center of this story is a PE-backed software business serving SMB customers across the United States. With roughly 700 mostly remote employees, the company has built its operating model around three priorities: driving productivity, deepening employee engagement, and maintaining a strong culture across a distributed workforce.
+THE CHALLENGE
+Managing Remote Performance on Instinct, Not Evidence
+Leadership knew work effort was unevenly distributed across the company, but lacked a consistent way to distinguish that perception from evidence. In a largely remote workforce, managers were coaching on instinct and executives were making staffing decisions on a hunch.
+Employee perception filled the vacuum. A company-wide engagement survey revealed that 85% of employees believed their colleagues weren’t working as hard as them. That type of widespread perception suggests a serious trust and fairness problem.
+The company’s CHRO knew introducing workforce analytics could come with friction. Measurement tools can quickly be perceived as surveillance if leaders are unclear about intent, access, and use. But the business stakes were too high to ignore.
+“The default position on this kind of tool is that it doesn’t
+######## pages/insightful.io__customer__peach-payments.txt
+URL: https://www.insightful.io/customer/peach-payments
+TITLE: How Peach Payments Achieved 40% Growth With Insightful
+META: <meta content="Discover how Peach Payments gained real-time productivity visibility with Insightful" name="description">
+META: <meta content="How Peach Payments Achieved 40% Growth With Insightful" property="og:title">
+META: <meta content="Discover how Peach Payments gained real-time productivity visibility with Insightful" property="og:description">
+META: <meta content="Discover how Peach Payments gained real-time productivity visibility with Insightful" name="twitter:description">
+How Peach Payments Achieved 40% Growth With Insightful
+Peach Payments
+Africa
+Financial Services
+200+
+Hybrid
+Remote Work Management
+Peach Payments and Insightful Prove That Remote-First Teams Boost Business Growth by 40%
+By giving managers real-time visibility into workflows and well-being, this pan-African payments provider built a thriving remote-first team—powered by Insightful’s actionable workforce insights.
+40% business growth with a remote-first team
+22% increase in remote team productivity
+Africa
+Financial Services
+200+
+Hybrid
+About ‍
+Peach Payments is a fast-growing African payment solutions provider (PSP) that makes online and offline payments simple and accessible across Kenya, Mauritius, and South Africa. The company partners with growing enterprises to offer a complete toolkit for accepting, managing, and disbursing payments through point-of-sale, web, and mobile channels. The acquisition of West African platform PayDunya expanded Peach Payments’ reach into six Francophone countries, including Senegal, Côte d’Ivoire, and Benin. Its focus remains on delivering seamless payment experiences for businesses and their customers.
+THE CHALLENGE
+Improving Performance Visibility for a Remote-First Workforce
+As Peach Payments navigated a post-COVID shift to remote and hybrid work, Nadine Martin, Head of Business Operations, faced a challenge. She needed to build trust among her team members and confidently run a remote-first company that still drove business results.
+But with employees working in a variety of locations and on different schedules, Nadine was left without clear visibility into employee productivity or workload balance. This made it harder to monitor for potential burnout and support employee well-being while balancing team capacity.
+Without precise analytics to reveal these challenges, her leadership team hesitated to accept a remote-first company model. Teams relied on additional tools and processes to support employee well-being, including platforms like October Health. But Nadine still lacked objective visibility into workloads for employees who were working remotely.
+At the same time, Peach Payments had strategic goals to embed AI 
+######## pages/insightful.io__customer__spinwise.txt
+URL: https://www.insightful.io/customer/spinwise
+TITLE: Spinwise Scales Support Team 5x with Insightful
+META: <meta content="Spinwise achieved 90%+ schedule adherence with Insightful, scaling their support team 5x across 6 operational teams." name="description">
+META: <meta content="Spinwise Scales Support Team 5x with Insightful" property="og:title">
+META: <meta content="Spinwise achieved 90%+ schedule adherence with Insightful, scaling their support team 5x across 6 operational teams." property="og:description">
+META: <meta content="Spinwise achieved 90%+ schedule adherence with Insightful, scaling their support team 5x across 6 operational teams." name="twitter:description">
+Spinwise Scales Support Team 5x with Insightful
+Spinwise
+Europe
+Consumer & Retail
+200+
+Hybrid
+Data Security
+How Spinwise Achieves 90%+ Schedule Adherence with Insightful
+Learn how this gaming company improved schedule adherence with Insightful, scaling their workforce 5x while maintaining operational efficiency.
+90%+ schedule adherence across Customer Support and VIP Support teams
+Scaled workforce 5x while maintaining operational efficiency
+Expanded Insightful use across 6 operational teams from 10 to 130 employees
+Europe
+Consumer & Retail
+200+
+Hybrid
+About
+Spinwise is a multi-brand gaming company managing several online casino platforms, including Casoo, Hype Kasino, and Tsars. The company operates across more than 25 countries, serving 1 million registered players and 8 million annual site visitors. With over 200 employees and continued brand expansion underway, Spinwise prioritizes operational visibility, security, and consistent service coverage.
+THE CHALLENGE
+Limited Visibility into Team Activity Hindered Productivity and Oversight
+With multiple brands and teams under the Spinwise umbrella, maintaining operational clarity became increasingly important. Vladislav Miskovskis , Software System Administrator, is responsible for selecting and managing the systems that underpin Spinwise’s productivity, security, and operational visibility across teams.
+The first area where this need became urgent was customer support. Without a reliable way to monitor working hours and breaks, managers couldn’t easily confirm whether teams maintained coverage during peak hours. For example, if multiple agents took their break at the same time, coverage could suddenly be thinner than expected.
+This lack of visibility made it difficult to ensure consistent shift coverage and schedule adherence, especially in customer and VIP support, where even small gaps in coverage could affect response times and service quality.
+They also needed confidence that work time was being used effectively. Without centralized insight into day-to-day activity, underlying inefficiencies or gaps were hard to spot and add
+######## pages/insightful.io__customer__trg.txt
+URL: https://www.insightful.io/customer/trg
+TITLE: How TRG Increased Productivity by 76% with Insightful
+META: <meta content="Discover how Insightful helped TRG streamline resources, reduce costs, and boost productivity by 76% in just 6 months. Learn how your business can achieve the same results." name="description">
+META: <meta content="How TRG Boosted Productivity by 76% with Insightful's Smart Data" property="og:title">
+META: <meta content="Explore how TRG, an Australian education leader, leveraged Insightful’s data-driven platform to optimize resources, streamline workflows, and achieve a 76% productivity increase in just 6 months." property="og:description">
+META: <meta content="Explore how TRG, an Australian education leader, leveraged Insightful’s data-driven platform to optimize resources, streamline workflows, and achieve a 76% productivity increase in just 6 months." name="twitter:description">
+How TRG Increased Productivity by 76% with Insightful
+TRG
+Australia
+Education
+200+
+Remote
+Remote Work Management
+How TRG Skyrocketed Profitability by Delivering the Same Great Service More Efficiently
+Discover how Insightful helped TRG optimize its people and processes to become 76% more productive in just 6 months.
+Inefficient Resource Allocations
+Hidden Unproductive Time
+Fragmented Data Sources
+Optimized Project Resourcing
+Improved Employee Performance
+Integrated Real-Time Insight
+Australia
+Education
+200+
+Remote
+Inability To Identify Wasted Resources
+Lack of visibility into workforce time allocation.
+Unable to assess effectiveness of processes.
+Difficulty in right-sizing project resourcing.
+Spending time and money on multiple activity management tools.
+Difficulty managing productivity of remote workforce.
+The Challenge: Inefficient Resource Allocation
+TRG prides itself on consistently excellent standards of service to its clients, but COO Jean Mae Quimada doesn’t believe in standing still.
+Quimada’s philosophy of continual improvement was hampered by the challenges of managing a remote team. She was operating within a complex fast-paced, multi-project ecosystem – and all without the vital data needed to make the best resourcing decisions.
+The demands of success made it imperative that each project was properly resourced for each client, but TRG had only limited success with costly workforce tracking solutions. It was difficult to find out how remote staff were spending their time, and whether current work processes were as effective as they should be.
+This made effective project resourcing more guesswork than data-driven decision making, frustrating attempts to optimize resources and boost productivity.
+Using Refreshingly Clear Data to Get Resourcing Right
+Quimada knew that accurate data was key, but TRG’s unique workflows had not been effectively
+######## pages/insightful.io__customer__village-gourmet.txt
+URL: https://www.insightful.io/customer/village-gourmet
+TITLE: How Village Gourmet Achieved 90%+ Productivity with Insightful
+META: <meta content="Discover how Village Gourmet used Insightful to reduce workplace distractions, increase productivity to 90%, and enhance team focus through data-driven insights." name="description">
+META: <meta content="How Village Gourmet Reached 90%+ Productivity with Insightful" property="og:title">
+META: <meta content="Village Gourmet partnered with Insightful to analyze technology use, improve focus time, and implement new meeting policies, boosting productivity and employee engagement. Discover their journey to 90%+ productivity." property="og:description">
+META: <meta content="Village Gourmet partnered with Insightful to analyze technology use, improve focus time, and implement new meeting policies, boosting productivity and employee engagement. Discover their journey to 90%+ productivity." name="twitter:description">
+How Village Gourmet Achieved 90%+ Productivity with Insightful
+Village Gourmet
+Consumer & Retail
+100+
+Hybrid & Remote
+Focus Time
+Technology Usage Analysis
+How Village Gourmet Removed Distractions to Achieve 90%+ Productivity
+Learn how Village Gourmet used Insightful to identify distractions and redesign their approach to meetings to dramatically increase focus time.
+Lack of Remote Visibility
+Common Workplace Distractions
+Project Delays
+Remote Accountability & Transparency
+Increased Employee Focus
+More Efficient Workflows
+Consumer & Retail
+100+
+Hybrid & Remote
+Missing Transparency HoldsBack Productivity
+Lack of accountability within distributed teams.
+Unable to manage remote work activity and tasks.
+Unbalanced workloads causing staff underutilization and overutilization.
+In need of a dependable way to analyze and manage productivity.
+Meeting overload preventing focus time.
+The Challenge: Workplace Distractions and Lost Focus Causing Project Delays
+Speciality food manufacturer Village Gourmet had a problem: their employees always seemed to be busy, yet projects weren’t getting finished. It’s the classic managerial challenge; a company-wide tendency of “busywork”, rather than productive work.
+Why were the Village Gourmet team’s productivity so inconsistent? What was preventing employee focus and causing project delays? Without visibility into workflows, Village Gourmet leaders were lost for answers.
+They needed data and visibility to find out – two things they didn’t have. It was a problem only made worse by many teams working remotely.
+Using Insightful to Design a Distraction-free Workday
+In search of more visibility into work time and productivity, Village Gourmet turned to Insightful.
+With Insightful in place, Village Gourmet managers were, for the first time, able to see what was causing the disconne
+######## pages/insightful.io__customers.txt
+URL: https://www.insightful.io/customers
+TITLE: Client Success Stories - Employee Monitoring and Time Tracking
+META: <meta content="Find out how our clients used our employee monitoring or time tracking solutions to increase productivity, efficiency and profitability of their companies." name="description">
+META: <meta content="Employee Monitoring and Time Tracking Case Studies" property="og:title">
+META: <meta content="Learn more about Insightful clients and how they’re using our solutions to improve their businesses." property="og:description">
+META: <meta content="Learn more about Insightful clients and how they’re using our solutions to improve their businesses." name="twitter:description">
+Client Success Stories - Employee Monitoring and Time Tracking
+Customer stories" aria-current="page" class="nav30_foot-link w--current">Customer stories
+Learn > Blog" class="nav30_item w-inline-block"> Blog Learn > Customer Stories" aria-current="page" class="nav30_item w-inline-block w--current"> Customer Stories Guides Learn > Webinars" class="nav30_item w-inline-block"> Webinars Learn > ROI Calculator" class="nav30_item w-inline-block"> ​ ROI Calculator Learn > Glossary" class="nav30_item w-inline-block"> ​ Glossary
+Discover How Companies Do Great Work with Insightful
+Software Development
+Why Mercor made Insightful Core Infrastructure
+Watch Full Story
+We Help Customers Achieve Measurable Results
+95%+
+team-wide productivity
+$2.5m
+saved via new efficiencies
+76%
+decrease in distracted time
+20%
+increase in sales revenue
+All stories
+Browse all Success Stories
+Use the side-left filters to explore the stories most relevant to your use case!
+FILTER BY
+Clear all
+Showing 0 of 100
+Use Cases
+Remote Work Management
+Billing & Invoicing
+Data Security
+Financial Services
+Consulting
+Technology
+IT Hardware/Software Distribution
+Public Services
+Media
+Construction
+Automotive
+BPO
+Aerospace
+Consumer & Retail
+Region
+Europe
+Asia
+Australia
+Africa
+Global
+Clear all
+Thank you! Your submission has been received!
+Oops! Something went wrong while submitting the form.
+Filters
+Tag
+Sort by
+Most Popular Most Recent Name: A to Z Name: Z to A Price: Low to High Price: High to Low
+National Law Firm
+Legal Services
+See how this firm achieved seven-figure savings with Insightful.
+Axiz
+IT Hardware/Software Distribution
+How Axiz Created a Decision System Using Real-Time Data
+Africa
+From spend to ROI
+Financial Services
+How a Global Finance Intelligence Firm Proved Its AI Was Paying Off
+AI Adoption
+Workflow Optimization
+H&CO
+Professional Services
+How H&CO Put 200,000 Hours Back Into Its Clients and Its People
+PE-Backed Software Company
+Software
+See how Insightful helped a software company boost productivity by 40%.
+Remote Work Management
+Oklahoma Heart Hospital
+80 Hours to 30 Mins: How an IT Team Resha
+######## pages/insightful.io__customers__alia-services.txt
+URL: https://www.insightful.io/customers/alia-services
+TITLE: How Insightful strengthens your working community
+META: <meta content="Discover how Alia Services has built trust and strengthened relationships with their clients and employees using Insightful’s employee monitoring app." name="description">
+META: <meta content="Stronger relationships, greater security with Insightful" property="og:title">
+META: <meta content="Find out how Insightful 's employee monitoring tool has helped Alia Services gain trust from clients, build better relationships with their employees, and strengthen security." property="og:description">
+META: <meta content="Find out how Insightful 's employee monitoring tool has helped Alia Services gain trust from clients, build better relationships with their employees, and strengthen security." name="twitter:description">
+How Insightful strengthens your working community
+Alia Services
+How Insightful Boosts Trust and Strengthens Relationships
+After switching to Insightful, Alia Services has experienced an increase in productivity, substantial savings, and built more trust and better relationships with their employees and clients.
+200+
+Global
+BPO
+Insightful listens to what we need. Other companies do what works for them and they don't listen to their customers. Insightful actually listens and makes changes. We’ve seen those changes and that's something that we're happy about.
+Herber Perez,
+IT Manager at Alia Services
+Alia Services Before Insightful
+Alia Services is a Human Capital Solutions company offering remote payroll and recruitment services to companies of all sizes. Alia Services’ workforce is entirely remote, with employees operating across nine different countries.
+Due to their widespread workforce, Alia had already gone from a small office to working fully remote before the pandemic hit. As a result, their employees were already equipped with a variety of software for communication and tools to support remote work. But they lacked an effective way to manage performance.
+After going fully remote, Alia began to look for tools to improve the way they work. They had spent four years looking for unintrusive tools to increase productivity and revenue, build better trust with employees, and manage people in the best way possible. Before discovering Insightful, Alia was using a combination of two different tools to try to cover their needs but were unable to yield the precise data they were looking for.
+The decision to switch to Insightful was actually pretty simple. We agreed really quickly; the customer service manager was excellent.
+Herber Perez,
+IT Manager at Alia Services
+Idle vs. Active Time
+Because Alia’s employees work hourly, the idle vs. active time feature allows them to see exactly how many actual hours are spent gen
+######## pages/insightful.io__customers__botkeeper.txt
+URL: https://www.insightful.io/customers/botkeeper
+TITLE: Discover How Insightful Boosts Operational Ffficiency
+META: <meta content="Find out how Botkeeper uses Insightful to strengthen operational efficiency, better manage their remote teams, and improve the work-life balance of their workforce." name="description">
+META: <meta content="Find Out How Insightful Can Strengthen Your Workforce!" property="og:title">
+META: <meta content="Discover how Insightful supports Botkeeper’s strategy by providing them with the data visualization they need to streamline processes and better automate their services." property="og:description">
+META: <meta content="Discover how Insightful supports Botkeeper’s strategy by providing them with the data visualization they need to streamline processes and better automate their services." name="twitter:description">
+Discover How Insightful Boosts Operational Ffficiency
+Botkeeper
+How Botkeeper Streamlines Processes and Improves Operational Efficiency
+Discover how Botkeeper better manages their remote workforce, streamlines processes, and ensures a proper work-life balance for their employees with Insightful.
+~400
+Financial Services
+EMPLOYEE ACTIVITY TRACKING
+Insightful has really helped us pinpoint inefficiencies in our processes.
+Tanya Holmes,
+Director of Client Services at Botkeeper
+Botkeeper Before Insightful
+Botkeeper is a software company that provides remote, scalable, and automated bookkeeping support for accounting firms using a combination of machine learning, artificial intelligence, and skilled accountants. They currently have three offices in Boston, New York, Sri Lanka, and the Philippines, with the majority of employees working remotely.
+Before Insightful, Botkeeper had not used any software or tracking system to review employee activity. They decided it was time to find a tracking solution when they realized employees were spending too much time tracking their time manually. Further, this method of time tracking was too susceptible to human error.
+In addition, Botkeeper had a hard time knowing how their team was spending their time and pinpointing where they could make improvements. They looked at a few other options before settling on Insightful. In the end, they opted for Insightful because of its easy-to-navigate interface which makes it the most user-friendly solution.
+Thanks to visualization provided by Insightful, time worked was apparent, and it became clearer what tasks could be redelegated to achieve a more sustainable work-life balance.
+Tanya Holmes,
+Director of Client Services at Botkeeper
+Real-Time Insights
+The real-time insights feature enables management to gain visibility into their team’s current tasks, making it easy for managers to stay connected and up-to-date with their remote teams.
+Websi
+######## pages/insightful.io__customers__cekindo.txt
+URL: https://www.insightful.io/customers/cekindo
+TITLE: How Insightful Helped Cekindo Through Rough Times
+META: <meta content="Working remotely for the first time is a huge challenge for companies. Find out how Insightful helped Insightful maintain productivity during a state of emergency in Indonesia." name="description">
+META: <meta content="Insightful Helps Cekindo Stay Productive During Lockdown" property="og:title">
+META: <meta content="Keeping track of employees' attendance and productivity while they’re working from home was a challenge to Cekindo before they started using Insightful." property="og:description">
+META: <meta content="Keeping track of employees' attendance and productivity while they’re working from home was a challenge to Cekindo before they started using Insightful." name="twitter:description">
+How Insightful Helped Cekindo Through Rough Times
+Cekindo
+How Insightful Helped Cekindo Stay Productive During the Pandemic
+Having a workforce of over 100 people suddenly working remotely can cause many issues in a company. Luckily, Cekindo made the right call and started using Insightful.
+110
+Asia
+Consulting
+EMPLOYEE MONITORING
+Added Visibility Leads to More Accountability
+Cekindo is a management consultancy group that helps businesses expand in the South Asian region. They are in charge of business setup, business process outsourcing, immigration issues - anything an organization needs when they want to set up shop in Asia. In the past 8 years, they’ve established themselves as industry leaders, and they currently employ more than 100 people.
+Supervising employees, managing their workload, as well as their attendance was easy when everyone was working from the same office. Their company used a fingerprint scanner to maintain the attendance records, and teams were seated together in the offices so collaboration and supervision were quite simple.
+However, as the novel coronavirus started spreading through Indonesia, Cekindo needed to put the health of their team members first, so they started working from home. One of the first issues they needed to encounter is attendance tracking.
+We were using fingerprint scanners to track employees’ attendance. Once the emergency state was pronounced in our country, these became obsolete and we knew we had to find a different solution.
+Engkin Nursita,
+HRGA Manager
+Apps & Website Usage
+This feature provides Cekindo with deep insight into how employees spend their time while working.
+Productivity Tracking
+Measuring and tracking productivity is one of the main reasons they chose Insightful.
+Screenshots
+Screenshots provide Cekindo’s team with an additional layer of supervision.
+Boosting Productivity When Working From Home
+Considering their main concerns, Cekindo decided to start using our employee monit
+######## pages/insightful.io__customers__classic-tech.txt
+URL: https://www.insightful.io/customers/classic-tech
+TITLE: How Classic Tech Boosts Productivity While Working Remotely
+META: <meta content="Find out how Classic Tech uses Insightful to monitor its remote workers, and keep their productivity intact at all times." name="description">
+META: <meta content="Insightful Helps Classic Tech Boost Productivity in a Remote Team" property="og:title">
+META: <meta content="Check out how Classic Tech handles productivity lows with Insightful’s productivity monitoring software." property="og:description">
+META: <meta content="Check out how Classic Tech handles productivity lows with Insightful’s productivity monitoring software." name="twitter:description">
+How Classic Tech Boosts Productivity While Working Remotely
+Classic Tech
+Boosting Remote Work Productivity with Insightful
+With Insightful, Classic Tech has transitioned from office-based work to remote work without a dip in productivity.
+1000+
+Asia
+Technology
+EMPLOYEE MONITORING
+Productivity increased significantly after using Insightful.
+Sujan Dahal,
+Network and System Manager
+Classic Tech Before Insightful
+Founded in 2009, Classic Tech came to the market with a proposition that, at the time, many saw as unnecessary. Paving the way for widespread internet use in Nepal, Classic Tech laid down the infrastructure, at great expense, to cater for a future in which the internet would become a necessity for most.
+Today, Classic Tech is a market leader, and is considered one of the most reputable internet service providers in Nepal. It provides more than 230,000 customers with broadband internet service. The company also offers IPTV as a value-added service to its customers.
+Insightful made it easier to manage resources.
+Sujan Dahal,
+Network and System Manager
+Employee Productivity Monitoring
+Classic Tech made the transition to remote work as a result of the pandemic, and the ability to understand what their team is working on helps maintain high levels of productivity.
+Being able to track idle time and time spent working is important for a company like Classic Tech that prides itself on efficiency and productivity.
+Cross-Platform Compatibility
+For Classic Tech, cross-platform compatibility is a must. The ability to install Insightful on both Mac and Windows OS made it easy to onboard all employees with the software.
+Adapting to the Shift to Remote Work With Insightful
+Classic Tech previously relied on in-house software to monitor employee productivity levels, but it proved to be insufficient for their needs. That’s where Insightful comes in. Classic Tech adopted the software when everything changed due to the COVID-19 pandemic outbreak.
+Whereas most workers worked in the company’s offices scattered throughout Nepal before the pandemic, once restrictions ramped up, m
+######## pages/insightful.io__customers__days.txt
+URL: https://www.insightful.io/customers/days
+TITLE: Maintaining High Levels Of Productivity with Insightful
+META: <meta content="Discover how Day’s Motor Group leverages Insightful to manage and boost employee performance in real-time." name="description">
+META: <meta content="How Day’s Motor Group Maintains Productivity With Insightful" property="og:title">
+META: <meta content="Discover how Insightful enabled Day’s Motor Group to create a cohesive workforce in the face of uncertainty." property="og:description">
+META: <meta content="Discover how Insightful enabled Day’s Motor Group to create a cohesive workforce in the face of uncertainty." name="twitter:description">
+Maintaining High Levels Of Productivity with Insightful
+Day's Motor Group
+Maintaining High Levels Of Productivity with Insightful
+The Day’s Fleet division of Day’s Motor Group turned to Insightful in a time of uncertainty to ensure productivity levels remain high.
+600+
+Europe
+Automotive
+EMPLOYEE MONITORING
+Insightful has got everything we need.
+Neil Williams,
+Group IT Manager, Day’s Motor Group
+Day’s Motor Group Before Insightful
+Day’s Motor Group is a Wales-based automobile business that first entered the market in 1926. The Day’s Fleet division was formed in 1988, offering long-term car rentals and business services to customers all over the UK.
+The company first realized the need for time tracking software when it was forced to adopt a hybrid work model due to COVID-19 social distancing restrictions. With more than two-thirds of the workforce working remotely, there was an increasing need to monitor activities and ensure employees were spending work hours productively.
+We chose Insightful to better understand how working from home could benefit the company and our employees productivity in and out of the office.
+Neil Williams,
+Group IT Manager, Day’s Motor Group
+Time-Saving Merge
+For the Day’s Fleet division, the biggest issue it faced was onboarding all employees seamlessly at a time when many were already working remotely. The employee merge tool, which brings all data together in a single employee profile, helped simplify the onboarding process.
+Simple User Interface
+For a company that wanted minimal disruption to productivity, getting used to new software had to be straightforward. Insightful’ intuitive user interface is easy-to-navigate and allows the Day’s Fleet division to carry on with business as usual without any disruption to workflows.
+Activity Screenshots
+Employee activity screenshots help Day’s Motor Group boost accountability among the workforce and ensure consistency in the way daily work gets completed.
+Upholding Productivity Levels
+with Insightful
+For the Day’s Fleet division, Insightful represented the transition to a productive remote work environment. It was a 
+######## pages/insightful.io__customers__digital-estimating.txt
+URL: https://www.insightful.io/customers/digital-estimating
+TITLE: How Insightful Removed the Human Error From Project Evaluations
+META: <meta content="Find out how Insightful helped Digital Estimating in a mission to save their managers' time and remove human error from project evaluations." name="description">
+META: <meta content="Insightful Helps Digital Estimating Improve Performance Evaluations" property="og:title">
+META: <meta content="Find out how Digital Estimating used Insightful to improve performance evaluations and boost the productivity of their workforce." property="og:description">
+META: <meta content="Find out how Digital Estimating used Insightful to improve performance evaluations and boost the productivity of their workforce." name="twitter:description">
+How Insightful Removed the Human Error From Project Evaluations
+Digital Estimating
+Optimized Evaluations Skyrocket Productivity to 90%+
+Learn how Insightful helped Digital Estimating decrease managerial workloads and remove human error from performance evaluations to create more productive employees.
+47
+Asia
+Construction
+TIME TRACKING
+Digital Estimating Before Insightful
+Digital Estimating is an SMB from Pakistan that does material and labor construction estimations for clients all over the United States. Most of their business comes from the same clients, so quality of work is among their top priorities.
+Before their team started using Insightful, managers were using Google Sheets to grade employees’ work on a project-by-project basis. This ad-hoc system sapped a lot of valuable managerial time, lacked vital objectivity and was prone to errors. And this caused problems.
+During their regular performance evaluations, Digital Estimating employees consistently raised questions and often even complaints about their performance grades. Not the hallmarks of a high-performing team. Enter Insightful.
+Even before COVID-19 started we were looking at implementing a tool like this, so we could eliminate human input from the evaluations in order to make them objective. But we were also looking to improve the quality of work as much as possible.
+Umer Alam,
+CEO
+Apps and Websites Tracking
+Digital Estimating employees essentially only need a couple of tools to do their job, so Insightful helps them see where time is spent during the day.
+Project Management
+Tracking projects and the time spent on them is essential for Digital Estimating because it gives them a clear picture of work, and provides more transparency for their clients.
+Digital Estimating bills by the hour, so Insightful gives them exact data about time spent on projects and improves their billing practices.
+Increasing Productivity and
+Quality of Work
+It was clear to Digital Estimating managers that employees were falling short on produc
+######## pages/insightful.io__customers__esquared.txt
+URL: https://www.insightful.io/customers/esquared
+TITLE: Case Study: eSquared's Transformation to a Remote Powerhouse
+META: <meta content="Journey with eSquared as they swiftly adapt to remote work, boosting productivity beyond expectations with Insightful. Explore their success story." name="description">
+META: <meta content="Remote Work Mastery: eSquared's Successful Adaptation with Insightful" property="og:title">
+META: <meta content="Navigating the remote work transition, eSquared leaned on Insightful for real-time insights and optimal productivity. Dive into their journey and discover their success secrets." property="og:description">
+META: <meta content="Navigating the remote work transition, eSquared leaned on Insightful for real-time insights and optimal productivity. Dive into their journey and discover their success secrets." name="twitter:description">
+Case Study: eSquared's Transformation to a Remote Powerhouse
+eSquared
+Making Remote Work Possible for eSquared
+Discover how eSquared transformed into a high-productivity remote workplace with the help of Insightful.
+120+
+Consulting
+EMPLOYEE MONITORING
+Insightful was our top choice because it offered a lot of features which were above our expectations.
+Allison Lessard,
+Director of Organizational Development
+eSquared Before Insightful
+eSquared has been providing communication consulting services for over 20 years to various industries, ranging from healthcare to service businesses. Pre-pandemic, their whole team worked from their central location, but the company had plans to offer remote employment to eligible workers.
+The pandemic fast-tracked this decision. Working from home became a necessity, rather than a planned perk.While eSquared had an HR software in place for attendance tracking, feedback and reviews, it couldn’t help them measure productivity or track day-to-day activities.
+Initially, eSquared simply had plans to find a solution to monitor the productivity of their remote team. But, on discovering Insightful, they quickly realized even more was possible. Insightful had the capabilities to solve two of their major concerns: understanding employee (un)productivity and unearthing the core performance issues behind it.
+We wanted to make sure that people are as productive when they’re working from home, but we realized that Insightful can offer us much more in the future.
+Allison Lessard,
+Director of Organizational Development
+Real-Time Insights
+An instant overview of everyone's current activities gives managers a snapshot of what employees are working on at any moment.
+Idle Time
+Managers at eSquared have deemed Idle Time one of their key KPIs for success, and they depend on Insightful to accurately track it.
+Productivity Tracking
+Reliable productivity data helped eSquared transform int
+######## pages/insightful.io__customers__eurosense.txt
+URL: https://www.insightful.io/customers/eurosense
+TITLE: Adapting to Remote Work With Insightful
+META: <meta content="Learn how Eurosense adapted to remote work and how they monitor remote workers' productivity by using Insightful." name="description">
+META: <meta content="How Eurosense is Adapting to Remote Work With Insightful" property="og:title">
+META: <meta content="Eurosense adapted to remote work thanks to Insightful! Learn how they did it in this case study." property="og:description">
+META: <meta content="Eurosense adapted to remote work thanks to Insightful! Learn how they did it in this case study." name="twitter:description">
+Adapting to Remote Work With Insightful
+Eurosense
+Using Insightful to Effortlessly Adopt a Remote Work Environment
+Using Insightful, Eurosense has access to accurate time data that ensures time is being used effectively, wherever their team is located.
+94
+Europe
+Aerospace
+TIME TRACKING
+I tested different time tracking solutions, but Insightful was definitely the easiest to use.
+Daniela Marcov,
+Chief Operating Officer
+Eurosense Before Insightful
+Eurosense is a leading aerial surveillance company in Europe that uses geo data and cutting edge technology to cater to clients in every industry from construction to telecommunication. The company was founded in 1964, and has over 94 employees.
+Pre-pandemic, Eurosense employees worked from the office using project management tools to handle tasks among various teams. After the pandemic swept the globe, the company was forced to make the switch to remote work. To smoothen the transition, Eurosense invested in Insightful software to accurately track employee time data.
+Initially when I was in the demo period of Insightful, the real working time was very low… now everybody accepts it and works as needed.
+Daniela Marcov,
+Chief Operating Officer
+Employee Time Tracking
+Automatic employee time allows Eurosense to understand whether employees are fulfilling their daily scheduled work time.
+Insightful timesheets give Eurosense an overview of how much time an employee has worked in a given time period which leads to accurate payrolls.
+Automated Clock Ins and Outs
+From a security standpoint, Eurosense is protected from false work-related accident claims due to the precise activity-based clock ins and outs.
+Turning to Insightful in a Rapidly-Changing Work Environment
+Eurosense turned to Insightful the moment it made the switch to a remote work environment. Due to the COVID-19 outbreak in March 2020, employee monitoring became an integral part of the work dynamic at the company.
+At first, the transition to remote work was challenging for employees as they weren’t used to being isolated from each other. Communication and collaboration became difficult, as it did for many other companies i
+######## pages/insightful.io__customers__farmers-insurance.txt
+URL: https://www.insightful.io/customers/farmers-insurance
+TITLE: Boosting Productivity and Sales by 20% With Insightful
+META: <meta content="Find out how Insightful helped a small insurance agency increase accountability and boost sales by 20%." name="description">
+META: <meta content="Insightful Boosts Farmers Insurance Sales by 20%" property="og:title">
+META: <meta content="Learn more about how Insightful helps companies stay productive and boost sales - even in the toughest times." property="og:description">
+META: <meta content="Learn more about how Insightful helps companies stay productive and boost sales - even in the toughest times." name="twitter:description">
+Boosting Productivity and Sales by 20% With Insightful
+Farmers Insurance
+How Increased Accountability Drove 20% Increase in Sales
+Drop in productivity means a drop in sales for Farmers Insurance agents, but Insightful helps them reach new heights.
+MULTIPLE FRANCHISES
+Financial Services
+WORKFORCE ANALYTICS
+Taking Action to Turn Sales Around
+Farmers Insurance is an enterprise with many smaller franchises around the United States. They provide insurance in various categories, including business, life, home, and auto insurance. Their franchises vary in size levels, but many of them have found Insightful to be of great use no matter the agency size.
+During the first week of COVID-19 lockdown, Farmers Insurance sales fell down noticeably due to low productivity levels. After doing some research they found Insightful and it completely won them over. They realized that it will help them track all computer activities of their employees thus increasing accountability for their actions during working hours.
+We were monitoring productivity in the sense that we were looking at the results, at daily sales. Within the first week of COVID-19 lockdown, we’ve lost about $25,000 in sales per location so we knew we had to do something.
+Brett Vance,
+Agency Owner
+Reports
+The graph presenting the most used apps and websites provides Farmers Insurance with a great visual overview of productivity.
+Productivity Tracking
+Even employees at Farmers Insurance get excited when they’re checking their daily productivity levels and overall improvement statistics.
+Activities Tracking
+Getting the data on active vs idle time, and comparing that to VOIP data lets Farmers Insurance determine exactly how productive everyone was during the day.
+Making Productivity Measuring Fun
+Employees at Farmers Insurance now get excited about productivity. At first, they weren’t really psyched about it, but after just a few short weeks their productivity increased notably, and they can’t wait to see their daily results.
+When we started using Insightful the productivity was at about high 70 to 80%. Right now we’re at 92%! We have people co
+######## pages/insightful.io__customers__fields-group.txt
+URL: https://www.insightful.io/customers/fields-group
+TITLE: Making Hybrid Work Possible with Insightful
+META: <meta content="Shifting to a hybrid working model wasn’t easy for Fields Group, but they’ve had Insightful to help them overcome these new challenges." name="description">
+META: <meta content="How Fields Group Adapted to Hybrid Work with Insightful" property="og:title">
+META: <meta content="Fields Group made switching to a hybrid working model reality by using Insightful’s features that are perfect for productivity montioring." property="og:description">
+META: <meta content="Fields Group made switching to a hybrid working model reality by using Insightful’s features that are perfect for productivity montioring." name="twitter:description">
+Making Hybrid Work Possible with Insightful
+Fields Group
+Fields Group Makes Hybrid Work a New Reality Using Insightful
+Learn how Insightful empowers Fields Group's managers to be more effective in supporting their employees while maintaining productivity and increasing workforce efficiency.
+70
+Global
+BPO
+EMPLOYEE MONITORING
+What I like about Insightful is that it alleviates the need for an on-site team leader when people are working from home and don't have a team leader present.
+Jonathan Latchem-Smith,
+Director
+Fields Group Before Insightful
+Fields Group is a holding company of several IT-related companies. Their main services include data forensics, recovery, and conversion. While their main office is in the United Kingdom, they also have offices in the United States and Thailand, as well as employees who work remotely from different countries.
+Before the pandemic, Fields Group worked from local offices. Once mandatory work from home orders were in place, Fields Group already had plenty of remote-friendly systems in place, but something was missing.
+They were looking for a tool that would empower their team leaders to manage more efficiently through improved transparency into team-wide activity. That’s where Insightful came in.
+Insightful allows us to see how our employees are spending their time and therefore help them to be more successful.
+Jonathan Latchem-Smith,
+Director
+Activities Report
+The activities report feature makes it easy for Fields Group to get a quick and comprehensive view of every employees’ workday. As a result, Insightful reduced personal use of the company's computers.
+Productivity Labeling
+By assigning productivity labels to the apps and websites their team uses, Fields Group achieves a better understanding of how their employees work.
+Manual Time Entries
+Manual Time Entries help Fields Group employees account for every time of their workday, including time spent on offsite meetings and trainings.
+100% Employee Adoption of Insightful
+Implementing Insightful was a straightforward, qu
+######## pages/insightful.io__customers__grapes-digital.txt
+URL: https://www.insightful.io/customers/grapes-digital
+TITLE: Grapes Digital's Journey: Achieving Remote Work Visibility
+META: <meta content="Discover how Grapes Digital overcame the challenges of managing a large remote team by leveraging Insightful. Dive into their transformation journey and learn from their experience in the Advertising Services industry in India." name="description">
+META: <meta content="Grapes Digital's Remote Work Success with Insightful" property="og:title">
+META: <meta content="From sudden COVID lockdowns to mastering the art of remote team management, explore how Grapes Digital harnessed the power of Insightful to streamline operations and boost productivity across their remote teams." property="og:description">
+META: <meta content="From sudden COVID lockdowns to mastering the art of remote team management, explore how Grapes Digital harnessed the power of Insightful to streamline operations and boost productivity across their remote teams." name="twitter:description">
+Grapes Digital's Journey: Achieving Remote Work Visibility
+Grapes
+How Grapes Digital Uses Data from Insightful to Shed Light on Remote Teams
+Discover how Grapes Digital uses employee monitoring as a supplemental tool for feedback and managing remote teams.
+200+
+Asia
+Media
+Left in the Dark
+Grapes Digital is an integrated communications agency headquartered in New Delhi, India. Like many companies at the time, when the COVID lockdown happened, Grapes’ workforce was forced to go remote practically overnight. The sudden transition left Grapes a bit in the dark when it came to managing their newly remote teams. The challenge they were facing was the inability to know if employees were working and if they were working productively.
+Before implementing Insightful, Grapes Digital were not getting their desired output levels. They had concerns that some employees who claimed to be working were not working to typical standards. That’s when they began looking for a solution.
+The way the product was explained was simple and clear. Insightful presented their product better than competitors, it really helped us to thoroughly understand the product.
+Himanshu Arya,
+Founder & Chief Mentor
+Active vs Idle Time
+Insightful enables Grapes Digital to not only see when employees clock in and out, but offers insight into exactly how much of that time is spent actively working. If employees are clocked in but their data shows much of their day is idle, management knows they have an issue to address with the employee.
+The Time and Attendance tracker allows Grapes Digital to see exactly when employees begin and end their workday, as well as take breaks. This helps management know exactly when their employees are working and is useful for identifying trends of lateness, leaving early, et
+######## pages/insightful.io__customers__habc.txt
+URL: https://www.insightful.io/customers/habc
+TITLE: Getting Reassuring Proof of Work During Uncertain Times
+META: <meta content="Check out how Insightful made HABC’s transition to working from home easier while maintaining and boosting their productivity." name="description">
+META: <meta content="Insightful Helps HABC Transform Into a Flexible Workplace" property="og:title">
+META: <meta content="Find out how Insightful helped HABC adjust to working from home without compromising their productivity levels." property="og:description">
+META: <meta content="Find out how Insightful helped HABC adjust to working from home without compromising their productivity levels." name="twitter:description">
+Getting Reassuring Proof of Work During Uncertain Times
+HABC
+Gaining Reassuring Proof of Work in Any Situation
+Discover how the Housing Authority of Bergen County maintained and improved productivity while working from home.
+70
+Public Services
+EMPLOYEE MONITORING
+HABC Before Insightful
+Housing Authority of Bergen County (HABC) is a public housing agency in New Jersey. They have one main office, and multiple field offices around the county. Before the pandemic their entire team was working from the office, however as the COVID-induced lockdown started, a rapid shift to working from home was needed.
+It’s unusual for a government agency to work remotely. This presented additional challenges for HABC as their team grappled with accountability, timesheets and proving to their board that being productive is possible when working from home.
+HABC had a payroll system in place that enabled employees to clock in and out, but they needed greater visibility into the daily activities of their newly remote workforce.
+We were looking for a modern, user-friendly solution and we stumbled upon ‍Insightful. We tried it, loved it, and jumped on board pretty quickly.
+Joe D’Angelo,
+Information Systems Specialist
+Real-Time Insights
+Understanding employee activity status with a click of a button when they’re working from home makes daily operations simpler for HABC.
+Automated Reports
+Automated weekly and monthly reports deliver the most relevant and insightful employee data to managers on a regular basis.
+Activities Tracking
+Indisputable proof of work via daily activity data provided reassurance and clarity to managers who found themselves in a work-from-home scenario for the first time.
+Seamlessly Introducing and Implementing ‍Insightful
+The Director of the HABC had a meeting with the entire team to explain the short-term need to work from home, and the accompanying requirement to implement a monitoring tool.
+HABC leadership emphasized that the introduction of Insightful was to enable remote work via aggregated data insights, not as a way of monitoring every minute of an employee’s da
+######## pages/insightful.io__customers__impac.txt
+URL: https://www.insightful.io/customers/impac
+TITLE: Case Study: How Impac Leveraged Insightful for Remote Work
+META: <meta content="Dive into Impac's story as they transitioned to a hybrid workforce and how Insightful's employee monitoring solution provided clarity and support for better performance management." name="description">
+META: <meta content="Achieving Remote Work Success: Impac's Experience with Insightful" property="og:title">
+META: <meta content="Impac, a mortgage holdings company, reveals their transformation journey with Insightful – enabling a clearer perspective and smarter management for their evolving remote teams. Discover their story." property="og:description">
+META: <meta content="Impac, a mortgage holdings company, reveals their transformation journey with Insightful – enabling a clearer perspective and smarter management for their evolving remote teams. Discover their story." name="twitter:description">
+Case Study: How Impac Leveraged Insightful for Remote Work
+Impac
+Using Insightful to Get a Fuller Story of Remote Work
+Discover how Impac leverages Insightful to gain greater visibility of their remote teams and uses at-a-glance insights to support performance management.
+450
+Financial Services
+The perception is typically that if people aren’t in the office they aren't working; Insightful helps managers better understand what employees are doing, and how productive they actually are.
+Timothy Minner,
+IT Services Manager
+New Model, New Metrics
+Impac is a mortgage holdings enterprise based in California with a hybrid workforce. Before COVID, 95% of Impac’s employees were working in the office, with only a few out-of-state employees working remotely. Once the pandemic hit, like many companies, Impac had to quickly transition to a fully remote workforce.
+Since the pandemic has died down, only 20% of Impac employees work in the office every day. Of their current workforce, 80% are hybrid, alternating between working from home and in the office 2 or 3 days a week. Eventually, employees may work more readily from the office, but Impac expects to continue a hybrid working model into the future at least to some degree.
+The transition to a hybrid working environment is what motivated Impac to seek out viable employee monitoring solutions for their business. The sudden switch to working from home during the pandemic made it difficult for management to get a clear view of their teams’ daily routines and activities.
+Before implementing Insightful, Impac was not using any similar software aside from basic time clock software without productivity monitoring capabilities. They needed more dynamic metrics and productivity insights in order to effectively manage the performance of their newly remote teams.
+Insightful’s easy-to-understand visua
+######## pages/insightful.io__customers__lean-solution.txt
+URL: https://www.insightful.io/customers/lean-solution
+TITLE: Case Study: Lean Solutions Group Boosts Client Relations with Insightful
+META: <meta content="Dive into Lean Solutions Group's journey as they use Insightful to bridge the gap between clients and remote teams, ensuring productivity and building trust." name="description">
+META: <meta content="Empowering Remote Work: Lean Solutions Group's and Insightful" property="og:title">
+META: <meta content="Learn how Lean Solutions Group amplified its client relationships, optimized employee monitoring, and upheld company culture across borders using Insightful." property="og:description">
+META: <meta content="Learn how Lean Solutions Group amplified its client relationships, optimized employee monitoring, and upheld company culture across borders using Insightful." name="twitter:description">
+Case Study: Lean Solutions Group Boosts Client Relations with Insightful
+Lean Solutions Group
+Strengthening Client Relationships with Insightful
+Lean Solutions Group uses Insightful to strengthen existing client relationships and help their customers manage employee productivity.
+10,000+
+Global
+BPO
+Insightful is good for both the employees and the employer.
+Willmar Marin,
+Chief Strategy Officer, Lean Solutions Group
+Lean Solutions Group Before Insightful
+Established in 2012 in Coral Springs, Florida, Lean Solutions Group is a nearshore and offshore service provider with 10,000 employees across seven offices in Colombia, Guatemala, Mexico, and the Philippines. Serving over 500 U.S. companies, they offer staffing, technology, marketing, sales, and business process outsourcing services under one roof.
+One of the tools Lean Solutions Group offers to customers is time-tracking software, as it identified that employee monitoring from afar is a primary customer need. Tools they’ve looked to in the past have proven difficult to get to grips with and didn’t provide the level of customer service necessary to implement the software and its features effectively.
+With Insightful, our clients can see if there is the potential to give employees more activities and more work.
+Willmar Marin,
+Chief Strategy Officer, Lean Solutions Group
+Activity Tracking
+Lean Solutions Group aims to streamline processes for its clients and make remote work for its employees as straightforward as possible. The activity tracking feature has proven effective for clients monitoring their employees’ productivity.
+Dashboard Overview
+For Lean Solutions Group’s clients, a simple software that delivers pertinent information at a glance is best. The Insightful dashboard displays relevant time data in a way that’s easy to understand and draw insights from.
+Customer Support
+Insightful customer support has worked closely with Lean Solutions Group to iron out 
+######## pages/insightful.io__customers__outstaffer.txt
+URL: https://www.insightful.io/customers/outstaffer
+TITLE: Outstaffer & Insightful: Empowering Autonomy and Digital Security
+META: <meta content="Learn how Outstaffer achieved enhanced autonomy, control over data, and a secure digital environment by leveraging Insightful’s employee monitoring solutions." name="description">
+META: <meta content="Outstaffer's Digital Transformation with Insightful" property="og:title">
+META: <meta content="Dive into Outstaffer’s story to discover the critical role Insightful played in enhancing productivity, transparency, and security in a global digital workspace." property="og:description">
+META: <meta content="Dive into Outstaffer’s story to discover the critical role Insightful played in enhancing productivity, transparency, and security in a global digital workspace." name="twitter:description">
+Outstaffer & Insightful: Empowering Autonomy and Digital Security
+Outstaffer
+Creating Greater Autonomy and a More Secure Digital Workspace with Insightful
+Discover how Insightful’s employee monitoring app provides Outstaffer with the autonomy and branding control they need and provides an added layer of security for their global network.
+200+
+Global
+BPO
+Insightful is an important tool in our business – we use it to track apps and URLs, activity and usage, and productivity.
+Thomas Derum,
+CEO at Outstaffer
+Outstaffer Before Insightful
+Outstaffer is a BPO that sources talent from the Philippines, Ukraine, Singapore, Vietnam, and Thailand, largely for Australian and American companies. They make it simple for enterprises to find, hire, and employ talent from around the world thanks to work-from-anywhere technology that enables employees to work in a virtual workspace safely and securely.
+Before COVID, Outstaffer provided staff from around the world, where they worked in traditional office settings. They had always planned the work-from-home model, but COVID sped up the process and it has proven very effective for their business model. Now they have workspaces that enable their employees to collaborate and work globally within a fully digital environment.
+Outstaffer uses a payroll system that employees clock in and out of, but it doesn’t track productivity. In the past, they used a third-party tool to track staff remotely via screenshots or website tracking. The downside was that using a third-party tool meant that they didn’t host their own data, which was important to them and their clients. Once they discovered how Insightful could better meet their needs, they decided to make the switch.
+We secure and manage our devices virtually on our network and use 24/7 monitoring to keep our clients’ data secure. For us, Insightful is an important security function.
+Thomas Derum,
+CEO at Outstaffer
+Website and Apps Usage
+The ability to 
+######## pages/insightful.io__customers__pexly.txt
+URL: https://www.insightful.io/customers/pexly
+TITLE: Pexly & Insightful: Enhancing Transparency and Productivity
+META: <meta content="Discover how Pexly uses Insightful for better visualization, transparency, and performance management across its global teams, enhancing both business intelligence and employee productivity." name="description">
+META: <meta content="Pexly's Success Story with Insightful" property="og:title">
+META: <meta content="Dive deep into how Pexly seamlessly adopted Insightful to elevate their global team management, harnessing real-time insights to boost productivity and ensure superior customer service." property="og:description">
+META: <meta content="Dive deep into how Pexly seamlessly adopted Insightful to elevate their global team management, harnessing real-time insights to boost productivity and ensure superior customer service." name="twitter:description">
+Pexly & Insightful: Enhancing Transparency and Productivity
+Pexly
+How Pexly Better Manages Global Teams with Insightful
+Discover how Pexly leverages Insightful for enhanced visualization, transparency, and business intelligence to better manage their global workforce.
+500+
+Global
+BPO
+I like the visualization in the app. I can easily find everything I need and it's enough for me - it was very easy to learn and intuitive.
+Michel Mertens,
+Managing Director at Pexly
+Wanted: A Sophisticated Yet Simple Solution
+Headquartered in Amsterdam, Pexly is an experienced company with a long track record in BPO and Customer Service outsourcing. Pexly operates throughout Europe, Asia, and the Americas, with international outsourced contact centers based primarily in Eastern Europe.
+Pexly currently operates via a hybrid work model. The biggest challenges of adopting remote work was the loss of face-to-face interactions and ensuring that remote agents were doing the job they were supposed to. The constant social aspect that in-office work offers meant that leaders could have their eyes and ears to the ground. Without the ability to have full access to their workforce, Pexly worried that the quality of work could be lost.
+Before implementing Insightful, Pexly kept records using spreadsheets coupled with a CRM tool for attendance tracking. Team leads also checked in with agents personally when shifts were beginning or ending. For productivity monitoring, managers asked agents to share results directly but didn’t offer much insight into agent workloads. They wanted to better understand how much of an agent’s workday consisted of productive time vs. free time.
+As our workforce grew, we needed a more sophisticated tool to manage a larger volume of agents and ensure teams are productive and delivering quality work.
+Michel Mertens,
+Managing Director at Pexly
+Screenshots
+Insightful’s Screenshots
+######## pages/insightful.io__customers__strategic-business-alliance.txt
+URL: https://www.insightful.io/customers/strategic-business-alliance
+TITLE: How Insightful Gave SBA a Granular View Into Everyday Activities
+META: <meta content="Find out how Insightful gave Strategic Business Alliance a deep dive into the productivity and daily activities of their employees." name="description">
+META: <meta content="Helping SBA Better Understand Employees' Workflows" property="og:title">
+META: <meta content="Check out how Strategic Business Alliance got surprising data about their employees' everyday activities." property="og:description">
+META: <meta content="Check out how Strategic Business Alliance got surprising data about their employees' everyday activities." name="twitter:description">
+How Insightful Gave SBA a Granular View Into Everyday Activities
+Strategic Business Alliance
+Gaining a Granular View Into Productivity From Anywhere
+Find out how Insightful helped Strategic Business Alliance better understand their employees’ everyday activities.
+50+
+Australia
+BPO
+TIME TRACKING
+With our team in India working from home, we were faced with a completely new experience and we definitely needed a tool like Insightful to help us navigate this situation.
+Partha Nag,
+Executive Director
+Strategic Business Alliance
+Before Insightful
+Strategic Business Alliance has been in the business process outsourcing (BPO) industry for over a decade. During this time, they’ve helped many companies, in particular law firms, reach their full potential and keep day-to-day operations running smoothly through strategic outsourcing.
+Before the COVID-induced lockdown in 2020, Strategic Business Alliance used a time and attendance software that required each employee to log their daily time manually. Reports would then be analyzed at the end of each month, and compared to billing times.
+This manual time tracking solution was working sufficiently for Strategic Business Alliance; but, over time, they realized it was only providing a minimal amount of time tracking insights. What they really needed was a solution that combined time tracking with productivity data to truly help them understand team performance, streamline daily activities and enhance business processes.
+We loved the fact that Insightful offered time tracking and productivity tracking at the same time.
+Partha Nag,
+Executive Director
+Productivity Tracking
+Having detailed visibility into everyone’s productivity -- and the data to back up conversations around it -- is essential for Strategic Business Alliance, especially with their team working from home.
+Real-Time Insights
+Real-time behavioral insights give Strategic Business Alliance managers a quick view of what everyone’s working on at any given moment. Plus, real-time insights reveal employee work status: active, idle, or on break.
+Given that t
+######## pages/insightful.io__customers__stratum.txt
+URL: https://www.insightful.io/customers/stratum
+TITLE: Stratum Benefits & Insightful: Elevating Hybrid Workforce Performance
+META: <meta content="Dive into Stratum Benefits' experience of harnessing Insightful to optimize visibility, productivity, and performance management across their hybrid teams in the Financial Services sector." name="description">
+META: <meta content="Stratum Benefits Empowers Hybrid Teams with Insightful" property="og:title">
+META: <meta content="Learn how Stratum Benefits, a leading Financial Services Provider, leverages Insightful to gain unparalleled visibility into employee work habits, ensuring optimal performance and productivity in a hybrid work model." property="og:description">
+META: <meta content="Learn how Stratum Benefits, a leading Financial Services Provider, leverages Insightful to gain unparalleled visibility into employee work habits, ensuring optimal performance and productivity in a hybrid work model." name="twitter:description">
+Stratum Benefits & Insightful: Elevating Hybrid Workforce Performance
+Stratum Benefits
+How Stratum Benefits Uses Insightful to Effectively Manage Hybrid Teams
+Discover how Stratum Benefits leverages Insightful to gain greater visibility into their hybrid teams’ work habits and more effectively manage performance.
+100+
+Africa
+Financial Services
+Insightful’s commitment to helping their clients is what makes me a loyal client.
+Marco Fronto,
+Managing Director at Stratum Benefits
+Stratum Before Insightful
+Stratum Benefits is a Financial Services Provider specializing in short-term health insurance products. Headquartered in Johannesburg, South Africa, their team consists of 124 employees.
+Prior to the pandemic, all of Stratum’s team members were based in the office. During COVID, they were forced to switch to remote work, and many of their team members are still working remotely. As the pandemic continues to die down, they plan to carry on with a hybrid working model into the future.
+When Stratum’s workforce went remote, they noticed fluctuations in productivity; productivity increased in some employees and dwindled in others. In order to better manage these changes, they needed greater visibility into what was happening and why, so they could adjust the way they approach and manage performance.
+At the time, Stratum managed productivity by keeping manual records of items processed versus time worked. The daily quality assurance that was done on the departments and their activities assisted in identifying productivity pain points. An additional solution was used to check when employees logged in, how long they remained online, and their data usage.
+What they needed was a more comprehensive solution that could track time and attendance, data usage, and provide productivity insights in one
+######## pages/insightful.io__customers__supportzebra.txt
+URL: https://www.insightful.io/customers/supportzebra
+TITLE: Enabling a More Proactive Approach to Productivity
+META: <meta content="Check out how Insightful's product helps SupportZebra manage their hybrid teams and maintain productivity across locations." name="description">
+META: <meta content="Using Insightful to Proactively Manage Productivity" property="og:title">
+META: <meta content="Find out more about how SupportZebra uses Insightful to manage productivity even in a hybrid setting." property="og:description">
+META: <meta content="Find out more about how SupportZebra uses Insightful to manage productivity even in a hybrid setting." name="twitter:description">
+Enabling a More Proactive Approach to Productivity
+SupportZebra
+How Insightful Enables a More Proactive Approach to Productivity
+Discover how SupportZebra depends on Insightful to unify their team in a hybrid environment and proactively manage productivity.
+700+
+Global
+BPO
+EMPLOYEE MONITORING
+The outsourcing industry will keep expanding, and considering what’s happening in the world, tools like Insightful will be pivotal in maintaining productivity.
+Nathan Yap,
+CEO of SupportZebra
+SupportZebra Before Insightful
+Founded in 2011, SupportZebra is a business process outsourcing company that supports fast-growing SaaS and eCommerce companies. The company offers a range of outsourced services, including back office support, content moderation and customer support.
+Before the pandemic, SupportZebra’s entire team worked on site. To navigate the pandemic, they switched to working remotely. Today, they’ve adopted a hybrid working model, a structure they intend to keep into the future.
+Prior to adopting Insightful, SupportZebra tried a different time tracking and employee monitoring tool, but found it was lacking some crucial features. Insightful won them over with a dashboard that enables team leaders to easily track real-time activities, improve team management, and generate custom reports.
+The ease of onboarding, implementation, and use was the main reason we chose Insightful.
+Nathan Yap,
+CEO of SupportZebra
+Real-Time Dashboard
+Being able to see what employees are working on in real-time enables SupportZebra to identify dips in productivity and address the root causes before they become ingrained.
+Custom Reports
+In-depth, team-level reports provide SupportZebra with a complete picture of productivity without the need for manual assessment, allowing them to objectively analyze and measure their results.
+Client Login
+The client login feature allows SupportZebra to give their clients access to productivity data related to their projects, providing refreshing transparency that most of their competitors simply don’t provide.
+Taking a Transparent Approach to Monitoring
+As SupportZebra was using a diff
+######## pages/insightful.io__customers__trib-total-media.txt
+URL: https://www.insightful.io/customers/trib-total-media
+TITLE: Unlocking Trib Total Media’s Full Potential With Insightful
+META: <meta content="Find out how Insightful helped a publishing company reach their employees’ full potential and unlock additional business value." name="description">
+META: <meta content="Insightful Helps Trib Total Media Discover New Potential" property="og:title">
+META: <meta content="Check out how Trib Total Media uses Insightful, and how we helped them discover the untapped potential of their employees." property="og:description">
+META: <meta content="Check out how Trib Total Media uses Insightful, and how we helped them discover the untapped potential of their employees." name="twitter:description">
+Unlocking Trib Total Media’s Full Potential With Insightful
+Trib Total Media
+Unlocking Employee Potential and Hidden Business Value
+Find out how Insightful helped Trib Total Media find gaps in their employees’ workflow and provide them with more training to reach their full potential.
+400+
+Media
+EMPLOYEE MONITORING
+We needed a set of unobtrusive eyes so that we could continue focusing on the big picture.
+David Fellabaum,
+Executive Director of Information Systems
+Trib Total Media Before Insightful
+Trib Total Media is a multimedia network of daily and weekly newspapers, weekly shoppers and websites.
+In addition, Trib Total Media provides media planning, digital marketing, commercial printing, ecommerce solutions and other services.
+As is the case for most organizations, 2020 was tough on Trib Total Media. Their customers had to cut marketing budgets and finding new clients proved quite a challenge.
+While navigating significant changes in their core business operations, Trib Total Media also went through another major transition – moving to a remote working environment and managing remote teams.
+Suddenly, they lost their immediate connection with their employees and no longer had visibility of what staff was working on.
+We needed data that we could base the conversation on.
+David Fellabaum,
+Executive Director of Information Systems
+Dashboard
+The intuitive design makes it simple for Trib Total Media to access and customize settings within the dashboard.
+Automatic Reports
+Receiving automatic reports saves managerial time and ensures Insightful is used to enhance collective performance, not focus on individual data.
+Activities Tracking
+Real-time activities tracking allows Trib Total Media to see the active vs. idle time of their employees to figure out who has gaps in their workload.
+Open Communication Is the Key of Successful Implementation
+Trib Total Media knew that open communication and transparency would be the key to the seamless implementation of Insightful.
+The first step was for the President to send an email to all emplo
+######## pages/insightful.io__customers__vitality-medical.txt
+URL: https://www.insightful.io/customers/vitality-medical
+TITLE: Adding Accountability to Vitality Medical’s Daily Operations
+META: <meta content="Find out how Insightful helped this medical e-commerce create an accountable workplace without compromising the privacy of their clients." name="description">
+META: <meta content="Insightful Helps Vitality Medical Create an Accountable Workplace" property="og:title">
+META: <meta content="Check out how Vitality Medical uses Insightful to add more accountability to their daily operations and keep their customers' data protected at the same time." property="og:description">
+META: <meta content="Check out how Vitality Medical uses Insightful to add more accountability to their daily operations and keep their customers' data protected at the same time." name="twitter:description">
+Adding Accountability to Vitality Medical’s Daily Operations
+Vitality Medical
+Creating an Accountable Work Environment With Insightful
+Explore how Vitality Medical managed to increase accountability while simultaneously protecting their customer and employee data.
+50+
+Consumer & Retail
+EMPLOYEE MONITORING
+Insightful helped us create a fair environment for employees, where everyone is accountable for their actions.
+James Erickson,
+IT Manager
+Vitality Medical Before Insightful
+Vitality Medical has been selling quality medical supplies to consumers, hospitals, and various health centers across the US for over 20 years. With more than 2.5 million happy customers, they are a recognized industry leader.
+The nature of Vitality Medical’s products makes them vital to the healthcare needs of their clients. This made keeping business running smoothly even more pressing during the pandemic.
+While office-based, the different departments of Vitality Medical had various methods for tracking daily progress, ranging from sheets to project management tools. When the Vitality Medical team moved to working from home, however, they quickly realized that this combination of methods didn’t provide accurate data about productivity and performance.
+Soon enough, they found Insightful - a software solution that helped them measure productivity, while staying transparent and keeping their client’s privacy intact.
+We trust our employees that they’re doing what they’re supposed to do, but with Insightful we have the ability to validate that trust.
+James Erickson,
+IT Manager
+Employee Login
+Giving employees access to their data helped Vitality Medical be transparent and open with their employees, keeping them informed and involved in the productivity tracking process.
+Privacy Settings
+The ability to disable tracking and screenshots in specific apps is crucial for Vitality Medical because they work with sensitive data and must adhere to privacy-related regulations li

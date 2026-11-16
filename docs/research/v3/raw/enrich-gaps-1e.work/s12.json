@@ -1,0 +1,11 @@
+[
+{"company_name": "VargasAndrews", "company_domain": "vargasandrews.com", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "", "hq_country": "United States (Irvine, CA)",
+ "contacts": [
+  {"name": "Andrew Andrews-Ramirez", "title": "Managing Partner (Founder)", "linkedin": "https://www.linkedin.com/in/andrew-andrews-ramirez", "source_url": "https://vargasandrews.com/"},
+  {"name": "Alonso Vargas", "title": "Founding Partner", "linkedin": "https://www.linkedin.com/in/vargasandrews-alonso/", "source_url": "https://vargasandrews.com/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/vargasandrews", "company_phone": "+1 213-712-9001",
+ "public_email": "info@vargasandrews.com", "contact_source_url": "https://vargasandrews.com/",
+ "notes": "Still in role: the homepage 'Our Founders' section lists Andrew Andrews-Ramirez (Managing Partner) and Alonso Vargas (Founding Partner). Both personal LinkedIn URLs are linked from the official homepage (/in/andrew-andrews-ramirez and /in/vargasandrews-alonso/), and the slugs match the names. Email and company LinkedIn re-confirmed. The phone was carried from the input; it is not in the homepage HTML (Wix-rendered)."}
+]

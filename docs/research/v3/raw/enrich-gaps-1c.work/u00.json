@@ -1,0 +1,28 @@
+{
+"0": {"confidence_score": 85,
+ "contacts": [
+  {"name": "Agustín Hernández Bonaglia", "title": "Co-Founder & CEO", "linkedin": "https://www.linkedin.com/in/agustinh17/", "source_url": "https://www.uruguayxxi.gub.uy/en/service-directory/xmartlabs-1/"},
+  {"name": "Enrique Galindo", "title": "Co-Founder & COO", "linkedin": "https://www.linkedin.com/in/enrique-galindo-042bb331/", "source_url": "https://toggl.com/customers/xmartlabs"}],
+ "company_phone": "+598 098 626 960 (CEO contact line listed in Uruguay XXI investor service directory)",
+ "public_email": "getintouch@xmartlabs.com; agustin@xmartlabs.com (published verbatim as CEO contact in Uruguay XXI directory)",
+ "contact_source_url": "https://www.uruguayxxi.gub.uy/en/service-directory/xmartlabs-1/",
+ "notes": "Added CEO Agustín Hernández Bonaglia as decision maker (co-founder with Galindo, 2012); Uruguay XXI government directory lists him as CEO with phone and email. Galindo still shown as COO & Co-founder on LinkedIn search result (still in role). LinkedIn URLs both from search results matching name + Xmartlabs. Contact page has no phone; HQ Bv. España 2529, Montevideo."},
+"1": {"confidence_score": 75,
+ "contacts": [
+  {"name": "Julmar Grace Locsin", "title": "CEO & Founder", "linkedin": "https://www.linkedin.com/in/gracelocsinph/", "source_url": "https://theorg.com/org/surge-marketplace/person/julmar-grace-locsin"},
+  {"name": "Jay Locsin", "title": "COO", "linkedin": "", "source_url": "https://theorg.com/org/surge-marketplace"}],
+ "company_phone": "+63 917-152-9383",
+ "public_email": "info@surgefreelancingmarketplace.com",
+ "contact_source_url": "https://surgefreelancingmarketplace.com/contact-us/",
+ "notes": "Grace Locsin still CEO (LinkedIn headline 'Surge Marketplace', theorg). COO Jay Locsin per search summary of theorg/ZoomInfo (not opened). Phone/email from search snippet of contact page (site returned empty to fetch; not verified directly); address Commercial Door B2, Luisa Ave. Square, E. Jacinto Ext., Davao City. Company LinkedIn page not found by search (posts exist under linkedin.com/posts/surgemarketplace_..., but company page URL not seen verbatim, so left blank)."},
+"2": {"confidence_score": 85,
+ "contacts": [
+  {"name": "Thiago de Carvalho", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/othiagodecarvalho/", "source_url": "https://theorg.com/org/deer-designer/org-chart/thiago-de-carvalho"},
+  {"name": "Lia Carvalho", "title": "Director of Business Operations", "linkedin": "https://www.linkedin.com/in/liacarvalho/", "source_url": "https://theorg.com/org/deer-designer/org-chart/lia-carvalho"}],
+ "hq_country": "UK (London); US entity Deer Designer LLC; remote team largely Brazil",
+ "company_linkedin": "https://uk.linkedin.com/company/deerdesigner",
+ "company_phone": "",
+ "public_email": "hello@deerdesigner.com; help@deerdesigner.com",
+ "contact_source_url": "https://www.deerdesigner.com/privacy",
+ "notes": "Both contacts still in role per LinkedIn search titles and theorg. Company LinkedIn 51-200 employees, London, founded 2018. Emails from site HTML (privacy policy; Cloudflare-obfuscated address decoded). No phone published on site."}
+}

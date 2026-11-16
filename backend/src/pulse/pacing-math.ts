@@ -5,7 +5,11 @@
 
 export const WEEKLY_HOURS_TARGET = 35;
 export const PACING_TARGET_HOURS_PER_WORKDAY = 7;
-/** Leave credit in pacing (full weekday). Distinct from Team Time leave adjustment (7h). */
+/**
+ * Personal-leave credit in pacing (full weekday).
+ * Public holidays do not use this. They remove the day from the target.
+ * Hours tracked on the holiday still count.
+ */
 export const PACING_LEAVE_HOURS_PER_DAY = 8;
 export const HALF_DAY_LEAVE_DAYS = 0.5;
 
@@ -187,6 +191,31 @@ export function employmentWeekdays(
   const start = startedOn ? String(startedOn).slice(0, 10) : null;
   if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return weekdays;
   return weekdays.filter((d) => d >= start);
+}
+
+export function excludeDateKeys(days: string[], skip: ReadonlySet<string>): string[] {
+  if (!skip.size) return days;
+  return days.filter((d) => !skip.has(d));
+}
+
+export function pacingTargetForWeekdays(weekdayCount: number): number {
+  return round2(Math.max(0, weekdayCount) * PACING_TARGET_HOURS_PER_WORKDAY);
+}
+
+/**
+ * A public holiday with no tracked time stays out of the pace sample.
+ * A holiday someone worked stays in, so those hours raise the average.
+ */
+export function sampleDaysWithHolidayWork(
+  sampleDays: string[],
+  holidayDays: ReadonlySet<string>,
+  trackedHours: (day: string) => number,
+): string[] {
+  if (!holidayDays.size) return sampleDays;
+  return sampleDays.filter((day) => {
+    if (!holidayDays.has(day)) return true;
+    return trackedHours(day) > 0;
+  });
 }
 
 export function weeklySampleKeys(weekMonday: string, rollupDay: string): string[] {

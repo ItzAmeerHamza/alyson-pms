@@ -27,6 +27,7 @@ macOS 11+ (Apple Silicon and Intel) and Windows 10/11. The same password works h
 | Dashboard | The Pulse web portal in the browser (`https://app.alyson.ai`) |
 | Screenshots | Your captures for one work day |
 | FAQ | In-app help |
+| Report an issue | Send a problem to company admins, with optional diagnostic logs |
 | App Updates | Check, download, and install |
 
 **Sidebar footer**
@@ -131,6 +132,15 @@ Your own captures.
 - What is AI analysis?
 - What is Tavilo Coach?
 - macOS blocked Tavilo Time (not from an identified developer) — how to choose Open Anyway
+- How do I report a problem with the app?
+
+## Report an issue
+
+- Category: time tracking, screenshots, sign-in, permissions, app update, or something else
+- Description (at least a few words, up to 4,000 characters)
+- Optional recent diagnostic logs. Screenshots are not attached
+- Send report. Company admins see it in Pulse under Issue Reports, and get an email when mail is configured
+- The tray menu has the same page: Report an issue
 
 ## App Updates
 

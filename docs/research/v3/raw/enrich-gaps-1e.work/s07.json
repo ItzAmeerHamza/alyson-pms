@@ -1,0 +1,42 @@
+[
+{"company_name": "Teachstone", "company_domain": "teachstone.com", "vendor": "Toggl Track", "confidence_score": 65,
+ "employee_count": "375", "hq_country": "United States",
+ "contacts": [
+  {"name": "Karlo Young", "title": "CEO", "linkedin": "", "source_url": "https://teachstone.com/leadership/"},
+  {"name": "Cheryl Toto", "title": "Chief Operating Officer", "linkedin": "", "source_url": "https://teachstone.com/leadership/"},
+  {"name": "Yvonne Cowser Yancy", "title": "Chief People Officer", "linkedin": "", "source_url": "https://teachstone.com/leadership/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/teachstone/", "company_phone": "", "public_email": "contact@teachstone.com",
+ "contact_source_url": "https://teachstone.com/contact/",
+ "notes": "Still in role: Karlo Young is listed as CEO on the official leadership page, which also lists Cheryl Toto (COO), Yvonne Cowser Yancy (Chief People Officer), Franco DeBlasio (CFO) and Francine Oliver (Chief Growth Officer). The email was decoded from the official contact/support page. Company LinkedIn comes from the site footer. The support page gives hours (Mon-Fri 8am-8pm EST) but no phone number. No personal LinkedIn links on the site (leadership page blocks curl)."},
+{"company_name": "Dovetail (now Paloma Group)", "company_domain": "palomagroup.com", "vendor": "Harvest", "confidence_score": 65,
+ "employee_count": "50", "hq_country": "Australia (North Sydney)",
+ "contacts": [
+  {"name": "Nick Frandsen", "title": "Co-CEO (co-founder)", "linkedin": "", "source_url": "https://palomagroup.com/about"},
+  {"name": "Ash Fogelberg", "title": "Co-CEO (co-founder)", "linkedin": "", "source_url": "https://palomagroup.com/about"},
+  {"name": "Shona Evans", "title": "Head of Operations", "linkedin": "", "source_url": "https://palomagroup.com/about"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/palomagroup", "company_phone": "+61 2 8317 1219 (Sydney)",
+ "public_email": "hello@palomagroup.com", "contact_source_url": "https://palomagroup.com/contact",
+ "notes": "dovetailstudios.com now redirects to Paloma Group. Still in role: Nick Frandsen and Ash Fogelberg are both listed as Co-CEO under Senior leadership on palomagroup.com/about. Added Shona Evans (Head of Operations). Georgia Chunn is GM. Sydney phone and address (Level 4 James Place, North Sydney NSW 2060) are from the contact page; there is also an Auckland office. No personal LinkedIn links on the site."},
+{"company_name": "The Charles", "company_domain": "thecharlesnyc.com", "vendor": "Harvest", "confidence_score": 65,
+ "employee_count": "37", "hq_country": "US (New York; offices in Chicago, London)",
+ "contacts": [
+  {"name": "Aaron Edwards", "title": "Co-Founder & CEO", "linkedin": "", "source_url": "https://thecharlesnyc.com/about"},
+  {"name": "Samantha Edwards", "title": "Co-Founder & Chief Creative Officer", "linkedin": "", "source_url": "https://thecharlesnyc.com/about"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/thecharlesgrp/", "company_phone": "+1 212 226 8929; London +44 20 3675 7721",
+ "public_email": "info@thecharlesgrp.com; info@thecharlesnyc.com", "contact_source_url": "https://thecharlesnyc.com/contact",
+ "notes": "Now branded The Charles Group. Still in role: Aaron Edwards (Co-Founder & CEO) and Samantha Edwards (Co-Founder & CCO) are on the current About page. Emails and London phone were extracted from the official contact page HTML. No personal LinkedIn links on the site."},
+{"company_name": "AREA 17", "company_domain": "area17.com", "vendor": "Harvest", "confidence_score": 65,
+ "employee_count": "40 (story)", "hq_country": "US/France (Brooklyn NY; Paris)",
+ "contacts": [
+  {"name": "George Eid", "title": "Founder, CEO", "linkedin": "", "source_url": "https://area17.com/about"},
+  {"name": "Mark Jarecke", "title": "Managing Director, North America", "linkedin": "", "source_url": "https://area17.com/about"},
+  {"name": "Alexandre Bommelaer", "title": "Managing Director, Europe & Asia", "linkedin": "", "source_url": "https://area17.com/about"},
+  {"name": "Mary Cleary", "title": "Associate Operations Director", "linkedin": "", "source_url": "https://area17.com/about"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/area-17", "company_phone": "+1 646-277-7117 (NY); +33 9 78 80 65 12 (Paris)",
+ "public_email": "", "contact_source_url": "https://area17.com/contact/",
+ "notes": "Contacts changed: George Eid is still Founder & CEO per the current leadership list. Co-founder Arnaud Mercier is now mentioned only in the founding story, not in current leadership, so he was replaced as second contact by Mark Jarecke (MD North America), with Alexandre Bommelaer (MD Europe & Asia) and Mary Cleary (Associate Operations Director) added. Kemp Attwood is Founding Partner. The contact page uses forms only (new business, press, general) and publishes no email. Addresses: 26 Dobbin St, 3rd Floor, Brooklyn NY 11222; 69 Quai de Valmy, 75010 Paris."}
+]

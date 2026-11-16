@@ -1,0 +1,29 @@
+[
+{"company_name": "Aktana", "company_domain": "aktana.com", "vendor": "TimeCamp", "confidence_score": 85,
+ "employee_count": "200-499", "hq_country": "US",
+ "contacts": [
+  {"name": "John Vitalie", "title": "CEO", "linkedin": "https://www.linkedin.com/in/johnvitalie/", "source_url": "https://www.timecamp.com/customer-stories/aktana/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/aktana", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "Nothing new found. aktana.com blocks both fetch and curl (Cloudflare 403), the archive.org lookup was rate-limited, and the TimeCamp story names no individual. Could not confirm John Vitalie is still CEO (web-search budget exhausted). Existing CEO and LinkedIn carried over from the input unchanged. No second contact, phone or email found."},
+{"company_name": "EGTC Infra", "company_domain": "egtc.com.br", "vendor": "TimeCamp", "confidence_score": 85,
+ "employee_count": "100-199 (story)", "hq_country": "Brazil",
+ "contacts": [
+  {"name": "Raul Pereira", "title": "Diretor Presidente (CEO)", "linkedin": "", "source_url": "https://egtc.com.br/quem-somos/"},
+  {"name": "Juliano Meirelles", "title": "Diretor de Finanças e ESG (CFO)", "linkedin": "", "source_url": "https://egtc.com.br/quem-somos/"},
+  {"name": "Nathanael Mota", "title": "Diretor Comercial", "linkedin": "", "source_url": "https://egtc.com.br/quem-somos/"}
+ ],
+ "company_linkedin": "https://br.linkedin.com/company/egtcinfra", "company_phone": "", "public_email": "",
+ "contact_source_url": "https://egtc.com.br/fale-conosco",
+ "notes": "Still in role: Raul Pereira is listed as Diretor Presidente in the current 'Diretoria' section of Quem Somos (formerly ENGETEC). Also listed: Juliano Meirelles (Finance & ESG), Nathanael Mota (Commercial) and Luciana Levy (Legal). Ignore the phones and email on the Fale Conosco page (+1 234 719 8948, +1 987 654 3210, support@industrium.com): they are WordPress theme placeholders, not real EGTC details, so phone and email are left blank. Offices: Av. Presidente Wilson 231, 6º andar, Rio de Janeiro; R. Funchal 263, 15º andar, São Paulo. No personal LinkedIn found (search budget exhausted)."},
+{"company_name": "Outgive Inc (Noni Brands; Seller Interactive, Stallion Express)", "company_domain": "outgive.ca", "vendor": "Hubstaff", "confidence_score": 65,
+ "employee_count": "11 (TheirStack); 400+ global team per company", "hq_country": "Canada (Markham, ON)",
+ "contacts": [
+  {"name": "Nicasio Co III", "title": "Founder", "linkedin": "https://ca.linkedin.com/in/nicasioiii", "source_url": "https://www.sellerinteractive.com/about-us"},
+  {"name": "Runda Shaher", "title": "CEO, Seller Interactive (Outgive portfolio company)", "linkedin": "", "source_url": "https://www.sellerinteractive.com/about-us"},
+  {"name": "Chelsie Simeon", "title": "People and Culture Team Lead, Seller Interactive", "linkedin": "", "source_url": "https://www.sellerinteractive.com/about-us"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/outgive", "company_phone": "1-833-607-5367 (Seller Interactive)", "public_email": "",
+ "contact_source_url": "https://www.sellerinteractive.com/contact-us",
+ "notes": "The outgive.ca about and contact pages name no leaders and list no phone or email; they show a form and the address 7676 Woodbine Ave #2, Markham, ON L3R 2N2. The Seller Interactive team page (an Outgive company) lists Nicasio Co III as Founder, which confirms he is still in role, and Runda Shaher as CEO. Phone 1-833-607-5367 is Seller Interactive's toll-free number from its contact page. Seller Interactive company LinkedIn: linkedin.com/company/seller-interactive. No public email found."}
+]

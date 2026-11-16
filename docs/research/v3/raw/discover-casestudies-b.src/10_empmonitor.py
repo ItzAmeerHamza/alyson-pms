@@ -1,0 +1,61 @@
+V = "EmpMonitor"
+CS = "Vendor case study"
+LG = "Vendor testimonial/logo"
+HP = "https://empmonitor.com/"
+LOGO = "https://empmonitor.com/wp-content/uploads/2026/01/emp-clients-updated.webp"
+Q = "EmpMonitor's testimonials page includes obvious placeholder reviewers ('John Clone'), so vendor claims are lower quality."
+def logo(name, domain="", industry="", country="", contacts=None, li="", phone="", email="", csrc="", emp="", empsrc="", conf=45, status="POSSIBLE", notes=""):
+    return dict(company_name=name, company_domain=domain, industry=industry, hq_country=country, employee_count=emp, employee_count_source_url=empsrc,
+        vendor=V, evidence_type=LG, evidence_summary="Logo in the EmpMonitor homepage client-logo graphic (image uploaded Jan 2026).",
+        source_url=LOGO, source_publication_date="2026-01", second_source_url=HP, status=status, status_reason="Logo only in a vendor image", confidence_score=conf,
+        contacts=contacts or [], company_linkedin=li, company_phone=phone, public_email=email, contact_source_url=csrc, notes=(notes+" "+Q).strip())
+BIG = "10k+ enterprise — low Tavilo priority."
+RECS = [
+ dict(company_name="Tasks Everyday", company_domain="taskseveryday.com", industry="Virtual assistant / remote staffing (India and Philippines)", hq_country="US (ops India/Philippines)",
+  employee_count="250+ VAs", employee_count_source_url="https://www.outsourceaccelerator.com/company/tasks-everyday/",
+  vendor=V, evidence_type=CS,
+  evidence_summary="EmpMonitor case study: TasksEveryday (remote workers from India and the Philippines) uses EmpMonitor for website/app usage monitoring to fix poor staff performance and response times.",
+  evidence_quote="EmpMonitor assisted us in improving our staff productivity, customer engagement, satisfaction, and work transparency",
+  source_url="https://empmonitor.com/case-study/track-employee-in-real-time/", source_publication_date="2023-12-20",
+  second_source_url="https://empmonitor.com/testimonials/", status="PROBABLE", status_reason="Named vendor case study 2023, modified 2025-03", confidence_score=75,
+  workforce_signals="offshore VA workforce, monitoring", contacts=[{"name":"Suvidh Marwaha","title":"Founder & CEO","linkedin":"","source_url":"https://www.outsourceaccelerator.com/company/tasks-everyday/"}],
+  contact_source_url="https://www.taskseveryday.com/contact-us/",
+  pitch_angle="250+ offshore VAs tracked — Tavilo Growth plan + extra seats; screenshot and activity features match", notes=Q),
+ dict(company_name="LBM Solutions", company_domain="lbmsolution.com", industry="IT services / blockchain development", hq_country="India",
+  employee_count="10-12 (2024 story)", employee_count_source_url="https://empmonitor.com/case-study/lbm-solution/",
+  vendor=V, evidence_type=CS, evidence_summary="EmpMonitor case study (Jan 2024): IT services firm LBM Solutions (MD Rampawan Singla, 10-12 staff) uses EmpMonitor.",
+  source_url="https://empmonitor.com/case-study/lbm-solution/", source_publication_date="2024-01-02", status="PROBABLE",
+  status_reason="Named vendor case study 2024", confidence_score=70,
+  contacts=[{"name":"Rampawan Singla","title":"Managing Director","linkedin":"","source_url":"https://empmonitor.com/case-study/lbm-solution/"}],
+  company_linkedin="https://www.linkedin.com/company/lbm-solutions", company_phone="+1 (218) 300-3442", public_email="info@lbmsolution.com", contact_source_url="https://lbmsolution.com/",
+  pitch_angle="Small dev shop — Tavilo Starter", notes=Q),
+ dict(company_name="Fabdesigns", vendor=V, evidence_type=CS, industry="3-D design & knitting (textiles)", hq_country="",
+  evidence_summary="EmpMonitor case study: Fabdesigns (3-D design/knitting since 1988) uses EmpMonitor productivity analytics, screen captures and top-apps reports.",
+  source_url="https://empmonitor.com/case-study/fabdesigns/", source_publication_date="2023-12-20", status="POSSIBLE", status_reason="Named vendor case study; company identity not verified", confidence_score=55, notes=Q),
+ dict(company_name="Lexmores", vendor=V, evidence_type=CS, industry="Legal services", hq_country="",
+  evidence_summary="EmpMonitor case study (Jan 2024): 'global law firm' Lexmores uses EmpMonitor for client-data leak prevention.",
+  source_url="https://empmonitor.com/case-study/lexmores/", source_publication_date="2024-01-19", status="POSSIBLE", status_reason="Named vendor case study; lexmores.com unreachable", confidence_score=50, notes=Q),
+ logo("AffirmData", "affirmdata.com", "Outsourced staffing", "US/India", [{"name":"Anthony Fulginiti","title":"Founder & CEO","linkedin":"","source_url":"https://www.cbinsights.com/company/affirm-data"}],
+      emp="~300", empsrc="https://www.cbinsights.com/company/affirm-data", conf=50, notes="Outsourced staffing firm — strong Tavilo fit if confirmed."),
+ logo("PracticeSuite", "practicesuite.com", "Medical billing software & RCM services", "US",
+      li="https://www.linkedin.com/company/practicesuite-inc-web-based-medical-billing-and-practice-management-software", phone="(813) 607-2255", csrc="https://practicesuite.com/"),
+ logo("Netscribes", "netscribes.com", "Market research / data services", "India", li="https://www.linkedin.com/company/netscribes"),
+ logo("Value Point Systems", "valuepointsystems.com", "IT services (a Noventiq company)", "India"),
+ logo("PSR Group", notes="Identity not verified."),
+ logo("Eiger Trekking Adventure", notes="Identity not verified."),
+ logo("Chingari", industry="Short-video app", country="India"),
+ logo("Mydin", industry="Retail", country="Malaysia", notes="Large retailer."),
+ logo("Silah (صلة)", notes="Arabic logo 'صلة'; identity not verified."),
+ logo("Tata Projects", status="DO_NOT_TARGET", conf=20, notes=BIG),
+ logo("Tata Consulting Engineers", status="DO_NOT_TARGET", conf=20, notes=BIG),
+ logo("Wipro", status="DO_NOT_TARGET", conf=15, notes=BIG + " Also a ProHance case study — EmpMonitor logo claim doubtful."),
+ logo("Cognizant", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("ICICI Bank", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("Airtel", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("Vistaprint", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("Monster", status="DO_NOT_TARGET", conf=15, notes="Monster logo; ambiguous; " + BIG),
+ logo("Freecharge", status="DO_NOT_TARGET", conf=20, notes="Axis Bank subsidiary; " + BIG),
+ logo("Auto1 Group", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("The Times Group", status="DO_NOT_TARGET", conf=15, notes=BIG),
+ logo("SriLankan Airlines", status="DO_NOT_TARGET", conf=15, notes=BIG),
+]

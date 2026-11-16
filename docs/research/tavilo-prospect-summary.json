@@ -1,0 +1,363 @@
+{
+  "relationship_rows": 997,
+  "unique_companies_excluding_do_not_target": 959,
+  "unique_companies_excluding_ambiguous_keywords": 604,
+  "current": 86,
+  "probable": 15,
+  "possible": 886,
+  "former": 8,
+  "do_not_target": 2,
+  "vendors": {
+    "Timesheets": {
+      "accounts": 236,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Construction",
+        "Software Development"
+      ],
+      "complaint_mentions": 0
+    },
+    "Time Analytics": {
+      "accounts": 137,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Financial Services",
+        "Software Development"
+      ],
+      "complaint_mentions": 0
+    },
+    "Hubstaff": {
+      "accounts": 99,
+      "high_conf": 14,
+      "estimated_seats": 3680,
+      "top_industries": [
+        "Advertising Services",
+        "IT Services and IT Consulting",
+        "Technology, Information and Internet"
+      ],
+      "complaint_mentions": 3
+    },
+    "Toggl": {
+      "accounts": 78,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Advertising Services",
+        "Software Development"
+      ],
+      "complaint_mentions": 0
+    },
+    "Replicon": {
+      "accounts": 69,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Construction",
+        "Business Consulting and Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "Time Doctor": {
+      "accounts": 61,
+      "high_conf": 4,
+      "estimated_seats": 200,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Advertising Services",
+        "Software Development"
+      ],
+      "complaint_mentions": 0
+    },
+    "Everhour": {
+      "accounts": 38,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Advertising Services",
+        "IT Services and IT Consulting",
+        "Business Consulting and Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "DeskTime": {
+      "accounts": 32,
+      "high_conf": 16,
+      "estimated_seats": 828,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Software development",
+        "Software services"
+      ],
+      "complaint_mentions": 1
+    },
+    "QuickBooks Time": {
+      "accounts": 31,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Construction",
+        "Accounting",
+        "Consumer Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "Teramind": {
+      "accounts": 30,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Software Development",
+        "Business Consulting and Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "My Hours": {
+      "accounts": 29,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Hospitals and Health Care",
+        "Legal Services",
+        "Non-profit Organizations"
+      ],
+      "complaint_mentions": 0
+    },
+    "Jibble": {
+      "accounts": 24,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Construction",
+        "Advertising Services",
+        "IT Services and IT Consulting"
+      ],
+      "complaint_mentions": 1
+    },
+    "ActivTrak": {
+      "accounts": 19,
+      "high_conf": 7,
+      "estimated_seats": 2700,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Law Practice",
+        "Industrial parts distribution"
+      ],
+      "complaint_mentions": 1
+    },
+    "Prodoscore": {
+      "accounts": 16,
+      "high_conf": 16,
+      "estimated_seats": 0,
+      "top_industries": [],
+      "complaint_mentions": 0
+    },
+    "ProHance": {
+      "accounts": 15,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Hospitals and Health Care",
+        "IT Services and IT Consulting",
+        "Administrative and Support Services"
+      ],
+      "complaint_mentions": 1
+    },
+    "Time Champ": {
+      "accounts": 13,
+      "high_conf": 10,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT services",
+        "Healthcare RCM",
+        "Life sciences IT consulting"
+      ],
+      "complaint_mentions": 0
+    },
+    "Insightful": {
+      "accounts": 9,
+      "high_conf": 6,
+      "estimated_seats": 330,
+      "top_industries": [
+        "Business process outsourcing",
+        "Healthcare revenue cycle / call center",
+        "Customer experience / BPO"
+      ],
+      "complaint_mentions": 1
+    },
+    "Toggl Track": {
+      "accounts": 9,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Business Consulting and Services",
+        "Software Development"
+      ],
+      "complaint_mentions": 0
+    },
+    "Apploye": {
+      "accounts": 7,
+      "high_conf": 4,
+      "estimated_seats": 100,
+      "top_industries": [
+        "HubSpot agency",
+        "Virtual assistant agency",
+        "Digital agency"
+      ],
+      "complaint_mentions": 0
+    },
+    "clockodo": {
+      "accounts": 7,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Software Development",
+        "IT Services and IT Consulting",
+        "Wholesale"
+      ],
+      "complaint_mentions": 0
+    },
+    "WebWork Time Tracker": {
+      "accounts": 6,
+      "high_conf": 3,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Software development",
+        "Outsourcing and offshoring",
+        "Construction"
+      ],
+      "complaint_mentions": 2
+    },
+    "Time Cop": {
+      "accounts": 5,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Business Consulting and Services",
+        "Education Administration Programs"
+      ],
+      "complaint_mentions": 0
+    },
+    "HourStack": {
+      "accounts": 4,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Advertising Services",
+        "Motor Vehicle Manufacturing"
+      ],
+      "complaint_mentions": 0
+    },
+    "Kimai": {
+      "accounts": 4,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Repair and Maintenance",
+        "Retail Luxury Goods and Jewelry"
+      ],
+      "complaint_mentions": 0
+    },
+    "We360.ai": {
+      "accounts": 3,
+      "high_conf": 3,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Virtual assistant outsourcing",
+        "Healthcare",
+        "Healthcare software"
+      ],
+      "complaint_mentions": 0
+    },
+    "RescueTime": {
+      "accounts": 3,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Advertising Services",
+        "Software Development",
+        "Legal Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "Work Examiner": {
+      "accounts": 3,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Hospitals and Health Care",
+        "Non-profit Organizations",
+        "Government Administration"
+      ],
+      "complaint_mentions": 0
+    },
+    "Screenshot Monitor": {
+      "accounts": 3,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Technology, Information and Internet",
+        "Broadcast Media Production and Distribution",
+        "Financial Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "Ekran System": {
+      "accounts": 2,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "IT Services and IT Consulting",
+        "Defense and Space Manufacturing"
+      ],
+      "complaint_mentions": 0
+    },
+    "Sapience": {
+      "accounts": 1,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Financial technology"
+      ],
+      "complaint_mentions": 0
+    },
+    "TrackingTime": {
+      "accounts": 1,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Advertising Services"
+      ],
+      "complaint_mentions": 0
+    },
+    "Clockify": {
+      "accounts": 1,
+      "high_conf": 0,
+      "estimated_seats": 0,
+      "top_industries": [
+        "Outsourcing"
+      ],
+      "complaint_mentions": 1
+    }
+  },
+  "channels": {
+    "Vendor case study": 39,
+    "Vendor case-study index": 49,
+    "Current job posting": 5,
+    "Employee review": 4,
+    "Vendor blog case study": 1,
+    "Technographic signal \u2014 requires validation": 887,
+    "Vendor-published client list": 3,
+    "Vendor case study (churn statement)": 8,
+    "Technographic signal": 1
+  }
+}

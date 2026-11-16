@@ -1,0 +1,73 @@
+#### START https://borndigital.be -> 200 https://www.borndigital.be/
+== PAGE https://www.borndigital.be/ 200
+  L https://www.linkedin.com/company/borndigital-be
+  L mailto:hello@borndigital.be
+  E hello@borndigital.be
+== PAGE https://www.borndigital.be/en/about 200
+  T… ents to design and build solutions that last. Jonas Verheijden Design Director Maarten Cox Strategic Director Maarten Vaesen Acc
+  T… ons that last. Jonas Verheijden Design Director Maarten Cox Strategic Director Maarten Vaesen Account Manager Kay Aerts Designer
+== PAGE https://www.borndigital.be/en/contact 200
+== PAGE https://www.borndigital.be/about 200
+== PAGE https://www.borndigital.be/privacy-policy 200
+#### START https://www.galvezgil.com/en/ -> 200 https://www.galvezgil.com/en/
+== PAGE https://www.galvezgil.com/en/ 200
+  L Tel:+4922177269970 
+  L https://www.linkedin.com/company/galvezgil-consulting
+  L tel:+34654525176
+  L tel:+4922177269970
+  P +34 65 45 25 176
+  P +49 221 772 69 970
+  T… ent, conception and consultancy ✓ Online projects since 1998 ✓ Google Partner Skip to main content Skip to search Skip to main 
+  T… out us: SEE ALL OPINION Our customers speak about us: SEE ALL OPINION Partners & technologies: Partners & technologies: E-comme
+  T… ur customers speak about us: SEE ALL OPINION Partners & technologies: Partners & technologies: E-commerce specialists go social
+== PAGE https://www.galvezgil.com/en/about_our_ecommerce_agency/ 200
+  T…  Deutsch English Español About us ABOUT US ABOUT US Israel Galvez Gil Founder, CEO and captain of the ship Israel Galvez Gil, o
+  T… English Español About us ABOUT US ABOUT US Israel Galvez Gil Founder, CEO and captain of the ship Israel Galvez Gil, our CE
+  T… alvez Gil Founder, CEO and captain of the ship Israel Galvez Gil, our CEO, of Basque origin, spent a long period of his lif
+  T… and in hand with his team and leads every project . Israel Galvez Gil Founder, CEO and captain of the ship Israel Galvez Gil, o
+== PAGE https://www.galvezgil.com/en/About-us/Affiliate-Program/ 500
+== PAGE https://www.galvezgil.com/en/contact/ 403
+== PAGE https://www.galvezgil.com/en/Information/Privacy-policy/ 200
+  P +34 871 180 854
+#### START https://gravitaslegal.com -> 200 https://gravitaslegal.com/
+== PAGE https://gravitaslegal.com/ 200
+#### START https://www.lafrancemasonry.com -> 200 https://www.lafrancemasonry.com/
+== PAGE https://www.lafrancemasonry.com/ 200
+  L tel:5802639176
+  E office@lafrancemasonry.com
+  P (580) 263-9176
+== PAGE https://www.lafrancemasonry.com/about-us 200
+== PAGE https://www.lafrancemasonry.com/contact-us 200
+  P (580) 263 9176
+#### START https://fortitudefo.com -> 200 https://fortitudefo.com/
+== PAGE https://fortitudefo.com/ 200
+  L https://www.linkedin.com/company/fortitude-family-office
+  L tel:602-834-0089
+  P (602) 834-0089
+  T… n-depth plans & strategies built for you, not a demographic. Personal CFO support including Accounting and Bill Pay. Talk t
+  T… . Personal CFO support including Accounting and Bill Pay. Talk to Our Founder Clients Per Advisor, on Average $3B+ Net Worth Un
+  T… on. Your financial stakes are high – that’s why you have us. Personal CFO Support Experience the convenience of your own fi
+  T… t Workplaces Recognition Awards & Recognition Fortitude Family Office Founder Matt Walker Named InvestmentNews Advisor of the Y
+== PAGE https://fortitudefo.com/team/ 200
+  T… o make a meaningful impact on those we serve. Matt Walker Matt Walker Founder & CEO Matt is the Founder and Chief Executive Off
+  T… eaningful impact on those we serve. Matt Walker Matt Walker Founder & CEO Matt is the Founder and Chief Executive Officer (
+  T…  on those we serve. Matt Walker Matt Walker Founder & CEO Matt is the Founder and Chief Executive Officer (CEO) of Fortitude Fa
+  T…  serve. Matt Walker Matt Walker Founder & CEO Matt is the Founder and Chief Executive Officer (CEO) of Fortitude Family Office, LLC. Driven by 
+  T… Walker Founder & CEO Matt is the Founder and Chief Executive Officer (CEO) of Fortitude Family Office, LLC. Driven by the d
+  T… ation: MGU Sudoku Master Badminton Enthusiast Avid Swimmer Corey Bird Director | Wealth, Ranching Services Corey brings a divers
+  T… ent B.S. in Accountancy: ASU Professional Photographer Small Business Owner Proud Father to Two Boys Exploring Arizona Soccer
+  T… ather to Two Boys Exploring Arizona Soccer Fanatic James Coons Senior Director | Tax, Partner James ensures clients benefit from
+  T… s Exploring Arizona Soccer Fanatic James Coons Senior Director | Tax, Partner James ensures clients benefit from the most effec
+  T…  Named Dallas Hot Yoga Enthusiast Can Do a Backflip Kristin Greenleaf Director | Wealth, Advisory Operations Kristin is focused 
+  T…  Mental Health & Wellness: GCU B.S. in Psychology: GCU Small Business Owner Mom of 2 ‘Friends’ Fanatic Coffee Lover Shaaol Ka
+  T… Fanatic Chess Enthusiast Speaks French and Learning Korean Ivan Lopez Director | Technology Ivan leads the firm’s technology str
+  T… ustry B.S. in Business Administration: U of A Former Specialty Bakery Owner Will Never Say No to a Zoo Day Wildlife Whisperer
+  T… amily Office Services 20+ Years in the Industry Former Small Business Owner East Coast Transplant to AZ Full-time Cheerleader
+  T… tegic initiatives. She serves as a liaison between Operations and the CEO, helping align processes, communications, and exe
+  T… eting: ASU MIM: AGSIM Hot Yoga Avid Reader Mom to Twins Drew Phillips Chief Operating Officer, Partner Drew handles investment strategy, compli
+  T…  Yoga Avid Reader Mom to Twins Drew Phillips Chief Operating Officer, Partner Drew handles investment strategy, compliance, and
+  T… icense (FINRA) French Native Cat Dad Certified Scuba Diver Geoff Tran Director | Wealth, Tax Geoff specializes in identifying op
+== PAGE https://fortitudefo.com/careers/ 200
+  T… ement, tax, accounting, philanthropy, ranching services, and Personal CFO support under one roof — so our clients don’t hav
+== PAGE https://fortitudefo.com/contact/ 200
+== PAGE https://fortitudefo.com/team 200

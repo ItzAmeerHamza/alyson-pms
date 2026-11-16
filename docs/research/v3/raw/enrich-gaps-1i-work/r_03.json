@@ -1,0 +1,41 @@
+[
+{"company_name": "Crossley Acoustics", "confidence_score": 60, "hq_country": "US (Brooklyn, NY)",
+ "contacts": [
+  {"name": "Tim Crossley", "title": "Founder", "linkedin": "", "source_url": "https://www.getharvest.com/customers/crossley-acoustics"}],
+ "company_linkedin": "https://www.linkedin.com/company/crossley-acoustics", "company_phone": "", "public_email": "",
+ "contact_source_url": "https://www.linkedin.com/company/crossley-acoustics",
+ "notes": "crossleyacoustics.com now redirects to a login-gated Google Sites page (sites.google.com/crossleyacoustics.com), so no phone/email could be read from the company site - check the company is still active before outreach. Company LinkedIn page URL from a search result ('multidisciplinary engineering and design firm located in Brooklyn'); several staff list Crossley Acoustics as current employer. No personal LinkedIn for Tim Crossley found; second contact not found (only shop/admin staff visible)."},
+{"company_name": "CCD Innovation", "confidence_score": 65, "hq_country": "US (now Battle Creek, MI; formerly San Francisco)",
+ "contacts": [
+  {"name": "Jeff Grogg", "title": "Founder, JPG Resources (parent company)", "linkedin": "", "source_url": "https://jpgresources.com/about"},
+  {"name": "Natalie Shmulik", "title": "Contact listed on CCD Innovation site (JPG Resources; title not stated)", "linkedin": "", "source_url": "https://www.ccdinnovation.com/contact"},
+  {"name": "Ruth Halpern", "title": "CEO (per Harvest story; current role unverified)", "linkedin": "", "source_url": "https://www.getharvest.com/customers/ccd-innovation"}],
+ "company_phone": "415.693.8900", "public_email": "Connect@CCDInnovation.com",
+ "contact_source_url": "https://www.ccdinnovation.com/contact",
+ "notes": "CCD Innovation is now 'a fully owned subsidiary of JPG Resources' (ccdinnovation.com homepage); contact address is JPG's 62 E. Michigan Ave, Ste 210, Battle Creek, MI 49017. Still operating, so status left empty, but the buying decision (and possibly the Harvest account) may now sit with JPG Resources (50+ staff; info@jpgresources.com). Ruth Halpern is not named on either site, so she may have left - kept as a third contact flagged unverified. Site also lists Natalie.Shmulik@jpgresources.com as a contact email."},
+{"company_name": "Beanstalk Web Solutions", "confidence_score": 85, "hq_country": "US (St. Louis, MO)",
+ "contacts": [
+  {"name": "Zachary Cocos", "title": "President", "linkedin": "", "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"},
+  {"name": "Parker Freeman", "title": "Digital Marketing Director", "linkedin": "", "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"},
+  {"name": "Tim Hebel", "title": "Advisor (former owner)", "linkedin": "", "source_url": "https://beanstalkwebsolutions.com/about-beanstalk-web-solutions/"}],
+ "public_email": "", "contact_source_url": "https://beanstalkwebsolutions.com/contact",
+ "notes": "Previous decision maker Tim Hebel (Owner) is now listed only as an Advisor; the team page names Zachary Cocos as President, so he is the new decision maker. LinkedIn not searched (search budget exhausted). Site shows no email (contact form only). Phone (314) 736-4430 and address 54 W. Moody Ave, St. Louis, MO 63119 confirmed."},
+{"company_name": "Sneeze It", "confidence_score": 75, "hq_country": "US (Fairfield, NJ)",
+ "contacts": [
+  {"name": "David Steel", "title": "CEO", "linkedin": "https://www.linkedin.com/in/dsteel/", "source_url": "https://www.indeed.com/cmp/Sneeze-IT"},
+  {"name": "Nathaniel Foss", "title": "Manager of Web Development", "linkedin": "https://www.linkedin.com/in/nathanielfoss11/", "source_url": "https://www.linkedin.com/in/nathanielfoss11/"}],
+ "company_linkedin": "https://www.linkedin.com/company/sneeze-it", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "CEO David Steel per Indeed company page snippet; his LinkedIn result shows 'Experience: Sneeze It', Fairfield. Second contact is a manager, not an executive - weak. sneeze.it returns 403/bot challenge to fetch, so phone and email not found. These came from one web search results page fetched before the search limit was reached."},
+{"company_name": "Mactores", "confidence_score": 40, "hq_country": "United States (Bellevue, WA)",
+ "contacts": [],
+ "company_phone": "", "contact_source_url": "https://mactores.com/about",
+ "notes": "Decision maker not found: mactores.com/about and the homepage list no executives (legal entity Mactores Cognition Inc., 2018 156th Ave NE, Suite 214, Bellevue, WA 98007). Emails lets-talk@mactores.com (kept) and partner@mactores.com. No phone on site. Leadership needs a search (budget exhausted)."},
+{"company_name": "Sofo Studios", "company_domain": "jollity.io", "confidence_score": 85, "hq_country": "US (Denver, CO)",
+ "contacts": [
+  {"name": "Jenn Hess", "title": "Co-founder & CEO, Jollity (Sofo Studios merged into Jollity in 2023)", "linkedin": "https://www.linkedin.com/in/jenniferhess/", "source_url": "https://jollity.io/about"},
+  {"name": "Karri Cole", "title": "Director of Technology", "linkedin": "https://www.linkedin.com/in/karrielizabethcole/", "source_url": "https://jollity.io/about"},
+  {"name": "Lauren Perfors", "title": "Co-founder", "linkedin": "", "source_url": "https://jollity.io/about"}],
+ "company_linkedin": "https://www.linkedin.com/company/jollityweb/", "company_phone": "720-515-7547", "public_email": "",
+ "contact_source_url": "https://jollity.io/contact",
+ "notes": "sofostudios.com now 301-redirects to jollity.io: 'After a decade of success, Sofo Studios merged with Jollity in 2023, where Jenn now serves as Co-founder & CEO.' Business continues as Jollity Studios (team ~10 incl. developers in Brazil), so not DO_NOT_TARGET; target as Jollity. LinkedIn URLs listed on jollity.io/about. No email on the site (forms only). Addresses: 1500 N Grant St, Ste R, Denver, CO 80203; mailing 9450 SW Gemini Dr, Ste 64378, Beaverton, OR 97008."}
+]

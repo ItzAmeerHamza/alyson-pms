@@ -6,6 +6,24 @@ import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { JwksClient, SigningKey } from 'jwks-rsa';
 
+/** Password app client in user pool us-west-2_ZL4ElZy4r. */
+export const PASSWORD_APP_CLIENT_ID = 'hrp03a37bqti7capfoptd8737';
+/** Tavilo Google web app client in the same user pool. */
+export const TAVILO_WEB_APP_CLIENT_ID = '77fbgec7tr6avhv5m5u4gnkdh0';
+
+/**
+ * Configured clients, plus the password app and the Tavilo web app.
+ * An empty configuration leaves Cognito disabled. Any other client is refused.
+ */
+export function resolveCognitoClientIds(configured: string | undefined): string[] {
+  const fromEnv = String(configured || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (!fromEnv.length) return [];
+  return [...new Set([...fromEnv, PASSWORD_APP_CLIENT_ID, TAVILO_WEB_APP_CLIENT_ID])];
+}
+
 export interface CognitoIdTokenPayload {
   sub: string;
   email?: string;
@@ -68,13 +86,16 @@ export class CognitoService {
   private readonly enabled: boolean;
   private readonly region: string;
   private readonly userPoolId: string;
-  private readonly clientId: string;
+  private readonly clientIds: string[];
 
   constructor(private readonly configService: ConfigService) {
     this.region = this.configService.get<string>('COGNITO_REGION', '');
     this.userPoolId = this.configService.get<string>('COGNITO_USER_POOL_ID', '');
-    this.clientId = this.configService.get<string>('COGNITO_CLIENT_ID', '');
-    this.enabled = Boolean(this.region && this.userPoolId && this.clientId);
+    const configured =
+      this.configService.get<string>('COGNITO_CLIENT_IDS') ||
+      this.configService.get<string>('COGNITO_CLIENT_ID', '');
+    this.clientIds = resolveCognitoClientIds(configured);
+    this.enabled = Boolean(this.region && this.userPoolId && this.clientIds.length);
 
     if (this.enabled) {
       const issuer = this.getIssuer();
@@ -117,7 +138,7 @@ export class CognitoService {
     try {
       const payload = jwt.verify(token, signingKey, {
         issuer: this.getIssuer(),
-        audience: this.clientId,
+        audience: this.clientIds,
         algorithms: ['RS256'],
       }) as CognitoIdTokenPayload;
 
@@ -127,6 +148,7 @@ export class CognitoService {
 
       return payload;
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       const detail = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Cognito token verification failed: ${detail}`);
       throw new UnauthorizedException('Invalid token');

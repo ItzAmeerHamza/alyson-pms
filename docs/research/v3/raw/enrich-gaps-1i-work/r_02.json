@@ -1,0 +1,26 @@
+[
+{"company_name": "ACP Billing Service", "company_domain": "acpbillingservices.com", "confidence_score": 85,
+ "employee_count": "27 (RocketReach)", "hq_country": "US (Orlando, FL) / India (Chennai)",
+ "contacts": [
+  {"name": "Dr. Charlin Anthony (Charlin Anthony Raj)", "title": "Founder, President & CEO", "linkedin": "https://www.linkedin.com/in/dr-charlin-anthony-3973111a/", "source_url": "https://acpbillingservices.com/about-us"},
+  {"name": "Tabby Parvez", "title": "CFO", "linkedin": "", "source_url": "https://acpbillingservices.com/about-us"},
+  {"name": "Dr. Hussien Ballout, MD", "title": "CSO", "linkedin": "", "source_url": "https://acpbillingservices.com/about-us"}],
+ "company_linkedin": "https://www.linkedin.com/company/acpbillingservicesllc", "company_phone": "321-364-4342",
+ "public_email": "info@acpbillingservices.com", "contact_source_url": "https://acpbillingservices.com/about-us",
+ "notes": "DOMAIN CORRECTED: the ProHance case-study PDF (https://www.prohance.net/pdf/Case-Study-ACP-Billing-Shows-19-Percent-Improvement-In-Productive-Time.pdf, per search snippet) describes 'ACP Billing Services ... offices in Florida, USA and Chennai, India' - that is ACP Billing Services LLC, Orlando (acpbillingservices.com), NOT acpbilling.com (Automatic Claims Processing Inc., Chino CA; CEO Robert Dimaano). The input's phone +1-909-591-9100 and info@acpbilling.com belong to the Chino company and have been replaced. Address 618 E South St STE 500, Orlando, FL 32801. Email decoded from site's Cloudflare-protected mailto. LinkedIn URLs from a Brave search result page. RocketReach also lists David Raja as HR Manager (name/title only)."},
+{"company_name": "Servus Limited", "confidence_score": 80,
+ "contacts": [
+  {"name": "Edward Kacal", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/edwardkacal/", "source_url": "https://www.linkedin.com/in/edwardkacal/"}],
+ "notes": "Edward Kacal still CEO (LinkedIn result 'Chief Executive Officer - Servus Limited ... CEO at Servus Trinidad'). Second contact not found: servus.co.tt/about names no managers, Jibble case study quotes only 'Servus' collectively, and a site:linkedin.com search was rate-limited. Existing LinkedIn/phone/email kept."},
+{"company_name": "Paxson Fay", "confidence_score": 90, "hq_country": "US (Seattle, WA)",
+ "contacts": [
+  {"name": "Amy Golden", "title": "Co-Founder & Principal", "linkedin": "https://www.linkedin.com/in/amyleedom/", "source_url": "https://paxsonfay.com/"},
+  {"name": "Tessa Franchini", "title": "Co-Founder & Principal", "linkedin": "https://www.linkedin.com/in/tessaandrews/", "source_url": "https://paxsonfay.com/"}],
+ "company_phone": "718.924.4096", "contact_source_url": "https://paxsonfay.com/",
+ "notes": "Previous decision maker Anna Coumou (Communications Manager) is no longer on the team list at paxsonfay.com, so she was replaced by the two co-founders/principals. Their LinkedIn results were titled 'Amy Golden - Paxson Fay' and 'Tessa Franchini - Paxson Fay'. The site publishes amy@paxsonfay.com and tessa@paxsonfay.com plus info@paxsonfay.com. Phone 718.924.4096 is listed as the Paxson Fay PR contact (Amy Golden) in a Miller Hull press release (https://millerhull.com/2021/the-deschutes-public-library-district-board-selects-the-miller-hull-partnership-and-steele-associates-to-bring-the-communitys-vision-for-public-libraries-across-central-oregon-to-life/), 2021 - may be her direct line. Address 4770 Ohio Ave S, Ste B, Seattle, WA 98134. About 7 staff now."},
+{"company_name": "RogueMark Studios", "confidence_score": 80, "employee_count": "1-5 (Prospeo lists 1 employee)", "hq_country": "US (Berkeley, CA)",
+ "contacts": [
+  {"name": "Abby VanMuijen", "title": "Founder & WIC (Woman In Charge)", "linkedin": "https://www.linkedin.com/in/abby-vanmuijen-5723a915/", "source_url": "https://www.roguemarkstudios.com/about"}],
+ "company_phone": "", "contact_source_url": "https://roguemarkstudios.com/contact",
+ "notes": "Founder Abby VanMuijen (Crunchbase, roguemarkstudios.com/about, LinkedIn result 'Abby VanMuijen - RogueMark Studios'). Co-founder Eliza Reisfeld's LinkedIn says she was Creative Director 'for five years' (past tense), so she is not used as second contact. Contact page lists abby@roguemarkstudios.com and info@roguemarkstudios.com, address 2101 Ashby Avenue, Berkeley, CA 94705; no phone. Very small (maybe solo now) - low seat potential."}
+]

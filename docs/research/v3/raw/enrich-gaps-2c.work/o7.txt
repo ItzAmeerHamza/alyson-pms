@@ -1,0 +1,25 @@
+#### START https://crestaz.com -> 200 https://crestaz.com/
+== PAGE https://crestaz.com/ 200
+  L tel:+15207700000
+  P (520) 751-8888
+  P (520) 770-0000
+== PAGE https://crestaz.com/about-us 200
+== PAGE https://crestaz.com/contact-us 200
+== PAGE https://crestaz.com/sms-privacy.html 200
+== PAGE https://crestaz.com/privacy-policy 200
+#### START https://www.ohsobrewery.com -> 403 https://www.ohsobrewery.com/
+== PAGE https://www.ohsobrewery.com/ 403
+#### START https://apineywoods.com -> 200 https://apineywoods.com/
+== PAGE https://apineywoods.com/ 200
+  L https://www.linkedin.com/company/a-pineywoods-home-health/
+  L tel://+18887291831
+  P 888-729-1831
+== PAGE https://apineywoods.com/home-health/our-team/ 200
+== PAGE https://apineywoods.com/careers/ 200
+  P 936-634-7982
+== PAGE https://apineywoods.com/careers/caregiver-jobs/ 200
+== PAGE https://apineywoods.com/careers/cna-jobs/ 200
+== PAGE https://apineywoods.com/careers/nursing-jobs/ 200
+== PAGE https://apineywoods.com/careers/office-jobs/ 200
+#### START https://kultindex.hu -> 200 https://kultindex.hu/
+== PAGE https://kultindex.hu/ 200

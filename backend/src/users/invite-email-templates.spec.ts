@@ -25,7 +25,10 @@ describe('invite email', () => {
     expect(mail.html).toContain('app.alyson.ai');
     expect(mail.html).toContain('Tmp#Pass12');
     expect(mail.html).toContain('set a new password');
-    expect(mail.html).toContain('Alyson Time Doctor');
+    expect(mail.html).toContain('cid:tavilo-logo');
+    expect(mail.html).toContain('Tavilo Time');
+    expect(mail.html).not.toContain('Alyson Time Doctor');
+    expect(mail.text).toContain('Tavilo Time');
     expect(mail.html).toContain('desktop app');
     expect(mail.html).toContain('/dashboard/alyson-pulse/download');
     expect(mail.text).toContain('Temporary password: Tmp#Pass12');

@@ -1,0 +1,51 @@
+V = "CurrentWare"
+CS = "Vendor case study"
+B = "https://www.currentware.com/customers/"
+NOTE = "CurrentWare stories were republished 2026-06-30 (datePublished) with modified 2026-09; the original stories are older (several from 2019-2022)."
+def r(name, slug, summary, industry, emp="", domain="", country="US", contacts=None, li="", phone="", email="", csrc="", conf=90,
+      status="CURRENT", reason="", pitch="", signals="", notes=""):
+    return dict(company_name=name, company_domain=domain, industry=industry, hq_country=country, employee_count=emp, employee_count_source_url=B+slug+"/",
+        vendor=V, evidence_type=CS, evidence_summary=summary, source_url=B+slug+"/", source_publication_date="2026-06-30",
+        status=status, status_reason=reason or "Named CurrentWare case study live in 2026 (lastmod 2026-09)", confidence_score=conf,
+        contacts=contacts or [], company_linkedin=li, company_phone=phone, public_email=email, contact_source_url=csrc,
+        pitch_angle=pitch, workforce_signals=signals, notes=(notes+" "+NOTE).strip())
+USB = "Mainly a USB/DLP (AccessPatrol) use — weak fit for Tavilo's time-tracking pitch."
+RECS = [
+ r("The Coding Network", "the-coding-network", "CurrentWare case study: medical-coding firm The Coding Network (700+ staff, healthcare) uses BrowseReporter in Citrix for remote workforce visibility, software adoption tracking and proof of work.",
+   "Medical coding / healthcare RCM", "700+", "codingnetwork.com",
+   contacts=[{"name":"Neal Green","title":"CEO / Co-founder","linkedin":"","source_url":"https://codingnetwork.com/our-management/"},
+             {"name":"Steve Micks","title":"(The Coding Network)","linkedin":"https://www.linkedin.com/in/steve-micks-a937b43/","source_url":"https://www.linkedin.com/in/steve-micks-a937b43/"}],
+   li="https://www.linkedin.com/company/the-coding-network", csrc="https://codingnetwork.com/", conf=95,
+   signals="remote coders, proof of work, productivity reporting", pitch="700 remote coders tracked for proof of work — strong Tavilo fit (Growth plan plus extra seats)"),
+ r("Sessions & Kimball LLP", "sessions-kimball-llp", "CurrentWare case study: fully remote employment-law firm (11-50 staff) uses BrowseReporter to see how employees spend work hours from home; it replaced 'clunky' earlier monitoring tools (not named).",
+   "Legal services (employee rights law)", "11-50", "job-law.com",
+   contacts=[{"name":"Don D. Sessions","title":"Founding & Managing Partner","linkedin":"https://www.linkedin.com/in/don-sessions-6083a35/","source_url":"https://www.job-law.com/don-d-sessions/"}],
+   li="https://www.linkedin.com/company/sessions-and-kimball", phone="(949) 380-0900", email="info@job-law.com", csrc="https://www.job-law.com/",
+   signals="fully remote team", pitch="Small remote law firm — Tavilo Starter/Business with time tracking"),
+ r("Boston Centerless", "boston-centerless", "CurrentWare case study: Boston Centerless (130+ endpoints) uses the CurrentWare suite for remote-staff productivity visibility, web filtering and USB control.",
+   "Precision materials manufacturing", "~135", "bostoncenterless.com",
+   contacts=[{"name":"Steve Tamasi","title":"Owner & CEO","linkedin":"","source_url":"https://www.thejobshopshow.com/episodes/episode-58-steve-tamasi-of-boston-centerless"}],
+   notes="Woburn MA; PE partner May River Capital."),
+ r("Shady Maple Smorgasbord & Farm Market", "shady-maple-farm-market", "CurrentWare case study: Shady Maple (800+ employees) monitors employee web and app use centrally; HR uses the data for underperformance.",
+   "Grocery & restaurant", "800+", "shady-maple.com",
+   contacts=[{"name":"Phil Weaver","title":"President","linkedin":"","source_url":"https://www.shady-maple.com/about/founders-executive-team/"}],
+   phone="717-354-4981", csrc="https://www.shady-maple.com/", notes="Mostly frontline staff; computer users are a small subset."),
+ r("Sentry View Systems", "sentry-view-systems", "CurrentWare case study: Sentry View Systems saved $10K+ on unused software licenses and uses productivity insights and acceptable-use enforcement.",
+   "Defense / security technology", "", "", contacts=[{"name":"Jim Bishop","title":"CEO","linkedin":"","source_url":"https://www.zoominfo.com/c/sentry-view-systems-inc/354166697"}],
+   notes="Melbourne FL."),
+ r("Viking Yachts", "viking-yachts", "CurrentWare case study: Viking Yachts (1,700+ employees, 530+ users, 6+ years a customer) caught a departing employee stealing design files; uses BrowseReporter/BrowseControl too.",
+   "Boat manufacturing", "1,700+", "vikingyachts.com", conf=95, notes=USB),
+ r("EHOB", "ehob", "CurrentWare case study: EHOB IT gives HR activity reports for investigations and supervises night shifts; also uses USB control.",
+   "Medical device manufacturing", "", "ehob.com",
+   contacts=[{"name":"James G. Spahn","title":"Founder, CEO & Chairman","linkedin":"","source_url":"https://www.crunchbase.com/organization/ehob-inc"}],
+   li="https://www.linkedin.com/company/ehob-inc", phone="800-899-5553", csrc="https://ehob.com/"),
+ r("SABIS Educational Systems", "sabis-educational-systems", "CurrentWare case study: SABIS gained endpoint visibility and IP protection across 21 countries.", "Education services", country="US/Lebanon", notes=USB),
+ r("Allied Mineral Products", "allied-mineral-products", "CurrentWare case study: refractory-materials maker protects IP across 1,100 endpoints.", "Manufacturing (refractories)", notes=USB),
+ r("First Choice Health", "first-choice-health", "CurrentWare case study: managed-care company (400+ employees) blocks USB storage for HIPAA.", "Healthcare managed care", "400+", notes=USB),
+ r("Tamice", "tamice", "CurrentWare case study: travel agency (20+ staff) uses AccessPatrol USB blocking.", "Travel agency", "20+", notes=USB, conf=80),
+ r("Metromont", "metromont", "CurrentWare case study: precast-concrete maker uses AccessPatrol after a USB-drop test.", "Construction / precast concrete", notes=USB),
+ r("Muhlenberg Township", "muhlenberg-township", "CurrentWare case study (2026, password-protected page): municipality (90-100 staff) uses BrowseReporter for workforce visibility.",
+   "Local government", "90-100", status="DO_NOT_TARGET", conf=60, reason="Municipal government — procurement-bound, low fit"),
+ r("Fluid Helix", "fluid-helix", "CurrentWare case study: MSP uses BrowseControl across 150+ client locations; it replaced an inconsistent competitor web-filtering tool (not named).",
+   "IT MSP", status="DO_NOT_TARGET", conf=50, reason="MSP reselling/managing CurrentWare for clients"),
+]

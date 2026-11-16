@@ -1,0 +1,533 @@
+URL: https://desktime.com/case-studies/brian-tankersley
+TITLE: How to keep yourself accountable with DeskTime
+META: <meta name="description" content="Here’s how Brian improved his productivity, prevented time waste, prioritized tasks, and maintained a healthy work-life balance using DeskTime.">
+META: <meta property="og:title" content="DeskTime | How to keep yourself accountable with DeskTime">
+META: <meta name="msvalidate.01" content="7E7149BB0536D28D683B219D73FAAF68" />
+----
+How to keep yourself accountable with DeskTime 
+ Support 
+ DeskTime
+ 🍪 Allow functional cookies?
+ We use Zendesk messaging software for easy communication with our clients. Zendesk uses cookies to interact with website visitors and provide chat history.
+ See our Privacy Policy for more info. You can change your cookie preferences at any time in our Cookie Settings .
+ Allow & continue to chat
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing
+ Demo
+ Intro call
+ Start free trial
+ Log in
+ en 
+ English
+ Español
+ document.getElementsByTagName('body')[0].classList.toggle('overflow-hidden'))"
+ >
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing 
+ Demo 
+ Intro call 
+ Start free trial
+ Log in
+ Taking control of your time
+ When discussing time tracking, we often look at it from the perspective of teams – how managers can make sure their employees stay productive and focus on their tasks. But time tracking is not just for teams; it can provide many benefits if you do it just for yourself as a freelancer or self-employed businessperson. This is precisely what accounting consultant Brian F. Tankersley has proved – he uses DeskTime to keep himself accountable, set the right priorities, and ensure a healthy work-life balance. 
+ Brian is a certified accounting and technology expert who consults companies on all aspects of setting up accounting tech at their workplaces. When you're your own boss, like Brian, you're completely in charge of your own time and priorities. So you need to find a way to keep yourself accountable about how you spend and organize your work hours.
+ Given these needs, this is exactly how Brian started to use DeskTime about seven years ago. Initially, he used a different time tracker, but the previous tool changed its functionality. Brian started looking for an alternative solution that would fit his requirements and came upon DeskTime on a review site. He gave DeskTime a try and hasn't looked back since. 
+ See what eats up your time
+ DeskTime helps Brian organize his work in several ways. Primarily, it allows him to see where exactly his time goes throughout the work day. By tracking his activities, Brian can look back at the data and understand how much time was spent on a particular project, which helps with billing and estimation for similar projects in the future.
+ From a broader perspective, keeping track of how long he's worked on certain projects and his earnings also tells Brian how much revenue he should generate in the future. With a more accurate understanding of a project's timeline and how much he should charge for it, Brian can ensure that his business can continue to grow and succeed.
+ "DeskTime keeps me on target for goals – I know how much time I need to spend working on things and how much billing I should generate to keep afloat." Brian F. Tankersley Automatic time tracking data can also help Brian be certain that he has set the right priorities and focuses on the things that really matter. He stresses that "real success comes from doing things that are important but not urgent. DeskTime helps keep the focus on those kinds of things."
+ Work vs. productivity
+ It's not just a question of how much time you spend in front of your computer screen. It's also about the quality of this time – how productive you've been. DeskTime's productivity analysis helps Brian see whether or not the work he was doing was as valuable as he thought it was.
+ "When I look at the productivity stats on my DeskTime dashboard, I can gauge how heads down I've been – whether I'm actually getting stuff done." Brian stresses the importance of preventing time waste. "I'm more effective when I have to be accountable for my time. You can never get the time back," he says. "You might think you've been very focused, but when you look at the data, it turns out that you were not."
+ Asked how he defines productivity, Brian points out that he distinguishes work from productivity – work hours on their own don't necessarily equal being productive. For him, "productivity is about creating as much value as I can for my organization and those I serve in the least amount of time."
+ "DeskTime and its productivity data help me correct myself before I invest four hours into a 15-minute project." Plus, if you notice that you're spending too much time on unnecessary things or seem to avoid certain jobs, it might mean your priorities are set wrong. The productivity data can help you reset them or change how you work to get the most out of the day and your time.
+ And when he does need to bill hourly for projects, DeskTime helps Brian capture all of the time he spent on a project and charge his customers precisely.
+ Setting work-life boundaries
+ DeskTime also helps Brian ensure that he maintains a healthy work-life balance. When you are responsible for your own business, it can be very easy to get sucked into the vortex of overworking – you're on your own, and if you're not going to be getting things done, no one else will.
+ But it's just as important to leave plenty of time for family and friends. We've all been guilty of peeking at our work email or Slack messages during our vacations. By glancing at DeskTime's stats, you can see if you're overexerting yourself. As Brian says, "The DeskTime data can signal that I need to step away from the laptop. In my line of work, nothing is a 'life or death' emergency."
+ "By keeping things in perspective and tracking your time, you can be realistic about the importance of what you do." Ultimately, even though DeskTime can help Brian see in great detail what exactly he had been working on at a given moment, in the end, it's all about the bigger picture. Brian says that the time tracker helps him see the larger patterns of his work and spot his productivity trends, so he can improve his work quality and overall effectiveness even further.
+ Automation is key
+ As Brian says, "I've been fighting a war with timesheets for over 30 years." Manual tracking of your time can be tedious and, ironically, take up way too much of your time, so if you can automate something – do it.
+ "You have to let automation work for you. Try out new things and see if you can make them work for you. If you're not doing that, you're becoming more obsolete every day," Brian believes. Brian has also come up with some creative ways how he uses DeskTime. Although this is typically a feature favored by team managers, Brian has enabled the automatic screenshots for his DeskTime account, too. It is another way to remind himself of what he was doing at a particular time. For example, if he was delivering a presentation, regularly-taken screenshots show him how far he had gotten at a given point and whether his timing was right. This way, he can improve the presentation further for the next time.
+ In the end, Brian sums up all the benefits of time tracking in one simple sentence:
+ "DeskTime helps me be a better steward of my own time." 
+ A time tracker that won’t interrupt your team’s workflow. Ever.
+ Forget manual entries and distractions. With DeskTime, time tracking runs on autopilot—zero effort needed.
+ Start free trial
+ Book an Intro
+ Features
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Solutions
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Resources
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Contacts
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ A hassle-free automatic time tracker. Set it and forget it.
+ © 2011 - 2026 DeskTime

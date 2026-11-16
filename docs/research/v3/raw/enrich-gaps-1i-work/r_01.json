@@ -1,0 +1,48 @@
+[
+{"company_name": "Episource", "confidence_score": 80, "employee_count": "5,001-10,000 (LinkedIn); ~2.9K (Craft/third-party)", "hq_country": "US (Gardena, CA) / India ops",
+ "contacts": [
+  {"name": "Harshith Ramesh", "title": "Co-CEO", "linkedin": "https://www.linkedin.com/in/harshith-ramesh-56088a1/", "source_url": "https://theorg.com/org/episource/org-chart/harshith-ramesh"},
+  {"name": "Sishir Reddy", "title": "Co-CEO", "linkedin": "https://www.linkedin.com/in/sishir-reddy-a985826/", "source_url": "https://theorg.com/org/episource/org-chart/sishir-reddy"},
+  {"name": "Angshuman", "title": "VP Operations, Optum (Episource) - ProHance testimonial author (surname not given)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"},
+  {"name": "Erik Simonsen", "title": "COO", "linkedin": "", "source_url": "https://craft.co/episource/executives"},
+  {"name": "Evelyn Acosta Behrendt", "title": "Chief People Officer", "linkedin": "", "source_url": "https://craft.co/episource/executives"}],
+ "company_linkedin": "https://www.linkedin.com/company/episource", "company_phone": "(714) 452-1961",
+ "public_email": "", "contact_source_url": "https://www.yellowpages.com/gardena-ca/mip/episource-504415194",
+ "notes": "Episource was acquired by Optum (UnitedHealth Group) in 2023 and still operates as 'Episource, an Optum company' (KLAS listing) - not shut, so status left empty, but buying decisions may now sit with Optum. Co-CEO names from theorg.com/Craft (third-party, could be stale post-acquisition); LinkedIn URLs appeared in a site:linkedin.com search showing 'Episource'. episource.com would not fetch (expired TLS certificate), so the phone is from Yellow Pages/Chamber of Commerce listings (address 500 W 190th St Suite 400, Gardena, CA 90248). No public email found. Company had a 5.4M-record data breach in 2025 (security-sensitive buyer)."},
+{"company_name": "Faes & Co",
+ "confidence_score": 85,
+ "contacts": [
+  {"name": "Christian Faes", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/christianfaes/", "source_url": "https://faesinvest.com/"},
+  {"name": "Jamie McGee", "title": "Director - Fund Sales & Investor Relations", "linkedin": "https://www.linkedin.com/in/jamescmcgee/", "source_url": "https://rocketreach.co/faes-co-management_b77947c9c5181c89"}],
+ "company_linkedin": "", "company_phone": "+1 424 500 4055", "public_email": "hello@faesinvest.com",
+ "contact_source_url": "https://faesinvest.com/",
+ "notes": "Christian Faes still Founder & CEO (Crunchbase/RocketReach; Dec 2024 and Apr 2026 press). Second contact Jamie McGee from RocketReach (name/title only) and his LinkedIn search result titled 'Director Fund Sales & Investor Relations' at Faes & Co. Phone/email from faesinvest.com (address 233 Wilshire Blvd Suite 220, Santa Monica, CA 90401); a search snippet also showed (424) 209-7970. Group lender is F2 Finance. Company LinkedIn page not found verbatim (site references a LinkedIn link but URL not visible)."},
+{"company_name": "Pandoblox", "confidence_score": 85, "hq_country": "US (Los Angeles); Philippines delivery team",
+ "contacts": [
+  {"name": "Henry Park", "title": "Co-Founder & CEO", "linkedin": "https://www.linkedin.com/in/henry-park-3a43a1/", "source_url": "https://www.pandoblox.com/ourteampb"},
+  {"name": "Luinell Florentin", "title": "Country Director & Head of Excellence", "linkedin": "", "source_url": "https://www.pandoblox.com/ourteampb"},
+  {"name": "Rachel Simmons", "title": "Director of Services", "linkedin": "", "source_url": "https://www.pandoblox.com/ourteampb"}],
+ "company_phone": "",
+ "notes": "Team from pandoblox.com/ourteampb. Henry Park LinkedIn appeared in site:linkedin.com search (LA, Pandoblox/3GC). Pandoblox acquired 3GC Group (einpresswire). Country Director is likely the PH ops lead, relevant to the Clockify PH job. No phone on site; contact page only lists contact@pandoblox.com."},
+{"company_name": "Visual Visitor", "confidence_score": 80,
+ "contacts": [
+  {"name": "Rick Batchelor", "title": "CEO & Co-founder", "linkedin": "https://www.linkedin.com/in/rickbatchelor/", "source_url": "https://www.prodoscore.com/resources/case-studies/visual-visitor/"},
+  {"name": "Mark Ihlenburg", "title": "VP of Operations", "linkedin": "https://www.linkedin.com/in/mark-ihlenburg-13055755/", "source_url": "https://www.prodoscore.com/resources/case-studies/visual-visitor/"}],
+ "company_phone": "(888) 586-7730", "public_email": "support@visualvisitor.com",
+ "contact_source_url": "https://www.visualvisitor.com/contact-us_old/",
+ "notes": "Rick Batchelor LinkedIn search result titled 'Co-Founder, Visual Visitor' (Roswell GA). Mark Ihlenburg LinkedIn headline mirrors Visual Visitor's tagline ('Driving Growth with AI-Powered Person...'), Winder GA - good match but headline doesn't name the company. Phone/email from a search snippet of visualvisitor.com contact page (site returns 403 to fetch); address 7400 Baymeadows Way #230, Jacksonville FL. Inc. 5000 2025."},
+{"company_name": "General Informatics", "confidence_score": 85, "hq_country": "United States (Baton Rouge, LA HQ; Cincinnati office)",
+ "contacts": [
+  {"name": "Don Monistere", "title": "CEO & President", "linkedin": "https://www.linkedin.com/in/donaldmonistere/", "source_url": "https://geninf.com/get-to-know-the-ceo/"},
+  {"name": "Edward Reade", "title": "Chief Operating Officer", "linkedin": "https://www.linkedin.com/in/edwardreade/", "source_url": "https://theorg.com/org/general-informatics/teams/leadership-team"},
+  {"name": "Dustin Landry", "title": "Chief Technology Officer", "linkedin": "", "source_url": "https://theorg.com/org/general-informatics/teams/leadership-team"}],
+ "company_linkedin": "https://www.linkedin.com/company/general-informatics", "company_phone": "(225) 767-7670", "public_email": "",
+ "contact_source_url": "https://www.lba.org/LBA/LBA/Bankers_Directory/Association_Profile_Paid.aspx?ID=44144",
+ "notes": "Input second_contact duplicated the CEO; replaced with COO Edward Reade (LinkedIn search result 'Chief Operating Officer at General ...'). Phone/address (One Smart Way, Suite 200, Baton Rouge, LA 70810) from Louisiana Bankers Association directory; geninf.com pages returned empty to fetch. Emails seen only in a data-broker snippet, not recorded."},
+{"company_name": "Kinective", "confidence_score": 90,
+ "contacts": [
+  {"name": "Stephen Baker", "title": "CEO", "linkedin": "https://www.linkedin.com/in/stephen-baker-153279/", "source_url": "https://www.kinective.io/company/"},
+  {"name": "Scott Perkins", "title": "EVP Sales", "linkedin": "https://www.linkedin.com/in/scott-perkins-6669b76/", "source_url": "https://www.kinective.io/company/"},
+  {"name": "Sarah Schedler", "title": "EVP of Talent", "linkedin": "", "source_url": "https://www.kinective.io/company/"}],
+ "notes": "Scott Perkins (case study contact) still EVP Sales per kinective.io/company and his LinkedIn result. Added CEO Stephen Baker as decision maker (LinkedIn result 'Stephen Baker - Kinective', Charleston SC; Inc. 5000 2026 #766) and EVP Talent Sarah Schedler. Existing phone/email kept."}
+]

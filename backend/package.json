@@ -14,7 +14,9 @@
     "docker:lambda": "docker build -f Dockerfile.lambda -t alyson-time-doctor-api:latest .",
     "clean": "rm -rf dist/",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:watch": "vitest",
+    "eval:coach": "ts-node -T test/coach-eval/run.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1089.0",

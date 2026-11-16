@@ -1,0 +1,38 @@
+[
+{"company_name": "Stratcore Developments", "company_domain": "stratcoredevelopments.com", "vendor": "Hubstaff", "confidence_score": 65,
+ "employee_count": "", "hq_country": "UK (Liverpool)",
+ "contacts": [],
+ "company_linkedin": "", "company_phone": "0151 382 2052", "public_email": "contact@stratcoredevelopments.com",
+ "contact_source_url": "https://www.stratcoredevelopments.com/",
+ "notes": "No decision maker found. The site fails TLS handshake for fetch. Search snippets show only first names in testimonials ('Sam & Tim', 'Michael'). No Companies House entity named Stratcore Developments was found: STRATCORE LIMITED 09231886 is a different company in Slough (director Danny Sohal), not this one. No company LinkedIn page found. Address per site snippet: 42 Jamaica Street, Liverpool L1 3AA. Existing phone and email kept, not re-verified."},
+{"company_name": "Envision Enterprise Solutions", "company_domain": "envisionesl.com", "vendor": "Time Champ", "confidence_score": 90,
+ "employee_count": "400+", "hq_country": "India (Hyderabad)",
+ "contacts": [
+  {"name": "Rama Raju", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/rajurama/", "source_url": "https://theorg.com/org/envision-enterprise-solutions/org-chart/rama-raju"},
+  {"name": "Parwez Khan", "title": "Business Unit Head (GC-TOS and Marine Harbour Operation)", "linkedin": "https://www.linkedin.com/in/parwez-khan-610971113/", "source_url": "https://rocketreach.co/envision-enterprise-solutions-management_b5c9b837f42e3075"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/envision-enterprise-solutions-pvt-ltd", "company_phone": "+91 9100496168",
+ "public_email": "info@envisionesl.com", "contact_source_url": "https://clutch.co/profile/envision-enterprise-solutions",
+ "notes": "Still in role: Rama Raju is listed as Founder & CEO (theorg). His LinkedIn URL appeared in a search result titled 'Rama Raju - Envision Enterprise Solutions America Inc.' (CEO, Hyderabad, 31K followers). Phone 9100496168 is from the Clutch profile (Cyber Gateway, HITEC City address, which matches the current site). The official contact page lists no phone. An older listing has +91 40 65343853 and sales@envisionesl.com at a former Jubilee Hills address (stale, not used). Other leaders from broker snippets: Devi Kala (Sr HR Manager), Girish Eleadath (VP), Sudharshan Reddy (VP Customer Experience)."},
+{"company_name": "Knack Global", "company_domain": "knackrcm.com", "vendor": "Time Champ", "confidence_score": 90,
+ "employee_count": "8,000+ (Carlyle release, May 2026)", "hq_country": "United States (Woodbridge, NJ)",
+ "contacts": [
+  {"name": "Gautam Barai", "title": "CEO, Knack RCM", "linkedin": "", "source_url": "https://www.carlyle.com/media-room/news-release-archive/carlyle-acquires-knack-rcm-and-equalizercm-create-ai-native-global"},
+  {"name": "Bhupinder Behl", "title": "Director - IT (Time Champ case-study contact)", "linkedin": "https://www.linkedin.com/in/bhupinder-behl-905b7566/", "source_url": "https://www.timechamp.io/case-studies/knack-global"},
+  {"name": "Laurie Zabel", "title": "Chief Operating Officer", "linkedin": "https://www.linkedin.com/in/laurie-zabel-56359a149/", "source_url": "https://www.zoominfo.com/p/Laurie-Zabel/2200257565"},
+  {"name": "Rajiv Sharma", "title": "Founder (Executive Chairman)", "linkedin": "", "source_url": "https://www.carlyle.com/media-room/news-release-archive/carlyle-acquires-knack-rcm-and-equalizercm-create-ai-native-global"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/knack-global/", "company_phone": "+1 732-596-0110 (NJ); 888-245-5627 (FL)",
+ "public_email": "hello@knackrcm.com", "contact_source_url": "https://knackrcm.com/contact/",
+ "notes": "Knack Global rebranded as Knack RCM (knackrcm.com). In May 2026 Carlyle bought a majority stake and combined it with EqualizeRCM. The company is still operating, so it stays targetable, but expect procurement changes under the new owner. CEO is now Gautam Barai, ex-WNS COO (Arvind Ramakrishnan was CEO earlier). Bhupinder Behl is still Director of IT per a LinkedIn search title (verbatim URL). Laurie Zabel is COO; her LinkedIn URL appeared in a search result titled 'Laurie Zabel - Chief Operating Officer at Knack RCM'. Email decoded from the official contact page; the page also lists India offices (Mohali, Mumbai, Hyderabad, Jaipur) and the Philippines."},
+{"company_name": "Milestone Technologies", "company_domain": "milestone.tech", "vendor": "Time Champ", "confidence_score": 85,
+ "employee_count": "4,000+", "hq_country": "United States (Fremont, CA) / India",
+ "contacts": [
+  {"name": "Sameer Kishore", "title": "CEO", "linkedin": "https://www.linkedin.com/in/sameerkishore/", "source_url": "https://milestone.tech/leadership"},
+  {"name": "Mike Riep", "title": "COO", "linkedin": "", "source_url": "https://milestone.tech/leadership"},
+  {"name": "Arlene LaBorde", "title": "Chief People Officer", "linkedin": "", "source_url": "https://milestone.tech/leadership"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/milestone-technologies", "company_phone": "(877) 651-2454",
+ "public_email": "itsolutions@milestone.tech", "contact_source_url": "https://milestone.tech/leadership",
+ "notes": "Still in role: Sameer Kishore (CEO) and Mike Riep (COO) are both on the current leadership page. Sameer Kishore's LinkedIn URL appeared in a search result titled 'Sameer Kishore - Milestone Technologies, Inc.'. Phone and address (2201 Walnut Ave, Ste 290, Fremont CA 94538) are from the site footer. itsolutions@milestone.tech appears on the contact page and privacy policy; privacy@milestone.tech is also listed. Other leaders: Mayank Agrawal (CFO), Puneet Kumar (CRO). The input source URL is the Time Champ 'suyathi' case study; the link to Milestone is carried from the input, not re-checked."}
+]

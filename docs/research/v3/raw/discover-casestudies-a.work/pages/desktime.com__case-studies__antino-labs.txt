@@ -1,0 +1,535 @@
+URL: https://desktime.com/case-studies/antino-labs
+TITLE: Maintaining productivity - Antino Labs case study
+META: <meta name="description" content="Here’s how Antino Labs improved team consistency, accountability, and transparency across a growing 55-person development team.">
+META: <meta property="og:title" content="DeskTime | Maintaining productivity - Antino Labs case study">
+META: <meta name="msvalidate.01" content="7E7149BB0536D28D683B219D73FAAF68" />
+----
+Maintaining productivity - Antino Labs case study 
+ Support 
+ DeskTime
+ 🍪 Allow functional cookies?
+ We use Zendesk messaging software for easy communication with our clients. Zendesk uses cookies to interact with website visitors and provide chat history.
+ See our Privacy Policy for more info. You can change your cookie preferences at any time in our Cookie Settings .
+ Allow & continue to chat
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing
+ Demo
+ Intro call
+ Start free trial
+ Log in
+ en 
+ English
+ Español
+ document.getElementsByTagName('body')[0].classList.toggle('overflow-hidden'))"
+ >
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing 
+ Demo 
+ Intro call 
+ Start free trial
+ Log in
+ How Antino Labs increased productivity from 85% to 95% with DeskTime.
+ Three years ago while working as a freelance software developer, Vinay Krishna Gupta started to use DeskTime to track his own time spent on different clients' projects. A year later, he co-founded Antino Labs where he continued to use DeskTime with his team.
+ Antino Labs is an IT company that builds high-performing web and mobile apps with the help of the latest cutting edge technologies. Over the last two years, the team has grown to 55 people, the majority of whom are developers.
+ As for Vinay himself, he is not only the co-founder of the company but also a hands-on CEO. He spends his workday on communicating with clients, managing his partly in-office, partly remote team, and, if necessary, helping the team with software development tasks.
+ Higher productivity and a stronger company culture
+ There were three key reasons why Vinay decided to use DeskTime with his Antino Labs team.
+ “The first reason was productivity . On DeskTime, we can quickly check each employee's productivity. Like how much time they've actually spent working during the day.” The second reason for using time tracking was to ensure ''consistency'' or, in other words, to make sure that people work a certain amount of hours a day and spend these hours on productive work.
+ And the third and final reason was to build a company culture where everyone is accountable and follow basic company policies and where there is transparency in workflow management.
+ ''When your team is small, you can easily see what project has been assigned to which person,'' Vinay explains. ''But when your team grows, you definitely need a tool like DeskTime where you can see who is working on what task.''
+ These three things – productivity, consistency, and strong company culture – became especially important during the Covid-19 crisis when the entire team switched to remote work. In the meantime, the crisis allowed Vinay to notice his team's dedication to the company:
+ While working from home, people were actually working more and for longer hours. Vinay believes that in a way, it was DeskTime that helped them to establish such a culture where everyone works hard.
+ Overall, Vinay has observed that by using DeskTime time tracking, the company's productivity consistently increases.
+ “The first week after introducing DeskTime to the company, the team's productivity was around 85%. Now it's 95%. We've become more efficient in our time management and in human resource management. For example, if we see that some projects are not moving forward, we speak to the specific employees and motivate them to perform better.” Time tracking that feels comfortable and boosts motivation
+ Before choosing DeskTime, Vinay tested Time Doctor but found it difficult to navigate. ''DeskTime's user interface is much clearer and easier to understand,'' says Vinay. He notes that the ease of use was an especially important factor during the already mentioned Covid-19 crisis when the entire team had to quickly switch to remote work and start using DeskTime.
+ “DeskTime is very easy to understand. When we introduced it to the team, we had a quick demo and within three or four days, everyone was using it.” Vinay says that when introducing DeskTime to the team, he specifically highlighted features like Private time and Offline time.
+ The Private time feature can be used at any time to stop time tracking and take care of personal things during the workday. Employees are also encouraged to use Offline time to log in productive time spent away from the computer. ''Those were the basic things we explained to the team because we wanted to make sure that people feel comfortable during work ,'' Vinay reveals.
+ To motivate everyone in the team to perform at his or her best, Vinay has started to ask his team members to pay attention to each individual’s place in the group.
+ “Everyone can see his or her place in the company and the number of hours worked. If you're at the bottom, this motivates you to improve and work harder. Meanwhile, we also regularly recognize and praise those who already work hard and do it consistently.” The company has developed a bonus system to reward its best-performing employees. At the same time, they have a system of how to help those who struggle with getting things done.
+ ''We'd arrange a one-on-one meeting with the person's direct manager where they talk to try to understand the problem. When we know where the problem is, we try to solve it together with the employee,'' Vinay tells us and mentions that for serious issues, the company also has a mentoring and counseling system in place.
+ Employees don't mind using DeskTime because they benefit from it
+ Vinay says that the team is generally okay with the company using time tracking. In fact, employees have realized that, at the end of the day, they actually benefit from it.
+ “Some companies require their employees to remain online during office hours. But if you use a time tracking tool, you can give people bigger flexibility because they can complete their minimum working hours at any time of the day. They can work at night or they can work during the day – that's up to them.'” Asked whom he would recommend DeskTime, Vinay says that the companies that would benefit the most from time tracking are the ones that pay attention to things like employee productivity and, even more importantly, the consistency of work performance.
+ '' Consistency is something you cannot maintain without any time tracking tool , especially if the whole or a part of your team works remotely,'' Vinay says with certainty.
+ He also believes that time tracking tools like DeskTime are necessary to ensure efficiency. For example, they help you understand how many people are working on what projects and whether there are any ''gaps'' that need to be filled.
+ Finally, he would recommend DeskTime to newly launched companies and startups that want to build a strong company culture and introduce specific work policies right from the start. Vinay's experience shows that time tracking not only helps to establish basic work guidelines but also to make sure that everyone follows them.
+ A time tracker that won’t interrupt your team’s workflow. Ever.
+ Forget manual entries and distractions. With DeskTime, time tracking runs on autopilot—zero effort needed.
+ Start free trial
+ Book an Intro
+ Features
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Solutions
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Resources
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Contacts
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ A hassle-free automatic time tracker. Set it and forget it.
+ © 2011 - 2026 DeskTime

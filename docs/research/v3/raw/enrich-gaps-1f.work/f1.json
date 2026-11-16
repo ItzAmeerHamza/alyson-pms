@@ -1,0 +1,33 @@
+{
+"0": {"contacts": [
+  {"name": "Ruchir Ranjan", "title": "Chief Executive Officer (since Nov 2025)", "linkedin": "https://www.linkedin.com/in/ruchir-ranjan-178711/", "source_url": "https://simplifyhealthcare.com/news-and-events/news/2025-11-21-simplify-healthcare-announces-leadership-transition-ruchir-ranjan-named-chief-executive-officer/"},
+  {"name": "Mohammed Vaid", "title": "Founder, Executive Chair & Chief Solution Architect", "linkedin": "https://www.linkedin.com/in/mohammed-vaid-7643669b/", "source_url": "https://simplifyhealthcare.com/about-us/leadership-team/"}],
+ "notes": "Still in role: Ruchir Ranjan named CEO 2025-11-21 (company press release); Mohammed Vaid moved to Executive Chair. CEO LinkedIn = search result 'Ruchir Ranjan - Wheaton, Illinois' (press release says he is based in Wheaton, IL) - match by name+location. Vaid LinkedIn = search result 'Mohammed Vaid - Aurora, Illinois' (Chicago-area, matches company). Company LinkedIn/phone/email unchanged from input."},
+"1": {"contacts": [
+  {"name": "Chris Sloane", "title": "President & Founder", "linkedin": "", "source_url": "https://theorg.com/org/heaviside-group"},
+  {"name": "Shannon Conway", "title": "Director of Operations", "linkedin": "https://www.linkedin.com/in/shannonaconway/", "source_url": "https://www.linkedin.com/in/shannonaconway/"}],
+ "company_phone": "(513) 334-3004; (800) 273-2176; Heaviside Digital (800) 711-9359",
+ "public_email": "info@heavisidegroup.com",
+ "contact_source_url": "https://heavisidegroup.com/terms-of-service",
+ "notes": "Chris Sloane still President & Founder (theorg; heaviside.digital names him founder). No personal LinkedIn for Chris found (site:linkedin.com/in search returned only other Chris Sloanes). Second contact Shannon Conway: LinkedIn search result title 'Shannon Conway - Director Of Operations - Heaviside Group'. info@ email and 800 number from company Terms of Service page; Digital brand number from heaviside.digital."},
+"2": {"contacts": [
+  {"name": "George Arkin", "title": "CEO / Founder", "linkedin": "", "source_url": "https://nexusautotransport.com/about-us/"},
+  {"name": "Agnis Arins", "title": "Chief Technology Officer", "linkedin": "", "source_url": "https://nexusautotransport.com/team/"}],
+ "notes": "George Arkin still CEO per company About page (fetched). No LinkedIn profile for him found (site:linkedin.com/in search returned no match). Second contact Agnis Arins (CTO) from company team page as shown in search snippet (page itself 404 on fetch). Phone/email unchanged."},
+"3": {"contacts": [
+  {"name": "Rob Bertholf", "title": "Founder & CEO, Bertholf Ventures LLC", "linkedin": "https://www.linkedin.com/in/bertholf/", "source_url": "https://www.crunchbase.com/person/rob-bertholf"}],
+ "company_linkedin": "",
+ "company_phone": "",
+ "public_email": "rob@bertholf.com",
+ "contact_source_url": "https://www.crunchbase.com/organization/bertholf-ventures",
+ "hq_country": "United States (San Diego, CA - 11835 Carmel Mountain Rd Ste 1304-226)",
+ "notes": "Rob Bertholf still Founder/CEO (LinkedIn title 'Rob Bertholf - Bertholf Ventures, LLC'; Crunchbase). Solo operator - no second contact found. bertholfventures.com refused connection on fetch; rob.bertholf.com shows only 'A new home is taking shape' (2026) - company may be winding down/rebuilding, verify. rob@bertholf.com appears in search snippets of public profile listings (not built from pattern) - unverified on own site. Phone left blank: listings give two different numbers ((415) 871-0504 and (808) 542-6033) and own site unavailable. No company LinkedIn page found."},
+"4": {"contacts": [
+  {"name": "Marko Gabud", "title": "CEO & co-founder (Board member)", "linkedin": "https://www.linkedin.com/in/markogabud/", "source_url": "https://4ofthem.eu/impressum/"},
+  {"name": "Robert Šinko", "title": "CEO & co-founder (Board member)", "linkedin": "https://www.linkedin.com/in/robertsinko/", "source_url": "https://4ofthem.eu/impressum/"},
+  {"name": "Jan Meister", "title": "President of the Board", "linkedin": "", "source_url": "https://4ofthem.eu/impressum/"}],
+ "public_email": "info@4ofthem.eu",
+ "contact_source_url": "https://4ofthem.eu/impressum/",
+ "hq_country": "Croatia (Ulica bana Josipa Jelačića 19, 10290 Zaprešić)",
+ "notes": "Impressum (fetched) lists board: Jan Meister (president), Marko Gabud, Robert Drago Šinko, Petar Gabud - both existing contacts still in role. Site has only a contact form, no phone. info@4ofthem.eu from search snippet describing the company site (not pattern-built) - not seen on fetched pages; verify. Company phone not found."}
+}

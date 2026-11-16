@@ -1,0 +1,31 @@
+[
+{"company_name": "Ice Cold Spice", "company_domain": "icecoldspice.com", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "small (founder + VA team)", "hq_country": "United Kingdom",
+ "contacts": [
+  {"name": "Laura (surname not published)", "title": "Founder & CEO", "linkedin": "", "source_url": "https://icecoldspice.com/pages/about-us"}
+ ],
+ "company_linkedin": "", "company_phone": "020 3740 1246", "public_email": "hello@icecoldspice.com; customercare@icecoldspice.com",
+ "contact_source_url": "https://icecoldspice.com/pages/contact",
+ "notes": "Decision maker: the official About page reads 'Hi, I'm Laura ... I'm the Founder of Ice Cold Spice' and is signed 'Laura, Founder & CEO'. The site gives no surname, and the terms and privacy pages name no legal entity. Without search, the surname and LinkedIn could not be established (do not guess). Emails and phone come from the site. No company LinkedIn link on the site."},
+{"company_name": "Get Me Insurance Inc.", "company_domain": "getmeinsurance.ca", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "", "hq_country": "Canada (Brampton, ON)",
+ "contacts": [],
+ "company_linkedin": "https://www.linkedin.com/company/get-me-insurance", "company_phone": "+1 647-459-6162",
+ "public_email": "info@getmeinsurance.ca", "contact_source_url": "https://getmeinsurance.ca",
+ "notes": "No decision maker found. The About page describes Get Me Insurance Inc. as a licensed broker in Brampton, ON, but names no founder or principal broker. A FSRA/RIBO licensee lookup or LinkedIn search would be needed (search budget exhausted). Phone, email and company LinkedIn re-confirmed on the official site."},
+{"company_name": "The Wealth Creation Club (TWCC)", "company_domain": "", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "", "hq_country": "United States",
+ "contacts": [
+  {"name": "Jonathan Gaze", "title": "Hiring lead on TWCC's behalf (via his UK company Welston Properties Limited)", "linkedin": "", "source_url": "https://www.onlinejobs.ph/jobseekers/job/marketing-operations-assistant-gohighlevel-full-time-long-term-us-company-1725675"}
+ ],
+ "company_linkedin": "", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "Per the OnlineJobs.ph posting, TWCC is a new venture from the owner of 'Seattle Nanny Network' (a US company trading since 1997). The hiring is run by Jonathan Gaze through Welston Properties Limited (UK). The owner is not named. seattlenannynetwork.com does not resolve. seattlenanny.com ('Seattle Nanny') exists but is NOT confirmed as the same business, so it was not used. No TWCC domain found. Jonathan Gaze's exact role is unclear (possibly a partner or contractor); treat him as an entry point only."},
+{"company_name": "Tidal Cleaning Services", "company_domain": "tidalcleaningservices.co.uk", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "", "hq_country": "United Kingdom (Darlington origin)",
+ "contacts": [
+  {"name": "Ralf Hodgson", "title": "Founder", "linkedin": "", "source_url": "https://tidalcleaningservices.co.uk/our-story/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/64762295", "company_phone": "",
+ "public_email": "contact@tidalcleaningservices.co.uk", "contact_source_url": "https://tidalcleaningservices.co.uk/contact/",
+ "notes": "Decision maker added: the official Our Story page says the business began in 2016 in Darlington when founder Ralf Hodgson set up RH Windows. The site lists email only (office hours Mon-Fri 7am-7pm), with no phone. Personal LinkedIn not found (search budget exhausted)."}
+]

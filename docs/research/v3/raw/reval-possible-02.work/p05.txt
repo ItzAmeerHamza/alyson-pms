@@ -1,0 +1,20 @@
+[
+{"idx":19,"vendor":"Teramind","status":"POSSIBLE","confidence_score":25,
+ "status_reason":"TheirStack only; no job ad, review or page naming Teramind.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"OneXtel\" Teramind' and 'OneXtel Noida job employee monitoring Teramind OR DLP' - nothing. Input contacts (CEO Kalpit Jain, phone, email) kept, not re-confirmed this round."},
+{"idx":20,"vendor":"Time Doctor","status":"POSSIBLE","confidence_score":25,
+ "status_reason":"TheirStack only; no job ad or page naming Time Doctor.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Legendary Careers\" \"Time Doctor\" OR timedoctor' and 'Legendary Careers Philippines virtual assistant job Melbourne time tracking' - nothing linking the company. Under 25 staff - no new contact research; input contacts kept."},
+{"idx":21,"vendor":"Teramind","status":"POSSIBLE","confidence_score":25,
+ "status_reason":"TheirStack only; Indeed shows one open marketing role, nothing naming Teramind or any tracker.",
+ "contact_source_url":"https://klizos.com/contact-us/",
+ "pitch_angle":"Kolkata dev shop billing US clients; cost-sensitive (Glassdoor pay complaints) - cheaper tracking + client timesheets than Teramind.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Klizo\" Teramind OR \"time tracking\" OR Hubstaff' and 'Klizo Solutions job Teramind OR screen monitoring OR time tracker Kolkata' - nothing. Contact page re-fetched: info@klizos.com, +91-33-4605-2411 confirmed. Contacts from input kept."},
+{"idx":22,"vendor":"DeskTime","status":"POSSIBLE","confidence_score":25,
+ "status_reason":"TheirStack only; an Aug 2026 Corporate Stays remote Account Manager ad (Philippines/Malaysia/Serbia, freelance, 8-5 ET) names no tracker. Offshore freelance staff makes tracking plausible but unproven.",
+ "second_source_url":"https://jobgether.com/offer/6a766a8b490731f1e18b8ed0-account-manager",
+ "company_phone":"+1 (514) 277-6464 (Canada & USA); +1 800 213 6030 (Latin America)","contact_source_url":"https://www.corporatestays.com/contact-us",
+ "workforce_signals":"Remote freelance account managers hired in the Philippines, Malaysia and Serbia on ET hours (Aug 2026); 100+ housing specialists 24/7.",
+ "pitch_angle":"Hiring offshore freelance account managers on fixed ET shifts - attendance/shift proof and activity tracking for contractors.",
+ "notes_prepend":"Wave-3 re-check 2026-10-07: searches '\"Corporate Stays\" DeskTime' and 'Corporate Stays job remote DeskTime OR time tracking' - no DeskTime link; found the offshore remote Account Manager ad (2026-08-07). Contact page fetched (phones above; also lists a Singapore address 68 Circular Road). CEO from input kept, not re-confirmed."}
+]

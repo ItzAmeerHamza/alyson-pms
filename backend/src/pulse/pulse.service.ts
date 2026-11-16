@@ -50,6 +50,7 @@ import {
   mailTargetFromDailyEmployee,
   resolveLowHoursSendWindow,
   employeesFromSendSnapshot,
+  targetAfterPublicHolidays,
 } from './low-hours-send-window';
 import {
   dayHoursWithLeaveTopUp,
@@ -60,6 +61,12 @@ import {
   expectedHoursForEmployment,
   normalizeStartedOn,
 } from './employment-start';
+import {
+  EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL,
+  leaveWeekdayKeys,
+  matchesTeamLeave,
+  publicHolidayDateKeys,
+} from '../leave/leave-days';
 
 export interface OrgSettings {
   hours_threshold: number;
@@ -349,7 +356,7 @@ export class PulseService {
     return byUserDay;
   }
 
-  /** Day total = tracked + other adj + holiday top-up (never below 0). */
+  /** Day total = tracked + full leave credit + other adjustments (never below 0). */
   private hoursWorkedForDay(
     trackedHours: number,
     otherAdjustmentHours = 0,
@@ -362,7 +369,7 @@ export class PulseService {
     });
   }
 
-  /** Applied net (holiday top-up + other adj), not the raw +7h leave row. */
+  /** Hours added on top of tracked time: full leave credit plus other adjustments. */
   private appliedAdjustmentHours(
     trackedHours: number,
     otherAdjustmentHours = 0,
@@ -377,7 +384,7 @@ export class PulseService {
 
   /**
    * Merge admin + leave adjustments into tracked daily maps.
-   * Holiday/leave is a floor: extra tracked time above the credit is kept.
+   * Leave credit is added in full. Other adjustments sit on top of tracked + leave.
    */
   private mergeTrackedWithAdjustments(
     trackedByUser: Map<string, Map<string, number>>,
@@ -428,8 +435,9 @@ export class PulseService {
   }
 
   /**
-   * Net adjustments (hours) per user_id → work_date, split so holiday leave
-   * can top up to 7h instead of stacking on tracked time.
+   * Net adjustments (hours) per user_id → work_date.
+   * Leave credit is added in full on top of tracked time. Public-holiday
+   * credits are excluded and do not add hours.
    */
   private async fetchAdjustmentHoursInRange(
     user: ScopedAuthUser,
@@ -461,6 +469,7 @@ export class PulseService {
               a.work_date::text AS work_date,
               COALESCE(SUM(a.delta_seconds) FILTER (
                 WHERE a.source_type IN ('leave', 'leave_void')
+                  AND ${EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL}
               ), 0)::bigint AS leave_seconds,
               COALESCE(SUM(a.delta_seconds) FILTER (
                 WHERE a.source_type IS NULL
@@ -495,6 +504,201 @@ export class PulseService {
       put(other, row.user_id, day, toHours(row.other_seconds));
     }
     return { other, leave };
+  }
+
+  /** Public-holiday weekdays for each employee. These days are not required hours. */
+  private async publicHolidaysByUser(
+    user: ScopedAuthUser,
+    employees: Array<{
+      id: string;
+      country?: string | null;
+      location?: string | null;
+      department?: string | null;
+    }>,
+    rangeStart: string,
+    rangeEnd: string,
+  ): Promise<Map<string, Set<string>>> {
+    const scope = workspaceScope(user, 't');
+    const result = await this.db.query<{
+      country: string | null;
+      location: string | null;
+      team: string;
+      start_date: string;
+      end_date: string;
+    }>(
+      `SELECT t.country, t.location, t.team,
+              t.start_date::text AS start_date,
+              t.end_date::text AS end_date
+         FROM time_doctor.team_leave_events t
+        WHERE ${scope.clause}
+          AND t.status = 'active'
+          AND t.leave_type = 'holiday'
+          AND t.end_date >= $${scope.params.length + 1}::date
+          AND t.start_date <= $${scope.params.length + 2}::date`,
+      [...scope.params, rangeStart, rangeEnd],
+    );
+    const holidays = result.rows.map((row) => ({
+      country: row.country,
+      location: row.location,
+      team: row.team,
+      startDate: String(row.start_date).slice(0, 10),
+      endDate: String(row.end_date).slice(0, 10),
+    }));
+    const byUser = new Map<string, Set<string>>();
+    for (const emp of employees) {
+      const days = publicHolidayDateKeys({
+        employeeCountry: emp.country,
+        employeeLocation: emp.location,
+        employeeTeam: emp.department,
+        holidays,
+        rangeStart,
+        rangeEnd,
+      });
+      if (days.length) byUser.set(String(emp.id), new Set(days));
+    }
+    return byUser;
+  }
+
+  private async employeesForHolidayMatch(
+    user: ScopedAuthUser,
+    employeeIds: string[],
+  ): Promise<
+    Array<{
+      id: string;
+      country: string | null;
+      location: string | null;
+      department: string | null;
+    }>
+  > {
+    const ids = [...new Set(employeeIds.map((id) => String(id)).filter((id) => /^\d+$/.test(id)))];
+    if (!ids.length) return [];
+    const scope = workspaceScope(user, 'ext');
+    const result = await this.db.query<{
+      id: string;
+      country: string | null;
+      location: string | null;
+      department: string | null;
+    }>(
+      `SELECT u.id::text AS id, ext.country, ext.location, ext.department
+         FROM tenant."user" u
+         JOIN time_doctor.user_extensions ext ON ext.user_id = u.id
+        WHERE ${scope.clause}
+          AND u.id = ANY($${scope.params.length + 1}::int[])`,
+      [...scope.params, ids.map((id) => parseTenantUserId(id))],
+    );
+    return result.rows;
+  }
+
+  /**
+   * Personal leave and non-holiday team leave for one employee, one entry per
+   * weekday (Coach). fraction is 1 for a full day, 0.5 for a half day (only the
+   * first weekday of a half-day request, as leave crediting does). Each day is
+   * credited as hours in Team Time, so the Coach treats it as already covered.
+   */
+  async personalLeaveDaysForUser(
+    user: ScopedAuthUser,
+    userId: string,
+    rangeStart: string,
+    rangeEnd: string,
+  ): Promise<Array<{ date: string; leaveType: string; fraction: number }>> {
+    const scope = workspaceScope(user, 'e');
+    const uid = parseTenantUserId(String(userId));
+    const personal = await this.db.query<{
+      leave_type: string;
+      start_date: string;
+      end_date: string;
+      half_day: boolean | null;
+    }>(
+      `SELECT e.leave_type, e.start_date::text AS start_date, e.end_date::text AS end_date, e.half_day
+         FROM time_doctor.leave_events e
+        WHERE ${scope.clause}
+          AND e.user_id = $${scope.params.length + 1}
+          AND e.status = 'active'
+          AND e.end_date >= $${scope.params.length + 2}::date
+          AND e.start_date <= $${scope.params.length + 3}::date`,
+      [...scope.params, uid, rangeStart, rangeEnd],
+    );
+
+    const byDay = new Map<string, { date: string; leaveType: string; fraction: number }>();
+    const put = (date: string, leaveType: string, fraction: number) => {
+      if (date < rangeStart || date > rangeEnd) return;
+      const prev = byDay.get(date);
+      if (!prev || fraction > prev.fraction) byDay.set(date, { date, leaveType, fraction });
+    };
+    for (const ev of personal.rows) {
+      const days = leaveWeekdayKeys(ev.start_date.slice(0, 10), ev.end_date.slice(0, 10));
+      if (ev.half_day) {
+        if (days[0]) put(days[0], ev.leave_type, 0.5);
+      } else {
+        for (const day of days) put(day, ev.leave_type, 1);
+      }
+    }
+
+    const employees = await this.employeesForHolidayMatch(user, [String(userId)]);
+    const emp = employees[0];
+    if (emp) {
+      const teamScope = workspaceScope(user, 't');
+      const team = await this.db.query<{
+        country: string | null;
+        location: string | null;
+        team: string;
+        leave_type: string;
+        start_date: string;
+        end_date: string;
+      }>(
+        `SELECT t.country, t.location, t.team, t.leave_type,
+                t.start_date::text AS start_date, t.end_date::text AS end_date
+           FROM time_doctor.team_leave_events t
+          WHERE ${teamScope.clause}
+            AND t.status = 'active'
+            AND t.leave_type <> 'holiday'
+            AND t.end_date >= $${teamScope.params.length + 1}::date
+            AND t.start_date <= $${teamScope.params.length + 2}::date`,
+        [...teamScope.params, rangeStart, rangeEnd],
+      );
+      for (const ev of team.rows) {
+        if (
+          !matchesTeamLeave({
+            employeeCountry: emp.country,
+            employeeLocation: emp.location,
+            employeeTeam: emp.department,
+            leaveCountry: ev.country,
+            leaveLocation: ev.location,
+            leaveTeam: ev.team,
+          })
+        ) {
+          continue;
+        }
+        for (const day of leaveWeekdayKeys(ev.start_date.slice(0, 10), ev.end_date.slice(0, 10))) {
+          put(day, ev.leave_type, 1);
+        }
+      }
+    }
+    return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /** Public-holiday weekdays for one employee (Coach week / month targets). */
+  async publicHolidayDaysForUser(
+    user: ScopedAuthUser,
+    userId: string,
+    rangeStart: string,
+    rangeEnd: string,
+  ): Promise<string[]> {
+    const employees = await this.employeesForHolidayMatch(user, [String(userId)]);
+    if (!employees.length) return [];
+    const byUser = await this.publicHolidaysByUser(user, employees, rangeStart, rangeEnd);
+    return [...(byUser.get(String(employees[0].id)) ?? [])].sort();
+  }
+
+  private expectedHoursAfterPublicHolidays(
+    expectedHours: number,
+    employmentDays: string[],
+    holidayDays: Set<string> | undefined,
+    hoursPerDay: number,
+  ): number {
+    if (!holidayDays?.size) return expectedHours;
+    const skipped = employmentDays.filter((day) => holidayDays.has(day)).length;
+    return Math.max(0, Math.round((expectedHours - skipped * hoursPerDay) * 10) / 10);
   }
 
   async listTimeAdjustments(user: ScopedAuthUser, userId: string, workDate: string) {
@@ -614,12 +818,16 @@ export class PulseService {
     const trackedMap = this.dailyHoursFromLogs(logs, workTz);
     const trackedHours = trackedMap.get(String(targetId))?.get(workDate) ?? 0;
 
+    // Old public-holiday credits no longer count toward the day (the holiday
+    // lowers the target instead), so they must not let an admin subtract
+    // hours the employee actually tracked.
     const netResult = await this.db.query<{ net: string | number }>(
-      `SELECT COALESCE(SUM(delta_seconds), 0)::bigint AS net
-         FROM time_doctor.time_adjustments
-        WHERE user_id = $1
-          AND work_date = $2::date
-          AND workspace_id = $3`,
+      `SELECT COALESCE(SUM(a.delta_seconds), 0)::bigint AS net
+         FROM time_doctor.time_adjustments a
+        WHERE a.user_id = $1
+          AND a.work_date = $2::date
+          AND a.workspace_id = $3
+          AND ${EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL}`,
       [targetId, workDate, workspaceId],
     );
     const currentNetSec = Number(netResult.rows[0]?.net) || 0;
@@ -749,6 +957,13 @@ export class PulseService {
     tz?: string,
     intervalMinutes = 1,
     userId?: string,
+    /** Time logs in range: idle only counts inside these tracked sessions. */
+    sessionLogs?: Array<{
+      user_id: string;
+      start_time: string | Date;
+      end_time?: string | Date | null;
+      last_alive_at?: string | Date | null;
+    }>,
   ): Promise<Map<string, Map<string, number>>> {
     const meetings = await this.effectiveTime.meetingIntervalsByUser(
       this.effectiveTimeFilter(user),
@@ -757,7 +972,12 @@ export class PulseService {
       intervalMinutes,
       userId,
     );
-    return this.effectiveTime.idleHoursFromIdleLogs(logs, tz, meetings);
+    return this.effectiveTime.idleHoursFromIdleLogs(
+      logs,
+      tz,
+      meetings,
+      sessionLogs ? this.effectiveTime.sessionIntervalsFromTimeLogs(sessionLogs) : undefined,
+    );
   }
 
   /** Idle hours per user/day — prefer idle_logs; fall back to time_logs.idle_seconds when no idle rows. */
@@ -968,6 +1188,9 @@ export class PulseService {
       email: string;
       role: string | null;
       manager_id: string | null;
+      department: string | null;
+      location: string | null;
+      country: string | null;
       is_active: boolean;
       paused_at: string | null;
       signed_in_at: string | null;
@@ -982,7 +1205,7 @@ export class PulseService {
     const workTz = settings.timezone;
     const { startIso, endExclusiveIso } = workDateRangeToUtcIso(startKey, endKey, workTz);
     const lowActivityCutoff = lowActivityCutoffPercent(settings);
-    const [logs, idleLogs, adjustmentSplit, screenshotRows] = await Promise.all([
+    const [logs, idleLogs, adjustmentSplit, screenshotRows, holidayByUser] = await Promise.all([
       this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
       this.fetchIdleLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
       this.fetchAdjustmentHoursInRange(user, startKey, endKey, restrictToUserId),
@@ -994,6 +1217,7 @@ export class PulseService {
         restrictToUserId,
         workTz,
       ),
+      this.publicHolidaysByUser(user, usersResult.rows, startKey, endKey),
     ]);
     const dailyByUser = this.dailyHoursFromLogs(logs, workTz);
     const lowActivityByUser = this.effectiveTime.lowActivityHoursFromRows(
@@ -1016,6 +1240,8 @@ export class PulseService {
           screenshotRows,
           settings.screenshot_interval_minutes,
         ),
+        // Only idle inside a tracked session is non-effective time.
+        this.effectiveTime.sessionIntervalsFromTimeLogs(logs),
       ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
@@ -1061,6 +1287,16 @@ export class PulseService {
           is_active: emp.is_active !== false,
           paused_at: emp.paused_at ?? null,
           signed_in_at: emp.signed_in_at ?? null,
+          // Public-holiday dates in this range and the hours tracked on them.
+          // These hours are already inside each day's hours_worked; shown on
+          // their own so holiday work can be seen and rewarded.
+          public_holiday_dates: days.filter((date) => holidayByUser.get(emp.id)?.has(date)),
+          holiday_hours_worked:
+            Math.round(
+              days
+                .filter((date) => holidayByUser.get(emp.id)?.has(date))
+                .reduce((sum, date) => sum + (dayMap.get(date) ?? 0), 0) * 10,
+            ) / 10,
           days: days.map((date) => {
             const trackedHours = dayMap.get(date) ?? 0;
             const otherHours = otherMap.get(date) ?? 0;
@@ -1087,6 +1323,7 @@ export class PulseService {
               idleHours,
             );
 
+            const onPublicHoliday = holidayByUser.get(emp.id)?.has(date) ?? false;
             return {
               date,
               tracked_hours: trackedHours,
@@ -1096,7 +1333,10 @@ export class PulseService {
               idle_hours: Math.round(idleHours * 10) / 10,
               non_effective_hours: effective.non_effective_hours,
               effective_hours: effective.effective_hours,
-              below_threshold: hoursWorked < settings.hours_threshold,
+              below_threshold: onPublicHoliday
+                ? false
+                : hoursWorked < settings.hours_threshold,
+              public_holiday: onPublicHoliday,
             };
           }),
         };
@@ -1173,7 +1413,7 @@ export class PulseService {
 
     // Adjustments are not project-scoped — surface as their own bucket so
     // org totals match Team Time / Email Reporting actual hours.
-    // Holiday leave is a top-up (floor), not stacked on tracked project hours.
+    // Leave credit and manual adjustments are their own bucket, added on top of tracked project hours.
     const [adjustmentSplit, adjLogs] = await Promise.all([
       this.fetchAdjustmentHoursInRange(user, startKey, endKey, restrictToUserId),
       this.fetchTimeLogsInRange(user, startIso, endExclusiveIso, restrictToUserId),
@@ -1707,6 +1947,12 @@ export class PulseService {
       previousKey,
       checkDate,
     );
+    const holidayByUser = await this.publicHolidaysByUser(
+      user,
+      usersResult.rows,
+      previousKey,
+      checkDate,
+    );
     const dailyByUser = this.mergeTrackedWithAdjustments(
       trackedByUser,
       adjOther,
@@ -1727,6 +1973,8 @@ export class PulseService {
         idleLogs,
         undefined,
         settings.screenshot_interval_minutes,
+        undefined,
+        logs,
       ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
@@ -1782,7 +2030,10 @@ export class PulseService {
         hours,
         low_activity_hours: Math.round(lowActivityHours * 10) / 10,
         idle_hours: Math.round(idleHours * 10) / 10,
-        below_threshold: !isWeekend(dateKey) && hours < settings.hours_threshold,
+        below_threshold:
+          !isWeekend(dateKey) &&
+          !(holidayByUser.get(empId)?.has(dateKey)) &&
+          hours < settings.hours_threshold,
       };
     };
 
@@ -1791,10 +2042,12 @@ export class PulseService {
       const check = dayMetrics(emp.id, checkDate);
       const previousWeekend = isWeekend(previousKey);
       const checkWeekend = isWeekend(checkDate);
+      const previousHoliday = holidayByUser.get(emp.id)?.has(previousKey) ?? false;
+      const checkHoliday = holidayByUser.get(emp.id)?.has(checkDate) ?? false;
 
       const notTrackingPrevious =
-        !previousWeekend && previous.hours <= 0;
-      const notTrackingCheck = !checkWeekend && check.hours <= 0;
+        !previousWeekend && !previousHoliday && previous.hours <= 0;
+      const notTrackingCheck = !checkWeekend && !checkHoliday && check.hours <= 0;
 
       return {
         employee_id: emp.id,
@@ -2280,11 +2533,14 @@ export class PulseService {
         idleLogs,
         workTz,
         settings.screenshot_interval_minutes,
+        undefined,
+        logs,
       ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
     const { other: adjOther, leave: adjLeave } = adjSplit;
     const { users, managerMap } = staff;
+    const holidayByUser = await this.publicHolidaysByUser(user, users, periodStart, effectiveEnd);
 
     const below = users
       .map((emp) => {
@@ -2297,7 +2553,12 @@ export class PulseService {
         });
         if (employment.exclude) return null;
 
-        const empExpected = employment.expectedHours;
+        const empExpected = this.expectedHoursAfterPublicHolidays(
+          employment.expectedHours,
+          employment.employmentDays,
+          holidayByUser.get(emp.id),
+          hoursPerDay,
+        );
         const empCutoff = Math.round(empExpected * (pacePercent / 100) * 10) / 10;
         const empDays = employment.employmentDays;
 
@@ -2373,6 +2634,14 @@ export class PulseService {
           daily_non_effective,
           daily_effective,
           day_keys: empDays,
+          public_holiday_days: empDays.filter((day) => holidayByUser.get(emp.id)?.has(day)),
+          // Hours tracked on those holidays (already inside hours_worked).
+          holiday_hours_worked:
+            Math.round(
+              empDays
+                .filter((day) => holidayByUser.get(emp.id)?.has(day))
+                .reduce((sum, day) => sum + (dayMap.get(day) ?? 0), 0) * 10,
+            ) / 10,
         };
       })
       .filter((e): e is NonNullable<typeof e> => Boolean(e) && e.below_threshold)
@@ -2430,6 +2699,8 @@ export class PulseService {
         idleLogs,
         undefined,
         settings.screenshot_interval_minutes,
+        undefined,
+        logs,
       ),
       this.dailyIdleSecondsFromTimeLogs(logs),
     );
@@ -2443,12 +2714,15 @@ export class PulseService {
       date,
       settings.timezone,
     );
+    const holidayByUser = await this.publicHolidaysByUser(user, users, date, date);
 
     const below = users
       .map((emp) => {
         const startedOn = normalizeStartedOn((emp as { started_on?: string | null }).started_on);
         if (startedOn && date < startedOn) return null;
 
+        const onHoliday = holidayByUser.get(emp.id)?.has(date) ?? false;
+        const expectedHours = onHoliday ? 0 : hoursThreshold;
         const tracked = dailyByUser.get(emp.id)?.get(date) ?? 0;
         const otherHours = adjOther.get(emp.id)?.get(date) ?? 0;
         const leaveHours = adjLeave.get(emp.id)?.get(date) ?? 0;
@@ -2466,7 +2740,9 @@ export class PulseService {
           Math.round((tracked > 0 ? Math.min(idleRaw, tracked) : idleRaw) * 10) / 10;
         const eff = computeEffectiveTime(hours, lowHours, idleHours);
         const mgr = emp.manager_id ? managerMap.get(emp.manager_id) : null;
-        const short = Math.round(Math.max(0, hoursThreshold - hours) * 10) / 10;
+        const short = onHoliday
+          ? 0
+          : Math.round(Math.max(0, hoursThreshold - hours) * 10) / 10;
         return {
           employee_id: emp.id,
           full_name: emp.full_name,
@@ -2480,11 +2756,13 @@ export class PulseService {
           idle_hours: idleHours,
           non_effective_hours: eff.non_effective_hours,
           effective_hours: eff.effective_hours,
-          expected_hours: hoursThreshold,
+          expected_hours: expectedHours,
           hours_short: short,
           manager_email: mgr?.email ?? null,
           manager_name: mgr?.full_name ?? null,
-          below_threshold: hours < hoursThreshold,
+          below_threshold: onHoliday ? false : hours < hoursThreshold,
+          public_holiday_days: onHoliday ? [date] : [],
+          holiday_hours_worked: onHoliday ? Math.round(tracked * 10) / 10 : 0,
           daily_hours: { [date]: hours },
           daily_adjustment: { [date]: adjustmentHours },
           daily_low_activity: { [date]: lowHours },
@@ -2578,6 +2856,8 @@ export class PulseService {
         idleLogs,
         workTz,
         settings.screenshot_interval_minutes,
+        undefined,
+        logs,
       ),
       this.dailyIdleSecondsFromTimeLogs(logs, workTz),
     );
@@ -2591,6 +2871,7 @@ export class PulseService {
       effectiveEnd,
       workTz,
     );
+    const holidayByUser = await this.publicHolidaysByUser(user, users, weekStart, effectiveEnd);
 
     const hoursPerDay = hoursThreshold / 5;
     const below = users
@@ -2604,7 +2885,12 @@ export class PulseService {
         });
         if (employment.exclude) return null;
 
-        const empExpected = employment.expectedHours;
+        const empExpected = this.expectedHoursAfterPublicHolidays(
+          employment.expectedHours,
+          employment.employmentDays,
+          holidayByUser.get(emp.id),
+          hoursPerDay,
+        );
         const empDays = employment.employmentDays;
 
         const dayMap = dailyByUser.get(emp.id) ?? new Map<string, number>();
@@ -2675,6 +2961,14 @@ export class PulseService {
           daily_non_effective,
           daily_effective,
           day_keys: empDays,
+          public_holiday_days: empDays.filter((day) => holidayByUser.get(emp.id)?.has(day)),
+          // Hours tracked on those holidays (already inside hours_worked).
+          holiday_hours_worked:
+            Math.round(
+              empDays
+                .filter((day) => holidayByUser.get(emp.id)?.has(day))
+                .reduce((sum, day) => sum + (dayMap.get(day) ?? 0), 0) * 10,
+            ) / 10,
         };
       })
       .filter((e): e is NonNullable<typeof e> => Boolean(e) && e.below_threshold)
@@ -2868,8 +3162,40 @@ export class PulseService {
     if (selectedIds.length) {
       const idSet = new Set(selectedIds);
       targets = targets.filter((emp) => idSet.has(String(emp.employee_id)));
-    } else {
-      targets = targets.filter((emp) => emp.hours_worked < sendWindow.expectedHours);
+    }
+
+    const holidayByUser = await this.publicHolidaysByUser(
+      user,
+      await this.employeesForHolidayMatch(
+        user,
+        targets.map((emp) => String(emp.employee_id)),
+      ),
+      sendWindow.periodStart,
+      sendWindow.periodEnd,
+    );
+    const withHolidayTarget = targets.map((emp) => {
+      const adjusted = targetAfterPublicHolidays({
+        period,
+        windowExpectedHours: sendWindow.expectedHours,
+        dayKeys: emp.day_keys,
+        holidayDays: holidayByUser.get(String(emp.employee_id)) ?? [],
+      });
+      return {
+        ...emp,
+        expected_hours: adjusted.expectedHours,
+        public_holiday_days: adjusted.holidayDays,
+      };
+    });
+    const recipients = selectedIds.length
+      ? withHolidayTarget
+      : withHolidayTarget.filter((emp) => emp.hours_worked < emp.expected_hours);
+
+    const recipientIdSet = new Set(recipients.map((emp) => String(emp.employee_id)));
+    const missingEmployeeIds = selectedIds.filter((id) => !recipientIdSet.has(id));
+    if (missingEmployeeIds.length) {
+      this.logger.warn(
+        `low-hours send: ${missingEmployeeIds.length} selected employee id(s) missing from roster data`,
+      );
     }
 
     const lowHours = {
@@ -2882,8 +3208,8 @@ export class PulseService {
       period_end: sendWindow.periodEnd,
       hours_threshold: sendWindow.expectedHours,
       expected_hours: sendWindow.expectedHours,
-      day_keys: targets[0]?.day_keys,
-      employees: targets,
+      day_keys: recipients[0]?.day_keys,
+      employees: recipients,
     };
 
     if (!this.sesEmail.isEnabled()) {
@@ -2893,118 +3219,127 @@ export class PulseService {
     await this.ensureLowHoursEmailLogHoursWidth();
 
     const from = this.sesEmail.resolveFrom(body.from);
-    const sent: Array<{ employee_id: string; email: string; status: string }> = [];
     const wsId = this.workspaceId(user);
 
-    for (const emp of targets) {
-      const expectedHours = Number(lowHours.expected_hours ?? lowHours.hours_threshold);
-      const periodStart = String((lowHours as any).period_start || lowHours.week_start);
-      const periodEnd = String((lowHours as any).period_end || lowHours.week_end);
-      const dayKeys: string[] =
-        (emp as any).day_keys ||
-        (lowHours as any).day_keys ||
-        eachWorkDateKey(periodStart, periodEnd);
+    const sent = await this.mapWithConcurrency(
+      recipients,
+      6,
+      async (emp) => {
+        const expectedHours = Number(emp.expected_hours ?? lowHours.expected_hours);
+        const holidayDays: string[] = emp.public_holiday_days || [];
+        const periodStart = String((lowHours as any).period_start || lowHours.week_start);
+        const periodEnd = String((lowHours as any).period_end || lowHours.week_end);
+        const dayKeys: string[] =
+          (emp as any).day_keys ||
+          (lowHours as any).day_keys ||
+          eachWorkDateKey(periodStart, periodEnd);
 
-      const dailyHoursMap = new Map<string, number>(
-        Object.entries(((emp as any).daily_hours || {}) as Record<string, number>),
-      );
-      const dailyLowMap = new Map<string, number>(
-        Object.entries(((emp as any).daily_low_activity || {}) as Record<string, number>),
-      );
-      const dailyIdleMap = new Map<string, number>(
-        Object.entries(((emp as any).daily_idle || {}) as Record<string, number>),
-      );
-      // Fallback when day/week path has no daily maps: single bucket.
-      if (!dailyHoursMap.size && dayKeys.length) {
-        const perDay = Number(emp.hours_worked) / dayKeys.length;
-        for (const d of dayKeys) dailyHoursMap.set(d, Math.round(perDay * 100) / 100);
-      }
-
-      const metrics = buildPaceEmailMetrics({
-        dayKeys,
-        dailyHours: dailyHoursMap,
-        dailyLowActivity: dailyLowMap,
-        dailyIdle: dailyIdleMap,
-        expectedHours,
-        todayKey,
-        // Day emails: Eff. Target = 7h (salary). Week/pace day rows use 7h eff. target.
-        ...(period === 'day'
-          ? { dailyTarget: DAILY_EFFECTIVE_TARGET_HOURS, useEffectiveGoal: true }
-          : { dailyTarget: DAILY_EFFECTIVE_TARGET_HOURS }),
-      });
-
-      const emailVariant =
-        period === 'day' ? 'day' : period === 'week' ? 'week' : 'pace';
-
-      const employeeMail = buildApprovedPaceEmail({
-        employeeName: emp.full_name,
-        department: (emp as any).department ?? null,
-        hoursWorked: metrics.hoursWorked || Number(emp.hours_worked),
-        expectedHours,
-        nonEffectiveHours: metrics.nonEffectiveHours,
-        effectiveHours: metrics.effectiveHours,
-        hoursRemaining: metrics.hoursRemaining,
-        avgDailyPace: metrics.avgDailyPace,
-        paceDelta: metrics.paceDelta,
-        periodStart,
-        periodEnd,
-        weekIndex: Number((lowHours as any).week_index || 1),
-        month: String((lowHours as any).month || periodStart.slice(0, 7)),
-        dayRows: metrics.dayRows,
-        fromEmail: from,
-        variant: emailVariant,
-        ...(period === 'day'
-          ? { effectiveHoursTarget: DAILY_EFFECTIVE_TARGET_HOURS }
-          : {}),
-      });
-
-      // Always CC ops; also CC manager when notify_manager is on.
-      const toEmail = String(emp.email || '').trim().toLowerCase();
-      const ccList = [
-        'alysonclient@cintara.ai',
-        'mohita@cintara.ai',
-        ...(body.notify_manager && emp.manager_email
-          ? [String(emp.manager_email).trim().toLowerCase()]
-          : []),
-      ].filter((addr, i, arr) => addr && addr !== toEmail && arr.indexOf(addr) === i);
-
-      let status = 'logged';
-      if (this.sesEmail.isEnabled() && emp.email) {
-        const result = await this.sesEmail.send({
-          to: emp.email,
-          ...(ccList.length ? { cc: ccList } : {}),
-          subject: employeeMail.subject,
-          html: employeeMail.html,
-          text: employeeMail.text,
-          from,
-        });
-        status = result.ok ? 'sent' : `failed:${result.code || 'ERROR'}`;
-      }
-
-      const periodType = period === 'pace' ? 'pace' : period;
-      try {
-        await this.insertLowHoursEmailLog({
-          workspaceId: wsId,
-          employeeId: emp.employee_id,
-          employeeEmail: emp.email,
-          managerEmail: emp.manager_email,
-          workDate: lowHours.week_start,
-          periodType,
-          periodEnd,
-          hoursWorked: emp.hours_worked,
-          hoursThreshold: lowHours.hours_threshold,
-          sentBy: user.id,
-          status,
-        });
-      } catch (logErr: any) {
-        // Never fail the send because history logging failed.
-        this.logger.warn(
-          `low_hours_email_log insert failed for ${emp.email}: ${logErr?.message || logErr}`,
+        const dailyHoursMap = new Map<string, number>(
+          Object.entries(((emp as any).daily_hours || {}) as Record<string, number>),
         );
-      }
+        const dailyLowMap = new Map<string, number>(
+          Object.entries(((emp as any).daily_low_activity || {}) as Record<string, number>),
+        );
+        const dailyIdleMap = new Map<string, number>(
+          Object.entries(((emp as any).daily_idle || {}) as Record<string, number>),
+        );
+        // Fallback when day/week path has no daily maps: single bucket.
+        if (!dailyHoursMap.size && dayKeys.length) {
+          const perDay = Number(emp.hours_worked) / dayKeys.length;
+          for (const d of dayKeys) dailyHoursMap.set(d, Math.round(perDay * 100) / 100);
+        }
 
-      sent.push({ employee_id: emp.employee_id, email: emp.email, status });
-    }
+        const metrics = buildPaceEmailMetrics({
+          dayKeys,
+          dailyHours: dailyHoursMap,
+          dailyLowActivity: dailyLowMap,
+          dailyIdle: dailyIdleMap,
+          expectedHours,
+          todayKey,
+          holidayDays,
+          // Day emails: Eff. Target = 7h (salary). Week/pace day rows use 7h eff. target.
+          ...(period === 'day'
+            ? { dailyTarget: DAILY_EFFECTIVE_TARGET_HOURS, useEffectiveGoal: true }
+            : { dailyTarget: DAILY_EFFECTIVE_TARGET_HOURS }),
+        });
+
+        const emailVariant =
+          period === 'day' ? 'day' : period === 'week' ? 'week' : 'pace';
+
+        const employeeMail = buildApprovedPaceEmail({
+          employeeName: emp.full_name,
+          department: (emp as any).department ?? null,
+          hoursWorked: metrics.hoursWorked || Number(emp.hours_worked),
+          expectedHours,
+          nonEffectiveHours: metrics.nonEffectiveHours,
+          effectiveHours: metrics.effectiveHours,
+          hoursRemaining: metrics.hoursRemaining,
+          avgDailyPace: metrics.avgDailyPace,
+          paceDelta: metrics.paceDelta,
+          periodStart,
+          periodEnd,
+          weekIndex: Number((lowHours as any).week_index || 1),
+          month: String((lowHours as any).month || periodStart.slice(0, 7)),
+          dayRows: metrics.dayRows,
+          fromEmail: from,
+          variant: emailVariant,
+          publicHolidayDays: holidayDays.length,
+          ...(period === 'day'
+            ? { effectiveHoursTarget: DAILY_EFFECTIVE_TARGET_HOURS }
+            : {}),
+        });
+
+        // Always CC ops; also CC manager when notify_manager is on.
+        const toEmail = String(emp.email || '').trim().toLowerCase();
+        const ccList = [
+          'alysonclient@cintara.ai',
+          'mohita@cintara.ai',
+          ...(body.notify_manager && emp.manager_email
+            ? [String(emp.manager_email).trim().toLowerCase()]
+            : []),
+        ].filter((addr, i, arr) => addr && addr !== toEmail && arr.indexOf(addr) === i);
+
+        let status = 'logged';
+        if (this.sesEmail.isEnabled() && emp.email) {
+          const result = await this.sesEmail.send({
+            to: emp.email,
+            ...(ccList.length ? { cc: ccList } : {}),
+            subject: employeeMail.subject,
+            html: employeeMail.html,
+            text: employeeMail.text,
+            from,
+          });
+          status = result.ok ? 'sent' : `failed:${result.code || 'ERROR'}`;
+        }
+
+        const periodType = period === 'pace' ? 'pace' : period;
+        try {
+          await this.insertLowHoursEmailLog({
+            workspaceId: wsId,
+            employeeId: emp.employee_id,
+            employeeEmail: emp.email,
+            managerEmail: emp.manager_email,
+            workDate: lowHours.week_start,
+            periodType,
+            periodEnd,
+            hoursWorked: emp.hours_worked,
+            hoursThreshold: expectedHours,
+            sentBy: user.id,
+            status,
+          });
+        } catch (logErr: any) {
+          // Never fail the send because history logging failed.
+          this.logger.warn(
+            `low_hours_email_log insert failed for ${emp.email}: ${logErr?.message || logErr}`,
+          );
+        }
+
+        return { employee_id: String(emp.employee_id), email: emp.email, status };
+      },
+    );
+
+    const sentOk = sent.filter((row) => row.status === 'sent').length;
+    const failed = sent.filter((row) => row.status !== 'sent' && row.status !== 'logged');
 
     return {
       period: lowHours.period,
@@ -3016,8 +3351,33 @@ export class PulseService {
       period_end: (lowHours as any).period_end,
       date: lowHours.week_start,
       sent_count: sent.length,
+      sent_ok_count: sentOk,
+      failed_count: failed.length,
+      missing_employee_ids: missingEmployeeIds,
       results: sent,
     };
+  }
+
+  /** Limited parallelism — API Lambda + API Gateway cap at ~29s. */
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> {
+    if (!items.length) return [];
+    const limit = Math.max(1, Math.min(concurrency, items.length));
+    const results = new Array<R>(items.length);
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: limit }, async () => {
+        for (;;) {
+          const index = next++;
+          if (index >= items.length) break;
+          results[index] = await worker(items[index], index);
+        }
+      }),
+    );
+    return results;
   }
 
   async getLowHoursHistory(user: ScopedAuthUser, limit: number) {

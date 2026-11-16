@@ -1,0 +1,533 @@
+URL: https://desktime.com/case-studies/diversity-travel
+TITLE: Process improvement with DeskTime - a case study
+META: <meta name="description" content="DeskTime helps DGI track performance, identify training needs, and increase efficiency, contributing to a 98% client retention rate.">
+META: <meta property="og:title" content="DeskTime | Process improvement with DeskTime - a case study">
+META: <meta name="msvalidate.01" content="7E7149BB0536D28D683B219D73FAAF68" />
+----
+Process improvement with DeskTime - a case study 
+ Support 
+ DeskTime
+ 🍪 Allow functional cookies?
+ We use Zendesk messaging software for easy communication with our clients. Zendesk uses cookies to interact with website visitors and provide chat history.
+ See our Privacy Policy for more info. You can change your cookie preferences at any time in our Cookie Settings .
+ Allow & continue to chat
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing
+ Demo
+ Intro call
+ Start free trial
+ Log in
+ en 
+ English
+ Español
+ document.getElementsByTagName('body')[0].classList.toggle('overflow-hidden'))"
+ >
+ Features
+ Time Tracking
+ Productivity insights
+ Integrations & API
+ Analytics & reports
+ Workforce management
+ Time Tracking
+ Automatic time tracking
+ Effortless time tracking with our desktop app
+ Project time tracking
+ Track time and progress of specific tasks and projects
+ Manual and offline time tracking
+ Track time manually and see when employees take breaks from working
+ Private time
+ Let users take a break from tracking when needed
+ See all features
+ Productivity insights
+ Productivity calculation
+ Get data about your employees’ productivity
+ Screenshots
+ Get proof-of-work in cases of questionable productivity or integrity
+ URL & app tracking
+ See what sites and apps your employees visit
+ Document title tracking
+ Keep track of document titles and email subjects
+ Customizable settings
+ Personalize DeskTime to fit your exact needs
+ Notifications
+ Receive notifications about important activity updates
+ See all features
+ Integrations & API
+ Jira
+ Asana
+ Outlook
+ Google Calendar
+ GitLab
+ Trello
+ Zapier
+ More about integrations & API
+ Analytics & reports
+ Reports
+ Get in-depth data about your team’s performance
+ Admin dashboard
+ Gain insights about your employees' work hours and productivity levels
+ User dashboard
+ See your team’s overall activities and performance
+ Exports
+ Download and save tracked data
+ AI summary
+ See daily and weekly insights instantly with AI-powered summaries
+ See all features
+ Workforce management
+ Shift scheduling
+ Plan and manage employee shifts in one place
+ Absence calendar
+ See who’s sick, on vacation, OOO and more
+ Attendance management
+ See how much time your employees spend working
+ Employee directory
+ Easily find another colleague’s contact information
+ IP location
+ See who’s working from the office or remotely
+ See all features
+ Solutions
+ For managers
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ For employees
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industry
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Video
+ Get started with DeskTime 
+ Start working with our time tracking tool in 5 easy steps
+ Resources
+ Time tracking ROI
+ What does DeskTime track?
+ Help Center
+ Case studies
+ Product updates
+ Blog
+ Competitor comparison
+ Legal & compliance
+ About us
+ Contact us
+ Download 
+ FEATURED PAGE
+ The DeskTime Setup Guide
+ Everything you need to get started, personalize your workspace, and set DeskTime up to fit your team
+ Read more
+ FEATURED PAGE
+ Security at DeskTime
+ See what measures we take every day to keep that data safe and secure
+ Read more
+ FEATURED PAGE
+ Spain's 2026 Time Tracking Reform
+ See what's changing under Spain's new law and how DeskTime keeps you compliant
+ Read more
+ 4.5 out of 5 from 400 reviews 
+ Pricing 
+ Demo 
+ Intro call 
+ Start free trial
+ Log in
+ Increasing productivity across 8 departments
+ “We’ve found that our people take a lot of pride in being able to demonstrate high productivity. Some teams have even had internal mini competitions based on the stats,” says Przemek Koszka, the Director of Technology at Diversity Travel. 
+ Diversity Travel is a travel management company that provides 24/7 service, unique travel technology and specialist fares to the academic, charity and public sector markets.
+ Diversity has an expanding team of dedicated travel professionals providing expert support from their offices in Europe, North America, and Australasia.
+ Process improvement across different departments
+ Diversity Travel uses DeskTime differently in each of its 8 departments that employ 148 staff in total. “The variety of applications is one of the key reasons why we invested in DeskTime. It helps us retain our position as one of the leading specialist global travel management companies,” Przemek explains.
+ Some departments use DeskTime as a timekeeping tool, some as a monitoring app and others focus on the productivity side of things. The company’s Operations and IT departments are good examples of very different, yet equally effective use of DeskTime.
+ For example, the Operations team uses DeskTime for monitoring and improvement:
+ Lateness tracking
+ Remote team monitoring
+ Core application usage
+ The IT department, on the other hand, focuses on productivity - e.g. which applications developers spend the most time on. Later the teams can discuss ways to improve their working patterns, for example:
+ Frequently looking at and reading PDFs may indicate that teams or individuals require additional training
+ Spending a lot of time in emails suggests that projects are not managed via other tools etc.
+ “The data DeskTime provides helps us understand and improve our processes, which ultimately benefits our teams and our customers, and helps us maintain our 98% client retention rate.” DeskTime brings out the best in our staff
+ Before rolling DeskTime out, the company had numerous conversations with heads of departments, team managers, and staff to introduce the idea and the tool itself.
+ Przemek Koszka points out: “We focused on the benefits DeskTime offers for employees and teams, like transparency, and being able to improve individual work. After these sessions, the majority of our people understood what we wanted to achieve and were happy to take part and demonstrate their quality and efficiency in a new way.
+ DeskTime has helped bring out the best in our staff and, again, it’s our customers who benefit the most from this, something which is always top of our agenda. We’ve found that our people take a lot of pride in being able to demonstrate high productivity; some teams have even had internal mini competitions based on the stats ,” Przemek says.
+ DeskTime helps to complete the picture
+ As a global travel management company working in diverse sectors, Diversity Travel measures productivity in many ways - not only with time and productive app tracking. However, DeskTime helps the company complete the picture and gives insights into working patterns and behaviours.
+ Przemek explains: “The department heads and team managers each look at the aspects of DeskTime that are relevant to them and their people, and analyse the reports within the tool.
+ We also use the DeskTime API to incorporate high levels of information into our operational and board level reports, keeping the business in the know at all times.” Director of Technology reveals the biggest benefit of using DeskTime at Diversity Travel - the ability to review hard data about the company’s back-office application . He explains: “The general perception was that we only use the application for “a moment” with every customer transaction. It turned out that we are spending over 30% of our time in that tool. This insight helped us to review the process and dramatically increase efficiency by improving the speed of the app.”
+ One of Diversity Travel’s four core values says: “We always look to improve our products, services and ourselves”. And DeskTime has undoubtedly helped the company to achieve that.
+ A time tracker that won’t interrupt your team’s workflow. Ever.
+ Forget manual entries and distractions. With DeskTime, time tracking runs on autopilot—zero effort needed.
+ Start free trial
+ Book an Intro
+ Features
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Solutions
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Resources
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Contacts
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ Features
+ Automatic time tracking 
+ Document title tracking 
+ Project time tracking 
+ Private time 
+ Productivity calculation 
+ Screenshots 
+ URL & app tracking 
+ Reports 
+ Dashboards 
+ AI summary 
+ Shift scheduling 
+ Absence calendar 
+ Attendance management 
+ Integrations & API 
+ IP Location 
+ Resources
+ Time tracking ROI 
+ What does DeskTime track? 
+ Demo 
+ The Desktime setup guide 
+ Help Center 
+ Blog 
+ Case studies 
+ Product updates 
+ About us 
+ For AI 
+ API documentation 
+ Become a reseller 
+ Affiliate 
+ Download app
+ Solutions
+ By use cases
+ Performance evaluation 
+ Employee monitoring 
+ Transparency & accountability 
+ Remote work monitoring 
+ Productivity & efficiency 
+ Employee well-being 
+ Work-life balance 
+ Burnout prevention 
+ Hybrid work support 
+ Self-accountability 
+ By industries
+ IT & software 
+ Financial services 
+ Consultants 
+ Startups 
+ Agencies 
+ Developers 
+ Lawyers 
+ By business size
+ Enterprises 
+ Medium businesses 
+ Small teams 
+ Freelancers 
+ Contacts
+ Contact us 
+ Open chat 
+ Feature requests 
+ Media kit 
+ Phone support
+ +1 (240) 623-5586 
+ Mon-Fri 9:00-22:00 EEST
+ Legal & Compliance
+ Security 
+ Terms 
+ Privacy 
+ Cookies 
+ Beta tester terms 
+ {
+ return {
+ data: {
+ email: ''
+ },
+ loading: false,
+ showSuccess: false,
+ errorText: null,
+ submit() {
+ this.loading = true;
+ this.errorText = null;
+ const route = document.getElementsByClassName('subscribe-box')[0].getAttribute('action');
+ fetch(route, {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'Accept': 'application/json',
+ 'X-CSRF-TOKEN': document.querySelector(`input[name='_token']`).value
+ },
+ body: JSON.stringify(this.data)
+ })
+ .then((res) => res.json())
+ .then((data) => {
+ if (data.errors) {
+ this.errorText = data.errors.email[0]
+ } else {
+ this.showSuccess = true
+ }
+ })
+ .catch((e) => {
+ console.error(e);
+ })
+ .finally(() => {
+ this.loading = false;
+ })
+ }
+ }
+}"
+ @submit.prevent="submit"
+ class="subscribe-box"
+ action="https://desktime.com/newsletter"
+>
+ Subscribed!
+ Subscribe to our newsletter
+ Submit
+ By subscribing, you agree to our privacy policy 
+ 4.5 out of 5 from 400 reviews 
+ ISO 27001 & 27701 certified 
+ A hassle-free automatic time tracker. Set it and forget it.
+ © 2011 - 2026 DeskTime

@@ -1,0 +1,53 @@
+[
+{"company_name": "German-Malaysian Institute (GMI)", "confidence_score": 85,
+ "contacts": [
+  {"name": "Tuan Haji Ahmad Solihin bin Mohamed Yusoff", "title": "Managing Director", "linkedin": "", "source_url": "https://www.gmi.edu.my/management-team/"},
+  {"name": "Dr. Nurhafiza binti Kamaruddin", "title": "Deputy Managing Director, Corporate", "linkedin": "", "source_url": "https://www.gmi.edu.my/management-team/"},
+  {"name": "Ms. Asni binti Ishak", "title": "Head of Section, Human Capital Management", "linkedin": "", "source_url": "https://www.gmi.edu.my/management-team/"},
+  {"name": "Ts. Razali bin Abu Bakar", "title": "Head of Section, Information & Communication Technology", "linkedin": "", "source_url": "https://www.gmi.edu.my/management-team/"}],
+ "notes": "Management from gmi.edu.my/management-team. The Managing Director is the top executive. HR (Human Capital Management) and ICT heads are included as the likely Jibble owners. Procurement head: Ms. Siti Saeidah binti Mohd Zaki. The page has no LinkedIn URLs, and personal LinkedIn was not searched (budget exhausted). Existing LinkedIn, phone and email kept."},
+{"company_name": "ERP Connect Consulting", "confidence_score": 75,
+ "contacts": [
+  {"name": "Natalie Lemke", "title": "CEO, RUX Software (acquirer)", "linkedin": "", "source_url": "https://ruxsoftware.com/about-rux"},
+  {"name": "Ben Cole", "title": "Strategic Sales Executive, RUX Software (former ERP Connect President)", "linkedin": "https://www.linkedin.com/in/bencolebc/", "source_url": "https://ruxsoftware.com/about-rux"},
+  {"name": "Emily Senica", "title": "Human Resources, RUX Software", "linkedin": "", "source_url": "https://ruxsoftware.com/about-rux"}],
+ "company_phone": "(214) 433-0923", "public_email": "support@ruxsoftware.com",
+ "contact_source_url": "https://erpconnectconsulting.com/pages/contact",
+ "notes": "ROLE CHANGE: the erpconnectconsulting.com footer now reads 'ERP Connect Consulting Acquired by RUX Software' with support@ruxsoftware.com. Ben Cole is listed on ruxsoftware.com/about-rux as Strategic Sales Executive, so he is no longer the decision maker; RUX CEO Natalie Lemke replaces him. The business continues under RUX (Microsoft BC rental/service software), so status is left empty, but the Clockify story may predate the acquisition. Old email bc@erpconnectconsulting.com replaced with the address the site now shows. RUX LinkedIn: https://www.linkedin.com/company/rux-software/ (the ERP Connect LinkedIn page is still linked)."},
+{"company_name": "Pariuri Si Jocuri", "confidence_score": 60,
+ "contacts": [
+  {"name": "Adrian Matieș", "title": "Journalist / sports-betting expert (Clockify story: Project Coordinator)", "linkedin": "", "source_url": "https://pariurisijocuri.ro/despre-noi/"},
+  {"name": "Marius Doroftei", "title": "Journalist and Sports Expert", "linkedin": "https://ro.linkedin.com/in/marius-doroftei-a9b7b6122", "source_url": "https://pariurisijocuri.ro/despre-noi/"}],
+ "company_linkedin": "", "company_phone": "", "public_email": "info@pariurisijocuri.ro",
+ "contact_source_url": "https://pariurisijocuri.ro/contact/",
+ "notes": "The site is owned by Playhill Limited (international company, ONJN licence 2597/28.11.2018) per the despre-noi page, so the real buyer is Playhill. No owner or executive is named. Adrian Maties is still on the team. Marius Doroftei's LinkedIn is linked from the about page (he is a writer, not a decision maker). No phone or company LinkedIn found. iGaming affiliate with about 9 staff, so low seat value."},
+{"company_name": "Foster Yarborough PLLC", "company_domain": "fyktriallaw.com", "confidence_score": 85,
+ "contacts": [
+  {"name": "Ben Foster", "title": "Partner/Founder", "linkedin": "", "source_url": "https://www.fyktriallaw.com/ourteam"},
+  {"name": "Patrick Yarborough", "title": "Partner", "linkedin": "", "source_url": "https://www.fyktriallaw.com/ourteam"},
+  {"name": "Michael Killingsworth", "title": "Partner (name partner)", "linkedin": "", "source_url": "https://www.fyktriallaw.com/ourteam"}],
+ "company_linkedin": "", "public_email": "admin@fyktriallaw.com",
+ "contact_source_url": "https://www.fyktriallaw.com/ourteam",
+ "notes": "RENAMED: the firm is now Foster Yarborough Killingsworth PLLC, and fosteryarborough.com 301-redirects to fyktriallaw.com. Ben Foster and Patrick Yarborough are still listed. The site shows admin@fyktriallaw.com (the mailto link still points to admin@fosteryarborough.com) and 713-331-5254, The Lyric Center, 440 Louisiana Suite 1800, Houston TX 77002. Now about 9 people. No LinkedIn URLs on the site; personal and company LinkedIn not searched."},
+{"company_name": "Perception Engineering", "company_domain": "perceptioneng.com", "confidence_score": 85, "hq_country": "US (Spring Lake, MI)",
+ "contacts": [
+  {"name": "Scott Tompsett", "title": "President & Owner", "linkedin": "https://www.linkedin.com/in/scott-tompsett-2a338b27/", "source_url": "https://www.perceptioneng.com/about-us"},
+  {"name": "Justeene Miller", "title": "Design Operations Manager", "linkedin": "", "source_url": "https://www.perceptioneng.com/about-us"}],
+ "company_linkedin": "https://www.linkedin.com/company/perception-engineering-llc", "company_phone": "(616) 965-1806", "public_email": "sales@perceptioneng.com",
+ "contact_source_url": "https://www.perceptioneng.com/contact-us",
+ "notes": "Domain taken from the Toggl customer story link. ROLE CHANGE: previous decision maker Stephen Wierenga (Owner) is not on the current team page, which lists Scott Tompsett as President & Owner (LinkedIn linked from the page). Ownership may have changed hands. Address 14998 Cleveland Street, Suite C, Spring Lake, MI."},
+{"company_name": "Harvey Esquire", "company_domain": "harveyesq.com", "confidence_score": 85, "hq_country": "US (Los Angeles, CA)",
+ "contacts": [
+  {"name": "Chris A. Harvey", "title": "CEO and Managing Partner (site: Emerging Fund Lawyer)", "linkedin": "https://www.linkedin.com/in/harveyesq/", "source_url": "https://harveyesq.com/about"},
+  {"name": "Alan S. Gutterman", "title": "Venture Counsel", "linkedin": "https://www.linkedin.com/in/alangutterman/", "source_url": "https://harveyesq.com/about"}],
+ "company_linkedin": "https://www.linkedin.com/company/harvey-esquire/", "company_phone": "310.819.1366", "public_email": "info@harveyesq.com",
+ "contact_source_url": "https://harveyesq.com/",
+ "notes": "Domain from the Toggl customer story link. Chris Harvey is still at the firm (harveyesq.com/about). The firm looks smaller now, with only 2 lawyers listed. Address 12130 Millennium Dr, 3rd Floor, Los Angeles, CA 90094."},
+{"company_name": "Revelation PR, Advertising & Social Media", "company_domain": "revelation.agency", "confidence_score": 90, "hq_country": "US (Madison, WI area)",
+ "contacts": [
+  {"name": "Brian Lee, APR", "title": "President", "linkedin": "https://www.linkedin.com/in/brian-lee-apr-ab83161/", "source_url": "https://revelation.agency/about"},
+  {"name": "Taylor Kennedy", "title": "PR Counselor", "linkedin": "https://www.linkedin.com/in/taylor-kennedy-a6879517/", "source_url": "https://revelation.agency/about"}],
+ "company_linkedin": "", "company_phone": "608-622-7767", "public_email": "info@revelation.agency",
+ "contact_source_url": "https://revelation.agency/contact",
+ "notes": "Domain from the Toggl customer story link. Brian Lee is still President. The contact page names him as the contact for new work and writes the email as 'info [at] revelation.agency'. Team of 5. The second contact is staff, not an executive. Company LinkedIn not linked on the site."}
+]

@@ -1,0 +1,254 @@
+URL: https://www.insightful.io/customers/impac
+TITLE: Case Study: How Impac Leveraged Insightful for Remote Work
+META: <meta content="Dive into Impac's story as they transitioned to a hybrid workforce and how Insightful's employee monitoring solution provided clarity and support for better performance management." name="description">
+META: <meta content="Achieving Remote Work Success: Impac's Experience with Insightful" property="og:title">
+META: <meta content="Impac, a mortgage holdings company, reveals their transformation journey with Insightful – enabling a clearer perspective and smarter management for their evolving remote teams. Discover their story." property="og:description">
+META: <meta content="Impac, a mortgage holdings company, reveals their transformation journey with Insightful – enabling a clearer perspective and smarter management for their evolving remote teams. Discover their story." name="twitter:description">
+----
+Case Study: How Impac Leveraged Insightful for Remote Work 
+ Platform ​ Product ​ Solutions ​ Pricing Resources ​ 
+ EN
+ English 
+ Español 
+ Log In 
+ Book a Demo Try for Free 
+ Platform Overview
+ Work Insights Platform" class="nav30_anchor"> Work Intelligence The work insights platform that drives bottom line efficiency. ​ 
+ Scale & trust
+ Enterprise" class="nav30_item w-inline-block"> ​ Enterprise Security" class="nav30_item w-inline-block"> ​ Security 
+ Connect & extend
+ Integrations" class="nav30_item w-inline-block"> ​ Integrations ​ MCP New Developer Docs" target="_blank" class="nav30_item w-inline-block"> ​ Developer Docs 
+ Evaluate
+ ​ Compare Insightful 
+ Built for Your Priorities
+ ​ Employee Monitoring Computer Monitoring" class="nav30_item w-inline-block"> ​ Computer Monitoring Time Tracking & Auditing" class="nav30_item w-inline-block"> ​ Time Tracking Workforce Visibility" class="nav30_item w-inline-block"> ​ Workforce Visibility Workforce Efficiency" class="nav30_item w-inline-block"> ​ Workforce Efficiency 
+ Shadow AI" class="nav30_item w-inline-block"> ​ Shadow AI Shadow IT" class="nav30_item w-inline-block"> ​ Shadow IT AI Spend" class="nav30_item w-inline-block"> ​ AI Spend IT Spend" class="nav30_item w-inline-block"> ​ IT Spend 
+ Compare
+ vs ActivTrak" class="nav30_foot-link">vs ActivTrak vs Hubstaff" class="nav30_foot-link">vs Hubstaff vs Teramind" class="nav30_foot-link">vs Teramind vs Time Doctor" class="nav30_foot-link">vs Time Doctor 
+ Start free trial Book a demo ​ 
+ Work Insights Platform" class="nav30_group-head"> Workforce Analytics Measure team workloads and efficiency so you can fix productivity gaps. ​ ​
+ Time and Attendance" class="nav30_item w-inline-block"> ​ Time and Attendance Location Insights" class="nav30_item w-inline-block"> ​ Location Insights Productivity Trends" class="nav30_item w-inline-block"> ​ Productivity Trends Communication Report" class="nav30_item w-inline-block"> ​ Communication Report App and Website Usage" class="nav30_item w-inline-block"> ​ App and Website Usage 
+ Irregular Behavior Alerts" class="nav30_item w-inline-block"> ​ Irregular Behavior Alerts New AI Adoption" class="nav30_item w-inline-block"> ​ AI Adoption Real-time Insights" class="nav30_item w-inline-block"> ​ Real-time Insights 
+ ​
+ Work Insights Platform" class="nav30_group-head"> Workflow Optimization How your processes actually run ​ ​
+ Process Improvement" class="nav30_item w-inline-block"> ​ Process Improvement 
+ See all features" class="nav30_foot-cta w-inline-block">See all features ​ 
+ Add-ons
+ ​
+ Workspace Security" class="nav30_item w-inline-block"> ​ Workspace Security Screen Monitoring" class="nav30_item w-inline-block"> ​ Screen Monitoring Data Warehouse Integrations" class="nav30_item w-inline-block"> ​ Data Warehouse Integrations Activity Logs" class="nav30_item w-inline-block"> ​ Activity Logs Audit Logs" class="nav30_item w-inline-block"> ​ Audit Logs Audit Logs" class="nav30_item w-inline-block"> ​ Insider Threat Detection 
+ Compare plans" class="nav30_foot-link">Compare plans 
+ Start free trial Book a demo ​ 
+ By team
+ ​
+ Operations" class="nav30_item w-inline-block"> ​ Operations IT" class="nav30_item w-inline-block"> ​ IT HR" class="nav30_item w-inline-block"> ​ HR Information Security" class="nav30_item w-inline-block"> ​ Information Security 
+ Work mode
+ ​
+ Remote Teams" class="nav30_item w-inline-block"> ​ Remote Teams Hybrid Teams" class="nav30_item w-inline-block"> ​ Hybrid Teams Return to Office" class="nav30_item w-inline-block"> ​ Return to Office 
+ By use case
+ ​
+ Capacity & Headcount Planning" class="nav30_item w-inline-block"> ​ Capacity & Headcount Planning AI Adoption" class="nav30_item w-inline-block"> ​ AI Adoption Operational Efficiency" class="nav30_item w-inline-block"> ​ Operational Efficiency Billing & Invoicing" class="nav30_item w-inline-block"> ​ Billing & Invoicing 
+ Contractor & Workforce Fraud Prevention" class="nav30_item w-inline-block"> ​ Contractor & Workforce Fraud Prevention Prevent Burnout" class="nav30_item w-inline-block"> ​ Prevent Burnout & Retention Protect Focus Time" class="nav30_item w-inline-block"> ​ Protect Focus Time Project Time Tracking" class="nav30_item w-inline-block"> ​ Project Time Tracking Task Time Tracking" class="nav30_item w-inline-block"> ​ Task Time Tracking 
+ ​
+ By industry
+ ​
+ Insurance" class="nav30_item w-inline-block"> ​ Insurance BPO" class="nav30_item w-inline-block"> ​ BPO Call Center" class="nav30_item w-inline-block"> ​ Call Center Finance" class="nav30_item w-inline-block"> ​ Financial Services Healthcare" class="nav30_item w-inline-block"> ​ Healthcare IT Outsourcing" class="nav30_item w-inline-block"> ​ IT Outsourcing Retail" class="nav30_item w-inline-block"> ​ Retail Retail" class="nav30_item w-inline-block"> ​ Support Retail" class="nav30_item w-inline-block"> ​ eCommerce AI Training & RLHF" class="nav30_item w-inline-block"> ​ AI Training & RLHF 
+ Customer stories" class="nav30_foot-link">Customer stories 
+ Start free trial Book a demo ​ 
+ Learn
+ Learn > Blog" class="nav30_item w-inline-block"> Blog Learn > Customer Stories" class="nav30_item w-inline-block"> Customer Stories Guides Learn > Webinars" class="nav30_item w-inline-block"> Webinars Learn > ROI Calculator" class="nav30_item w-inline-block"> ​ ROI Calculator Learn > Glossary" class="nav30_item w-inline-block"> ​ Glossary 
+ Support
+ Support > Help Center" target="_blank" class="nav30_item w-inline-block"> Help Center Support > Academy" class="nav30_item w-inline-block"> Academy 
+ Company
+ Company > About Us" class="nav30_item w-inline-block"> About Us Company > Careers" target="_blank" class="nav30_item w-inline-block"> Careers Product Updates 
+ Contact
+ Contact > Contact Us" class="nav30_item w-inline-block"> Contact Us Contact > Become a Partner" class="nav30_item w-inline-block"> Become a Partner 
+ Featured webinar" target="_blank" class="nav30_feat"> Webinar Stop Burning Tokens: Why Companies Are Measuring AI Adoption Wrong 
+ Start free trial Book a demo 
+ Book a Demo Try for Free 
+ Success Stories 
+ Impac
+ Using Insightful to Get a Fuller Story of Remote Work 
+ Discover how Impac leverages Insightful to gain greater visibility of their remote teams and uses at-a-glance insights to support performance management.
+ Company Size
+ 450
+ Location
+ USA
+ Industry
+ Financial Services
+ Product
+ Employee Monitoring
+ The perception is typically that if people aren’t in the office they aren't working; Insightful helps managers better understand what employees are doing, and how productive they actually are.
+ Timothy Minner, 
+ IT Services Manager
+ New Model, New Metrics
+Impac is a mortgage holdings enterprise based in California with a hybrid workforce. Before COVID, 95% of Impac’s employees were working in the office, with only a few out-of-state employees working remotely. Once the pandemic hit, like many companies, Impac had to quickly transition to a fully remote workforce. 
+Since the pandemic has died down, only 20% of Impac employees work in the office every day. Of their current workforce, 80% are hybrid, alternating between working from home and in the office 2 or 3 days a week. Eventually, employees may work more readily from the office, but Impac expects to continue a hybrid working model into the future at least to some degree.
+The transition to a hybrid working environment is what motivated Impac to seek out viable employee monitoring solutions for their business. The sudden switch to working from home during the pandemic made it difficult for management to get a clear view of their teams’ daily routines and activities. 
+Before implementing Insightful, Impac was not using any similar software aside from basic time clock software without productivity monitoring capabilities. They needed more dynamic metrics and productivity insights in order to effectively manage the performance of their newly remote teams. 
+ Insightful’s easy-to-understand visualization allows managers to see where problems lie at a glance; they don’t want to dig through a mountain of data.
+ Timothy Minner, 
+ IT Services Manager
+ Favorite Features
+ Time and Attendance
+ Managers at Impac are able to get a fuller picture of their teams’ workdays and ensure that remote employees continue to work the proper amount of time while still adhering to important work policies like taking their necessary breaks.
+ Productivity Tracking
+ Insightful’s Productivity Tracking feature enables managers to see not just when their employees are working but how they are working. This has been hugely beneficial for managing the performance of remote teams.
+ Stealth Mode
+ Impact chose to roll out their implementation of Insightful using the Stealth Mode option to better eliminate human error, and because only managers would be engaging with the application, employees do not have access.
+ A Smooth & Easy Implementation
+The decision to go with Insightful’s employee monitoring solution was made after demos of different products were presented to executive-level management. 
+It was decided that Insightful was the best choice for their business based on its clean, easy to understand user interface. It was important that management could get quick, actionable insights at a glance. Insightful’s user-friendly dashboards provided the ideal data visualization they were looking for. 
+Impac didn’t face any roadblocks during implementation; they consulted with their legal department to ensure the rollout was above board and within the terms of their company policies. 
+Insightful was implemented companywide, primarily for its time and attendance and productivity tracking features. Impac chose not to activate the screenshot feature and managers don’t have access to the level of detail available in activity logs, keeping the implementation privacy-minded.
+ When you see that an employee clocks in at 9am and out at 5pm, it doesn’t tell the whole story of what they’re doing during the day - Insightful gives us a bigger picture.
+ Timothy Minner, 
+ IT Services Manager
+ Getting a Fuller Story with Insightful
+Impac has certain industry-specific metrics and KPIs that measure, for example, how many loans get pushed through. But these metrics alone don’t tell the whole story. Impac wanted to better understand how their employees were working, which were following the company’s policies, and which weren’t. 
+Impac’s intention has always been to use Insightful responsibly as a supplemental tool to identify performance issues. They recognize that while no one tool or metric will tell the whole story, Insightful can help validate any concerns they might have, as well as identify fluctuating trends in productivity and gain insight into the causes. 
+Insightful provided management with a better perception of how employees are working at home. They were actually surprised to see that unproductive sites were being accessed considerably less than they expected. Insightful proved to senior management that the vast majority of employees are perfectly capable of working productively in a remote environment. 
+The nature of their business makes it hard to determine how implementing Insightful has impacted Impac’s bottom line. But thanks to their ability to more easily manage remote employees, they’ve downsized by subleasing extra office space, saving their business considerable costs.
+ We try to use Insightful responsibly and just to spot issues, to get a fuller picture and understanding of what’s going on.
+ Timothy Minner, 
+ IT Services Manager
+ Greater Visibility for Better Management of Remote Teams 
+ Provides Greater Visibility of Remote Teams
+ Insightful provides essential visibility into when and how employees work, giving manager’s peace of mind that their teams are able to work independently, autonomously, and productively - even from home.
+ Supports Better Performance Management
+ The visibility provided by Insightful helps leaders understand how to better manage the performance of remote employees, enabling them to set reasonable goals and expectations to drive employee productivity.
+ Ensures Healthy & Compliant Work Habits
+ Insightful provides visibility into when remote employees are working, ensuring they adhere to company policies and allowing managers to identify underworking as well as unhealthy working habits that could lead to burnout.
+ Enhance Performance Management with Insightful
+ Use Insightful’s powerful productivity insights to better manage your remote workforce.
+ Start Free Trial 
+ No credit card required.
+ About Us
+ Blog
+ Careers
+ Product Updates
+ FEATURES
+ Employee Monitoring
+ Time & Attendance
+ Time Tracking
+ Automatic Time Mapping
+ Security
+ Pricing
+ Activity Monitoring
+ Productivity Management
+ Screen Monitoring
+ Computer Monitoring
+ Operational Efficiency
+ On Premise
+ Integrations
+ InsightsAI
+ Industries
+ Healthcare
+ Call center
+ Finance
+ IT BPO
+ Business Process Outsourcing
+ Insurance
+ Retail
+ USE CASES
+ Billable Hours
+ Operational Efficiency
+ Workforce Analytics
+ Enterprise
+ Remote Workers
+ Support
+ Workload Management
+ Software Utilization
+ Capacity Analysis
+ Compare
+ ActivTrak
+ Time Doctor
+ Teramind
+ Hubstaff
+ Resources
+ Help Center
+ Become a Partner
+ Remote Work
+ Hybrid Work
+ Work from Home
+ Return to Office
+ Success Stories
+ Timesheets
+ Webinars
+ Remote Research
+ Employee Burnout
+ ROI Calculator
+ FEATURES
+ Employee Monitoring
+ Time & Attendance
+ Time Tracking
+ Process Improvement
+ Security
+ Pricing
+ Activity Monitoring
+ Productivity Management
+ Screen Monitoring
+ Computer Monitoring
+ Communication Report
+ Operational Efficiency
+ On Premise
+ Integrations
+ InsightsAI
+ Industries
+ Healthcare
+ Call center
+ Finance
+ IT BPO
+ Business Process Outsourcing
+ Insurance
+ Retail
+ Use CaseS
+ Billable Hours
+ Operational Efficiency
+ Workforce Analytics
+ Enterprise
+ Remote Workers
+ Support
+ Workload Management
+ Software Utilization
+ Capacity Analysis
+ Compare
+ ActivTrak
+ Time Doctor
+ Teramind
+ Hubstaff
+ Resources
+ Help Center
+ Become a Partner
+ Remote Work
+ Hybrid Work
+ Work from Home
+ Return to Office
+ Glossary
+ Success Stories
+ Timesheets
+ Webinars
+ Remote Research
+ Employee Burnout
+ ROI Calculator
+ Summarize With AI
+ Terms of Service
+ Privacy Policy
+ Acceptable Use Policy
+ System Status
+ Developer Platform
+ Personal Data Processing Addendum
+ Headquarters
+ 1450 Broadway, New York, NY 10018, United States
+ Legal address
+ 3739 Balboa Street, #1067
+San Francisco, CA 94121, USA
+ Terms of Service
+ Privacy Policy
+ Acceptable Use Policy
+ System Status
+ Developer Platform
+ Personal Data Processing Addendum
+ Sales: +1 415-704-3737
+ © 2026 Insightful.io, Inc - All Rights Reserved
+ Hey AI, learn about us 
+ ✕

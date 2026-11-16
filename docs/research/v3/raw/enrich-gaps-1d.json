@@ -1,0 +1,1335 @@
+[
+ {
+  "company_name": "Ovation Healthcare",
+  "company_domain": "ovationhc.com",
+  "vendor": "ActivTrak",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "472",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Dr. Dwayne Gunter",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/dwayne-gunter-4971812/",
+    "source_url": "https://theorg.com/org/ovation-healthcare/org-chart/dwayne-gunter"
+   },
+   {
+    "name": "Scott Gressett",
+    "title": "President",
+    "linkedin": "https://www.linkedin.com/in/scott-e-gressett-b489825b/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/ovation-healthcare",
+  "company_phone": "+1 615-371-7979",
+  "public_email": "info@ovationhc.com",
+  "contact_source_url": "https://ovationhc.com/",
+  "notes": "Added public email info@ovationhc.com from ovationhc.com homepage contact section (also media@ovationhc.com in search results); phone 615-371-7979 and address 1573 Mallory Lane, Suite 200, Brentwood, TN confirmed on own site. Gunter still in role: 2026 CompMed partnership release on ovationhc.com quotes him as CEO. Gressett not re-checked."
+ },
+ {
+  "company_name": "Readiness IT",
+  "company_domain": "readinessit.com",
+  "vendor": "Replicon",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "400+ (case study); 220 (TheirStack)",
+  "hq_country": "Portugal",
+  "contacts": [
+   {
+    "name": "Adérito Ferreira",
+    "title": "CEO, Readiness IT and CEO of parent group CONKORD",
+    "linkedin": "",
+    "source_url": "https://www.investporto.pt/en/news/conkord-announces-80-job-openings-driven-by-growing-demand-for-ai-solutions/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/readinessit",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "Readiness IT merged with Red.IT, Ritain.io and Latitudde into the CONKORD group (Porto, 550+ staff). readinessit.com now 301-redirects to conkord.com, and the LinkedIn page is titled 'Readiness IT - a CONKORD company'. Still operating, so not DO_NOT_TARGET. Aderito Ferreira still in role: 2026 InvestPorto/Radio Covilha articles name him CEO of CONKORD. No matching personal LinkedIn found (one 'Adérito Ferreira - A.F.F.' profile does not match, so not used). LeadIQ lists 'COO Iberia: R. G.' (initials only), so no second contact named. conkord.com did not render its contact details, so phone and email are still blank. One aggregator gave phone 808 214 214, but it looks like it belongs to another org, so it was not used."
+ },
+ {
+  "company_name": "Talk Shop Media",
+  "company_domain": "talkshopmedia.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~50 (Toggl customer story)",
+  "hq_country": "Canada (Toronto/Vancouver; also LA)",
+  "contacts": [
+   {
+    "name": "Sara Padidar",
+    "title": "Co-Founder & Partner",
+    "linkedin": "",
+    "source_url": "https://www.crunchbase.com/person/sara-padidar-7fef"
+   },
+   {
+    "name": "Hannah McClenaghan",
+    "title": "Operations Manager (case-study champion)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/talkshopmedia",
+  "company_phone": "US 1.833.739.2200; CA 1.855.738.2220",
+  "public_email": "",
+  "contact_source_url": "https://www.talkshopmedia.com/contact",
+  "notes": "Contact page confirms US 1.833.739.2200 and CA 1.855.738.2220, with offices in Toronto, Vancouver, LA and New York. It shows no public email. The Sara Padidar LinkedIn results are other people (University of Pretoria/Eswatini), so LinkedIn is left blank. Padidar is still shown as co-founder/partner on Crunchbase; no 2026 change found."
+ },
+ {
+  "company_name": "NAKIVO",
+  "company_domain": "nakivo.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "220 (per Hubstaff case study)",
+  "hq_country": "USA (Sparks, NV); R&D/contractors in 9 locations incl. Ukraine",
+  "contacts": [
+   {
+    "name": "Bruce Talley",
+    "title": "CEO & Co-founder",
+    "linkedin": "https://www.linkedin.com/in/brucetalley/",
+    "source_url": "https://www.nakivo.com/company/about-nakivo/"
+   },
+   {
+    "name": "Sergei Serdyuk",
+    "title": "VP of Product Management & Co-founder",
+    "linkedin": "",
+    "source_url": "https://www.nakivo.com/company/about-nakivo/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/nakivo",
+  "company_phone": "+1 408 440 5605 (Americas); +44 074 8287 7208 (EMEA)",
+  "public_email": "sales@nakivo.com",
+  "contact_source_url": "https://www.nakivo.com/company/contact-us/",
+  "notes": "Found Bruce Talley's LinkedIn: a search result titled 'Bruce Talley - Nakivo' at linkedin.com/in/brucetalley/ (Henderson, NV; profile says he co-founded NAKIVO in 2012 and is CEO). A different 'Bruce Talley - Ukraine Capital' profile was ignored. Company LinkedIn is linkedin.com/company/nakivo (Sparks, NV; 51-200 staff). Talley still in role per that profile and Crunchbase. Serdyuk not re-checked."
+ },
+ {
+  "company_name": "ProfitWorks (ProfitWorks USA)",
+  "company_domain": "profitworksusa.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~20 (ContactOut) plus Philippine outsourced team",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Annie Newton",
+    "title": "Owner / CEO",
+    "linkedin": "https://www.linkedin.com/in/annienewton",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/profitworksusa",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://profitworksusa.com/contact",
+  "notes": "profitworksusa.com and its /contact page show only a form, with no phone or email. A data broker (success.ai) lists a phone and email for Annie, but they were not used (broker data). RocketReach lists Cindy Parrino (Controller) and Anna Darato (Senior Accountant). Neither is a decision-maker role, so no second contact was added. Annie Newton still owner per the 'Annie Newton - ProfitWorks' LinkedIn result. Small firm (Kennewick, WA) serving painting companies with offshore staff."
+ },
+ {
+  "company_name": "Montway Auto Transport",
+  "company_domain": "montway.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "260 (DeskTime story)",
+  "hq_country": "United States (Schaumburg, IL) with teams in Bulgaria & North Macedonia",
+  "contacts": [
+   {
+    "name": "Tom Gartland",
+    "title": "Chairman & CEO",
+    "linkedin": "https://www.linkedin.com/in/tom-gartland-982597372/",
+    "source_url": "https://www.montway.com/executive-team/tom-gartland"
+   },
+   {
+    "name": "Alberto Anguiano",
+    "title": "Chief Financial Officer",
+    "linkedin": "",
+    "source_url": "https://www.prnewswire.com/news-releases/montway-auto-transports-leadership-team-embodies-the-future-of-auto-transport-302483241.html"
+   },
+   {
+    "name": "Eftim Eftimov",
+    "title": "Chief Information Officer",
+    "linkedin": "",
+    "source_url": "https://www.prnewswire.com/news-releases/montway-auto-transports-leadership-team-embodies-the-future-of-auto-transport-302483241.html"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/montway-auto-transport",
+  "company_phone": "(888) 666-8929; local (224) 220-0221",
+  "public_email": "privacy@montway.com",
+  "contact_source_url": "https://www.montway.com/contact-us/",
+  "notes": "Added company LinkedIn (14.5k followers); there is also a separate Montway Bulgaria page at bg.linkedin.com/company/montwaybulgaria. Corrected Alberto Anguiano's title from COO to CFO (2025 PR Newswire release). Added CIO Eftim Eftimov, the IT head. privacy@montway.com is from Montway's own privacy policy. info@montway.com appears only on third-party listings and was not verified on the site. Gartland still Chairman & CEO per montway.com executive page."
+ },
+ {
+  "company_name": "DevBunch Private Limited",
+  "company_domain": "devbunch.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "61 (TheirStack); 51-200 (ZoomInfo snippet)",
+  "hq_country": "Pakistan (Lahore); UK office Durham",
+  "contacts": [
+   {
+    "name": "Ammar Nasir",
+    "title": "CEO / Founder",
+    "linkedin": "",
+    "source_url": "https://devbunch.com/about-us/"
+   },
+   {
+    "name": "Haroon Aejaz",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Sohaib Nasir",
+    "title": "CTO / Co-Founder",
+    "linkedin": "",
+    "source_url": "https://theorg.com/org/devbunch"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/devbunch",
+  "company_phone": "+92 309 4010099",
+  "public_email": "info@devbunch.com; hr@devbunch.com; careers@devbunch.com",
+  "contact_source_url": "https://devbunch.com/contact-us/",
+  "notes": "Added phone +92 309 4010099 and emails info@/hr@/careers@devbunch.com from the contact page. Offices: Johar Town, Lahore (HQ), 69 North Road, Durham, UK, and Sadiqabad. Added Sohaib Nasir as CTO/Co-Founder (named in search results and on theorg). No LinkedIn found for Ammar Nasir: every 'Ammar Nasir' profile in the results is someone else. An 'Ammar Malik - DevBunch' profile exists, but it is not confirmed to be the same person, so it was not used."
+ },
+ {
+  "company_name": "Balance Foot & Ankle PLLC",
+  "company_domain": "michiganfootdoctors.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~15-30 (estimate; 3 podiatrists, 2 offices)",
+  "hq_country": "United States (Howell & Bloomfield Township, MI)",
+  "contacts": [
+   {
+    "name": "Dr. Tom Biernacki, DPM",
+    "title": "Founder",
+    "linkedin": "https://www.linkedin.com/in/tom-biernacki/",
+    "source_url": "https://www.michiganfootdoctors.com/about/"
+   },
+   {
+    "name": "Gray Fabia",
+    "title": "Virtual team coordinator (per job post)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(810) 206-1402",
+  "public_email": "",
+  "contact_source_url": "https://www.michiganfootdoctors.com/contact-us",
+  "notes": "Contact page confirms (810) 206-1402 and two offices: 4330 E Grand River Ave, Howell, MI and 43494 Woodward Ave #208, Bloomfield Twp. The site shows no email and no social or LinkedIn links. No company LinkedIn page was found; search only returned Dr. Biernacki's profile ('Tom Biernacki - Balance Foot and Ankle'), which confirms he is still in role. Other podiatrists on staff: Dr. Carl Jay and Dr. Daria Gutkin (clinicians, not decision makers)."
+ },
+ {
+  "company_name": "Power Shifter Digital Inc. (POWER SHIFTER)",
+  "company_domain": "powershifter.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "Canada (Vancouver, BC)",
+  "contacts": [
+   {
+    "name": "JP Holecka",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/jpholecka/",
+    "source_url": "https://www.powershifter.com/about"
+   },
+   {
+    "name": "Gina Asuncion Bernier",
+    "title": "Chief of Staff",
+    "linkedin": "",
+    "source_url": "https://www.powershifter.com/about"
+   },
+   {
+    "name": "Ted Morgan",
+    "title": "Partner / Client Delivery",
+    "linkedin": "",
+    "source_url": "https://www.powershifter.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/powershifterdigital",
+  "company_phone": "+1 (604) 227-9952",
+  "public_email": "",
+  "contact_source_url": "https://www.powershifter.com/about",
+  "notes": "Second contacts taken from the about page's leadership list: Gina Asuncion Bernier (Chief of Staff) and Ted Morgan (Partner / Client Delivery). The page also lists Cary Newfeldt (Partner / Technology) and Russ Jarman Price (Chairman). Holecka still Founder & CEO per the about page. Eilish Kennedy is shown as MD on Crunchbase/Wiza but is not on the current about page, so she was not used. The site shows no public email (contact form only)."
+ },
+ {
+  "company_name": "EcomExperts",
+  "company_domain": "ecomexperts.io",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Gilles Pichette",
+    "title": "President & Owner",
+    "linkedin": "https://www.linkedin.com/in/gilles-pichette-2288095/",
+    "source_url": ""
+   },
+   {
+    "name": "Moemen Hegazy",
+    "title": "CTO",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://ca.linkedin.com/company/shopifyexperts",
+  "company_phone": "+1 438-601-4617",
+  "public_email": "andrew@ecomexperts.io",
+  "contact_source_url": "https://www.shopify.com/partners/directory/partner/andrewdurot",
+  "notes": "The site's contact page shows no email; it gives phone +1 438-601-4617 and address 2727 Saint-Patrick St., Montreal. The public email andrew@ecomexperts.io is the contact listed on EcomExperts' Shopify Partner Directory profile, which also gives phone 858 367 9573. The site features Andrew Durot as its public face (it links his X account), but his title was not verified, so he is not listed as a contact. Pichette was not re-verified because the web search budget ran out."
+ },
+ {
+  "company_name": "Common Thread",
+  "company_domain": "gocommonthread.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~20 (19 listed on About page)",
+  "hq_country": "United States (fully remote; leaders in US, UK, France)",
+  "contacts": [
+   {
+    "name": "Sherine Guirguis",
+    "title": "Co-Founder & Lead Strategist",
+    "linkedin": "https://www.linkedin.com/in/sherine-guirguis-0aa8016/",
+    "source_url": ""
+   },
+   {
+    "name": "Felicity Pocklington",
+    "title": "Managing Director",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/gocommonthread",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://gocommonthread.com/contact",
+  "notes": "The contact page has only a form and a Calendly link (calendly.com/olivia-commonthread/intro-ct). It lists no email, phone or address, consistent with a fully remote firm. Company LinkedIn confirmed via the site footer link (linkedin.com/company/gocommonthread/). Phone and email are still blank. Contacts were not re-verified because the web search budget ran out."
+ },
+ {
+  "company_name": "Community First Dental",
+  "company_domain": "communityfirstdental.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~10-30 (estimate; single practice)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Dr. Ibraheem Samirah, DMD",
+    "title": "Founder / Dentist",
+    "linkedin": "https://www.linkedin.com/in/ibraheem-samirah-582baa35/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(571) 446-4064",
+  "public_email": "info@communityfirstdental.com",
+  "contact_source_url": "https://www.communityfirstdental.com/",
+  "notes": "Added info@communityfirstdental.com from the homepage. Address: 46045 Palisade Parkway, Sterling, VA 20165. Social links on the site are Facebook, Instagram and TikTok only, so no company LinkedIn was found. The site names no other staff, so there is no second contact."
+ },
+ {
+  "company_name": "Mr Digital",
+  "company_domain": "mr-digital.co.uk",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "13 (site: 5 directors + 8 staff); LinkedIn 11-50",
+  "hq_country": "UK (Brighton) with offshore delivery (India-based directors)",
+  "contacts": [
+   {
+    "name": "Ross Crawford",
+    "title": "Founder & Managing Director",
+    "linkedin": "https://www.linkedin.com/in/rosscrawford/",
+    "source_url": ""
+   },
+   {
+    "name": "Avani Dev",
+    "title": "Operations Director",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/mr-digital-uk",
+  "company_phone": "01273 942 329 (+44 1273 942329)",
+  "public_email": "office@mr-digital.co.uk",
+  "contact_source_url": "https://www.mr-digital.co.uk/contact",
+  "notes": "Added office@mr-digital.co.uk (Cloudflare-obfuscated on the contact page; decoded and also present as a mailto link). Address: 3 Warren Close, Brighton, BN2 6DT. The site footer links to linkedin.com/company/mr-digital-uk, which replaces the earlier 'mr-digital-limited' value; the earlier slug may be an older or alternate page."
+ },
+ {
+  "company_name": "Happy Tours Travel",
+  "company_domain": "happytourstravel.com",
+  "vendor": "Teramind",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "dozens of call-center agents",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Imer Vigil",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/imer-vigil-bb4370157/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/happy-tours-travel-agency",
+  "company_phone": "+1-888-369-0649; +1 (213) 212-8098",
+  "public_email": "ventasonline@happytourstravel.com",
+  "contact_source_url": "https://happytourstravel.com/",
+  "notes": "Homepage confirms ventasonline@happytourstravel.com, +1 (888) 369-0649 and +1 (213) 212-8098, offices in Los Angeles, Bakersfield and Washington DC, and the company LinkedIn happy-tours-travel-agency. The site names no leaders (travel advisors only), so no second contact was found. The web search budget ran out before a LinkedIn people search could be run."
+ },
+ {
+  "company_name": "Wynncrest Insurance Agency",
+  "company_domain": "wynncrestinsurance.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "small team",
+  "hq_country": "United States",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "314-794-7774; 314-312-2123",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "wynncrestinsurance.com returns only a title shell ('Wynncrest Insurance Agency - Health Insurance Quotes'); the content is JS-rendered and the /about and /contact-us pages show nothing. No decision maker, LinkedIn or email found. Phones 314-794-7774 and 314-312-2123 carried over from input, not re-verified. The web search budget ran out before agent/owner searches could run. Needs a manual lookup, e.g. the Missouri DOI producer lookup or a Missouri SOS business search."
+ },
+ {
+  "company_name": "Dolce Calma",
+  "company_domain": "dolcecalma.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "11-50",
+  "hq_country": "United States",
+  "contacts": [],
+  "company_linkedin": "",
+  "company_phone": "(480) 561-4651",
+  "public_email": "info@dolcecalma.com",
+  "contact_source_url": "https://dolcecalma.com/policies/contact-information",
+  "notes": "The Shopify contact-information page gives legal entity Innovate Tech LLC, 6352 South 154th Street, Gilbert AZ 85298, plus phone (480) 561-4651 and info@dolcecalma.com. OpenCorporates has an active Arizona 'INNOVATE TECH, LLC' (L18446462) with registered agent Adil Khan at a Tempe address. That entity is not confirmed to be the same company because the address differs, so no decision maker was recorded. The about page has no founder names. Next step: check AZ Corporation Commission eCorp for L18446462 members."
+ },
+ {
+  "company_name": "The Nabo Group",
+  "company_domain": "thenabogroup.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "14 (per profile)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Chelsey Kelly",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(866) 365-6226",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "thenabogroup.com is a Wix site, and its Our Team and Contact pages did not render team content via fetch or curl. The menu shows sub-brands HOAM Inc., Management Solutions Northwest and Seaside Management, suggesting a roll-up of HOA management firms. No LinkedIn or email found. Phone (866) 365-6226 carried over from input. The web search budget ran out before LinkedIn people searches could run."
+ },
+ {
+  "company_name": "The Traveling Chucks",
+  "company_domain": "thetravelingchucks.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Dominique",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "contact@thetravelingchucks.com",
+  "contact_source_url": "https://thetravelingchucks.com/",
+  "notes": "Homepage confirms contact@thetravelingchucks.com and address 1910 Madison Ave #2357, Memphis, TN 38104 (The Traveling Chucks LLC). Social links are Facebook, Instagram, TikTok and Pinterest only, with no LinkedIn. No phone is shown. The founder's surname was not found on the site."
+ },
+ {
+  "company_name": "The Amazon Whisperer",
+  "company_domain": "theamazonwhisperer.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Ryan Eales",
+    "title": "Founder / principal (site refers to 'Ryan and his team'; formal title not stated)",
+    "linkedin": "https://www.linkedin.com/in/ryan-eales/",
+    "source_url": "https://theamazonwhisperer.com/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://theamazonwhisperer.com/",
+  "notes": "Gained a decision maker: the homepage links the personal LinkedIn linkedin.com/in/ryan-eales/ and a client testimonial says 'working with Ryan and his team'. Ryan Eales is therefore the principal, though the site gives no formal title. The site is an Amazon agency for food & beverage brands. It shows no phone, email (CTA goes to /profit-roadmap) or company LinkedIn."
+ },
+ {
+  "company_name": "Angel Reyes & Associates",
+  "company_domain": "reyeslaw.com",
+  "vendor": "ActivTrak",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~650 (per founder interview; 425+ nearshore staff, mostly Central America)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Angel L. Reyes III",
+    "title": "Founder / President",
+    "linkedin": "https://www.linkedin.com/in/angel-l-reyes-iii-b97b997/",
+    "source_url": ""
+   },
+   {
+    "name": "James Carlson",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/reyeslaw/",
+  "company_phone": "469-289-1910 (24/7)",
+  "public_email": "help@reyeslaw.com",
+  "contact_source_url": "https://www.reyeslaw.com/privacy-policy/",
+  "notes": "Company LinkedIn linkedin.com/company/reyeslaw/ is linked from the site footer. help@reyeslaw.com is from the firm's privacy policy. Main line 469-289-1910 is confirmed on the contact page. There are offices across Texas (see /office-locations/), with several local tel numbers on the homepage. A gmail address that appeared on the contact page was ignored. Contacts were not re-verified because the web search budget ran out."
+ },
+ {
+  "company_name": "DGI (formerly Diversity Travel)",
+  "company_domain": "dgitravel.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "148 (DeskTime story); larger now",
+  "hq_country": "United Kingdom",
+  "contacts": [
+   {
+    "name": "James Parkhouse",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://www.dgitravel.com/who-we-are/our-people/"
+   },
+   {
+    "name": "Julie Kendrick",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.dgitravel.com/who-we-are/our-people/"
+   },
+   {
+    "name": "Jen Herbert",
+    "title": "Director of Operations - Global",
+    "linkedin": "",
+    "source_url": "https://www.dgitravel.com/who-we-are/our-people/"
+   },
+   {
+    "name": "Joanne Bowden",
+    "title": "Chief Technical Officer",
+    "linkedin": "",
+    "source_url": "https://www.dgitravel.com/who-we-are/our-people/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/dgitravel",
+  "company_phone": "+1 703 705 9446; +1 703 721 7394",
+  "public_email": "usasales@dgitravel.com",
+  "contact_source_url": "https://www.dgitravel.com/contact-us",
+  "notes": "Parkhouse (CEO) and Kendrick (COO) are confirmed still in role on the current Our People page. That page also lists Sam Whittle (President), Eddie Shaw (CFO), DeAnne Dale (GM North America), Jen Herbert (Director of Operations - Global) and Joanne Bowden (CTO). Added usasales@dgitravel.com from the site. The site shows US numbers only; no UK number was found on the pages fetched. No personal LinkedIn found because the web search budget ran out."
+ },
+ {
+  "company_name": "Specialty Lighting Group",
+  "company_domain": "sslighting.com",
+  "vendor": "Prodoscore",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~53 (Datanyze)",
+  "hq_country": "United States (Portland, CT)",
+  "contacts": [
+   {
+    "name": "Dan Carroll",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Greg Carreon",
+    "title": "VP, Information Technology (interviewee)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(860) 767-0110 (regional extensions 250-258; commercial ext 253/227)",
+  "public_email": "",
+  "contact_source_url": "https://www.sslighting.com/contact",
+  "notes": "Added main phone (860) 767-0110 from the contact page, which also lists regional extensions. The site shows no public email (contact form only), no social or LinkedIn links, and no leadership. CEO and IT VP were not re-verified because the web search budget ran out. Company LinkedIn still blank."
+ },
+ {
+  "company_name": "Vitality Medical",
+  "company_domain": "vitalitymedical.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "50+ (Insightful case study)",
+  "hq_country": "United States (Salt Lake City, UT)",
+  "contacts": [
+   {
+    "name": "Brad Packer",
+    "title": "Founder & CEO",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "James Erickson",
+    "title": "Director of IT and Data (case-study champion)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "(800) 397-5899; intl (801) 733-4449",
+  "public_email": "support@vitalitymedical.com; question@vitalitymedical.com (search snippet of contact page)",
+  "contact_source_url": "",
+  "notes": "vitalitymedical.com blocks automated fetches (Cloudflare 403 'Attention Required'), so nothing could be re-verified. Phones and emails are carried over from the input; the emails came from a contact-page search snippet. Company LinkedIn and personal LinkedIns are still blank because the web search budget ran out."
+ },
+ {
+  "company_name": "Stratum Benefits (Pty) Ltd",
+  "company_domain": "stratumbenefits.co.za",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "124 (Insightful case study)",
+  "hq_country": "South Africa",
+  "contacts": [
+   {
+    "name": "Marco Fonto",
+    "title": "Managing Director / Founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://za.linkedin.com/company/stratum-benefits-sa",
+  "company_phone": "+27 10 593 0981 (Johannesburg HO); +27 21 914 6985 (Cape Town); +27 31 940 1918 (Durban); WhatsApp +27 10 448 0861",
+  "public_email": "info@stratumbenefits.co.za; yoursupport@stratumbenefits.co.za",
+  "contact_source_url": "https://www.stratumbenefits.co.za/",
+  "notes": "Added info@stratumbenefits.co.za (Cloudflare-obfuscated on the site; decoded) and yoursupport@stratumbenefits.co.za (mailto link), plus branch phones. HQ: Stratum House, 8 Fir Drive, Northcliff, Randburg. Firm is FSP 2111. The input listed both 'Marco Fonto' and 'Marco Fronto' as MD, which is almost certainly one person with a spelling variant, so they were merged into one contact. The correct spelling is unconfirmed: the site names no leaders and search was unavailable."
+ },
+ {
+  "company_name": "Incsub (WPMU DEV, CampusPress, Edublogs)",
+  "company_domain": "incsub.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "160+ staff (company careers page); 51 (TheirStack)",
+  "hq_country": "Australia (fully remote, 40+ countries)",
+  "contacts": [
+   {
+    "name": "James Farmer",
+    "title": "Co-founder & CEO",
+    "linkedin": "",
+    "source_url": "https://incsub.com/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/incsub",
+  "company_phone": "",
+  "public_email": "contact@incsub.com",
+  "contact_source_url": "https://incsub.com/contact/",
+  "notes": "incsub.com confirms James Farmer co-founded Incsub in 2007 and gives contact@incsub.com. No phone is shown (fully remote company). No other leaders are listed on the site, and the web search budget ran out before a LinkedIn people search could run."
+ },
+ {
+  "company_name": "eSquared Communication Consulting",
+  "company_domain": "e2cc.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "120+ (Insightful case study)",
+  "hq_country": "United States (Tempe, AZ)",
+  "contacts": [
+   {
+    "name": "Josh Fulton",
+    "title": "Owner (Founder & CEO)",
+    "linkedin": "https://www.linkedin.com/in/josh-fulton-142bb93/",
+    "source_url": "https://www.e2cc.com/about/"
+   },
+   {
+    "name": "Greg Foster",
+    "title": "Director of Operations",
+    "linkedin": "",
+    "source_url": "https://www.e2cc.com/about/"
+   },
+   {
+    "name": "Allison Lessard",
+    "title": "Director of Organizational Development (case-study champion)",
+    "linkedin": "",
+    "source_url": "https://www.e2cc.com/about/"
+   },
+   {
+    "name": "Karolyn Fulton",
+    "title": "Owner",
+    "linkedin": "",
+    "source_url": "https://www.e2cc.com/about/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/e2cc",
+  "company_phone": "602-371-1500; toll-free 877-545-3770",
+  "public_email": "info@e2cc.com",
+  "contact_source_url": "https://e2cc.com/about/terms",
+  "notes": "The phone 602-371-1500 that was an unverified aggregator value is now confirmed on e2cc.com, plus toll-free 877-545-3770. Added info@e2cc.com (also privacy@e2cc.com) from the site terms page, and company LinkedIn from the site footer. The About page lists Josh and Karolyn Fulton as owners; Josh is still in role. Also on the About page: Adam Shapiro (VP Business Development), Greg Foster (Director of Operations) and Jay Johnson (Director of Service Delivery)."
+ },
+ {
+  "company_name": "Boring Commerce",
+  "company_domain": "boringcommerce.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "101-500 (case study)",
+  "hq_country": "India (Hyderabad)",
+  "contacts": [
+   {
+    "name": "Anish Jajodia",
+    "title": "Founding Partner",
+    "linkedin": "https://www.linkedin.com/in/anish-jajodia-6585b345/",
+    "source_url": ""
+   },
+   {
+    "name": "Monica Thakwani",
+    "title": "HR & Operations Manager",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/boring-commerce",
+  "company_phone": "+91 8978266266 (WhatsApp, on website)",
+  "public_email": "",
+  "contact_source_url": "https://boringcommerce.com/contact",
+  "notes": "The contact page shows only the WhatsApp number +91 8978266266, with no email or address; the homepage and privacy page have no email either. The site's reference to 'Anish ji and team' confirms Anish as the principal. Public email is still blank."
+ },
+ {
+  "company_name": "Empire Flippers",
+  "company_domain": "empireflippers.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~100 (case study band 101-500)",
+  "hq_country": "United States (fully remote; CEO in UK/Perth)",
+  "contacts": [
+   {
+    "name": "Andy Allaway",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/andy-allaway-31b0aa84/",
+    "source_url": ""
+   },
+   {
+    "name": "Justin Cooke",
+    "title": "Co-Founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/empire-flippers/",
+  "company_phone": "+1-888-658-8388 (prior list; not re-verified)",
+  "public_email": "sales@empireflippers.com; support@empireflippers.com",
+  "contact_source_url": "https://empireflippers.com/privacy-policy/",
+  "notes": "Company LinkedIn and sales@empireflippers.com are from the homepage, and support@empireflippers.com from the privacy policy. No phone found on the homepage, contact page or privacy policy, so +1-888-658-8388 is kept from the prior list, still not verified. Contacts not re-verified (web search budget ran out). Justin Cooke co-founded the company but may no longer be operational there."
+ },
+ {
+  "company_name": "Day's Motor Group",
+  "company_domain": "days.co.uk",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "600+",
+  "hq_country": "UK (Swansea, Wales)",
+  "contacts": [
+   {
+    "name": "Russell Day",
+    "title": "CEO & Managing Director",
+    "linkedin": "https://www.linkedin.com/in/russell-day-7b374510a/",
+    "source_url": ""
+   },
+   {
+    "name": "Neil Williams",
+    "title": "Group IT Manager (case-study champion)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/day%27s-motor-group",
+  "company_phone": "01792 222111 / 01792 616200 (plus branch numbers in notes)",
+  "public_email": "",
+  "contact_source_url": "https://www.days.co.uk/privacy-policy/",
+  "notes": "No public email on days.co.uk: the homepage and privacy policy have none, and the contact page did not render. Branch phones on the site: 01792 222111, 01792 616200, 01792 616000, 01792 224700, 01792 892614, 01437 760860, 01437 768000 and 029 2023 7775. Company LinkedIn is the URL-encoded form of the existing value, as linked from the site footer."
+ },
+ {
+  "company_name": "Riseup Labs",
+  "company_domain": "riseuplabs.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~80 (DeskTime story)",
+  "hq_country": "Bangladesh",
+  "contacts": [
+   {
+    "name": "Ershadul Hoque",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/ershadul-hoque/",
+    "source_url": "https://riseuplabs.com/"
+   },
+   {
+    "name": "Enamul Hoque Ratul",
+    "title": "Head of Operations",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/riseuplabs",
+  "company_phone": "+880 1759 747 387; +1 (231) 241-2777; +44 7475 103777",
+  "public_email": "contact@riseuplabs.com",
+  "contact_source_url": "https://riseuplabs.com/",
+  "notes": "Gained the CEO's LinkedIn: riseuplabs.com links linkedin.com/in/ershadul-hoque/ directly from its own site. Also added UK number +44 7475 103777 from the site. contact@riseuplabs.com and the company LinkedIn are confirmed on the homepage."
+ },
+ {
+  "company_name": "CodiciPromozionali365",
+  "company_domain": "codicipromozionali365.it",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "40+",
+  "hq_country": "Poland (operator iGamingNuts sp. z o.o., Gdańsk); Italian-language site",
+  "contacts": [
+   {
+    "name": "Weronika Mazur",
+    "title": "Site Manager (Clockify story interviewee; earlier listed as Project Coordinator)",
+    "linkedin": "https://www.linkedin.com/in/weronika-mazur-b37346233/",
+    "source_url": "https://www.codicipromozionali365.it/chi-siamo/"
+   },
+   {
+    "name": "Antonio Pannella",
+    "title": "Journalist and Director",
+    "linkedin": "",
+    "source_url": "https://www.codicipromozionali365.it/chi-siamo/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+48 664 134 405",
+  "public_email": "info@codicipromozionali365.it",
+  "contact_source_url": "https://www.codicipromozionali365.it/chi-siamo/",
+  "notes": "The Chi siamo page says the site is operated by iGamingNuts sp. z o.o. (Polish company no. 1068144, Sobotki 5/3, 80-247 Gdańsk), a group founded in 2015 in London. Added phone +48 664 134 405 and info@codicipromozionali365.it. The site is an Italian gambling bonus-code and affiliate content site (casino/bookmaker reviews), with a small editorial team. It is not a time-tracking vendor, so not DO_NOT_TARGET, but it is a small, low-value prospect. Weronika Mazur is now 'Site Manager'. Antonio Pannella is listed as 'Journalist and Director', probably an editorial director rather than a company director. No company LinkedIn is linked from the site."
+ },
+ {
+  "company_name": "WITHIN",
+  "company_domain": "within.co",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "50-200",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Danielle Aalund",
+    "title": "HR Director",
+    "linkedin": "https://www.linkedin.com/in/danielle-aalund/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/withinmarketingagency",
+  "company_phone": "",
+  "public_email": "hello@within.co",
+  "contact_source_url": "https://www.within.co/",
+  "notes": "The homepage and About page name no leaders and list no phone. Offices: 43-01 22nd St, Suite 602, Queens, NY 11101, plus Mexico City (Av. Insurgentes Sur 1082) and Bogotá (Carrera 14A #101-47). hello@within.co and the company LinkedIn are confirmed on the site. A second contact and phone are still blank: the web search budget ran out before people searches could run. Aalund's tenure was not re-verified."
+ },
+ {
+  "company_name": "NETCONOMY",
+  "company_domain": "netconomy.net",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "500+",
+  "hq_country": "Austria",
+  "contacts": [
+   {
+    "name": "Eric Peter Schreiner",
+    "title": "Managing Director (Geschaeftsfuehrer), appointed 27 Mar 2026",
+    "linkedin": "",
+    "source_url": "https://www.northdata.com/NETCONOMY%20GmbH,%20Graz"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.northdata.com/NETCONOMY%20GmbH,%20Graz",
+  "notes": "netconomy.net blocks automated fetches (Cloudflare 403 on home, contact and imprint). NorthData (Austrian Firmenbuch 204360f) lists NETCONOMY GmbH at Bahnhofguertel 77, 8020 Graz, with current Managing Director Eric Peter Schreiner (appointed 27 Mar 2026). Former MDs: Thomas Ziegler (out by Aug 2025), Martin Bachler and Andreas Schilk. NorthData shows four MD positions but hides the rest behind a paywall. Company LinkedIn, phone and email are still blank: the site is blocked and the web search budget ran out. Manual next step: open netconomy.net/en/imprint in a browser."
+ },
+ {
+  "company_name": "Reboot Online",
+  "company_domain": "rebootonline.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "75+",
+  "hq_country": "UK",
+  "contacts": [
+   {
+    "name": "Shai Aharony",
+    "title": "Co-Founder",
+    "linkedin": "",
+    "source_url": "https://www.rebootonline.com/about-us/"
+   },
+   {
+    "name": "Naomi Aharony",
+    "title": "Co-Founder",
+    "linkedin": "",
+    "source_url": "https://www.rebootonline.com/about-us/"
+   },
+   {
+    "name": "Zoë Blogg",
+    "title": "Agency Operations",
+    "linkedin": "",
+    "source_url": "https://www.rebootonline.com/about-us/"
+   },
+   {
+    "name": "James Bentham",
+    "title": "Strategy Director",
+    "linkedin": "https://uk.linkedin.com/in/jbentham",
+    "source_url": "https://www.rebootonline.com/"
+   },
+   {
+    "name": "Oliver Sissons",
+    "title": "Search Director (Clockify story contact)",
+    "linkedin": "https://www.linkedin.com/in/oliver-sissons/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/reboot-online-seo-and-web-marketing",
+  "company_phone": "0203 397 1948",
+  "public_email": "info@rebootonline.com; hello@rebootonline.com",
+  "contact_source_url": "https://www.rebootonline.com/about-us/",
+  "notes": "Added decision makers from the About page: co-founders Shai and Naomi Aharony (founded 2012) and Zoe Blogg (Agency Operations). James Bentham (Strategy Director) is added with LinkedIn uk.linkedin.com/in/jbentham, which is linked from rebootonline.com itself. Still-in-role check: Oliver Sissons, the existing contact, is NOT on the current leadership list and may have left or changed role, so he is kept last. Address: 727-729 High Road, London N12 0BP (Co. No. 08282774). Phone 0203 397 1948 is confirmed."
+ },
+ {
+  "company_name": "Candybox Marketing Inc.",
+  "company_domain": "candyboxmarketing.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "40 (case study)",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Darrell Keezer",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://www.candyboxmarketing.com/about/"
+   },
+   {
+    "name": "Derek Joynt",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": "https://www.candyboxmarketing.com/about/"
+   },
+   {
+    "name": "Cindy Mash",
+    "title": "Sr. HR Manager",
+    "linkedin": "",
+    "source_url": "https://www.candyboxmarketing.com/about/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/candybox-marketing_4/",
+  "company_phone": "+1 (416) 479-0177",
+  "public_email": "hello@candyboxmarketing.com",
+  "contact_source_url": "https://candyboxmarketing.com/",
+  "notes": "Company LinkedIn linkedin.com/company/candybox-marketing_4/ is linked from the site footer. Keezer (CEO) and Joynt (COO) are confirmed still in role on the About page. Also added Cindy Mash (Sr. HR Manager). The About page shows no personal LinkedIns, and search was unavailable."
+ },
+ {
+  "company_name": "Airrosti",
+  "company_domain": "airrosti.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "591",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Mark Metcalfe",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://www.airrosti.com/get-to-know-us/"
+   },
+   {
+    "name": "Jeffrey W. Littmann, PT",
+    "title": "Senior VP, Practice Operations",
+    "linkedin": "",
+    "source_url": "https://www.airrosti.com/get-to-know-us/"
+   },
+   {
+    "name": "McKinley Rich",
+    "title": "Vice President, Human Resources",
+    "linkedin": "",
+    "source_url": "https://www.airrosti.com/get-to-know-us/"
+   },
+   {
+    "name": "Kelly Green",
+    "title": "Chairman of the Board",
+    "linkedin": "",
+    "source_url": "https://www.airrosti.com/get-to-know-us/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/airrosti-rehab-centers/",
+  "company_phone": "(800) 404-6050",
+  "public_email": "HR@airrosti.com; PatientServices@airrosti.com; marketing@airrosti.com",
+  "contact_source_url": "https://www.airrosti.com/contact-us/",
+  "notes": "Metcalfe (CEO) and Green (Chairman) are confirmed on the Get to Know Us leadership page. Added Littmann (SVP Practice Operations) and McKinley Rich (VP HR). CFO Emily McKay is also listed. HQ is San Antonio, TX. Company LinkedIn, phone and three department emails are from the site's footer and contact page."
+ },
+ {
+  "company_name": "Grip",
+  "company_domain": "grip.events",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "100",
+  "hq_country": "UK",
+  "contacts": [
+   {
+    "name": "Tim Groot",
+    "title": "CEO and Founder",
+    "linkedin": "",
+    "source_url": "https://grip.events/about-us"
+   },
+   {
+    "name": "Maria Martin",
+    "title": "Chief Operating Officer",
+    "linkedin": "https://www.linkedin.com/in/maria-m-martin",
+    "source_url": "https://grip.events/about-us"
+   },
+   {
+    "name": "James Leng",
+    "title": "Head of Finance",
+    "linkedin": "",
+    "source_url": "https://grip.events/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/gripevents",
+  "company_phone": "",
+  "public_email": "hello@grip.events; sales@grip.events; support@grip.events",
+  "contact_source_url": "https://grip.events/contact",
+  "notes": "Maria Martin is confirmed as Chief Operating Officer on the current About page. Added CEO and Founder Tim Groot as the decision maker; other leaders listed include Dheeraj Uppalapati (VP Engineering Operations). Address: Runway East London Bridge, Office 2.6, 18 Crucifix Ln, London SE1 3JW. No phone is published."
+ },
+ {
+  "company_name": "Keen Ltd",
+  "company_domain": "keen.com.mt",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "50",
+  "hq_country": "Malta",
+  "contacts": [
+   {
+    "name": "John Falzon",
+    "title": "Managing Director",
+    "linkedin": "",
+    "source_url": "https://keen.com.mt/points-of-contact/"
+   },
+   {
+    "name": "Carolin Hyzyk",
+    "title": "Director & Head of Business Development",
+    "linkedin": "https://www.linkedin.com/in/carolin-hyzyk/",
+    "source_url": "https://keen.com.mt/points-of-contact/"
+   },
+   {
+    "name": "John Abela",
+    "title": "Director",
+    "linkedin": "",
+    "source_url": "https://keen.com.mt/points-of-contact/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/keen-advertising-ltd",
+  "company_phone": "(+356) 21 55 33 77",
+  "public_email": "info@keen.com.mt",
+  "contact_source_url": "https://keen.com.mt/points-of-contact/",
+  "notes": "The Points of Contact page lists John Falzon as Managing Director, so he is now the lead decision maker; Hyzyk is confirmed still Director & Head of BD, and Director John Abela is added. Phone (+356) 21 55 33 77 and info@keen.com.mt are from the site. Addresses: Triq L-Iskola, Msida MSD1611, and Triq L-Industrija, Xewkija, Gozo."
+ },
+ {
+  "company_name": "Thornton & Lowe",
+  "company_domain": "thorntonandlowe.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "30",
+  "hq_country": "UK",
+  "contacts": [
+   {
+    "name": "Dave Thornton",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/dave-thornton-56833625",
+    "source_url": "https://thorntonandlowe.com/our-team"
+   },
+   {
+    "name": "Tom Daniel",
+    "title": "Managing Director (promoted Oct 2025 from Operations Director)",
+    "linkedin": "",
+    "source_url": "https://thorntonandlowe.com/our-team"
+   },
+   {
+    "name": "Rachel Edmundson",
+    "title": "Operations Support Manager (employee lifecycle & finance ops)",
+    "linkedin": "",
+    "source_url": "https://thorntonandlowe.com/our-team"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "01204 238 046",
+  "public_email": "hello@thorntonandlowe.com",
+  "contact_source_url": "https://thorntonandlowe.com/",
+  "notes": "Role change: Dave Thornton is now Founder & CEO, and Tom Daniel became Managing Director in October 2025. Added Rachel Edmundson, who runs HR/employee lifecycle. Phone 01204 238 046 and hello@thorntonandlowe.com are confirmed on the homepage. The site has no company LinkedIn link, and search was unavailable."
+ },
+ {
+  "company_name": "Whiteboard Games",
+  "company_domain": "whiteboard.games",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "30",
+  "hq_country": "Argentina",
+  "contacts": [
+   {
+    "name": "Luciano Musella",
+    "title": "President, CEO, Game Director",
+    "linkedin": "https://www.linkedin.com/in/lucianomusella/",
+    "source_url": "https://whiteboard.games/"
+   },
+   {
+    "name": "Guillermo Darío Carbonell Veracruz",
+    "title": "Vice President, Chief Creative Officer",
+    "linkedin": "https://www.linkedin.com/in/dariocarbonell/",
+    "source_url": "https://whiteboard.games/"
+   },
+   {
+    "name": "Diego Soraires",
+    "title": "Business Director",
+    "linkedin": "https://www.linkedin.com/in/diego-soraires-2315a51b/",
+    "source_url": "https://whiteboard.games/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/whiteboardgames/",
+  "company_phone": "",
+  "public_email": "contact@whiteboard.games",
+  "contact_source_url": "https://whiteboard.games/",
+  "notes": "Added two second contacts with LinkedIns taken verbatim from the team section of whiteboard.games: VP & CCO Dario Carbonell and Business Director Diego Soraires. Musella is confirmed as President/CEO. The site lists only contact@whiteboard.games, with no phone or address."
+ },
+ {
+  "company_name": "Thinkingbox",
+  "company_domain": "thinkingbox.com",
+  "vendor": "Harvest Forecast",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "140",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Amir Sahba",
+    "title": "Founder & Chief Executive Officer",
+    "linkedin": "https://www.linkedin.com/in/amir-sahba-2ba36722/",
+    "source_url": "https://thinkingbox.com/company"
+   },
+   {
+    "name": "Corey Hankey",
+    "title": "Chief Operating Officer & Partner",
+    "linkedin": "",
+    "source_url": "https://thinkingbox.com/company"
+   },
+   {
+    "name": "Amy Lewis",
+    "title": "Director, Talent & People",
+    "linkedin": "",
+    "source_url": "https://thinkingbox.com/company"
+   },
+   {
+    "name": "Alyssa Belova",
+    "title": "Managing Partner",
+    "linkedin": "",
+    "source_url": "https://thinkingbox.com/company"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/thinkingbox",
+  "company_phone": "",
+  "public_email": "hello@thinkingbox.com; info.van@thinkingbox.com; info.to@thinkingbox.com; info.la@thinkingbox.com",
+  "contact_source_url": "https://thinkingbox.com/contact",
+  "notes": "Added COO & Partner Corey Hankey, plus Amy Lewis (Talent & People) and Managing Partner Alyssa Belova, from the Company page; Sahba is confirmed as Founder & CEO. Offices: Vancouver (602 W Hastings St), Toronto (425 Adelaide St W), Culver City, Chicago, Salt Lake City and London. Per-office emails are on the contact page. No phone is published anywhere on the site."
+ },
+ {
+  "company_name": "Z1",
+  "company_domain": "z1.digital",
+  "vendor": "Everhour",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "80+",
+  "hq_country": "Spain",
+  "contacts": [
+   {
+    "name": "Héctor Giner",
+    "title": "CEO & Co-founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/z1digitalstudio",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "z1.digital is behind a Vercel security checkpoint (and WebFetch got 403/429), so no site data could be read. Nothing new was added, and the CEO was not re-verified: the web search budget ran out. Needs a manual browser visit for phone and email."
+ },
+ {
+  "company_name": "Standard Chartered",
+  "company_domain": "sc.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "85k",
+  "hq_country": "United Kingdom",
+  "contacts": [
+   {
+    "name": "Tanuj Kapilashrami",
+    "title": "Group Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.sc.com/en/about/our-people/group-management-team/"
+   },
+   {
+    "name": "Noelle Eder",
+    "title": "Group Head, Technology",
+    "linkedin": "",
+    "source_url": "https://www.sc.com/en/about/our-people/group-management-team/"
+   },
+   {
+    "name": "Bill Winters, CBE",
+    "title": "Group Chief Executive",
+    "linkedin": "",
+    "source_url": "https://www.sc.com/en/about/our-people/group-management-team/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/standardchartered/",
+  "company_phone": "",
+  "public_email": "askhr@sc.com (careers/HR enquiries)",
+  "contact_source_url": "https://www.sc.com/en/contact-us/",
+  "notes": "Enterprise bank. The contacts are Group Management Team members from sc.com: COO Tanuj Kapilashrami, Group Head of Technology Noelle Eder and CEO Bill Winters. They are group-level and not the likely buyer: ProHance is probably deployed in a GBS or operations unit (e.g. India/Malaysia hubs), and the right ops-excellence or GBS head needs a people search, which was unavailable. Company LinkedIn is linked from sc.com. No central phone: sc.com points to per-market numbers at /en/our-locations/. askhr@sc.com is the only general email on the contact page."
+ },
+ {
+  "company_name": "Paperlust",
+  "company_domain": "paperlust.co",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "45",
+  "hq_country": "Australia (Melbourne)",
+  "contacts": [
+   {
+    "name": "James Boston",
+    "title": "Co-founder & Director (Product)",
+    "linkedin": "",
+    "source_url": "https://paperlust.co/about-us/"
+   },
+   {
+    "name": "Alex Boston",
+    "title": "Co-founder & Director (Digital)",
+    "linkedin": "",
+    "source_url": "https://paperlust.co/about-us/"
+   },
+   {
+    "name": "Carrisa Ghassini",
+    "title": "Head of Customer Service / Manager",
+    "linkedin": "",
+    "source_url": "https://paperlust.co/about-us/"
+   }
+  ],
+  "company_linkedin": "https://au.linkedin.com/company/paperlust",
+  "company_phone": "+1 (855) 946-4949; +44 808 502 2244",
+  "public_email": "support@paperlust.co",
+  "contact_source_url": "https://paperlust.co/about-us/",
+  "notes": "Both co-founders are confirmed on the About Us page. Added Carrisa Ghassini, who runs the customer-service team, likely where DeskTime is used. No personal LinkedIns appear on the site, and search was unavailable, so decision-maker LinkedIn is still blank. support@paperlust.co is confirmed on the homepage."
+ },
+ {
+  "company_name": "AD VERBUM",
+  "company_domain": "adverbum.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~25 in-house + ~1,300 freelance linguists (DeskTime case study)",
+  "hq_country": "Latvia (Riga); team also in Bulgaria",
+  "contacts": [
+   {
+    "name": "Viestarts Vidiņš",
+    "title": "CEO (since May 2023)",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Zelma Diana Vidina",
+    "title": "Managing Director",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/ad-verbum",
+  "company_phone": "+371 6 7229 430",
+  "public_email": "info@adverbum.com",
+  "contact_source_url": "https://www.adverbum.com/about-us",
+  "notes": "The About page confirms +371 6 7229 430, info@adverbum.com and the company LinkedIn (ad-verbum). It says the firm is 'family-owned' but names no executives, so the CEO could not be re-verified there. The CEO's LinkedIn is still blank: search was unavailable and none is linked from the site."
+ }
+]

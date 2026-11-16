@@ -1,0 +1,32 @@
+[
+{"company_name": "Vital Virtuals Global HR Solutions", "company_domain": "vitalvirtuals.com", "vendor": "Time Doctor", "confidence_score": 95,
+ "employee_count": "~2 core staff per directory snippet (plus placed VAs; not stated)", "hq_country": "United States (Irving, TX)",
+ "contacts": [
+  {"name": "Dr. Harveer Parmar", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/harveer-parmar-39b51549/", "source_url": "https://vitalvirtuals.com/about-us"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/vitalvirtuals/", "company_phone": "(469) 708-4797",
+ "public_email": "hello@vitalvirtuals.com", "contact_source_url": "https://vitalvirtuals.com/faq",
+ "notes": "Still in role: the About page says the company was founded in 2023 by Dr. Parmar (Dallas-based family physician) and is 'led by Dr. Parmar'. Company LinkedIn added from the site footer. The site names no other team members, so no second contact. This is a VA staffing firm that uses Time Doctor to monitor its placed VAs; it is an end user, not a reseller."},
+{"company_name": "310 Nutrition", "company_domain": "310nutrition.com", "vendor": "Teramind", "confidence_score": 90,
+ "employee_count": "", "hq_country": "United States (Knoxville, TN office; brand founded in West L.A.)",
+ "contacts": [
+  {"name": "Tim Sharif", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/tim-sharif-166756160/", "source_url": "https://310nutrition.com/pages/about-us"}
+ ],
+ "company_linkedin": "", "company_phone": "+1 888-775-8525", "public_email": "support@310nutrition.com",
+ "contact_source_url": "https://310nutrition.com/pages/contact-us",
+ "notes": "Still in role: the official About page names 'Our founder, Tim Sharif'. Phone, email and office address (2661 Byington Solway Rd, Knoxville, TN 37931) are from the official contact page. No company LinkedIn link on the site and no second contact named."},
+{"company_name": "Ecotrips Costa Rica", "company_domain": "ecotripscostarica.com", "vendor": "Jibble", "confidence_score": 65,
+ "employee_count": "small (<10 likely; ConnectAmericas lists 2)", "hq_country": "Costa Rica (Pavas, San José)",
+ "contacts": [],
+ "company_linkedin": "", "company_phone": "+(506) 4081-0336; WhatsApp +(506) 4070-0601", "public_email": "info@ecotripscostarica.com",
+ "contact_source_url": "https://ecotripscostarica.com/",
+ "notes": "No decision maker found: the site names no owner or manager and links no LinkedIn (only Facebook, Instagram @ecotripscostarica, TikTok and TripAdvisor). Address: Centro comercial Plaza del Oeste, local #5, Pavas, San José. Phone and email re-confirmed."},
+{"company_name": "Nelson Finance-Life LLC", "company_domain": "nelsonfinance-life.com", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "", "hq_country": "United States",
+ "contacts": [
+  {"name": "Shaquana Nelson", "title": "Founder", "linkedin": "", "source_url": "https://nelsonfinance-life.com/about-us/"}
+ ],
+ "company_linkedin": "", "company_phone": "914-500-8794", "public_email": "operations@nelsonfinance-life.com",
+ "contact_source_url": "https://nelsonfinance-life.com/about-us/",
+ "notes": "Still in role: the About page says the firm was 'Founded by Shaquana Nelson' (minority- and woman-owned financial consulting and compliance firm). The site has no LinkedIn links and names no other staff, so DM LinkedIn, second contact and company LinkedIn are still missing (search budget exhausted)."}
+]

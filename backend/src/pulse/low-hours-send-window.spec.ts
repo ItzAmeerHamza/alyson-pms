@@ -4,6 +4,7 @@ import {
   employeesFromSendSnapshot,
   mailTargetFromDailyEmployee,
   resolveLowHoursSendWindow,
+  targetAfterPublicHolidays,
 } from './low-hours-send-window';
 
 describe('resolveLowHoursSendWindow', () => {
@@ -79,5 +80,42 @@ describe('mailTargetFromDailyEmployee', () => {
       ['2'],
     );
     expect(rows.map((row) => row.employee_id)).toEqual(['2']);
+  });
+});
+
+describe('targetAfterPublicHolidays', () => {
+  const week = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23'];
+
+  it('drops one day from a 40 hour week and keeps the holiday date', () => {
+    expect(
+      targetAfterPublicHolidays({
+        period: 'week',
+        windowExpectedHours: 40,
+        dayKeys: week,
+        holidayDays: ['2026-10-20'],
+      }),
+    ).toEqual({ expectedHours: 32, holidayDays: ['2026-10-20'] });
+  });
+
+  it('drops 7 hours from an MTD pace target', () => {
+    expect(
+      targetAfterPublicHolidays({
+        period: 'pace',
+        windowExpectedHours: 70,
+        dayKeys: week,
+        holidayDays: ['2026-10-20', '2026-11-01'],
+      }),
+    ).toEqual({ expectedHours: 63, holidayDays: ['2026-10-20'] });
+  });
+
+  it('does not require a holiday day', () => {
+    expect(
+      targetAfterPublicHolidays({
+        period: 'day',
+        windowExpectedHours: 8,
+        dayKeys: ['2026-10-20'],
+        holidayDays: ['2026-10-20'],
+      }).expectedHours,
+    ).toBe(0);
   });
 });

@@ -1,0 +1,28 @@
+[
+{"company_name": "Chetan Pabari & Associates", "confidence_score": 30,
+ "contacts": [{"name": "Chetan Pabari", "title": "Principal (name of firm; title not stated)", "linkedin": "", "source_url": "https://www.workstatus.io/"}],
+ "notes": "Workstatus homepage testimonial still shows 'Chetan Pabari, CHETAN PABARI & ASSOCIATES'. No website given, and the firm can't be identified without a web search (budget exhausted), so LinkedIn, phone and email are blank."},
+{"company_name": "RF Solutions", "confidence_score": 20,
+ "contacts": [{"name": "Alvaro J Ruiz", "title": "(title not stated)", "linkedin": "", "source_url": "https://www.workstatus.io/"}],
+ "notes": "Workstatus homepage testimonial 'Alvaro J Ruiz, RF Solutions' (still live). 'RF Solutions' is a common name and can't be pinned to one company or domain without a search; all other fields blank."},
+{"company_name": "DITS", "confidence_score": 20,
+ "contacts": [
+  {"name": "Sudha", "title": "(title not stated; surname not given)", "linkedin": "", "source_url": "https://www.workstatus.io/"},
+  {"name": "Akash", "title": "(title not stated; surname not given)", "linkedin": "", "source_url": "https://www.workstatus.io/"}],
+ "notes": "Two Workstatus homepage testimonials credited to 'DITS' (first names only). The acronym can't be resolved to a company or domain without a search; all other fields blank."},
+{"company_name": "Investment House", "confidence_score": 20,
+ "contacts": [{"name": "Karna Shah", "title": "(title not stated)", "linkedin": "", "source_url": "https://www.workstatus.io/"}],
+ "notes": "Workstatus homepage testimonial 'Karna Shah, Investment House' (still live). Generic company name - domain, LinkedIn, phone and email not found without a search."},
+{"company_name": "Experts Bio", "confidence_score": 20,
+ "contacts": [{"name": "Karthik", "title": "CEO", "linkedin": "", "source_url": "https://www.workstatus.io/"}],
+ "notes": "Workstatus homepage testimonial 'Karthik, CEO of Experts Bio'. I checked expertsbio.com, but it is a coaching business whose founder is 'Punya Slogan', so it is NOT treated as this company. Domain, LinkedIn, phone and email are blank."},
+{"company_name": "Xybion (now Instem)", "company_domain": "instem.com", "confidence_score": 70, "hq_country": "UK / US (Instem); Xybion had US/India ops",
+ "contacts": [
+  {"name": "Vik Krishnan", "title": "Chief Executive Officer, Instem", "linkedin": "", "source_url": "https://www.instem.com/about/leadership/"},
+  {"name": "Gina Green", "title": "Chief Operations Officer, Instem", "linkedin": "", "source_url": "https://www.instem.com/about/leadership/"},
+  {"name": "Eve Leconte", "title": "Chief Administrative Officer, Instem", "linkedin": "", "source_url": "https://www.instem.com/about/leadership/"},
+  {"name": "Louis Brook", "title": "Chief Technology Officer, Instem", "linkedin": "", "source_url": "https://www.instem.com/about/leadership/"}],
+ "company_linkedin": "https://www.linkedin.com/company/instem/", "company_phone": "", "public_email": "info@instem.com",
+ "contact_source_url": "https://www.instem.com/contact-us/",
+ "notes": "xybion.com now 301-redirects to instem.com, and Xybion's Pristima is listed as 'Xybion Legacy study management software' within Instem. The ProHance user (Xybion) is now part of Instem, so Instem's leadership is listed. The CAO (Eve Leconte) owns people/workplace. It's unclear whether ProHance survived the merger. info@instem.com is from the contact page (the other emails there belong to regional distributors). No HQ phone was extracted."}
+]

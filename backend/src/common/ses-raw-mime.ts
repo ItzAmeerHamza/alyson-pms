@@ -7,6 +7,8 @@ export type SesMimeAttachment = {
   contentType: string;
   /** UTF-8 text or binary as Buffer / string */
   content: string | Buffer;
+  /** When set, the part is an inline image (cid:contentId in the HTML). */
+  contentId?: string;
 };
 
 function encodeSubject(subject: string): string {
@@ -76,14 +78,17 @@ export function buildSesRawMime(input: {
     for (const att of attachments) {
       const filename = String(att.filename || 'attachment.bin').replace(/[\r\n"]/g, '');
       const contentType = String(att.contentType || 'application/octet-stream');
+      const contentId = String(att.contentId || '').replace(/[^\w.-]/g, '');
       const buf = Buffer.isBuffer(att.content)
         ? att.content
         : Buffer.from(String(att.content), 'utf8');
+      const disposition = contentId ? 'inline' : 'attachment';
       parts.push(
         `--${boundaryMixed}`,
         `Content-Type: ${contentType}; name="${filename}"`,
         'Content-Transfer-Encoding: base64',
-        `Content-Disposition: attachment; filename="${filename}"`,
+        `Content-Disposition: ${disposition}; filename="${filename}"`,
+        ...(contentId ? [`Content-ID: <${contentId}>`] : []),
         '',
         foldBase64(buf.toString('base64')),
       );

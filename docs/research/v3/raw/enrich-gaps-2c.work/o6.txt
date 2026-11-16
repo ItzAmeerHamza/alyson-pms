@@ -1,0 +1,63 @@
+#### START https://ebs.ee -> 200 https://www.ebs.ee/
+== PAGE https://www.ebs.ee/ 200
+  L https://www.linkedin.com/school/estonian-business-school/
+  E ebs@ebs.ee
+  P +372 665 1300
+== PAGE https://www.ebs.ee/sundmused/ebs-staff-week 200
+== PAGE https://www.ebs.ee/kontaktid 200
+  L mailto:ebs@ebs.ee
+  L mailto:gymnaasium@ebs.ee
+  L mailto:koolitus@ebs.ee
+  E gymnaasium@ebs.ee
+  E kadri.tammearu@ebs.ee
+  E koolitus@ebs.ee
+  P +372 5198 2662
+  P +372 665 1323
+  P +372 665 1384
+#### START https://umanova.com -> 200 https://umanova.com/
+== PAGE https://umanova.com/ 200
+#### START https://www.cevotec.com -> 200 https://www.cevotec.com/
+== PAGE https://www.cevotec.com/ 200
+  L https://www.linkedin.com/company/cevotec/
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us Contact en / de cl
+  T… e aerostructures of next generation aircraft .” Prof. Klaus Drechsler Head of Chair of Carbon Composites, Technical University 
+  T… and receive remote support wherever possible.” Dr. Waruna Seneviratne Director, Advanced Tech. Lab for Aerospace Systems (ATLAS)
+  T… cation scope for aerospace structural components.” Dr. Shunichi Bando President & CEO of B.I.TEC, co. ltd, Japan “Fiber Patch Pla
+  T…  for aerospace structural components.” Dr. Shunichi Bando President & CEO of B.I.TEC, co. ltd, Japan “Fiber Patch Placement
+  T… s getting a lot of attention from our customers.” Mr. Yuichiro Sasaki Managing Director at Fuji Industries Co., Ltd. FPP for Composite ta
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us Legal Terms & Cond
+== PAGE https://www.cevotec.com/cevotec/about-cevotec/ 200
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us About Cevotec Get 
+  T… d are looking forward to their future innovations.” Michael Kralowetz President & CEO GFM GmbH Milestones 2008 Fiber Patch Placem
+  T… g forward to their future innovations.” Michael Kralowetz President & CEO GFM GmbH Milestones 2008 Fiber Patch Placement is
+  T… ven Majic und Prof. Klaus Drechsler found Cevotec GmbH in Munich 2016 Partnership with Airbus Financing for market entry Move t
+  T… us Financing for market entry Move to Ludwig-Bölkow-Campus, Ottobrunn Partnership with Baumann Automation 2017 Cevotec launchs 
+  T… Hatrium, Unterhaching Successful ISO 9001:2015 certification 2021 New Partner and shareholder: GFM GmbH 2022 Commissioning of f
+== PAGE https://www.cevotec.com/cevotec/cevotec-team/ 200
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us The Cevotec Team I
+  T… and ambitious people to join the cevoTeam! Apply now! Thorsten Groene CEO & Co-Founder Dr. Florian Lenz Technical Director 
+  T… bitious people to join the cevoTeam! Apply now! Thorsten Groene CEO & Co-Founder Dr. Florian Lenz Technical Director Dr. Dimitrios
+  T… pply now! Thorsten Groene CEO & Co-Founder Dr. Florian Lenz Technical Director Dr. Dimitrios Sikoutris Composites & FPP Technolo
+  T… más Giesecke Lead Automation Design Engineer Christian Fleischfresser Head of Operations Florian Weyrauch Team Lead Application
+== PAGE https://www.cevotec.com/cevotec/partners-references/ 200
+  T…  Partners & References - Cevotec Cevotec Open menu Product
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us Partners & Referen
+  T… otec Career About Cevotec Team Partners & References Where to find us Partners & References Strong partners share our vision, s
+  T… t of success is to understand the perspectives of others.” Henry Ford Partners & References Testimonials Quotes from customers 
+  T…  for aerospace structural components.” Dr. Shunichi Bando President & CEO of B.I.TEC, co. ltd, Japan “Cevotec’s Fiber Patch
+  T… d are looking forward to their future innovations.” Michael Kralowetz President & CEO GFM GmbH International distribution partner
+  T… g forward to their future innovations.” Michael Kralowetz President & CEO GFM GmbH International distribution partners Test
+  T…  modern composites manufacturing system should deliver.” John Mellili President & CEO of Composite Automation “Fiber Patch Placem
+  T… osites manufacturing system should deliver.” John Mellili President & CEO of Composite Automation “Fiber Patch Placement te
+  T… s getting a lot of attention from our customers.” Mr. Yuichiro Sasaki Managing Director You got questions? Whether you have a question ab
+== PAGE https://www.cevotec.com/contact//contact 200
+  T… ers & Downloads Press Events Videos Cevotec Career About Cevotec Team Partners & References Where to find us Schedule a meeting
+== PAGE https://www.cevotec.com/contact/ 200
+== PAGE https://www.cevotec.com/cevotec-partners-with-union-chemical-to-bring-robotic-lamination-to-taiwans-growing-aerospace-industry/ 200
+  P +49 89 2314 165
+  P +49 89 2314 165 0
+  T… ring this to Taiwan’s UAV manufacturers and beyond. ” Thorsten Gröne, CEO, Cevotec “We are pleased to partner with Cevotec 
+  T… ful and lasting partnership with Cevotec.” David Wang, Assistant Vice President, Union Chemical Ind. Co., Ltd. About Union Chemic
+== PAGE https://www.cevotec.com/cevotec-partners-with-kcompositelab-to-bring-robotic-lamination-to-south-koreas-aerospace-and-hydrogen-industries/ 200
+  T… d by KCLab’s own composite engineering capabilities.” Thorsten Gröne, CEO, Cevotec “We are excited to partner with Cevotec 
+  T… n equipment for next-generation composite structures.” Seungchan Lee, COO, KCompositeLab About KCompositeLab KCompositeLab 

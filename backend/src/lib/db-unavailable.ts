@@ -1,7 +1,7 @@
 /** RDS / pool blips that must become 503, not a 500 retry storm. */
 
 const DB_UNAVAILABLE_RE =
-  /too many connections|remaining connection slots|connection terminated|ECONNRESET|connect ETIMEDOUT|timeout expired|the database system is|remaining connection|53300|57P03|08006|08001|08000|53301/i;
+  /too many connections|remaining connection slots|connection terminated|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|connect ETIMEDOUT|timeout expired|canceling statement due to statement timeout|query_canceled|the database system is|remaining connection|Connection refused|could not connect|Client has encountered a connection error|53300|57P03|08006|08001|08000|53301|57014|40001/i;
 
 const DB_UNAVAILABLE_CODES = new Set([
   '53300',
@@ -11,6 +11,8 @@ const DB_UNAVAILABLE_CODES = new Set([
   '08001',
   '08003',
   '08006',
+  '57014',
+  '40001', // serialization_failure — retry as 503
 ]);
 
 export function isDbUnavailableError(err: unknown): boolean {

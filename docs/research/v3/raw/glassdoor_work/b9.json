@@ -1,0 +1,14 @@
+[
+{"company_name":"Save The Robots","company_domain":"savetherobots.com","industry":"Digital agency (design/dev/marketing)","hq_country":"USA (San Francisco, CA)","employee_count":"small (18 Glassdoor reviews)","employee_count_source_url":"https://www.glassdoor.com/Reviews/Save-The-Robots-Reviews-E1992763.htm","estimated_tracked_seats":"",
+"vendor":"Clockify","evidence_type":"Employee review",
+"evidence_summary":"Glassdoor review 'Worst company' says if time reporting in Clockify was not done properly, employees would not receive their actual salary.",
+"evidence_quote":"",
+"source_url":"https://www.glassdoor.co.uk/Reviews/Employee-Review-Save-The-Robots-RVW29680210.htm","source_publication_date":"2019",
+"status":"POSSIBLE","status_reason":"Single old review (~2019, by review ID).","confidence_score":30,
+"unhappy_type":"complaint","complaint_category":"billing","complaint_summary":"Pay tied to Clockify reporting; reviewer says salary withheld when Clockify logs incomplete.","complaint_url":"https://www.glassdoor.co.uk/Reviews/Employee-Review-Save-The-Robots-RVW29680210.htm","complaint_date":"2019",
+"workforce_signals":"Agency, likely offshore devs, pay tied to logged hours",
+"contacts":[{"name":"Ullash Tiwari","title":"CEO & Founder","linkedin":"","source_url":"https://theorg.com/org/save-the-robots"}],
+"company_linkedin":"","company_phone":"","public_email":"","contact_source_url":"",
+"pitch_angle":"Pay-by-logged-hours agency; automatic tracking removes disputes. Low priority (stale).",
+"notes":"Domain not verified. Evidence stale."}
+]

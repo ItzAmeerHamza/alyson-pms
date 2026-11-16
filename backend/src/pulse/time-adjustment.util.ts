@@ -16,15 +16,18 @@ export function resolveAdjustmentDeltaSeconds(input: {
   return 0;
 }
 
-/** Holiday/leave credit that still applies after tracked time (never stacks on top). */
-export function leaveTopUpHours(trackedHours: number, leaveCreditHours: number): number {
-  const tracked = Number(trackedHours) || 0;
+/**
+ * Full leave credit to add. Tracked time is kept and does not reduce this.
+ * Public holidays are removed before this runs; they are not a credit.
+ */
+export function leaveTopUpHours(_trackedHours: number, leaveCreditHours: number): number {
   const leave = Number(leaveCreditHours) || 0;
-  return Math.max(0, Math.round((leave - tracked) * 10) / 10);
+  return Math.round(Math.max(0, leave) * 10) / 10;
 }
 
 /**
- * Holiday is a floor, not a stack: work 2h + 7h holiday → 7h; work 9h + 7h holiday → 9h.
+ * Day total = tracked + full leave credit + other adjustments.
+ * Work 1h on a 7h leave day → 8h. A manual add sits on top of that.
  */
 export function dayHoursWithLeaveTopUp(input: {
   trackedHours: number;
@@ -33,8 +36,8 @@ export function dayHoursWithLeaveTopUp(input: {
 }): number {
   const tracked = Number(input.trackedHours) || 0;
   const other = Number(input.otherAdjustmentHours) || 0;
-  const leaveApplied = leaveTopUpHours(tracked, Number(input.leaveCreditHours) || 0);
-  return Math.max(0, Math.round((tracked + other + leaveApplied) * 10) / 10);
+  const leave = leaveTopUpHours(tracked, Number(input.leaveCreditHours) || 0);
+  return Math.max(0, Math.round((tracked + other + leave) * 10) / 10);
 }
 
 /**

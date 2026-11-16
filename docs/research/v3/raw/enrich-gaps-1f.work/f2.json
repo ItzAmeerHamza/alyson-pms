@@ -1,0 +1,36 @@
+{
+"5": {"contacts": [
+  {"name": "Tarek Alhussayni", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/tarek-alhussayni-517a65aa/", "source_url": ""}],
+ "company_domain": "cepco-sa.com",
+ "company_phone": "+966 920002536 (central/hotline); Riyadh 011 460 0803; Dammam 012 663 4331; Dubai +971 4 5846855",
+ "public_email": "cepco@cepco-sa.com; info@cepco-sa.com",
+ "contact_source_url": "https://cepco-sa.com/contact/",
+ "hq_country": "Saudi Arabia (Jeddah head office; offices Riyadh, Dammam, Dubai, Cairo)",
+ "notes": "Input domain cepco.com.sa does not resolve; live company site is cepco-sa.com. Phone and both emails from the fetched contact page; Riyadh/Dammam/Dubai numbers from a search snippet of the same site. About page names no executives, so CEO Tarek Alhussayni carried over from input (in-role not re-confirmed: web search budget ran out before a check). No second contact found."},
+"6": {"contacts": [
+  {"name": "Taavi Madiberk", "title": "Co-Founder & Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/madiberk/", "source_url": "https://www.skeletontech.com/about"},
+  {"name": "Timo Koljonen", "title": "Chief Operating Officer", "linkedin": "", "source_url": "https://www.skeletontech.com/about"},
+  {"name": "Patricia Godel", "title": "Head of Grant Financing (Toggl story interviewee)", "linkedin": "", "source_url": ""}],
+ "company_phone": "+372 622 9370 (Estonia); +49 1627265432 (Germany)",
+ "contact_source_url": "https://www.skeletontech.com/about",
+ "notes": "Replaced the decision maker: the input contact (Patricia Godel, Head of Grant Financing) is not an exec. The company About page (fetched) lists CEO Taavi Madiberk and COO Timo Koljonen, plus CTO Linus Froböse and CFO Margus Vals. Madiberk's LinkedIn (linkedin.com/in/madiberk) appeared in search: headline 'Frankenburg Technologies', with the Skeleton co-founder role described. He also runs Frankenburg, but Skeleton's site still lists him as CEO. Godel's in-role status was not re-checked. No LinkedIn found for the COO."},
+"7": {"contacts": [
+  {"name": "Tad Selby", "title": "CEO", "linkedin": "https://www.linkedin.com/in/tad-selby-a05a866/", "source_url": "https://www.linkedin.com/in/tad-selby-a05a866/"},
+  {"name": "Bryan Knott", "title": "VP, Automation Division (North America contact)", "linkedin": "", "source_url": ""}],
+ "company_linkedin": "https://www.linkedin.com/company/npsgglobal",
+ "company_phone": "+1 (678) 273-3324",
+ "contact_source_url": "https://npsgglobal.com/",
+ "hq_country": "United States (1850 Parkway Place Ste 500, Marietta, GA 30067)",
+ "notes": "Tad Selby: the LinkedIn search result title 'Tad Selby - NPSG Global' confirms he is still there (CEO). Company LinkedIn npsgglobal found in search (11.9k followers, Marietta GA). Homepage (fetched) confirms the phone and info@ email. Bryan Knott is carried over from input; his LinkedIn was not found because the search budget ran out."},
+"8": {"contacts": [
+  {"name": "Ziv Ofek", "title": "Founder", "linkedin": "https://www.linkedin.com/in/zivofek/", "source_url": ""},
+  {"name": "Dana Arditi", "title": "Customer service & account manager (interviewee)", "linkedin": "https://www.linkedin.com/in/dana-arditi-09740857/", "source_url": ""}],
+ "company_phone": "",
+ "contact_source_url": "https://www.mdclone.com/contact-us",
+ "hq_country": "Israel (Energy 77, Be'er-Sheva 8410402)",
+ "notes": "The contact page (fetched) gives only communications@mdclone.com, no phone. Phone numbers seen in a search snippet ((508) 405-1562; +972-54-4791265) come from data-broker aggregation and one is a mobile, so they were left out. Phone still not found on the company's own pages. Contacts carried over; in-role not re-checked."},
+"9": {"contacts": [
+  {"name": "Mike Diamond", "title": "Co-Founder & Director of Curriculum Development", "linkedin": "", "source_url": "https://focustutoring.com/apex-team/"},
+  {"name": "Fatma Xhafa", "title": "Director of Operations", "linkedin": "https://www.linkedin.com/in/fatma-x-79446114b/", "source_url": "https://focustutoring.com/apex-team/"}],
+ "notes": "Team page (fetched) lists co-founder Mike Diamond as the top leader and Fatma Xhafa, now Director of Operations (was Engagement Manager), so both are current. A search snippet named a 'Ben Miller' as CEO (data broker) but it was not confirmed and is not included. No LinkedIn found for Mike Diamond."}
+}

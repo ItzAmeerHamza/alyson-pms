@@ -22,21 +22,21 @@ import {
   AssistantWeekPace,
   AssistantPulseDay,
   AssistantHoursSource,
+  answerArithmetic,
+  buildChatUserContent,
+  buildPlanningFacts,
   buildPromptUserContent,
-  buildRagUserContent,
   buildStats,
   countBy,
   emptyScreenshotStats,
   fallbackBriefing,
-  answerArithmetic,
+  coachQuestionUsesModel,
   fallbackChatReply,
-  questionIsAboutRecordedWork,
-  replyPivotsToRecordedTime,
+  OFF_TOPIC_COACH_REPLY,
   formatWorkClock,
-  coachReplyNeedsHourLabels,
-  extractHourLabels,
   looksLikeOpeningDump,
   normalizePulseDay,
+  inventedHourLabels,
   replyHasInventedHours,
   openingMessage,
   parseAssistantCopy,
@@ -46,10 +46,11 @@ import {
   sessionsFromLogs,
   trackedHoursFromLogs,
   weekMonthPaceFromDays,
+  type AssistantLeaveDay,
 } from './assistant-briefing';
 import { EffectiveTimeService } from './effective-time.service';
 import { PulseService } from './pulse.service';
-import { mondayKey } from './pacing-math';
+import { addCalendarDays, lastDayOfMonth, mondayKey } from './pacing-math';
 
 type ScreenshotInsightRow = {
   captured_at: string;
@@ -69,6 +70,7 @@ type ScreenshotInsightRow = {
 type PulseDayRow = AssistantPulseDay;
 
 const OPENING_CACHE_TTL_MS = 15 * 60_000;
+const STATS_CACHE_TTL_MS = 20_000;
 
 @Injectable()
 export class AssistantService {
@@ -77,6 +79,7 @@ export class AssistantService {
     string,
     { at: number; hoursKey: string; copy: AssistantBriefingCopy }
   >();
+  private readonly statsCache = new Map<string, { at: number; stats: AssistantStats }>();
 
   constructor(
     private readonly db: DatabaseService,
@@ -87,7 +90,7 @@ export class AssistantService {
 
   async briefing(user: ScopedAuthUser, date?: string) {
     const self = await this.callerContext(user);
-    const stats = await this.loadStats(self, date);
+    const stats = await this.loadStatsCached(self, date);
     const copy = await this.openingCopy(self, stats);
     return this.payload(stats, copy);
   }
@@ -113,18 +116,9 @@ export class AssistantService {
     if (cached && cached.hoursKey === hoursKey && Date.now() - cached.at < OPENING_CACHE_TTL_MS) {
       return cached.copy;
     }
-    const copy = await this.composeCopy(stats, {
-      mode: 'opening',
-      instruction: [
-        'This is their first chat message.',
-        'Open with a month-to-date summary of their recorded hours (effective vs expected vs month target), using exact FACTS hour labels.',
-        'Then give a short snapshot of the selected day.',
-        'Invite them to ask follow-up questions.',
-        'Put that opening in "summary". Greeting is one friendly line to them.',
-        'Speak to them as you. Visible text must not mention other people or internal report names.',
-        'Be specific: name apps, session times, and screenshot samples from FACTS when they help. Do not sound like a generic template.',
-      ].join(' '),
-    });
+    // The opening is a fixed summary of recorded hours. Waiting on a model
+    // rewrite only delayed the first message.
+    const copy = fallbackBriefing(stats);
     this.openingCache.set(key, { at: Date.now(), hoursKey, copy });
     return copy;
   }
@@ -134,7 +128,7 @@ export class AssistantService {
     opts: { date?: string; message: string; history?: AssistantChatTurn[] },
   ) {
     const self = await this.callerContext(user);
-    const stats = await this.loadStats(self, opts.date);
+    const stats = await this.loadStatsCached(self, opts.date);
     const question = String(opts.message || '').trim().slice(0, 500);
     const copy = await this.composeCopy(stats, {
       mode: 'chat',
@@ -185,6 +179,19 @@ export class AssistantService {
     };
   }
 
+  private statsCacheKey(user: ScopedAuthUser, date?: string) {
+    return `${String(user.id || '')}|${String(user.organization_id || '')}|${date || ''}`;
+  }
+
+  private async loadStatsCached(user: ScopedAuthUser, date?: string): Promise<AssistantStats> {
+    const key = this.statsCacheKey(user, date);
+    const hit = this.statsCache.get(key);
+    if (hit && Date.now() - hit.at < STATS_CACHE_TTL_MS) return hit.stats;
+    const stats = await this.loadStats(user, date);
+    this.statsCache.set(key, { at: Date.now(), stats });
+    return stats;
+  }
+
   private async loadStats(user: ScopedAuthUser, date?: string): Promise<AssistantStats> {
     const settings = await this.pulse.getOrgSettings(user);
     const tz = settings.timezone;
@@ -216,6 +223,8 @@ export class AssistantService {
         timezone: tz,
         hoursSource: pulseWindow.hoursSource,
         hoursThreshold: settings.hours_threshold,
+        publicHoliday: Boolean(pulseDay.public_holiday),
+        leaveToday: pulseWindow.leaveDays?.find((l) => l.date === dateKey) ?? null,
         trackedHours: pulseDay.tracked_hours,
         adjustmentHours: pulseDay.adjustment_hours,
         hoursWorked: pulseDay.hours_worked,
@@ -227,6 +236,7 @@ export class AssistantService {
         screenshots,
         weekPace: pulseWindow.weekPace,
         monthPace: pulseWindow.monthPace,
+        recentDays: pulseWindow.days,
       });
     }
 
@@ -250,6 +260,8 @@ export class AssistantService {
       timezone: tz,
       hoursSource: 'synced_sessions',
       hoursThreshold: settings.hours_threshold,
+      publicHoliday: pulseWindow.publicHolidayDays?.includes(dateKey) ?? false,
+      leaveToday: pulseWindow.leaveDays?.find((l) => l.date === dateKey) ?? null,
       trackedHours: tracked.hours,
       sessionCount: sessions.length || tracked.sessionCount,
       idleHours,
@@ -259,6 +271,7 @@ export class AssistantService {
       screenshots,
       weekPace: pulseWindow.weekPace,
       monthPace: pulseWindow.monthPace,
+      recentDays: pulseWindow.days,
     });
   }
 
@@ -275,13 +288,32 @@ export class AssistantService {
     },
   ): Promise<{
     day: PulseDayRow | null;
+    days?: PulseDayRow[];
     weekPace?: AssistantWeekPace;
     monthPace?: AssistantMonthPace;
     hoursSource: AssistantHoursSource;
+    publicHolidayDays?: string[];
+    leaveDays?: AssistantLeaveDay[];
   }> {
     const weekStart = mondayKey(dateKey);
     const monthStart = `${dateKey.slice(0, 7)}-01`;
     const rangeStart = weekStart < monthStart ? weekStart : monthStart;
+    // Holidays later this week / month lower those targets too.
+    const friday = addCalendarDays(weekStart, 4);
+    const monthEnd = lastDayOfMonth(dateKey.slice(0, 7));
+    const holidayEnd = friday > monthEnd ? friday : monthEnd;
+    let publicHolidayDays: string[] = [];
+    let leaveDays: AssistantLeaveDay[] = [];
+    // Async wrappers so a missing or throwing lookup becomes a rejection here,
+    // never an error that stops the Coach from loading.
+    const [holidayResult, leaveResult] = await Promise.allSettled([
+      (async () => this.pulse.publicHolidayDaysForUser(user, userId, rangeStart, holidayEnd))(),
+      (async () => this.pulse.personalLeaveDaysForUser(user, userId, rangeStart, holidayEnd))(),
+    ]);
+    if (holidayResult.status === 'fulfilled') publicHolidayDays = holidayResult.value;
+    else this.logger.warn(`assistant public holidays skipped: ${String(holidayResult.reason?.message || holidayResult.reason)}`);
+    if (leaveResult.status === 'fulfilled') leaveDays = leaveResult.value;
+    else this.logger.warn(`assistant leave days skipped: ${String(leaveResult.reason?.message || leaveResult.reason)}`);
     try {
       const result = await this.pulse.getDailyHours(user, rangeStart, dateKey, userId);
       const employee = (result.employees || []).find((row: { employee_id?: string }) =>
@@ -292,13 +324,20 @@ export class AssistantService {
         .filter((row: AssistantPulseDay) => row.date);
       if (days.length) {
         const day = days.find((row: AssistantPulseDay) => row.date === dateKey) ?? null;
-        return { day, hoursSource: 'pulse_daily_hours', ...weekMonthPaceFromDays(days, dateKey, tz) };
+        return {
+          day,
+          days,
+          hoursSource: 'pulse_daily_hours',
+          publicHolidayDays,
+          leaveDays,
+          ...weekMonthPaceFromDays(days, dateKey, tz, undefined, publicHolidayDays, leaveDays),
+        };
       }
       this.logger.warn(`assistant pulse roster missed user ${userId}; using synced sessions for week/month`);
     } catch (err) {
       this.logger.warn(`assistant pulse day skipped: ${String((err as Error)?.message || err)}`);
     }
-    return this.loadPaceFromSyncedSessions(userId, dateKey, rangeStart, tz, opts);
+    return this.loadPaceFromSyncedSessions(userId, dateKey, rangeStart, tz, opts, publicHolidayDays, leaveDays);
   }
 
   private async loadPaceFromSyncedSessions(
@@ -312,11 +351,16 @@ export class AssistantService {
       lowActivityThreshold: number;
       intervalMinutes: number;
     },
+    publicHolidayDays: string[] = [],
+    leaveDays: AssistantLeaveDay[] = [],
   ): Promise<{
     day: PulseDayRow | null;
+    days?: PulseDayRow[];
     weekPace?: AssistantWeekPace;
     monthPace?: AssistantMonthPace;
     hoursSource: AssistantHoursSource;
+    publicHolidayDays?: string[];
+    leaveDays?: AssistantLeaveDay[];
   }> {
     const { startIso, endExclusiveIso } = workDateRangeToUtcIso(rangeStart, dateKey, tz);
     const [logs, idleStats] = await Promise.all([
@@ -346,7 +390,14 @@ export class AssistantService {
       .filter((key) => key >= rangeStart && key <= dateKey)
       .map((key) => pulseDayFromLogs(logs, key, tz, idleStats.daily || {}, opts.hoursThreshold));
     const day = days.find((row) => row.date === dateKey) ?? null;
-    return { day, hoursSource: 'synced_sessions', ...weekMonthPaceFromDays(days, dateKey, tz) };
+    return {
+      day,
+      days,
+      hoursSource: 'synced_sessions',
+      publicHolidayDays,
+      leaveDays,
+      ...weekMonthPaceFromDays(days, dateKey, tz, undefined, publicHolidayDays, leaveDays),
+    };
   }
 
   private async loadTimeLogs(
@@ -536,56 +587,83 @@ export class AssistantService {
       history?: AssistantChatTurn[];
     },
   ): Promise<AssistantBriefingCopy> {
-    const question = opts.question || '';
-    const direct = opts.mode === 'chat' ? answerArithmetic(question) : null;
-    const aboutWork = opts.mode !== 'chat' || questionIsAboutRecordedWork(question);
-    const fallback =
-      opts.mode === 'chat'
-        ? fallbackChatReply(stats, question)
-        : fallbackBriefing(stats);
-    if (direct) {
-      return { ...fallback, greeting: 'Here you go.', summary: direct };
-    }
+    if (opts.mode === 'chat') return this.composeChat(stats, opts.question || '', opts.history);
+    const fallback = fallbackBriefing(stats);
     if (!this.deepseek.isConfigured()) return fallback;
-    const instruction = String(opts.instruction || '');
-    const systemPrompt = opts.mode === 'chat' ? ASSISTANT_CHAT_SYSTEM_PROMPT : ASSISTANT_SYSTEM_PROMPT;
-    const userContent =
-      opts.mode === 'chat'
-        ? buildRagUserContent(stats, question, opts.history)
-        : buildPromptUserContent(stats, instruction);
     try {
       const { parsed } = await this.deepseek.chatJson({
-        systemPrompt,
-        userContent,
-        maxTokens: opts.mode === 'chat' ? 800 : 900,
-        temperature: opts.mode === 'chat' ? 0.4 : 0.2,
+        systemPrompt: ASSISTANT_SYSTEM_PROMPT,
+        userContent: buildPromptUserContent(stats, String(opts.instruction || '')),
+        maxTokens: 500,
+        temperature: 0.2,
       });
-      const copy = parseAssistantCopy(parsed);
-      if (!copy) return fallback;
-      if (opts.mode === 'chat') {
-        if (!aboutWork && replyPivotsToRecordedTime(copy.summary)) {
-          return {
-            ...fallback,
-            greeting: 'Here you go.',
-            summary: 'Ask that again as a normal question. I will answer it directly, without your time record.',
-          };
-        }
-        if (aboutWork && (looksLikeOpeningDump(copy.summary) || replyHasInventedHours(stats, copy.summary))) {
-          return fallback;
-        }
-        if (
-          aboutWork &&
-          coachReplyNeedsHourLabels(question) &&
-          extractHourLabels(copy.summary).length === 0
-        ) {
-          return fallback;
-        }
-        return { ...fallback, greeting: copy.greeting || fallback.greeting, summary: copy.summary };
-      }
-      return copy;
+      return parseAssistantCopy(parsed) || fallback;
     } catch (err) {
       this.logger.warn(`assistant LLM fallback: ${String((err as Error)?.message || err)}`);
       return fallback;
     }
+  }
+
+  /**
+   * Personal-assistant chat. Plain metric lookups get the exact recorded reply
+   * instantly; everything else (advice, planning, "why", drafting) goes to the
+   * model with the full record plus precomputed planning numbers. The model
+   * flags off-topic questions itself; replies with invented hour totals fall
+   * back to the recorded answer.
+   */
+  private async composeChat(
+    stats: AssistantStats,
+    question: string,
+    history?: AssistantChatTurn[],
+  ): Promise<AssistantBriefingCopy> {
+    const now = this.now();
+    const fallback = fallbackChatReply(stats, question, now);
+    const offTopic = { ...fallback, greeting: 'Outside what I cover.', summary: OFF_TOPIC_COACH_REPLY };
+    if (answerArithmetic(question)) return offTopic;
+    if (!coachQuestionUsesModel(question)) return fallback;
+    if (!this.deepseek.isConfigured()) return fallback;
+    const planning = buildPlanningFacts(stats, now);
+    const userContent = buildChatUserContent(stats, question, history, planning);
+    const ask = (content: string) =>
+      this.deepseek.chatJson({
+        systemPrompt: ASSISTANT_CHAT_SYSTEM_PROMPT,
+        userContent: content,
+        maxTokens: 700,
+        temperature: 0.5,
+      });
+    try {
+      let { parsed } = await ask(userContent);
+      if (parsed?.off_topic === true) return offTopic;
+      let copy = parseAssistantCopy(parsed);
+      if (copy && replyHasInventedHours(stats, copy.summary, planning)) {
+        // One corrective retry: name the figures that are not in their record.
+        const bad = inventedHourLabels(stats, copy.summary, planning);
+        ({ parsed } = await ask(
+          `${userContent}\n\nYour previous reply used figures that are not in FACTS or PLANNING${
+            bad.length ? ` (${bad.join(', ')})` : ' (decimal hours)'
+          }. Rewrite it using only hour labels that appear in FACTS or PLANNING, or no hour figures at all.`,
+        ));
+        copy = parsed?.off_topic === true ? null : parseAssistantCopy(parsed);
+      }
+      if (!copy) return fallback;
+      // The model sometimes puts the list items in "suggestions" after a "Here are 3 tips:" lead-in.
+      if (/:\s*$/.test(copy.summary) && !/^- /m.test(copy.summary)) {
+        if (!copy.suggestions.length) return fallback;
+        copy = { ...copy, summary: `${copy.summary}\n${copy.suggestions.map((tip) => `- ${tip}`).join('\n')}` };
+      }
+      if (looksLikeOpeningDump(copy.summary) || replyHasInventedHours(stats, copy.summary, planning)) {
+        this.logger.warn('assistant chat reply rejected (invented hours or opening dump); using recorded reply');
+        return fallback;
+      }
+      return { ...fallback, greeting: copy.greeting || fallback.greeting, summary: copy.summary };
+    } catch (err) {
+      this.logger.warn(`assistant LLM fallback: ${String((err as Error)?.message || err)}`);
+      return fallback;
+    }
+  }
+
+  /** Overridable in tests. */
+  protected now(): number {
+    return Date.now();
   }
 }

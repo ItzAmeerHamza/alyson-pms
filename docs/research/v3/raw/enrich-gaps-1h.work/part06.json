@@ -1,0 +1,82 @@
+[
+{"company_name": "LBM Solutions",
+ "contacts": [
+  {"name": "Rampawan Singla", "title": "Managing Director", "linkedin": "", "source_url": "https://empmonitor.com/case-study/lbm-solution/"}
+ ],
+ "notes": "The lbmsolution.com homepage (re-fetched) shows the phone +1 (218) 300-3442 and a Cloudflare-obfuscated email (the existing info@ was kept). It lists no leadership; the about-us URL returns 404. The search budget was exhausted, so the MD's LinkedIn and a second contact could not be found. The firm now positions itself as blockchain and AI engineering (founded 2014; US/UK/UAE/Singapore)."},
+{"company_name": "Knorish",
+ "contacts": [
+  {"name": "Kinner N Sacchdev", "title": "Co-founder & CEO", "linkedin": "", "source_url": "https://resources.timedoctor.com/case-studies/knorish/"}
+ ],
+ "notes": "Not enriched. knorish.com and knorish.com/about.html return 403 to WebFetch, and the search budget was exhausted. The existing CEO was kept but not re-checked. Phone, email, LinkedIn and second contact are still blank."},
+{"company_name": "InsightsTap",
+ "contacts": [
+  {"name": "Ritesh Osta", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/riteshosta1/", "source_url": "https://www.insightstap.com/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/105917233/", "public_email": "info@insightstap.com", "contact_source_url": "https://www.insightstap.com/contact",
+ "hq_country": "United States (Dallas, TX; founder and team India-linked)",
+ "notes": "Ritesh Osta is still Founder & CEO (also quoted on the Workstatus homepage as Founder, 'insightstap solutions pvt ltd'). His LinkedIn and the company LinkedIn page (numeric ID URL) are linked from insightstap.com. The email and the address (539 W Commerce St #2588, Dallas, TX 75208) are from the site; the address looks like a virtual mailbox. No phone is listed, and no second contact was found. This is a very small GTM consultancy."},
+{"company_name": "Austek Play",
+ "contacts": [
+  {"name": "Glenn (surname not published)", "title": "Owner", "linkedin": "", "source_url": "https://austekplay.com.au/meet-the-team/"},
+  {"name": "Belinda (surname not published)", "title": "General Manager", "linkedin": "", "source_url": "https://austekplay.com.au/meet-the-team/"},
+  {"name": "Alberto Calzavara", "title": "Lead Designer (Clockify story interviewee)", "linkedin": "https://www.linkedin.com/in/albertocalz/", "source_url": "https://austekplay.com.au/meet-the-team/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/austek-play/", "company_phone": "1300 433 364", "public_email": "enquiries@austekplay.com.au", "contact_source_url": "https://austekplay.com.au/",
+ "notes": "The team page lists first names only: Glenn (Owner) and Belinda (General Manager) are the decision makers. Alberto (now 'Lead Designer') is still there, matching the existing Clockify-story contact; his LinkedIn URL is from the input. The phone, email, ABN 72 091 979 789 and the QLD (37 Neumann Rd, Capalaba) and NSW (Morisset) addresses are from the homepage. The company LinkedIn page is from the footer, with the ?viewAsMember parameter stripped."},
+{"company_name": "Big Sky Care Connect", "company_domain": "mtbscc.org",
+ "contacts": [
+  {"name": "Ben Tyrrell", "title": "Chief Executive Officer", "linkedin": "", "source_url": "https://www.mtbscc.org/about"},
+  {"name": "Matt Graham", "title": "VP of Finance & Administration", "linkedin": "", "source_url": "https://www.mtbscc.org/about"},
+  {"name": "Tiffany Hodgins", "title": "VP of Technology & Operations", "linkedin": "", "source_url": "https://www.mtbscc.org/about"},
+  {"name": "Drew Hensel", "title": "Chief Information Officer", "linkedin": "", "source_url": "https://www.mtbscc.org/about"}
+ ],
+ "company_phone": "406.422.1078", "public_email": "information@mtbscc.org", "contact_source_url": "https://www.mtbscc.org/contact",
+ "hq_country": "US (Helena, Montana)",
+ "notes": "DOMAIN CORRECTED: bigskycareconnect.org does not resolve; the Toggl case study gives https://www.mtbscc.org/. The leadership page shows Ben Tyrrell as CEO, so he is now listed first. Matt Graham, the existing contact, is still VP Finance & Admin. Cass Staton, the case-study Program Manager, is not on the leadership page and was dropped. The phone and email are from the contact page; there is also 24/7 tech support at 888.937.7396 and a mailing address at PO Box 7962, Helena, MT 59604. No company LinkedIn page and no personal LinkedIn on the site."},
+{"company_name": "Marvel & Snap",
+ "contacts": [
+  {"name": "André Langlois", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/alanglois/", "source_url": "https://everhour.com/customers/marvel-and-snap"}
+ ],
+ "hq_country": "Canada (Kanata, Ontario)",
+ "notes": "The Everhour story (re-fetched) still names André Langlois as Founder & CEO and links his LinkedIn. marvelandsnap.com renders client-side and WebFetch got no content, so no phone, email or company LinkedIn page. It is a small remote team with no named second contact."},
+{"company_name": "A Pequena Tulipa",
+ "contacts": [
+  {"name": "Paulo Couto", "title": "Creative Director & Founder", "linkedin": "https://www.linkedin.com/in/paulocouto1/", "source_url": "https://everhour.com/customers/a-pequena-tulipa"}
+ ],
+ "company_phone": "+351 227 325 517; +351 936 456 673 (mobile/WhatsApp)", "contact_source_url": "https://www.apequenatulipa.pt/contactos",
+ "notes": "Added the mobile/WhatsApp number from the contact page. The address is Rua Padre Manuel Ribeiro Coelho nº64, 4410-040 Serzedo, Vila Nova de Gaia. The site shows no email (it uses a contact form) and names no team member other than Paulo Couto. The company LinkedIn page was re-confirmed."},
+{"company_name": "New Law Business Model",
+ "contacts": [
+  {"name": "Ali Katz (formerly Alexis Martin Neely)", "title": "Founder", "linkedin": "", "source_url": "https://newlawbusinessmodel.com/nlbm-about"}
+ ],
+ "notes": "Ali Katz is still presented as founder of New Law Business Model, Personal Family Lawyer and Eyes Wide Open Life. The site names no CEO, COO or other executive and has no personal LinkedIn links, and the search budget was exhausted, so no second contact. The phone (+1 844-785-8532), support@ email and company LinkedIn page were kept, and the phone and email were re-confirmed on the homepage."},
+{"company_name": "LLM Design", "status": "DO_NOT_TARGET", "status_reason": "Company closed: llmdesign.com states 'After over 10 amazing years, LLM Design has closed its doors.' The contact page says it stopped operating on 2024-10-01.",
+ "contacts": [
+  {"name": "Leila Mitchell", "title": "Founder (company closed)", "linkedin": "", "source_url": "https://www.getharvest.com/customers/llm-design"}
+ ],
+ "contact_source_url": "https://www.llmdesign.com/contact",
+ "notes": "CLOSED: the website announces the studio has closed, and only a 'lightly monitored' email (getcreative@llmdesign.com) remains. Marked DO_NOT_TARGET."},
+{"company_name": "Ideamotive",
+ "contacts": [
+  {"name": "Kamil Osiecki", "title": "COO (per Clockify story; site now lists a 'Kamil' as CEO - unconfirmed if same person)", "linkedin": "https://www.linkedin.com/in/kamil-osiecki-79b8b6116/", "source_url": "https://clockify.me/customer-stories/ideamotive"}
+ ],
+ "contact_source_url": "https://ideamotive.co/contact",
+ "notes": "The homepage now shows leaders by first name only: Kamil (CEO), Tomasz (Business Consultancy Leader), Anna (Head of Finance & Legal) and Michał (Talent Acquisition Leader). The existing contact, Kamil Osiecki, may now be CEO, but the surname is not shown. The contact page's email is Cloudflare-obfuscated, so it could not be read, and no phone is listed. Registered entity: IDEAMOTIVE Sp. z o.o., Złota 61/101, 00-819 Warsaw (KRS 0000529079, VAT PL5272722655); HQ at Skierniewicka 16/20, Warsaw, with offices in Berlin, London and NYC. No company LinkedIn page found."},
+{"company_name": "Float Digital",
+ "contacts": [
+  {"name": "Sam Charles", "title": "Founder", "linkedin": "https://www.linkedin.com/in/samcharlesuk/", "source_url": "https://clockify.me/customer-stories/sam-charles"}
+ ],
+ "notes": "The Clockify story (re-fetched) links only Sam Charles's LinkedIn and gives no company website. floatdigital.io (a guessed check) does not resolve, so nothing was recorded from it. Without search, no website, phone, email or company LinkedIn could be found. It is a 4-person agency with no second contact."},
+{"company_name": "Kfactor Marketing e Design",
+ "contacts": [
+  {"name": "Kevin Oliveira", "title": "CEO", "linkedin": "https://www.linkedin.com/in/kevin-oliveira-39b050194/", "source_url": "https://clockify.me/customer-stories/kevin-oliveira"}
+ ],
+ "notes": "The Clockify story (re-fetched) links only Kevin Oliveira's LinkedIn and the company LinkedIn page, with no website. No phone or email could be found without search. It is a 2-10 person agency with no second contact."},
+{"company_name": "CSforALL",
+ "contacts": [
+  {"name": "Leigh Ann DeLyser", "title": "Co-Founder & Executive Director", "linkedin": "", "source_url": "https://www.getharvest.com/customers/csforall"},
+  {"name": "Dionne Williams", "title": "Senior Director of Operations", "linkedin": "", "source_url": "https://www.getharvest.com/customers/csforall"}
+ ],
+ "notes": "Added Dionne Williams (Senior Director of Operations) from the Harvest story as second contact; current role not re-checked. The redesigned csforall.org has no about, team or contact pages (all 404) and shows no phone or email. The privacy policy gives only policy@csnyc.org, a legacy CSNYC address that is not a general inbox, so it was not used as public_email. The company LinkedIn page was kept."}
+]

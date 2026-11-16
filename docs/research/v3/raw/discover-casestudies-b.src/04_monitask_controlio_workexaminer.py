@@ -1,0 +1,25 @@
+# Controlio (controlio.net) and Work Examiner (workexaminer.com): only anonymized Capterra-style
+# reviews / first-name testimonials, no named customer companies -> no records.
+RECS = [
+ dict(company_name="FBA Prep 4U", company_domain="fbaprep4u.com", industry="E-commerce / Amazon FBA prep & logistics", hq_country="US",
+  vendor="Monitask", evidence_type="Vendor testimonial/logo",
+  evidence_summary="Testimonial on the Monitask homepage and agency page (reviews sourced from Capterra, ratings retrieved Aug 2026): the Sales & Marketing Manager at FBA Prep 4U uses Monitask 5 days a week and says the boss checks her timeline and screenshots.",
+  evidence_quote="As a Sales and Marketing Manager on FBA Prep 4U. I am using Monitask 5 days a week",
+  source_url="https://www.monitask.com/", source_publication_date="2026-08",
+  second_source_url="https://www.monitask.com/industries/agency-time-tracking-software/",
+  status="PROBABLE", status_reason="Named in a vendor-displayed testimonial (originally a Capterra review, date unknown); still shown in 2026", confidence_score=70,
+  workforce_signals="remote staff tracked with screenshots; manager reviews timeline",
+  company_phone="(614) 392-8850", public_email="Info@FBAPrep4U.com", contact_source_url="https://fbaprep4u.com/",
+  pitch_angle="Small e-commerce ops team using screenshot-based tracking — direct Monitask-replacement pitch on price/features",
+  notes="Reviewer is an employee (not identified further — privacy). Columbus OH area code. Decision maker not found: web search quota ran out."),
+ dict(company_name="Faes & Co", vendor="Monitask", evidence_type="Public review by company (G2/Capterra/Trustpilot/app store)", industry="Financial services", hq_country="",
+  evidence_summary="Capterra review by the CEO (Christian F.) of Faes & Co: they manage client accounts across time zones and use Monitask time tracking with activity monitoring.",
+  evidence_quote="At Faes & Co, we manage multiple client accounts across different time zones",
+  source_url="https://www.capterra.com/p/163622/Monitask/reviews/", source_publication_date="", status="PROBABLE",
+  status_reason="Company named in the CEO's own public review; date not captured", confidence_score=70,
+  workforce_signals="multi-time-zone team", notes="Found through a search snippet of Capterra reviews; the review date was not visible."),
+ dict(company_name="MyBikeMx", vendor="Monitask", evidence_type="Public review by company (G2/Capterra/Trustpilot/app store)", industry="Logistics / delivery", hq_country="Mexico (probable)",
+  evidence_summary="Capterra review by the CEO (Sebastian C.) of MyBikeMx: dispatchers and drivers stay in sync using Monitask.",
+  source_url="https://www.capterra.com/p/163622/Monitask/reviews/", source_publication_date="", status="POSSIBLE",
+  status_reason="Company named in a public review; date unknown", confidence_score=60, notes="Search snippet only."),
+]

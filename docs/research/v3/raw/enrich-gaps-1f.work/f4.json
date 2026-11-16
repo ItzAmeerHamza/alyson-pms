@@ -1,0 +1,47 @@
+{
+"20": {"contacts": [
+  {"name": "Andy Ly", "title": "Founder", "linkedin": "https://www.linkedin.com/in/andy-ly-7471101aa/", "source_url": "https://www.lypadacademy.com/"}],
+ "notes": "Homepage (fetched and scraped) confirms Andy Ly is still founder and gives inquiries@lypadacademy.com. No phone, address, LinkedIn links or other team members on the site. Company LinkedIn and phone not found; no second contact."},
+"21": {"contacts": [
+  {"name": "Garrett Lord", "title": "Co-Founder & CEO", "linkedin": "", "source_url": "https://www.joinhandshake.com/about"},
+  {"name": "Jonathan Stull", "title": "President and Chief Operating Officer", "linkedin": "", "source_url": "https://www.joinhandshake.com/about"},
+  {"name": "Katie Viamari", "title": "VP, People & Talent", "linkedin": "", "source_url": "https://www.joinhandshake.com/about"}],
+ "company_linkedin": "https://www.linkedin.com/company/team-handshake",
+ "contact_source_url": "https://www.joinhandshake.com/about",
+ "notes": "About page (fetched) lists the leadership: CEO Garrett Lord; co-founders Ben Christensen and Scott Ringwelski; President/COO Jonathan Stull; CPO Vee Sahgal; VP People Katie Viamari; CTO Matt Greenberg; CFO Jesse Hulsing. Company LinkedIn (team-handshake) is in the site footer (scraped /contact). No public phone or general email on the site. Personal LinkedIns need search, so they were left blank. This is a large company; the Hubstaff use is probably within a contractor/AI-trainer program."},
+"22": {"company_linkedin": "",
+ "public_email": "",
+ "contact_source_url": "https://www.ovationlawfirm.com/about-us/",
+ "hq_country": "US (200 South San Pedro St, Suite 505, Los Angeles, CA; offices San Bernardino, Fresno, Bakersfield, Lehi UT)",
+ "notes": "About page (fetched) confirms Simon Neman is still Founding Attorney and the phone is (800) 902-5613. The site shows no email and no LinkedIn link (homepage and contact page scraped). Company LinkedIn and public email still not found. COO Mark A. is carried over and not re-checked."},
+"23": {"contacts": [
+  {"name": "Juan Pablo Osorio", "title": "CEO & Co-Founder", "linkedin": "https://www.linkedin.com/in/juan-pablo-osorio-aa4571150/", "source_url": "https://www.alphacomarketing.com/about-us/"},
+  {"name": "Graham Dunlap", "title": "Co-founder", "linkedin": "https://www.linkedin.com/in/graham-dunlap-522b9890/", "source_url": "https://www.alphacomarketing.com/about-us/"},
+  {"name": "Julio Osorio", "title": "Co-Founder", "linkedin": "", "source_url": ""}],
+ "public_email": "contactus@alphacomarketing.com; info@alphacomarketing.com",
+ "contact_source_url": "https://www.alphacomarketing.com/about-us/",
+ "notes": "The About Us page links personal LinkedIns for co-founders Juan Pablo Osorio and Graham Dunlap; both URLs were scraped verbatim from the page. The page says the company was 'founded by three MBA's' but names only those two. Julio Osorio is carried over from input and is not on the page. info@ was also found on the site."},
+"24": {"notes": "Homepage (fetched and scraped) shows only hello@ and careers@kyralabs.ai and says the team spans several countries. No founders, phone or social/LinkedIn links on the site. Finding the decision maker needs search, which was unavailable (budget exhausted), so it is left blank."},
+"25": {"contacts": [],
+ "company_linkedin": "https://www.linkedin.com/company/staffright-llc",
+ "contact_source_url": "https://staffright.breezy.hr/",
+ "notes": "The Breezy careers page (fetched) links the company LinkedIn (linkedin.com/company/staffright-llc) and Facebook. A testimonial mentions the owner/CEO only as 'David' (no surname), so he is not recorded. staffrightcareers.com returns 403. staffright.com is parked/for sale on GoDaddy, so it is not their domain. No phone or email found."},
+"26": {"contacts": [
+  {"name": "Dona Lacdao", "title": "CEO (joined Oct 2022; leads day-to-day ops and the Philippines team)", "linkedin": "", "source_url": "https://www.coconutva.com/about"},
+  {"name": "Tyler Leber", "title": "Co-founder", "linkedin": "https://www.linkedin.com/in/tyler-leber/", "source_url": "https://www.coconutva.com/about"},
+  {"name": "George Munguia", "title": "Co-founder (sales & marketing)", "linkedin": "", "source_url": "https://www.coconutva.com/about"}],
+ "company_linkedin": "https://www.linkedin.com/company/coconutvacommunity/",
+ "contact_source_url": "https://www.coconutva.com/about",
+ "hq_country": "United States (Phoenix, AZ 85016)",
+ "notes": "About page (fetched) confirms CEO 'Dona' and co-founders Tyler Leber, Eric Espinosa and George Munguia. Company LinkedIn (coconutvacommunity) was scraped from the site. No phone on the site. CEO personal LinkedIn not found."},
+"27": {"notes": "Homepage (scraped) confirms info@reworkssolutions.com, tel +1 845-210-6070 and company LinkedIn reworks-solutions. The /about-us/ page returns 404. No second contact found. Moshe Sender is carried over."},
+"28": {"company_phone": "",
+ "contact_source_url": "https://riotters.com/contact",
+ "hq_country": "Poland (Królowej Korony Polskiej 24/315, 70-486 Szczecin; NIP PL8522656985)",
+ "notes": "Contact page (fetched) gives contact@riotters.com, the Szczecin address and VAT ID, but no phone. The site describes a 'flat org culture' and lists no executives (only first names: Daria, Design Team Leader; 'Dawid' takes discovery calls). COO Filip Kubicki is not mentioned on the site and was not re-confirmed. No second contact found."},
+"29": {"contacts": [
+  {"name": "Lucas DiPietrantonio", "title": "Chief Executive Officer", "linkedin": "", "source_url": "https://darkroomagency.com/about"},
+  {"name": "Darragh Rose", "title": "VP, Operations", "linkedin": "", "source_url": "https://darkroomagency.com/about"}],
+ "contact_source_url": "https://darkroomagency.com/about",
+ "notes": "About page (fetched) lists CEO Lucas DiPietrantonio, VP Operations Darragh Rose and SVP Finance Ramy Mahfouz. No phone or email on the site (scraped). Company LinkedIn darkroomagency confirmed in the footer."}
+}

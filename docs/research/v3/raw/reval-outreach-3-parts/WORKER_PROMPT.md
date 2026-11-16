@@ -1,0 +1,16 @@
+You are a research worker re-validating sales prospects for Tavilo (employee time tracking/monitoring SaaS).
+ROOT = /Users/revcloudmac/Desktop/alyson-time-doctor/.claude/worktrees/tavilo-research-v3/docs/research
+1. Read ROOT/v3/AGENT_SPEC.md and follow it exactly (record schema, evidence rules, confidence rubric, contact rules: NEVER guess emails or construct LinkedIn URLs; blank beats wrong).
+2. Load web tools: ToolSearch(query="select:WebSearch,WebFetch", max_results=2).
+3. Your input: ROOT/v3/raw/reval-outreach-3-parts/input-N.json (N given below). Rows from an earlier list; human-label columns. ALL are TheirStack-only "POSSIBLE" priority D — the user says the earlier list may be WRONG; be skeptical.
+4. Output: ROOT/v3/raw/reval-outreach-3-parts/out-N.json — a JSON array, one record per input row, in the AGENT_SPEC schema. REWRITE THE WHOLE FILE after every 3 rows (use python json.dump via Bash or Write). If out-N.json already exists, read it and continue with rows not yet done. Keep ROOT/v3/raw/reval-outreach-3-parts/out-N.progress.md (rows done / left).
+
+For EVERY row:
+a. Re-open the Evidence URL (TheirStack country page) with WebFetch and confirm the company is actually listed for that tool (note employee count shown; jobs count/dates if any). If not listed, say so.
+b. Search for real evidence: site:<domain> "<tool>"; "<company>" "<tool>"; job posts (Indeed, LinkedIn, Workable, OnlineJobs.ph, Rozee, Naukri, Bayt, careers page) mentioning the tool; vendor case studies/testimonials; Glassdoor reviews mentioning it. Record source URL + date. Also search for switching-away evidence / complaints by the company (Reddit/X/G2/Capterra/Trustpilot) — company-identified only.
+c. Check company is alive (fetch website), real, not a vendor/reseller/review site/competitor of Tavilo (e.g. Softprom is a software distributor/reseller -> likely DO_NOT_TARGET; HR-software or monitoring-tool makers -> DO_NOT_TARGET). Get current employee count (LinkedIn snippet, website) with source.
+d. Status fresh per rubric: TheirStack-only with nothing else = POSSIBLE, confidence ~30-50 depending on recency/specificity; a job post explicitly requiring the tool = PROBABLE/CURRENT per date; dead domain = DO_NOT_TARGET. Do not inherit the old status. Name collisions (e.g. "RescueTime", "DeskTime" words) — confirm it's the software.
+e. Outreach: decision maker + second contact (name, title, source_url), personal LinkedIn /in/ URL only if the exact URL appeared in a search result/page and clearly matches; company LinkedIn /company/ URL; phone and public email from company site (contact page/footer/privacy) with contact_source_url. Verify the existing values in the input row; keep only if still valid. In notes, write what you changed vs the input (e.g. "input DM X confirmed via URL; phone changed from A to B; email removed—not found on site").
+f. notes MUST include: "Original priority: <Priority>; Found by: <Found by>; input row <_row>". Also set "estimated_tracked_seats" as an estimate (labelled in notes) and a pitch_angle.
+Budget: about 6-12 tool calls per row; don't get stuck. If a page won't fetch, use the search snippet and say so.
+Finish with a short summary: records written, count by status, # with decision maker / personal LinkedIn / phone / email, best prospects.

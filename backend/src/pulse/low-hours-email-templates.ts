@@ -3,6 +3,7 @@
  * Source design: time doctor email.html
  */
 
+import { taviloEmailLogoImg } from '../common/tavilo-email-brand';
 import { computeEffectiveTime } from '../lib/effective-time';
 import { formatDecimalHours } from './format-hours';
 
@@ -36,7 +37,25 @@ function shortDate(dateKey: string): string {
   });
 }
 
-/** "2026-07" → "July" */
+function holidayDateLabel(dateKey: string): string {
+  return `${dayName(dateKey)}, ${shortDate(dateKey)}`;
+}
+
+function holidaySentence(dates: string[]): string {
+  const labels = [...new Set(dates.map((d) => String(d).slice(0, 10)))]
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort()
+    .map(holidayDateLabel);
+  if (!labels.length) return '';
+  if (labels.length === 1) {
+    return `${labels[0]} was a public holiday, so that day was not required. Time worked that day still counts.`;
+  }
+  const list =
+    labels.length === 2
+      ? `${labels[0]} and ${labels[1]}`
+      : `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
+  return `${list} were public holidays, so those days were not required. Time worked on those days still counts.`;
+}
 function monthNameFromKey(monthKey: string): string {
   const m = String(monthKey || '').trim();
   if (/^\d{4}-\d{2}$/.test(m)) {
@@ -62,7 +81,7 @@ function signerFromAddress(fromEmail: string): string {
   const addr = String(fromEmail || '').toLowerCase();
   if (addr.includes('mohita')) return 'Mohita Yadav';
   if (addr.includes('hamza')) return 'Hamza';
-  return 'Alyson Pulse';
+  return 'Tavilo Time';
 }
 
 export type DayBreakdownRow = {
@@ -71,7 +90,9 @@ export type DayBreakdownRow = {
   nonEffectiveHours: number;
   effectiveHours: number;
   dailyTarget: number;
-  status: 'Behind' | 'On track' | 'Pending';
+  /** Public holiday: the day is not required. Tracked time still shows. */
+  publicHoliday?: boolean;
+  status: 'Behind' | 'On track' | 'Pending' | 'Holiday' | 'Worked';
 };
 
 export type ApprovedPaceEmailInput = {
@@ -105,6 +126,8 @@ export type ApprovedPaceEmailInput = {
   variant?: 'pace' | 'day' | 'week';
   /** Daily effective hours target for salary (default 7). */
   effectiveHoursTarget?: number;
+  /** Public-holiday weekdays already removed from expectedHours. */
+  publicHolidayDays?: number;
 };
 
 function greetingName(input: ApprovedPaceEmailInput): string {
@@ -121,7 +144,13 @@ function buildDayRowsHtml(rows: DayBreakdownRow[], multiWeek: boolean): string {
         ? `${dayName(row.date)}, ${shortDate(row.date)}`
         : dayName(row.date);
       const statusColor =
-        row.status === 'Behind' ? '#dc2626' : row.status === 'On track' ? '#15803d' : '#6b7280';
+        row.status === 'Behind'
+          ? '#dc2626'
+          : row.status === 'On track' || row.status === 'Worked'
+            ? '#15803d'
+            : row.status === 'Holiday'
+              ? '#1d4ed8'
+              : '#6b7280';
       const nonEffColor = row.nonEffectiveHours > 0 ? '#dc2626' : '#6b7280';
       return `
                   <tr style="background-color:${bg};">
@@ -129,20 +158,20 @@ function buildDayRowsHtml(rows: DayBreakdownRow[], multiWeek: boolean): string {
                       ${escapeHtml(dayLabel)}
                     </td>
                     <td align="right" style="padding:12px 10px; border-bottom:1px solid #e5e7eb;
-                                             font-size:13px; font-weight:700;">
+                                             font-size:13px; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(row.trackedHours))}
                     </td>
                     <td align="right" style="padding:12px 10px; border-bottom:1px solid #e5e7eb;
-                                             font-size:13px; color:${nonEffColor};">
+                                             font-size:13px; color:${nonEffColor}; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(row.nonEffectiveHours))}
                     </td>
                     <td align="right" style="padding:12px 10px; border-bottom:1px solid #e5e7eb;
-                                             font-size:13px; font-weight:700;">
+                                             font-size:13px; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(row.effectiveHours))}
                     </td>
                     <td align="right" style="padding:12px 10px; border-bottom:1px solid #e5e7eb;
-                                             font-size:13px;">
-                      ${escapeHtml(hoursLabel(row.dailyTarget))}
+                                             font-size:13px; white-space:nowrap;">
+                      ${escapeHtml(row.publicHoliday ? 'Holiday' : hoursLabel(row.dailyTarget))}
                     </td>
                     <td align="center" style="padding:12px 10px; border-bottom:1px solid #e5e7eb;
                                               font-size:12px; color:${statusColor}; font-weight:700;">
@@ -184,19 +213,19 @@ function buildDayRowsHtml(rows: DayBreakdownRow[], multiWeek: boolean): string {
                       Period Total
                     </td>
                     <td align="right" style="padding:13px 10px; font-size:13px;
-                                             color:#1e3a8a; font-weight:700;">
+                                             color:#1e3a8a; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(totalTracked))}
                     </td>
                     <td align="right" style="padding:13px 10px; font-size:13px;
-                                             color:#dc2626; font-weight:700;">
+                                             color:#dc2626; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(totalNonEff))}
                     </td>
                     <td align="right" style="padding:13px 10px; font-size:13px;
-                                             color:#15803d; font-weight:700;">
+                                             color:#15803d; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(totalEffective))}
                     </td>
                     <td align="right" style="padding:13px 10px; font-size:13px;
-                                             color:#1e3a8a; font-weight:700;">
+                                             color:#1e3a8a; font-weight:700; white-space:nowrap;">
                       ${escapeHtml(hoursLabel(totalTarget))}
                     </td>
                     <td align="center" style="padding:13px 10px; font-size:12px;
@@ -230,6 +259,24 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
     input.effectiveHoursTarget > 0
       ? input.effectiveHoursTarget
       : DAILY_EFFECTIVE_TARGET_HOURS;
+  const publicHolidayDays = Math.max(0, Math.round(Number(input.publicHolidayDays) || 0));
+  const holidayDates = input.dayRows
+    .filter((row) => row.publicHoliday)
+    .map((row) => row.date);
+  const holidayHoursWorked = input.dayRows
+    .filter((row) => row.publicHoliday)
+    .reduce((sum, row) => sum + (Number(row.trackedHours) || 0), 0);
+  const holidayBase =
+    holidaySentence(holidayDates) ||
+    (publicHolidayDays > 0
+      ? publicHolidayDays === 1
+        ? 'One day in this period was a public holiday, so that day was not required. Time worked that day still counts.'
+        : `${publicHolidayDays} days in this period were public holidays, so those days were not required. Time worked on those days still counts.`
+      : '');
+  const holidayNote =
+    holidayBase && holidayHoursWorked >= 0.05
+      ? `${holidayBase} You worked ${hoursLabel(holidayHoursWorked)} on ${holidayDates.length > 1 ? 'those holidays' : 'the holiday'}, and it is included in your hours above.`
+      : holidayBase;
   const missing = hoursLabel(input.hoursRemaining);
   const behind = input.paceDelta < 0;
   const goalWindow = isDay ? 'this day' : isWeek ? 'this week' : 'this month';
@@ -293,14 +340,27 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
 
           <!-- Header -->
           <tr>
-            <td style="background-color:#173b67; padding:24px 30px;">
-              <h1 style="margin:0; color:#ffffff; font-size:22px; line-height:30px; font-weight:700;">
-                ${escapeHtml(headerTitle)}
-              </h1>
-
-              <p style="margin:6px 0 0; color:#dbeafe; font-size:14px; line-height:20px;">
-                Alyson Pulse working-hours summary · ${escapeHtml(periodLabel)}
-              </p>
+            <td style="background-color:#173b67; padding:18px 28px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td valign="middle" style="padding:0;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding:0;">${taviloEmailLogoImg(56)}</td>
+                        <td style="padding-left:10px; font-size:15px; line-height:18px; font-weight:700; color:#ffffff; letter-spacing:-0.02em;">Tavilo Time</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="middle" align="right" style="padding:0 0 0 16px;">
+                    <p style="margin:0; color:#ffffff; font-size:18px; line-height:24px; font-weight:700;">
+                      ${escapeHtml(headerTitle)}
+                    </p>
+                    <p style="margin:3px 0 0; color:#dbeafe; font-size:13px; line-height:18px;">
+                      ${escapeHtml(periodLabel)}
+                    </p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
@@ -357,6 +417,16 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
                     ${escapeHtml(hoursLabel(input.expectedHours))}
                   </td>
                 </tr>
+                ${
+                  holidayNote
+                    ? `<tr style="background-color:#eff6ff;">
+                  <td colspan="2" style="padding:13px 15px; border-bottom:1px solid #e5e7eb;
+                                         font-size:13px; line-height:20px; color:#1e3a8a;">
+                    ${escapeHtml(holidayNote)}
+                  </td>
+                </tr>`
+                    : ''
+                }
 
                 ${
                   isDay
@@ -491,7 +561,7 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
                     </p>
 
                     <p style="margin:0; font-size:13px; line-height:21px; color:#1e40af;">
-                      This is an automated report, and occasional discrepancies may occur (for example, the desktop timer includes live in-progress time before every session is fully synced). Approved leave is credited automatically into these hours when logged in Alyson Pulse Leave (or via people-ops inbox scan). We generally work 8 hours a day. Payroll uses effective working hours (total tracked minus non-effective). Non-effective time combines idle and low-activity time. To be eligible for full salary, at least ${escapeHtml(hoursLabel(effectiveTarget))} of effective time is required each work day — anything below that can affect salary. Low activity during meeting times is also not considered and will not count.
+                      This is an automated report, and occasional discrepancies may occur (for example, the desktop timer includes live in-progress time before every session is fully synced). Approved personal leave is credited into these hours. A public holiday is not a credit: it lowers required hours for that team, and time worked on the holiday still counts. We generally work 8 hours a day. Payroll uses effective working hours (total tracked minus non-effective). Non-effective time combines idle and low-activity time. To be eligible for full salary, at least ${escapeHtml(hoursLabel(effectiveTarget))} of effective time is required each required work day — a public holiday is not a required day. Low activity during meeting times is also not considered and will not count.
                     </p>
                   </td>
                 </tr>
@@ -513,7 +583,7 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
             <td align="center" style="background-color:#f9fafb; padding:18px 25px;
                                       border-top:1px solid #e5e7eb;">
               <p style="margin:0; color:#6b7280; font-size:12px; line-height:18px;">
-                This email was generated automatically using Alyson Pulse tracking data.
+                This email was generated automatically using Tavilo Time tracking data.
               </p>
             </td>
           </tr>
@@ -537,6 +607,7 @@ export function buildApprovedPaceEmail(input: ApprovedPaceEmailInput): {
         ? `Weekly hours target: ${hoursLabel(input.expectedHours)}`
         : `Target (MTD, Week ${input.weekIndex} × ${formatDecimalHours(PACE_WEEKLY_HOURS, { emptyLabel: '0 hours' })}): ${hoursLabel(input.expectedHours)}`,
     ...(isDay ? [`Daily effective hours target: ${hoursLabel(effectiveTarget)}`] : []),
+    ...(holidayNote ? [holidayNote] : []),
     `Total tracked: ${hoursLabel(input.hoursWorked)}`,
     `Non-effective: ${hoursLabel(input.nonEffectiveHours)}`,
     `Effective: ${hoursLabel(input.effectiveHours)}`,
@@ -558,6 +629,8 @@ export function buildPaceEmailMetrics(opts: {
   dailyIdle: Map<string, number>;
   expectedHours: number;
   todayKey: string;
+  /** Weekdays that are public holidays for this employee. */
+  holidayDays?: Iterable<string>;
   /**
    * Per-day Eff. Target shown in the breakdown (default 7h).
    * Day status uses effective hours vs this target.
@@ -582,6 +655,7 @@ export function buildPaceEmailMetrics(opts: {
     opts.dailyTarget != null && Number.isFinite(opts.dailyTarget) && opts.dailyTarget > 0
       ? opts.dailyTarget
       : PACE_DAILY_HOURS;
+  const holidayDays = new Set(opts.holidayDays || []);
 
   let hoursWorked = 0;
   let nonEffectiveHours = 0;
@@ -596,9 +670,13 @@ export function buildPaceEmailMetrics(opts: {
     hoursWorked += tracked;
     nonEffectiveHours += eff.non_effective_hours;
     effectiveHours += eff.effective_hours;
+    const publicHoliday = holidayDays.has(date);
 
     let status: DayBreakdownRow['status'] = 'Pending';
-    if (date < opts.todayKey) {
+    if (publicHoliday) {
+      status = tracked > 0 ? 'Worked' : 'Holiday';
+      if (tracked > 0) completedHours.push(tracked);
+    } else if (date < opts.todayKey) {
       status = eff.effective_hours + 0.05 >= dailyTarget ? 'On track' : 'Behind';
       completedHours.push(tracked);
     } else if (date === opts.todayKey) {
@@ -616,7 +694,8 @@ export function buildPaceEmailMetrics(opts: {
       trackedHours: tracked,
       nonEffectiveHours: eff.non_effective_hours,
       effectiveHours: eff.effective_hours,
-      dailyTarget,
+      dailyTarget: publicHoliday ? 0 : dailyTarget,
+      publicHoliday,
       status,
     };
   });

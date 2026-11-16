@@ -29,9 +29,19 @@ async function getBackfillService(): Promise<ScreenshotAiBackfillService> {
   return backfill;
 }
 
-/** EventBridge cron: claim pending screenshots and enqueue to SQS. */
-export const handler: Handler = async () => {
+/**
+ * EventBridge cron claims the historical backlog.
+ * A manual invoke with `{ sinceMinutes }` only re-queues screenshots from that window.
+ */
+export const handler: Handler = async (event?: { sinceMinutes?: number; limit?: number }) => {
   const service = await getBackfillService();
+  const sinceMinutes = Number(event?.sinceMinutes);
+  if (Number.isFinite(sinceMinutes) && sinceMinutes > 0) {
+    const start = new Date(Date.now() - sinceMinutes * 60_000).toISOString();
+    const limit = Math.max(1, Math.min(Number(event?.limit) || 200, 500));
+    const result = await service.requeueSince(start, limit);
+    return { ok: true, mode: 'recent', start, ...result };
+  }
   const result = await service.enqueuePending();
   return { ok: true, ...result };
 };

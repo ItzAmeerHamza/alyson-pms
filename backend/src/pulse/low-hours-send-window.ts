@@ -27,6 +27,37 @@ function requireDate(value: string | null | undefined, label: string): string {
   return key;
 }
 
+/**
+ * Required hours after public holidays.
+ * A week email is prorated to the days in the message, then each holiday
+ * weekday drops one day's hours. Pace keeps the MTD checkpoint (weeks × 35)
+ * and drops 7 hours per holiday weekday. A holiday day itself is not required.
+ */
+export function targetAfterPublicHolidays(opts: {
+  period: LowHoursSendPeriod;
+  windowExpectedHours: number;
+  dayKeys: string[];
+  holidayDays: Iterable<string>;
+}): { expectedHours: number; holidayDays: string[] } {
+  const holidaySet = new Set(opts.holidayDays);
+  const weekdays = opts.dayKeys.filter((day) => isWeekdayKey(day));
+  const inWindow = weekdays.filter((day) => holidaySet.has(day));
+  if (opts.period === 'day') {
+    return {
+      expectedHours: inWindow.length ? 0 : opts.windowExpectedHours,
+      holidayDays: inWindow,
+    };
+  }
+  const hoursPerDay = opts.period === 'pace' ? 7 : opts.windowExpectedHours / 5;
+  const base =
+    opts.period === 'pace' ? opts.windowExpectedHours : weekdays.length * hoursPerDay;
+  const expectedHours = Math.max(
+    0,
+    Math.round((base - inWindow.length * hoursPerDay) * 10) / 10,
+  );
+  return { expectedHours, holidayDays: inWindow };
+}
+
 export function isWeekdayKey(dateKey: string): boolean {
   const [y, m, d] = String(dateKey || '')
     .split('-')

@@ -139,7 +139,9 @@ describe('PacingService.sendPacingDigest', () => {
     expect(payload.attachments).toHaveLength(1);
     expect(payload.attachments[0].filename).toBe('weekly-pacing-2026-08-10.csv');
     expect(payload.attachments[0].content).toContain('Ben');
-    expect(payload.attachments[0].content).toContain('10.00');
+    // Hours use the same "10 hours" labels as the email body.
+    expect(payload.attachments[0].content).toContain('10 hours');
+    expect(payload.attachments[0].content).toContain('Holiday hours worked');
   });
 
   it('surfaces SES failure as a generic send error', async () => {

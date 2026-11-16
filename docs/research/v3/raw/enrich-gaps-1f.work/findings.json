@@ -1,0 +1,687 @@
+{
+ "0": {
+  "contacts": [
+   {
+    "name": "Ruchir Ranjan",
+    "title": "Chief Executive Officer (since Nov 2025)",
+    "linkedin": "https://www.linkedin.com/in/ruchir-ranjan-178711/",
+    "source_url": "https://simplifyhealthcare.com/news-and-events/news/2025-11-21-simplify-healthcare-announces-leadership-transition-ruchir-ranjan-named-chief-executive-officer/"
+   },
+   {
+    "name": "Mohammed Vaid",
+    "title": "Founder, Executive Chair & Chief Solution Architect",
+    "linkedin": "https://www.linkedin.com/in/mohammed-vaid-7643669b/",
+    "source_url": "https://simplifyhealthcare.com/about-us/leadership-team/"
+   }
+  ],
+  "notes": "Still in role: Ruchir Ranjan named CEO 2025-11-21 (company press release); Mohammed Vaid moved to Executive Chair. CEO LinkedIn = search result 'Ruchir Ranjan - Wheaton, Illinois' (press release says he is based in Wheaton, IL) - match by name+location. Vaid LinkedIn = search result 'Mohammed Vaid - Aurora, Illinois' (Chicago-area, matches company). Company LinkedIn/phone/email unchanged from input."
+ },
+ "1": {
+  "contacts": [
+   {
+    "name": "Chris Sloane",
+    "title": "President & Founder",
+    "linkedin": "",
+    "source_url": "https://theorg.com/org/heaviside-group"
+   },
+   {
+    "name": "Shannon Conway",
+    "title": "Director of Operations",
+    "linkedin": "https://www.linkedin.com/in/shannonaconway/",
+    "source_url": "https://www.linkedin.com/in/shannonaconway/"
+   }
+  ],
+  "company_phone": "(513) 334-3004; (800) 273-2176; Heaviside Digital (800) 711-9359",
+  "public_email": "info@heavisidegroup.com",
+  "contact_source_url": "https://heavisidegroup.com/terms-of-service",
+  "notes": "Chris Sloane still President & Founder (theorg; heaviside.digital names him founder). No personal LinkedIn for Chris found (site:linkedin.com/in search returned only other Chris Sloanes). Second contact Shannon Conway: LinkedIn search result title 'Shannon Conway - Director Of Operations - Heaviside Group'. info@ email and 800 number from company Terms of Service page; Digital brand number from heaviside.digital."
+ },
+ "2": {
+  "contacts": [
+   {
+    "name": "George Arkin",
+    "title": "CEO / Founder",
+    "linkedin": "",
+    "source_url": "https://nexusautotransport.com/about-us/"
+   },
+   {
+    "name": "Agnis Arins",
+    "title": "Chief Technology Officer",
+    "linkedin": "",
+    "source_url": "https://nexusautotransport.com/team/"
+   }
+  ],
+  "notes": "George Arkin still CEO per company About page (fetched). No LinkedIn profile for him found (site:linkedin.com/in search returned no match). Second contact Agnis Arins (CTO) from company team page as shown in search snippet (page itself 404 on fetch). Phone/email unchanged."
+ },
+ "3": {
+  "contacts": [
+   {
+    "name": "Rob Bertholf",
+    "title": "Founder & CEO, Bertholf Ventures LLC",
+    "linkedin": "https://www.linkedin.com/in/bertholf/",
+    "source_url": "https://www.crunchbase.com/person/rob-bertholf"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "rob@bertholf.com",
+  "contact_source_url": "https://www.crunchbase.com/organization/bertholf-ventures",
+  "hq_country": "United States (San Diego, CA - 11835 Carmel Mountain Rd Ste 1304-226)",
+  "notes": "Rob Bertholf still Founder/CEO (LinkedIn title 'Rob Bertholf - Bertholf Ventures, LLC'; Crunchbase). Solo operator - no second contact found. bertholfventures.com refused connection on fetch; rob.bertholf.com shows only 'A new home is taking shape' (2026) - company may be winding down/rebuilding, verify. rob@bertholf.com appears in search snippets of public profile listings (not built from pattern) - unverified on own site. Phone left blank: listings give two different numbers ((415) 871-0504 and (808) 542-6033) and own site unavailable. No company LinkedIn page found."
+ },
+ "4": {
+  "contacts": [
+   {
+    "name": "Marko Gabud",
+    "title": "CEO & co-founder (Board member)",
+    "linkedin": "https://www.linkedin.com/in/markogabud/",
+    "source_url": "https://4ofthem.eu/impressum/"
+   },
+   {
+    "name": "Robert Šinko",
+    "title": "CEO & co-founder (Board member)",
+    "linkedin": "https://www.linkedin.com/in/robertsinko/",
+    "source_url": "https://4ofthem.eu/impressum/"
+   },
+   {
+    "name": "Jan Meister",
+    "title": "President of the Board",
+    "linkedin": "",
+    "source_url": "https://4ofthem.eu/impressum/"
+   }
+  ],
+  "public_email": "info@4ofthem.eu",
+  "contact_source_url": "https://4ofthem.eu/impressum/",
+  "hq_country": "Croatia (Ulica bana Josipa Jelačića 19, 10290 Zaprešić)",
+  "notes": "Impressum (fetched) lists board: Jan Meister (president), Marko Gabud, Robert Drago Šinko, Petar Gabud - both existing contacts still in role. Site has only a contact form, no phone. info@4ofthem.eu from search snippet describing the company site (not pattern-built) - not seen on fetched pages; verify. Company phone not found."
+ },
+ "5": {
+  "contacts": [
+   {
+    "name": "Tarek Alhussayni",
+    "title": "Chief Executive Officer",
+    "linkedin": "https://www.linkedin.com/in/tarek-alhussayni-517a65aa/",
+    "source_url": ""
+   }
+  ],
+  "company_domain": "cepco-sa.com",
+  "company_phone": "+966 920002536 (central/hotline); Riyadh 011 460 0803; Dammam 012 663 4331; Dubai +971 4 5846855",
+  "public_email": "cepco@cepco-sa.com; info@cepco-sa.com",
+  "contact_source_url": "https://cepco-sa.com/contact/",
+  "hq_country": "Saudi Arabia (Jeddah head office; offices Riyadh, Dammam, Dubai, Cairo)",
+  "notes": "Input domain cepco.com.sa does not resolve; live company site is cepco-sa.com. Phone and both emails from the fetched contact page; Riyadh/Dammam/Dubai numbers from a search snippet of the same site. About page names no executives, so CEO Tarek Alhussayni carried over from input (in-role not re-confirmed: web search budget ran out before a check). No second contact found."
+ },
+ "6": {
+  "contacts": [
+   {
+    "name": "Taavi Madiberk",
+    "title": "Co-Founder & Chief Executive Officer",
+    "linkedin": "https://www.linkedin.com/in/madiberk/",
+    "source_url": "https://www.skeletontech.com/about"
+   },
+   {
+    "name": "Timo Koljonen",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.skeletontech.com/about"
+   },
+   {
+    "name": "Patricia Godel",
+    "title": "Head of Grant Financing (Toggl story interviewee)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_phone": "+372 622 9370 (Estonia); +49 1627265432 (Germany)",
+  "contact_source_url": "https://www.skeletontech.com/about",
+  "notes": "Replaced the decision maker: the input contact (Patricia Godel, Head of Grant Financing) is not an exec. The company About page (fetched) lists CEO Taavi Madiberk and COO Timo Koljonen, plus CTO Linus Froböse and CFO Margus Vals. Madiberk's LinkedIn (linkedin.com/in/madiberk) appeared in search: headline 'Frankenburg Technologies', with the Skeleton co-founder role described. He also runs Frankenburg, but Skeleton's site still lists him as CEO. Godel's in-role status was not re-checked. No LinkedIn found for the COO."
+ },
+ "7": {
+  "contacts": [
+   {
+    "name": "Tad Selby",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/tad-selby-a05a866/",
+    "source_url": "https://www.linkedin.com/in/tad-selby-a05a866/"
+   },
+   {
+    "name": "Bryan Knott",
+    "title": "VP, Automation Division (North America contact)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/npsgglobal",
+  "company_phone": "+1 (678) 273-3324",
+  "contact_source_url": "https://npsgglobal.com/",
+  "hq_country": "United States (1850 Parkway Place Ste 500, Marietta, GA 30067)",
+  "notes": "Tad Selby: the LinkedIn search result title 'Tad Selby - NPSG Global' confirms he is still there (CEO). Company LinkedIn npsgglobal found in search (11.9k followers, Marietta GA). Homepage (fetched) confirms the phone and info@ email. Bryan Knott is carried over from input; his LinkedIn was not found because the search budget ran out."
+ },
+ "8": {
+  "contacts": [
+   {
+    "name": "Ziv Ofek",
+    "title": "Founder",
+    "linkedin": "https://www.linkedin.com/in/zivofek/",
+    "source_url": ""
+   },
+   {
+    "name": "Dana Arditi",
+    "title": "Customer service & account manager (interviewee)",
+    "linkedin": "https://www.linkedin.com/in/dana-arditi-09740857/",
+    "source_url": ""
+   }
+  ],
+  "company_phone": "",
+  "contact_source_url": "https://www.mdclone.com/contact-us",
+  "hq_country": "Israel (Energy 77, Be'er-Sheva 8410402)",
+  "notes": "The contact page (fetched) gives only communications@mdclone.com, no phone. Phone numbers seen in a search snippet ((508) 405-1562; +972-54-4791265) come from data-broker aggregation and one is a mobile, so they were left out. Phone still not found on the company's own pages. Contacts carried over; in-role not re-checked."
+ },
+ "9": {
+  "contacts": [
+   {
+    "name": "Mike Diamond",
+    "title": "Co-Founder & Director of Curriculum Development",
+    "linkedin": "",
+    "source_url": "https://focustutoring.com/apex-team/"
+   },
+   {
+    "name": "Fatma Xhafa",
+    "title": "Director of Operations",
+    "linkedin": "https://www.linkedin.com/in/fatma-x-79446114b/",
+    "source_url": "https://focustutoring.com/apex-team/"
+   }
+  ],
+  "notes": "Team page (fetched) lists co-founder Mike Diamond as the top leader and Fatma Xhafa, now Director of Operations (was Engagement Manager), so both are current. A search snippet named a 'Ben Miller' as CEO (data broker) but it was not confirmed and is not included. No LinkedIn found for Mike Diamond."
+ },
+ "10": {
+  "contacts": [
+   {
+    "name": "Olivier Novasque",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://fr.wikipedia.org/wiki/Sidetrade"
+   },
+   {
+    "name": "Hesham Zaki",
+    "title": "Global VP of Projects (Toggl story contact)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "hq_country": "France (Boulogne-Billancourt); US office Houston, TX",
+  "notes": "Added the founder, Olivier Novasque (French Wikipedia), as the top contact. sidetrade.com returns 403 to both fetch and curl, so its contact page, phone, email and LinkedIn could not be read. Hesham Zaki is carried over; his in-role status was not checked because the web search budget ran out. Company LinkedIn, phone and email were not found."
+ },
+ "11": {
+  "contacts": [
+   {
+    "name": "Tania Treiss",
+    "title": "Co-Owner & Principal",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Susanne Heim",
+    "title": "Co-Owner & Principal",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_phone": "(650) 373-1200; (650) 373-1211",
+  "public_email": "info@panoramaenv.com",
+  "contact_source_url": "https://www.panoramaenv.com/",
+  "hq_country": "US (717 Market Street, Suite 400, San Francisco, CA 94103)",
+  "notes": "Homepage (fetched) says Panorama Environmental has joined Spheros Environmental. The site says the team and leadership stay the same, but buying decisions may now sit with Spheros. Check before outreach. Phone numbers and the email (decoded from a Cloudflare-protected mailto) come from the homepage footer. The About page returned HTTP 500, so the principals could not be re-confirmed. No personal LinkedIn found."
+ },
+ "12": {
+  "contacts": [
+   {
+    "name": "Marta Kephart",
+    "title": "President + CEO",
+    "linkedin": "",
+    "source_url": "https://ranacohabitat.com/about"
+   },
+   {
+    "name": "Paul Kephart",
+    "title": "Founder, Principal Ecologist + Designer",
+    "linkedin": "",
+    "source_url": "https://ranacohabitat.com/about"
+   }
+  ],
+  "contact_source_url": "https://ranacohabitat.com/about",
+  "hq_country": "US (27875 Berwick Drive, Carmel-by-the-Sea, CA 93923; offices San Francisco, Los Angeles)",
+  "notes": "About page (fetched) confirms Marta Kephart is still President + CEO. Added founder Paul Kephart as second contact. Matt Yurus (Principal Landscape Architect) is also listed. The site has no phone or email, and /contact returns 404. No personal LinkedIn found."
+ },
+ "13": {
+  "contacts": [
+   {
+    "name": "James A. (Jim) Evans",
+    "title": "CEO & Founder",
+    "linkedin": "https://www.linkedin.com/in/jim-evans-65983318",
+    "source_url": "https://sevan.com/leadership/"
+   },
+   {
+    "name": "Aaron Becker, CFA",
+    "title": "President & Chief Operations Officer",
+    "linkedin": "https://www.linkedin.com/in/aaron-becker-cfa/",
+    "source_url": "https://sevan.com/leadership/"
+   },
+   {
+    "name": "Chris Galazka",
+    "title": "Chief People Officer",
+    "linkedin": "https://www.linkedin.com/in/chris-galazka",
+    "source_url": "https://sevan.com/leadership/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sevan-multi-site-solutions",
+  "company_phone": "+1 312.756.7778",
+  "public_email": "",
+  "contact_source_url": "https://sevan.com/",
+  "hq_country": "United States (3025 Highland Parkway, Suite 850, Downers Grove, IL 60515)",
+  "notes": "Leadership page (fetched) confirms Jim Evans is still CEO & Founder and links personal LinkedIns for each leader. The input's second contact, John Schneider (VP Finance & Risk), is no longer on the leadership page; replaced with President/COO Aaron Becker and Chief People Officer Chris Galazka. Phone and company LinkedIn from the homepage. No public email on the site."
+ },
+ "14": {
+  "notes": "Homepage (fetched) shows only hello@freedup.life. No phone, LinkedIn links or team names. Co-founders Aaron Hayslip and Scott Frazier are carried over; their in-role status was not re-checked because the search budget ran out. Company LinkedIn and personal LinkedIns not found."
+ },
+ "15": {
+  "public_email": "support.coordinator@chelsongordon.com",
+  "contact_source_url": "https://chelsongordon.com/contact/",
+  "notes": "Contact page (scraped) lists support.coordinator@chelsongordon.com and phones +61 499 994 530, +66 62 174 4994, +91 7980490067 and +91 9903918416, matching the input. No LinkedIn links on the site; company and personal LinkedIn not found. Contacts are carried over and were not re-checked."
+ },
+ "16": {
+  "contacts": [
+   {
+    "name": "Ross Edward Davies",
+    "title": "Director (sole officer since 2012-04-11)",
+    "linkedin": "",
+    "source_url": "https://find-and-update.company-information.service.gov.uk/company/08025198/officers"
+   }
+  ],
+  "hq_country": "United Kingdom (Unit D, Acorn Business Park, Ling Road, Poole, Dorset BH12 4NZ)",
+  "contact_source_url": "https://find-and-update.company-information.service.gov.uk/company/08025198",
+  "notes": "Companies House: KOIN LIMITED (08025198) is active. Ross Edward Davies is the only officer (director since 2012) and still in role. koinlimited.co.uk shows only 'Big changes are coming...'. The Koin Club shop (thekoinclub.com) offers live chat only, with no phone or email in its policies. worldchallengecoins.com refused connection. No phone, public email or personal LinkedIn found; no second officer exists."
+ },
+ "17": {
+  "notes": "WARNING: bokdoc.com has no DNS records (no A or NS) as of 2026-10-05, though WHOIS shows it registered until 2027-08 (GoDaddy). The website is offline, so the company may be inactive. Verify before outreach; DO_NOT_TARGET is not set because it is unconfirmed. Founder/CEO Dr. Ahmed Elawady is carried over and was not re-checked because the search budget ran out. No phone, email or second contact found."
+ },
+ "18": {
+  "contacts": [
+   {
+    "name": "Anil K. Motwani",
+    "title": "Partner (registered agent of Tractic Marketing LLC)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "contact_source_url": "https://buzzdigitalagency.com/about-us/",
+  "hq_country": "US (1535 West Loop S. Ste 450, Houston, TX 77027)",
+  "notes": "About page (fetched) confirms info@buzzdigitalagency.com, (888) 234-5100 and the Houston address, but names no people. Motwani is carried over and not re-checked. No second contact or personal LinkedIn found."
+ },
+ "19": {
+  "contacts": [
+   {
+    "name": "Marlon Lockyear",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://genghisdigital.com.au/"
+   }
+  ],
+  "company_phone": "+61 8 7665 9888",
+  "public_email": "info@genghisdigital.com.au",
+  "contact_source_url": "https://genghisdigital.com.au/",
+  "hq_country": "Australia (Perth)",
+  "notes": "Homepage (fetched and scraped) names 'Marlon' as Founder and gives phone tel:+61876659888 and info@ email. The site has no LinkedIn links, and no company or personal LinkedIn was found. No other team members are named."
+ },
+ "20": {
+  "contacts": [
+   {
+    "name": "Andy Ly",
+    "title": "Founder",
+    "linkedin": "https://www.linkedin.com/in/andy-ly-7471101aa/",
+    "source_url": "https://www.lypadacademy.com/"
+   }
+  ],
+  "notes": "Homepage (fetched and scraped) confirms Andy Ly is still founder and gives inquiries@lypadacademy.com. No phone, address, LinkedIn links or other team members on the site. Company LinkedIn and phone not found; no second contact."
+ },
+ "21": {
+  "contacts": [
+   {
+    "name": "Garrett Lord",
+    "title": "Co-Founder & CEO",
+    "linkedin": "",
+    "source_url": "https://www.joinhandshake.com/about"
+   },
+   {
+    "name": "Jonathan Stull",
+    "title": "President and Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.joinhandshake.com/about"
+   },
+   {
+    "name": "Katie Viamari",
+    "title": "VP, People & Talent",
+    "linkedin": "",
+    "source_url": "https://www.joinhandshake.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/team-handshake",
+  "contact_source_url": "https://www.joinhandshake.com/about",
+  "notes": "About page (fetched) lists the leadership: CEO Garrett Lord; co-founders Ben Christensen and Scott Ringwelski; President/COO Jonathan Stull; CPO Vee Sahgal; VP People Katie Viamari; CTO Matt Greenberg; CFO Jesse Hulsing. Company LinkedIn (team-handshake) is in the site footer (scraped /contact). No public phone or general email on the site. Personal LinkedIns need search, so they were left blank. This is a large company; the Hubstaff use is probably within a contractor/AI-trainer program."
+ },
+ "22": {
+  "company_linkedin": "",
+  "public_email": "",
+  "contact_source_url": "https://www.ovationlawfirm.com/about-us/",
+  "hq_country": "US (200 South San Pedro St, Suite 505, Los Angeles, CA; offices San Bernardino, Fresno, Bakersfield, Lehi UT)",
+  "notes": "About page (fetched) confirms Simon Neman is still Founding Attorney and the phone is (800) 902-5613. The site shows no email and no LinkedIn link (homepage and contact page scraped). Company LinkedIn and public email still not found. COO Mark A. is carried over and not re-checked."
+ },
+ "23": {
+  "contacts": [
+   {
+    "name": "Juan Pablo Osorio",
+    "title": "CEO & Co-Founder",
+    "linkedin": "https://www.linkedin.com/in/juan-pablo-osorio-aa4571150/",
+    "source_url": "https://www.alphacomarketing.com/about-us/"
+   },
+   {
+    "name": "Graham Dunlap",
+    "title": "Co-founder",
+    "linkedin": "https://www.linkedin.com/in/graham-dunlap-522b9890/",
+    "source_url": "https://www.alphacomarketing.com/about-us/"
+   },
+   {
+    "name": "Julio Osorio",
+    "title": "Co-Founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "public_email": "contactus@alphacomarketing.com; info@alphacomarketing.com",
+  "contact_source_url": "https://www.alphacomarketing.com/about-us/",
+  "notes": "The About Us page links personal LinkedIns for co-founders Juan Pablo Osorio and Graham Dunlap; both URLs were scraped verbatim from the page. The page says the company was 'founded by three MBA's' but names only those two. Julio Osorio is carried over from input and is not on the page. info@ was also found on the site."
+ },
+ "24": {
+  "notes": "Homepage (fetched and scraped) shows only hello@ and careers@kyralabs.ai and says the team spans several countries. No founders, phone or social/LinkedIn links on the site. Finding the decision maker needs search, which was unavailable (budget exhausted), so it is left blank."
+ },
+ "25": {
+  "contacts": [],
+  "company_linkedin": "https://www.linkedin.com/company/staffright-llc",
+  "contact_source_url": "https://staffright.breezy.hr/",
+  "notes": "The Breezy careers page (fetched) links the company LinkedIn (linkedin.com/company/staffright-llc) and Facebook. A testimonial mentions the owner/CEO only as 'David' (no surname), so he is not recorded. staffrightcareers.com returns 403. staffright.com is parked/for sale on GoDaddy, so it is not their domain. No phone or email found."
+ },
+ "26": {
+  "contacts": [
+   {
+    "name": "Dona Lacdao",
+    "title": "CEO (joined Oct 2022; leads day-to-day ops and the Philippines team)",
+    "linkedin": "",
+    "source_url": "https://www.coconutva.com/about"
+   },
+   {
+    "name": "Tyler Leber",
+    "title": "Co-founder",
+    "linkedin": "https://www.linkedin.com/in/tyler-leber/",
+    "source_url": "https://www.coconutva.com/about"
+   },
+   {
+    "name": "George Munguia",
+    "title": "Co-founder (sales & marketing)",
+    "linkedin": "",
+    "source_url": "https://www.coconutva.com/about"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/coconutvacommunity/",
+  "contact_source_url": "https://www.coconutva.com/about",
+  "hq_country": "United States (Phoenix, AZ 85016)",
+  "notes": "About page (fetched) confirms CEO 'Dona' and co-founders Tyler Leber, Eric Espinosa and George Munguia. Company LinkedIn (coconutvacommunity) was scraped from the site. No phone on the site. CEO personal LinkedIn not found."
+ },
+ "27": {
+  "notes": "Homepage (scraped) confirms info@reworkssolutions.com, tel +1 845-210-6070 and company LinkedIn reworks-solutions. The /about-us/ page returns 404. No second contact found. Moshe Sender is carried over."
+ },
+ "28": {
+  "company_phone": "",
+  "contact_source_url": "https://riotters.com/contact",
+  "hq_country": "Poland (Królowej Korony Polskiej 24/315, 70-486 Szczecin; NIP PL8522656985)",
+  "notes": "Contact page (fetched) gives contact@riotters.com, the Szczecin address and VAT ID, but no phone. The site describes a 'flat org culture' and lists no executives (only first names: Daria, Design Team Leader; 'Dawid' takes discovery calls). COO Filip Kubicki is not mentioned on the site and was not re-confirmed. No second contact found."
+ },
+ "29": {
+  "contacts": [
+   {
+    "name": "Lucas DiPietrantonio",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://darkroomagency.com/about"
+   },
+   {
+    "name": "Darragh Rose",
+    "title": "VP, Operations",
+    "linkedin": "",
+    "source_url": "https://darkroomagency.com/about"
+   }
+  ],
+  "contact_source_url": "https://darkroomagency.com/about",
+  "notes": "About page (fetched) lists CEO Lucas DiPietrantonio, VP Operations Darragh Rose and SVP Finance Ramy Mahfouz. No phone or email on the site (scraped). Company LinkedIn darkroomagency confirmed in the footer."
+ },
+ "30": {
+  "contacts": [
+   {
+    "name": "Paul Williamson",
+    "title": "CEO & Founder",
+    "linkedin": "",
+    "source_url": "https://www.truelegacyhomes.com/about-us/"
+   },
+   {
+    "name": "Jeff Stordahl",
+    "title": "COO & Founder",
+    "linkedin": "",
+    "source_url": "https://www.truelegacyhomes.com/about-us/"
+   },
+   {
+    "name": "Tanya Vallejo",
+    "title": "Director of HR",
+    "linkedin": "",
+    "source_url": "https://www.truelegacyhomes.com/about-us/"
+   }
+  ],
+  "company_phone": "(619) 450-1702",
+  "public_email": "info@truelegacyhomes.com",
+  "contact_source_url": "https://www.truelegacyhomes.com/",
+  "notes": "About page (fetched) confirms Paul Williamson is still CEO & Founder. It also lists COO & Founder Jeff Stordahl, CSO Ever Eternity, Director of HR Tanya Vallejo and Controller Peter Ohm. Phone tel:6194501702 and info@ email were scraped from the homepage. No LinkedIn links on the site; company and personal LinkedIn not found."
+ },
+ "31": {
+  "contacts": [
+   {
+    "name": "Chris Patrick",
+    "title": "CEO (IILLC, IIBA, III, Inc)",
+    "linkedin": "",
+    "source_url": "https://www.inlandimaging.com/about-us/leadership"
+   },
+   {
+    "name": "Jason Cardon",
+    "title": "Chief Information Officer",
+    "linkedin": "",
+    "source_url": "https://www.inlandimaging.com/about-us/leadership"
+   },
+   {
+    "name": "Shari Yamane",
+    "title": "Chief Human Resources Officer",
+    "linkedin": "",
+    "source_url": "https://www.inlandimaging.com/about-us/leadership"
+   },
+   {
+    "name": "Jennifer Heimbigner",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": "https://www.inlandimaging.com/about-us/leadership"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/inland-imaging/",
+  "company_phone": "+1 509-455-4455; +1 509-747-4455; +1 509-891-0209",
+  "public_email": "",
+  "contact_source_url": "https://www.inlandimaging.com/contact-us",
+  "hq_country": "United States (Spokane, WA)",
+  "notes": "Leadership page (fetched) confirms Chris Patrick is still CEO. Added the CIO, CHRO and COO; Sarah Russell is CEO of the IIPS entity. Phones and company LinkedIn were scraped from the contact page. No general email on the site. Personal LinkedIns not found."
+ },
+ "32": {
+  "company_domain": "platinumcos.com",
+  "contacts": [
+   {
+    "name": "Rich Tuckwell-Skuda",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://toggl.com/customers/platinum-companies"
+   }
+  ],
+  "company_phone": "+1 (615) 277-1100",
+  "public_email": "info@platinumcos.com",
+  "contact_source_url": "https://www.platinumcos.com/",
+  "hq_country": "US (111 Broadway Suite 300, Nashville, TN 37201)",
+  "notes": "The Toggl story links the company site, platinumcos.com, which was missing from input. Its homepage (fetched and scraped) gives the address, info@ email and phone. The site is a single page with no team list or LinkedIn link. The COO comes from the Toggl story and was not re-checked. No second contact or company LinkedIn found."
+ },
+ "33": {
+  "contacts": [
+   {
+    "name": "Mike Rozewicz",
+    "title": "General Manager",
+    "linkedin": "",
+    "source_url": "https://tekna.rebuildmanufacturing.com/about"
+   },
+   {
+    "name": "Mike Nellenbach",
+    "title": "VP of Product Innovation (per Harvest story; not re-confirmed)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_phone": "269-978-3500",
+  "contact_source_url": "https://tekna.rebuildmanufacturing.com/contact",
+  "hq_country": "US (Kalamazoo, MI - 3400 Tech Circle / 3665 Midlink Drive)",
+  "notes": "teknateam.com now redirects to tekna.rebuildmanufacturing.com. The About page says Tekna was acquired by Re:Build Manufacturing in 2022 but still operates as Tekna, so it is not DO_NOT_TARGET, though tool decisions may be made at Re:Build group level. GM Mike Rozewicz is the only named leader. Mike Nellenbach is not on the About page and may have left. Phone and info@teknateam.com are in the contact block."
+ },
+ "34": {
+  "company_domain": "publicarchitecture.ca",
+  "contacts": [
+   {
+    "name": "John Wall",
+    "title": "Principal (founding principal)",
+    "linkedin": "",
+    "source_url": "https://www.publicarchitecture.ca/team"
+   },
+   {
+    "name": "Brian Wakelin",
+    "title": "Principal",
+    "linkedin": "",
+    "source_url": "https://www.publicarchitecture.ca/team"
+   },
+   {
+    "name": "Robert Drew",
+    "title": "Principal",
+    "linkedin": "",
+    "source_url": "https://www.publicarchitecture.ca/team"
+   }
+  ],
+  "public_email": "info@publicarchitecture.ca",
+  "contact_source_url": "https://www.publicarchitecture.ca/",
+  "hq_country": "Canada (Vancouver)",
+  "notes": "publicdesign.ca 301-redirects to publicarchitecture.ca. The team page (scraped) lists John Wall as Principal, so he is still in role, plus principals Brian Wakelin and Robert Drew. The firm publishes each staff member's email on its team page (e.g. JOHN@PUBLICARCHITECTURE.CA, shown verbatim). General email info@publicarchitecture.ca and phone 604 738 4323 are in the site footer. No personal LinkedIn found."
+ },
+ "35": {
+  "contacts": [
+   {
+    "name": "Janna Gilbert",
+    "title": "Partner and CEO",
+    "linkedin": "",
+    "source_url": "https://www.luminary-labs.com/team/"
+   },
+   {
+    "name": "Sara Holoubek",
+    "title": "Founding Partner and Executive Advisory",
+    "linkedin": "",
+    "source_url": "https://www.luminary-labs.com/team/"
+   }
+  ],
+  "contact_source_url": "https://www.luminary-labs.com/",
+  "notes": "Replaced the decision maker: the team page (fetched) shows Janna Gilbert is now Partner and CEO. Sara Holoubek (former CEO & Founder) is now Founding Partner and Executive Advisory. Phone +1 917 265 8375, hello@ email and company LinkedIn were re-confirmed on the homepage. Personal LinkedIns not found."
+ },
+ "36": {
+  "company_domain": "yld.com",
+  "contacts": [],
+  "public_email": "privacy@yld.com",
+  "contact_source_url": "https://www.yld.com/privacy-policy",
+  "hq_country": "UK (1 King's Cross Bridge, London N1 9NW; offices Lisbon, Porto)",
+  "notes": "yld.io redirects to yld.com. The homepage, About Us and privacy policy (fetched or scraped) name no leaders and show no phone. The only email is privacy@yld.com. The company LinkedIn is linkedin.com/company/yld. Finding a decision maker needs search (budget exhausted), so it is left blank."
+ },
+ "37": {
+  "status": "DO_NOT_TARGET",
+  "status_reason": "Company closed: centricdigital.com states 'Centric Digital is no longer active as of 2025. This is a final website archive.'",
+  "contacts": [],
+  "contact_source_url": "https://centricdigital.com/about",
+  "notes": "Site banner (fetched) says the company is no longer active as of 2025. No contacts collected."
+ },
+ "38": {
+  "contacts": [
+   {
+    "name": "Marian Phelan",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://hashrocket.com/team"
+   },
+   {
+    "name": "Diana McCann",
+    "title": "CFO",
+    "linkedin": "",
+    "source_url": "https://hashrocket.com/team"
+   }
+  ],
+  "contact_source_url": "https://hashrocket.com/contact",
+  "notes": "Team page (fetched) lists CEO Marian Phelan, CFO Diana McCann and Director of Software Engineering Ryan Poland. Phone 1-904-339-7047 and company LinkedIn were confirmed on the contact page. No public email on the site (scraped). Personal LinkedIns not found."
+ },
+ "39": {
+  "notes": "salesgeneration.ai (fetched and scraped) is now a single landing page ('The one cold message your buyers actually watch') with no names, phone, email or social links. Combined with the founder's LinkedIn headline now showing Railforge AI, the business may have pivoted or wound down; verify before outreach. Company LinkedIn, phone and email not found. Contacts are carried over."
+ },
+ "40": {
+  "contacts": [
+   {
+    "name": "Ritesh Idnani",
+    "title": "MD & CEO",
+    "linkedin": "",
+    "source_url": "https://www.firstsource.com/about-us/leadership"
+   },
+   {
+    "name": "Sohit Brahmawar",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": "https://www.firstsource.com/about-us/leadership"
+   },
+   {
+    "name": "Shamita Mukherjee",
+    "title": "CHRO",
+    "linkedin": "",
+    "source_url": "https://www.firstsource.com/about-us/leadership"
+   },
+   {
+    "name": "Hasit Trivedi",
+    "title": "Chief Digital & AI Officer",
+    "linkedin": "",
+    "source_url": "https://www.firstsource.com/about-us/leadership"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/firstsource-solutions-limited/",
+  "contact_source_url": "https://www.firstsource.com/contact-us",
+  "hq_country": "India (Corporate office: 9th Floor, Building 4, Candor TechSpace, Sector 48, Gurugram, Haryana 122018)",
+  "notes": "Leadership page (fetched) lists MD & CEO Ritesh Idnani, COO Sohit Brahmawar, CHRO Shamita Mukherjee, CDAIO Hasit Trivedi, CFO Dinesh Jain and CMO Aniket Maindarkar. The contact page uses forms only, with no general phone or email shown. Company LinkedIn comes from the contact page. Large enterprise (16k+ staff, RP-Sanjiv Goenka Group) and a current ProHance customer."
+ },
+ "41": {
+  "notes": "pangeatwo.com returns 403 to both fetch and scrape (bot protection), so contact details could not be read. Search budget is exhausted. Contacts are carried over and not re-checked. Company LinkedIn, phone and email not found."
+ },
+ "42": {
+  "notes": "tristarrjobs.com returns 403 to both fetch and scrape (bot protection), so the site could not be read. Search budget is exhausted. Contacts are carried over and not re-checked. Phone and email not found."
+ },
+ "43": {
+  "notes": "cfstaffing.com returns 403 to both fetch and scrape (bot protection), so the site could not be read. Search budget is exhausted. Contacts are carried over and not re-checked. Company LinkedIn, phone and email not found."
+ },
+ "44": {
+  "contacts": [],
+  "notes": "The only source is an OnlineJobs.ph posting by 'Sourcing Squad HQ' (a remote team of 7 sourcing for two Amazon seller accounts). It gives no website, and the contact email is redacted for logged-out users. sourcingsquadhq.com does not resolve; sourcingsquad.com is an unrelated/parked page. Without web search the business cannot be identified, so all fields are blank. Likely a tiny Amazon-seller operation, low priority."
+ }
+}

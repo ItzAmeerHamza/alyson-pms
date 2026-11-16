@@ -1,0 +1,22 @@
+[
+{"company_name": "Adamick Architecture", "confidence_score": 80, "hq_country": "US (New Orleans, LA)",
+ "contacts": [
+  {"name": "Alec Adamick", "title": "Founder / Architect (AIA, NCARB)", "linkedin": "", "source_url": "https://adamickarchitecture.com/about-us/"},
+  {"name": "Clayton Hakes", "title": "Architect", "linkedin": "", "source_url": "https://adamickarchitecture.com/about-us/"}],
+ "public_email": "", "contact_source_url": "https://adamickarchitecture.com/contact-us",
+ "notes": "Alec Adamick is still listed first on the 'Meet the Makers' page. Clayton Hakes is the only other licensed architect, so he is a weak second contact. The site shows no email (contact form only). Phone 504.322.1220, address 3301 Chippewa St, New Orleans, LA 70115, and LinkedIn page confirmed. Personal LinkedIn not searched (budget exhausted)."},
+{"company_name": "Juicyorange", "confidence_score": 60, "hq_country": "US (New York, NY)",
+ "contacts": [
+  {"name": "Mark Robohm", "title": "Founder", "linkedin": "", "source_url": "https://www.getharvest.com/customers/juicyorange"}],
+ "company_phone": "646.666.9363", "contact_source_url": "https://www.juicyorange.com/contact",
+ "notes": "Phone and address (Juicyorange, LLC, 275 W 39th St 4th Fl, New York, NY 10018) from juicyorange.com/contact. hello@juicyorange.com and the LinkedIn page are confirmed. The site names no team members, so I couldn't confirm Mark Robohm is still in charge or find a second contact; personal LinkedIn not searched."},
+{"company_name": "7shifts", "confidence_score": 40,
+ "contacts": [
+  {"name": "Kelly Bonneau", "title": "Accounting Manager (Everhour testimonial author; not re-verified)", "linkedin": "", "source_url": "https://everhour.com/customers"}],
+ "notes": "7shifts.com returns a Cloudflare challenge to every fetch (about/contact/privacy), so leadership, phone and email could not be read. Search budget exhausted, so nothing was added. FLAG: 7shifts sells restaurant scheduling with a built-in time clock and payroll, which overlaps partly with time tracking. It isn't a direct Tavilo competitor (no activity or screenshot monitoring), so status is left empty, but the coordinator may want to review it."},
+{"company_name": "Pazion", "confidence_score": 70,
+ "contacts": [
+  {"name": "Paul Groeneweg", "title": "Web Developer / Ondernemer (owner) - not re-verified", "linkedin": "", "source_url": "https://everhour.com/customers"}],
+ "public_email": "info@pazion.nl", "contact_source_url": "https://www.pazion.nl/nl/privacybeleid",
+ "notes": "Pazion BV, Nieuwe Kade 18-2, 6827AB Arnhem, NL. info@pazion.nl and 026-3020038 come from the contact page and privacy policy (the email is a mailto link), and the LinkedIn page (linkedin.com/company/pazion-it) is linked from the site. The site names no staff, so I couldn't confirm Paul Groeneweg is still the owner or find a second contact. KvK number not shown."}
+]

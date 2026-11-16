@@ -1,0 +1,13 @@
+[
+{"input_index":70,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; ALPE is a São Paulo B2B credit fintech — no Everhour evidence found.","confidence_score":30,"company_linkedin":"https://www.linkedin.com/company/alpenet"},
+{"input_index":90,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Clyro (Islamabad UI/UX agency, 10-49 staff) — no corroboration found.","confidence_score":35,"workforce_signals":"Offshore Pakistani design agency serving US SaaS clients."},
+{"input_index":118,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; no domain and nothing found.","confidence_score":30},
+{"input_index":149,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Wired Media (Bristol digital agency) — no corroboration.","confidence_score":35,"company_domain":"wiredmedia.co.uk","company_linkedin":"https://uk.linkedin.com/company/wired-media"},
+{"input_index":164,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Iceberg RevOps (Austin HubSpot/Salesforce consultancy) — no corroboration.","confidence_score":35},
+{"input_index":168,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Pixel (Edmonton web agency) — no corroboration.","confidence_score":35,"company_linkedin":"https://ca.linkedin.com/company/pixel-yeg"},
+{"input_index":170,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; site:setsail.ca search found nothing.","confidence_score":35},
+{"input_index":172,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; eeCPA (Scottsdale CPA firm) — no corroboration.","confidence_score":35},
+{"input_index":560,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Fyber Agency (Leeds) shows 2-10 staff on LinkedIn — no corroboration.","confidence_score":30,"company_linkedin":"https://uk.linkedin.com/company/fyber-agency"},
+{"input_index":581,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; Together Films (London/NYC film marketing) — no corroboration.","confidence_score":30,"company_linkedin":"https://www.linkedin.com/company/together-films"},
+{"input_index":583,"status":"POSSIBLE","status_reason":"TheirStack Everhour hit only; WorldLight Media (Fresno CA HubSpot agency; input says Austria) — no corroboration.","confidence_score":30,"company_domain":"worldlightmedia.com"}
+]

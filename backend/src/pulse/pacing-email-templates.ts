@@ -2,6 +2,7 @@
  * HR pacing digest email — one HTML report of selected employees for hamza@.
  */
 
+import { taviloEmailBrandLockup } from '../common/tavilo-email-brand';
 import { formatDecimalHours } from './format-hours';
 
 function escapeHtml(value: unknown): string {
@@ -21,6 +22,34 @@ function fmtPct(n: unknown): string {
   const v = Number(n);
   if (!Number.isFinite(v)) return '—';
   return v.toFixed(2);
+}
+
+function holidayDateLabel(dateKey: string): string {
+  const [y, m, d] = String(dateKey).slice(0, 10).split('-').map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return String(dateKey);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  return dt.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function holidaySentence(dates: string[] | undefined): string {
+  const labels = [...new Set((dates || []).map((d) => String(d).slice(0, 10)))]
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort()
+    .map(holidayDateLabel);
+  if (!labels.length) return '';
+  if (labels.length === 1) {
+    return `${labels[0]} was a public holiday, so that day was not required. Time worked that day still counts.`;
+  }
+  const list =
+    labels.length === 2
+      ? `${labels[0]} and ${labels[1]}`
+      : `${labels.slice(0, -1).join(', ')}, and ${labels[labels.length - 1]}`;
+  return `${list} were public holidays, so those days were not required. Time worked on those days still counts.`;
 }
 
 function statusLabel(status: unknown): string {
@@ -60,6 +89,10 @@ export type PacingDigestRow = {
   remainingWorkDays?: number;
   monthProgressPct?: number;
   status?: string;
+  /** YYYY-MM-DD weekdays that were public holidays for this employee. */
+  holidayDates?: string[];
+  /** Hours tracked on those holidays (already inside the logged / worked hours). */
+  holidayHoursWorked?: number;
 };
 
 export type PacingDigestEmailInput = {
@@ -84,7 +117,7 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
   text: string;
 } {
   const modeLabel = input.mode === 'weekly' ? 'Weekly' : 'Monthly';
-  const subject = `Alyson Pulse · ${modeLabel} pacing · ${input.periodLabel} (${input.rows.length} employees)`;
+  const subject = `Tavilo Time · ${modeLabel} pacing · ${input.periodLabel} (${input.rows.length} employees)`;
 
   const summaryBits = [
     ['Critical', input.summary?.critical],
@@ -131,6 +164,15 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
         `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">
           <div style="font-weight:600;color:#262626;">${escapeHtml(r.name)}</div>
           <div style="font-size:12px;color:#8c8c8c;">${escapeHtml(r.email || '')}</div>
+          ${
+            r.holidayDates?.length
+              ? `<div style="font-size:12px;color:#1d4ed8;margin-top:4px;">${escapeHtml(holidaySentence(r.holidayDates))}</div>`
+              : ''
+          }${
+            Number(r.holidayHoursWorked) > 0
+              ? `<div style="font-size:12px;color:#1d4ed8;margin-top:2px;font-weight:600;">${escapeHtml(holidayWorkSentence(r.holidayHoursWorked))}</div>`
+              : ''
+          }
         </td>`,
         `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">${fmtHours(r.hoursWorkedLogged)}</td>`,
         `<td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;">${fmtHours(r.leaveHoursCredit)}</td>`,
@@ -162,7 +204,7 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:960px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
           <td style="background:#173b67;padding:20px 24px;">
-            <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9fb4d1;">Alyson Pulse</div>
+            ${taviloEmailBrandLockup()}
             <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">${escapeHtml(modeLabel)} pacing report</div>
             <div style="font-size:14px;color:#c5d4e8;margin-top:6px;">${escapeHtml(input.periodLabel)} · Rollup ${escapeHtml(input.rollupDay)}</div>
           </td>
@@ -170,7 +212,10 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
         <tr>
           <td style="padding:20px 24px 8px;">
             <div style="font-size:13px;color:#595959;margin-bottom:12px;">
-              Leave credit ${escapeHtml(fmtHours(input.leaveHoursPerDay))}/weekday · TZ ${escapeHtml(input.timezone)} ·
+              Leave credit ${escapeHtml(fmtHours(input.leaveHoursPerDay))}/weekday is personal leave only ·
+              a public holiday lowers that country's target and is not a credit ·
+              hours worked on a holiday still count ·
+              TZ ${escapeHtml(input.timezone)} ·
               ${escapeHtml(input.rows.length)} employee${input.rows.length === 1 ? '' : 's'} selected
             </div>
             ${summaryBits ? `<div style="margin-bottom:8px;">${summaryBits}</div>` : ''}
@@ -186,7 +231,7 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
         </tr>
         <tr>
           <td style="padding:16px 24px;background:#fafafa;border-top:1px solid #f0f0f0;font-size:12px;color:#8c8c8c;">
-            Sent from Alyson Pulse · CSV attached with the same rows · hours include leave credit · Δ = projected − target
+            Sent from Tavilo Time · CSV attached with the same rows · personal leave is a credit · a public holiday lowers the target · Δ = projected − target
           </td>
         </tr>
       </table>
@@ -198,15 +243,20 @@ export function buildPacingDigestEmail(input: PacingDigestEmailInput): {
   const textLines = [
     `${modeLabel} pacing · ${input.periodLabel}`,
     `Rollup ${input.rollupDay} · TZ ${input.timezone}`,
-    'CSV attachment includes the full table.',
+    'Personal leave is a credit. A public holiday lowers the target. Hours worked on a holiday still count.',
     '',
     ...input.rows.map(
       (r) =>
-        `${r.name}: worked ${fmtHours(r.hoursWorked)} / target ${fmtHours(r.targetHours)} · projected ${fmtHours(r.projectedPace)} · Δ ${fmtHours(r.paceDelta)} · ${statusLabel(r.status)}`,
+        `${r.name}: worked ${fmtHours(r.hoursWorked)} / target ${fmtHours(r.targetHours)} · projected ${fmtHours(r.projectedPace)} · Δ ${fmtHours(r.paceDelta)} · ${statusLabel(r.status)}${r.holidayDates?.length ? ` · ${holidaySentence(r.holidayDates)}` : ''}${Number(r.holidayHoursWorked) > 0 ? ` · ${holidayWorkSentence(r.holidayHoursWorked)}` : ''}`,
     ),
   ];
 
   return { subject, html, text: textLines.join('\n') };
+}
+
+/** "Worked 6 hours 29 min on the holiday (included in Worked)." */
+function holidayWorkSentence(hours: unknown): string {
+  return `Worked ${fmtHours(hours)} on public holidays (already included in Worked).`;
 }
 
 function csvEscape(value: unknown): string {
@@ -223,6 +273,8 @@ export function buildPacingDigestCsv(
   const headers = [
     'Name',
     'Email',
+    'Holiday',
+    'Holiday hours worked',
     'Logged',
     'Leave credit',
     'Worked',
@@ -239,6 +291,8 @@ export function buildPacingDigestCsv(
     const cols = [
       csvEscape(r.name),
       csvEscape(r.email || ''),
+      csvEscape(r.holidayDates?.length ? holidaySentence(r.holidayDates) : ''),
+      csvEscape(r.holidayDates?.length ? fmtHours(r.holidayHoursWorked ?? 0) : ''),
       csvEscape(fmtHours(r.hoursWorkedLogged)),
       csvEscape(fmtHours(r.leaveHoursCredit)),
       csvEscape(fmtHours(r.hoursWorked)),

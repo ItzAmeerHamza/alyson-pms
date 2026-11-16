@@ -1,0 +1,443 @@
+URL: https://hubstaff.com/customers/mr-digital
+TITLE: Mr Digital is Going Global with Hubstaff
+META: <meta name="description" content="Discover how Mr Digital has transitioned to remote work, reduced check-in time by 10%, and more with Hubstaff.">
+META: <meta property="og:title" content="Mr Digital is Going Global with Hubstaff">
+META: <meta property="og:description" content="Mr Digital is Going Global with Hubstaff">
+META: <meta name="twitter:description" content="Discover how Mr Digital has transitioned to remote work, reduced check-in time by 10%, and more with Hubstaff.">
+----
+Mr Digital is Going Global with Hubstaff ` from breaking out. Applies to all three render blocks below. Sibling sites: hsds-page-hub.vue, hsds-faq.vue. --> 
+ Product 
+ Time tracking 
+ Productivity monitoring 
+ Workforce analytics 
+ Payments and costs 
+ Integrations 
+ Download the apps 
+ Time tracking software Time tracking software for teams across devices.
+ Automated timesheets 
+ Automatically turn tracked time into accurate timesheets. 
+ Time reports 
+ Detailed time reports that help you improve business processes. 
+ Project and task tracking 
+ Track time across projects, tasks, and team activities. 
+ GPS time tracking 
+ Create job sites that automatically clock teams in and out. 
+ Attendance tracking 
+ Track attendance, shifts, and clock-ins across your team. 
+ Time-off and leave management 
+ Track time off, holidays, and team availability. 
+ See all features 
+ Productivity monitoring software See how work time is spent – without micromanagement.
+ Employee monitoring 
+ Clear visibility into work activity – built for transparency. 
+ Employee activity tracking 
+ Track activity levels to understand work patterns. 
+ Time tracking with screenshots 
+ Add screenshots to tracked time for context. 
+ Idle time tracking 
+ Identify idle time and understand productivity gaps. 
+ App and URL usage 
+ See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software Turn work data into operational insights and decisions.
+ Advanced insights 
+ See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance 
+ Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning 
+ Plan team workloads and prevent resource bottlenecks. 
+ Reporting 
+ Analyze work data with detailed operational reports. 
+ AI Unusual activity tracking 
+ Detect unusual activity patterns in tracked work data. 
+ AI-ready workforce data 
+ Query, analyze, and understand work data with AI tools and agents. 
+ Workforce intelligence software 
+ Combine work data and AI for automated insights. 
+ Time tracking API 
+ Build custom time tracking into your own product. 
+ See all features 
+ Global payments Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting 
+ Track project costs based on tracked work hours. 
+ Invoicing and billing 
+ Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker 
+ Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations. Hubstaff syncs with the apps you’re already using.
+ Jira 
+ Slack 
+ Wise 
+ Deel 
+ Asana 
+ Google Calendar 
+ Trello 
+ GitHub 
+ ClickUp 
+ Zendesk 
+ Quickbooks 
+ Monday 
+ Paypal 
+ Gusto 
+ Salesforce 
+ See all integrations 
+ See it in action Maximize productivity with time tracking you can trust. Get started 
+ Solutions 
+ By industry 
+ Agencies 
+ Manage campaigns, billable hours, client budgets, project budgets, and more. 
+ Software development 
+ Reach milestones sooner with workload management and time tracking features. 
+ Consulting 
+ Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all solutions 
+ By workforce 
+ Remote 
+ Manage remote teams of any size, anywhere. 
+ In-office 
+ Simplify attendance, scheduling, and payroll for on-site teams. 
+ Field 
+ Track time with geofencing and manage projects in real-time. 
+ Enterprise 
+ Scale operations with enterprise-grade features, compliance, and support. 
+ By outsourcing type 
+ BPO 
+ Boost efficiency and client satisfaction with targeted time tracking and productivity insights. 
+ Virtual assistant services 
+ Enhance task organization and productivity with time tracking and workload management. 
+ Call centers (CX) 
+ Elevate customer experience with streamlined employee management and performance metrics. 
+ Customer stories Affordable Staff saved $4.2M over 12 years with Hubstaff. Explore our customer stories 
+ Resources 
+ Learn 
+ What Hubstaff tracks 
+ Delivering transparency, control, and access to every member of the team. 
+ Guiding principles 
+ Discover more about Hubstaff's employee experience values and policies. 
+ Help center 
+ Hubstaff time tracking support articles and walkthrough videos. 
+ FAQ 
+ Check out our frequently asked questions. 
+ Discover 
+ Resources 
+ Explore guides, tools, and practical team resources. 
+ Blog 
+ Explore the latest on productivity, product news, tips, and more. 
+ Customer stories 
+ Discover the experiences of our valued customers through their stories. 
+ Reviews 
+ See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales 
+ Connect with our sales team to explore tailored solutions for your business needs. 
+ Partners 
+ Join us in shaping a brighter future for the global workforce. 
+ Careers 👋 Hiring 
+ Explore exciting opportunities to join our amazing team. 
+ Featured resource Ready to see how your team stacks up? Read our NEW 2026 Global Work Report. Download now 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Sign in 
+ Product 
+ Time tracking software Time tracking software for teams across devices.
+ Automated timesheets 
+ Automatically turn tracked time into accurate timesheets. 
+ Time reports 
+ Detailed time reports that help you improve business processes. 
+ Project and task tracking 
+ Track time across projects, tasks, and team activities. 
+ GPS time tracking 
+ Create job sites that automatically clock teams in and out. 
+ Attendance tracking 
+ Track attendance, shifts, and clock-ins across your team. 
+ Time-off and leave management 
+ Track time off, holidays, and team availability. 
+ See all features 
+ Productivity monitoring software See how work time is spent – without micromanagement.
+ Employee monitoring 
+ Clear visibility into work activity – built for transparency. 
+ Employee activity tracking 
+ Track activity levels to understand work patterns. 
+ Time tracking with screenshots 
+ Add screenshots to tracked time for context. 
+ Idle time tracking 
+ Identify idle time and understand productivity gaps. 
+ App and URL usage 
+ See which apps and websites teams use during work. 
+ See all features 
+ Workforce analytics software Turn work data into operational insights and decisions.
+ Advanced insights 
+ See productivity benchmarks and compare team performance. 
+ Remote vs in-office performance 
+ Analyze productivity across remote, hybrid, and office teams. 
+ Capacity planning 
+ Plan team workloads and prevent resource bottlenecks. 
+ Reporting 
+ Analyze work data with detailed operational reports. 
+ AI Unusual activity tracking 
+ Detect unusual activity patterns in tracked work data. 
+ AI-ready workforce data 
+ Query, analyze, and understand work data with AI tools and agents. 
+ Workforce intelligence software 
+ Combine work data and AI for automated insights. 
+ Time tracking API 
+ Build custom time tracking into your own product. 
+ See all features 
+ Global payments Turn tracked hours into project costs, invoices, and payments.
+ Project cost budgeting 
+ Track project costs based on tracked work hours. 
+ Invoicing and billing 
+ Turn tracked hours into accurate invoices and billing. 
+ Overtime tracker 
+ Apply overtime rules when teams exceed work thresholds. 
+ See all features 
+ Connect Hubstaff with your favorite tools 
+ 35+ integrations. Hubstaff syncs with the apps you’re already using.
+ Jira 
+ Slack 
+ Wise 
+ Deel 
+ Asana 
+ Google Calendar 
+ Trello 
+ GitHub 
+ ClickUp 
+ Zendesk 
+ Quickbooks 
+ Monday 
+ Paypal 
+ Gusto 
+ Salesforce 
+ See all integrations 
+ Solutions 
+ By industry 
+ Agencies 
+ Manage campaigns, billable hours, client budgets, project budgets, and more. 
+ Software development 
+ Reach milestones sooner with workload management and time tracking features. 
+ Consulting 
+ Monitor project timelines, track billable hours, and streamline invoicing. 
+ See all solutions 
+ By workforce 
+ Remote 
+ Manage remote teams of any size, anywhere. 
+ In-office 
+ Simplify attendance, scheduling, and payroll for on-site teams. 
+ Field 
+ Track time with geofencing and manage projects in real-time. 
+ Enterprise 
+ Scale operations with enterprise-grade features, compliance, and support. 
+ By outsourcing type 
+ BPO 
+ Boost efficiency and client satisfaction with targeted time tracking and productivity insights. 
+ Virtual assistant services 
+ Enhance task organization and productivity with time tracking and workload management. 
+ Call centers (CX) 
+ Elevate customer experience with streamlined employee management and performance metrics. 
+ Resources 
+ Learn 
+ What Hubstaff tracks 
+ Delivering transparency, control, and access to every member of the team. 
+ Guiding principles 
+ Discover more about Hubstaff's employee experience values and policies. 
+ Help center 
+ Hubstaff time tracking support articles and walkthrough videos. 
+ FAQ 
+ Check out our frequently asked questions. 
+ Discover 
+ Resources 
+ Explore guides, tools, and practical team resources. 
+ Blog 
+ Explore the latest on productivity, product news, tips, and more. 
+ Customer stories 
+ Discover the experiences of our valued customers through their stories. 
+ Reviews 
+ See what our customers are saying about Hubstaff. 
+ Connect 
+ Contact sales 
+ Connect with our sales team to explore tailored solutions for your business needs. 
+ Partners 
+ Join us in shaping a brighter future for the global workforce. 
+ Careers 👋 Hiring 
+ Explore exciting opportunities to join our amazing team. 
+ See pricing 
+ Get a demo 
+ Try it free 
+ Sign in 
+ Hubstaff Creates the Confidence for Mr Digital to Go Global 
+ Industry
+ Digital Marketing Agency
+ Employees
+ 16
+ Employees using Hubstaff
+ 16 (Everyone)
+ Hubstaff
+ Users since 2018
+ In this case study 
+ The path for Mr Digital 
+ Reducing check-in time by 10% without quality loss 
+ Hubstaff serves as a positive motivator 
+ Understanding profitability 
+ Try Hubstaff for 14 days
+ No credit card required
+ Start my free trial 
+ Key outcomes
+ Reduced check-in meeting time by 10%
+ Increased activity level by 10% through incentive program
+ Improved profitability analysis through tracking time to projects
+ Confidence to run a fully remote, global operation
+ The path for Mr Digital
+ Building a business is tough, especially when you’re growing from a team of one to an agency of 15 across multiple countries. But that’s just what Mr Digital’s managing director Ross Crawford did in 2018. After two years of running a solo operation, he began this global journey with a new office in India while staying in the UK, choosing Hubstaff as his time tracking solution.
+ “I knew there was a lot of talent in India, particularly in web development. After traveling a bit, I decided to set up our company in India to expand my service offering and meet clients’ growing needs,” says Crawford.
+ When the 2020 pandemic hit, and offices closed, Hubstaff was a core partner that helped Mr Digital keep operations running smoothly. Learning that his team preferred to work from home and was performing during the pandemic, the shift to remote work has become permanent for Mr Digital.
+ “Without Hubstaff, I wouldn’t be confident in running a remote business. We used the platform from the first day we opened the office in India, so I knew it would give me the insights and confidence to commit to remote working.”
+ Reducing check-in time by 10% without quality loss
+ Running a successful international brand requires using your time effectively and efficiently. In most cases, that means fewer meetings and faster internal support. This is one area where Mr Digital finds Hubstaff to be a reliable partner.
+ “Eliminating unnecessary things is where Hubstaff saves us a lot of time. We’ve probably reduced meeting time by 10% as we can check in and see how progress is being made without interrupting people’s work.”
+ To support that, the company utilizes Hubstaff tracking elements such as screenshots for training opportunities.
+ “Sometimes we give a team member a task that is new to them or something we know they will need support with,” says Crawford. “Then, we check in throughout the day to see how they are getting on by looking at the screenshots. It usually indicates where they are with the task, whether the project is on track, and if they need help.”
+ As managers embrace remote work, these efforts provide clear digital alternatives to the traditional desk drive-by or popping your head in someone’s office. Only here, there’s less interruption if the team member is succeeding with the new responsibility. 
+ Hubstaff serves as a positive motivator
+ The future of workforce management lies in motivating teams to succeed and continually achieve reach goals. Instead of tracking time to ensure people are simply on task, leaders are approaching tools like Hubstaff to provide positive motivation and honest feedback on work being done.
+ Mr Digital relied on Hubstaff to help establish the baseline of company performance and then reward those who stepped up and improved work and efficiency. Hubstaff made it easy to look at the historical performance of different staff members and roles so that the company could ensure evaluations and rewards were fair.
+ And then, Hubstaff’s metrics were applied as a direct measure for company incentives.
+ “We offered a monetary bonus to team members who achieve at least a 50% activity level in Hubstaff. We saw a big performance increase after that, so we will increase that goal to 55% in January for people who complete at least eight hours of tracked time.”
+ Mr Digital saw activity levels increase an average of 10% during the first four months of this incentive program.
+ Understanding profitability
+ Beyond individual team member support, Hubstaff can help brands like Mr Digital look at the health of their organization. Typically, this happens at the project level, where time and resources impact profitability most.
+ The depth of our data and availability of dashboards and reporting offer this insight and allow companies to manage it at their own pace.
+ “Hubstaff helps us understand the profitability of projects as the time is tracked against them. That’s a huge value."
+ We don’t use this analysis regularly. But about twice a year, we’ll look back and review which projects made the best profit. Then we review why they did, as well as which weren’t as profitable and why. That enables us to make improvements to our overall business operations. "
+ Hubstaff’s Insights platform offers data-driven business intelligence for brands like Mr Digital, and we’re confident it can do the same for you. If you’d like to understand profitability, improve tracking, and motivate your workforce through accurate reporting, our team is here to help.
+ Click the button below to get your custom demo and see how you can go global, just like Mr Digital.
+ See the difference Hubstaff can make.
+ Discover how productivity metrics, time tracking, and other Hubstaff features can help your remote team reach new heights. 
+ Try Hubstaff free for 14 days 
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Product & platform 
+ Time tracking software 
+ Productivity monitoring 
+ Workforce analytics 
+ Global payments 
+ See all features 
+ Solutions by industry 
+ See all integrations 
+ How Hubstaff works 
+ What Hubstaff tracks 
+ Compare Hubstaff with 
+ Toggl 
+ Clockify 
+ Insightful 
+ Apploye 
+ ActivTrak 
+ Time Doctor 
+ Desktime 
+ See all comparisons 
+ Company 
+ About us 
+ Guiding principles 
+ Reviews 
+ Press 
+ Partners 
+ Product roadmap 
+ Careers 
+ 👋 Hiring 
+ Resources 
+ Resource hub 
+ Time tracking resources 
+ Productivity monitoring resources 
+ Workforce analytics resources 
+ Global payments resources 
+ Hubstaff ROI calculator 
+ Hubstaff buy-in guide 
+ FAQ 
+ Customer stories 
+ Blog 
+ Get Hubstaff 
+ Download Hubstaff 
+ Mac time tracker 
+ Linux time tracker 
+ Windows time tracker 
+ Chrome time tracking 
+ Android time tracker 
+ iOS time tracker 
+ Firefox time tracking 
+ Connect with us 
+ Help center 
+ Sign in 
+ See pricing 
+ 😎 Free trial 
+ Get a demo 
+ Contact us 
+ Hubstaff is a time tracking platform that turns work hours into insights with productivity monitoring and automated payments.
+ Ready to get started?
+ Use your work email to sign up and see how it works for your team.
+ Create account 
+ Connect
+ GDPR 
+ SOC 2 Type II 
+ HIPAA 
+ LGPD and CCPA 
+ Trust center 
+ Terms 
+ Privacy 
+ Your privacy choices 
+ Copyright © 2026 Netsoft Holdings, LLC 
+ All systems normal

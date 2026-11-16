@@ -60,6 +60,23 @@ export class ScreenshotAiBackfillService {
     return { reenqueued, claimed: rows.length, enqueued, resetProcessing };
   }
 
+  /** Re-queue only screenshots captured since `startDate`. Leaves the older backlog alone. */
+  async requeueSince(
+    startDate: string,
+    limit: number,
+  ): Promise<{ enqueued: number }> {
+    if (!this.queue.isEnabled()) {
+      this.logger.debug('AI pipeline disabled — skip recent requeue');
+      return { enqueued: 0 };
+    }
+    const rows = await this.repo.requeueRecent(startDate, limit);
+    const enqueued = await this.queue.enqueueMany(
+      rows.map((row) => this.analyzer.buildJob(row, 'backfill')),
+    );
+    this.logger.log(`Re-queued ${enqueued} screenshots captured since ${startDate}`);
+    return { enqueued };
+  }
+
   async enqueueAfterUpload(row: {
     id: string;
     user_id: number;

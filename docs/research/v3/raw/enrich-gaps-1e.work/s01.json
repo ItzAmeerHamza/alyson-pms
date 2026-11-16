@@ -1,0 +1,30 @@
+[
+{"company_name": "Kainjoo", "company_domain": "kainjoo.com", "vendor": "Everhour", "confidence_score": 85,
+ "employee_count": "11-50 (Crunchbase); input had 501-1K vendor band", "hq_country": "Switzerland",
+ "contacts": [
+  {"name": "Haider Alleg", "title": "Founder, President of the Board & Managing Director", "linkedin": "https://www.linkedin.com/in/haideralleg/", "source_url": "https://kainjoo.com/about-kainjoo/the-kj-group/kainjoo-leadership/"},
+  {"name": "Jean-Philippe Kunz", "title": "Partner (Kainjoo .life)", "linkedin": "", "source_url": "https://www.crunchbase.com/person/jean-philippe-kunz"}
+ ],
+ "company_linkedin": "https://linkedin.com/company/kainjoo", "company_phone": "+41 21 561 34 96; US +1 201 241 2711; Japan +81 120-974-670",
+ "public_email": "info@kainjoo.com; us@kainjoo.com; jp@kainjoo.com", "contact_source_url": "https://kainjoo.com/contact",
+ "notes": "Still in role: Haider Alleg is listed on the official leadership page as Founder & President of the Board (with the same LinkedIn URL); company news says he returned as Managing Director. Second contact Jean-Philippe Kunz: Partner at Kainjoo per Crunchbase and search results; no verbatim /in/ URL found (only a posts URL), so LinkedIn left blank. Emails and extra phones are from the official contact page. The leadership page names no Executive Committee members."},
+{"company_name": "MSL Engineering Ltd.", "company_domain": "mslengineering.ie", "vendor": "Jibble", "confidence_score": 85,
+ "employee_count": "223-400 (various; LinkedIn band 51-200)", "hq_country": "Ireland",
+ "contacts": [
+  {"name": "Brian McGrath", "title": "Managing Director", "linkedin": "https://www.linkedin.com/in/brian-mcgrath-3724b214b/", "source_url": "https://www.mslengineering.ie/our-leadership-team/"},
+  {"name": "Orla McGrath", "title": "HR Director", "linkedin": "", "source_url": "https://www.mslengineering.ie/our-leadership-team/"},
+  {"name": "Leonard Cronin", "title": "Operations Director", "linkedin": "", "source_url": "https://www.mslengineering.ie/our-leadership-team/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/msl-engineering-ltd-", "company_phone": "+353 21 451 3550",
+ "public_email": "info@mslengineering.ie", "contact_source_url": "https://www.mslengineering.ie/contact/",
+ "notes": "Still in role: Brian McGrath is still MD per the leadership page (seen in search snippets; the site returns 403 to fetch). His LinkedIn URL appeared in a search result titled 'Brian McGrath - Managing Director - MSL Engineering Ltd.'. Leadership page snippets also name Orla McGrath (HR Director since 2024), Leonard Cronin (Operations Director), Kevin O'Sullivan (Commercial Director), Dave Ronan (Projects Director), Conor McGrath (Production Director) and Maurice McGrath (Chairman). Company LinkedIn page is from a site:linkedin.com/company search (Cork, mechanical engineering contractor)."},
+{"company_name": "Fastr", "company_domain": "getfastr.com", "vendor": "Everhour", "confidence_score": 70,
+ "employee_count": "89 (TheirStack)", "hq_country": "United States (Boston, MA)",
+ "contacts": [
+  {"name": "John Murdock", "title": "CEO (since Feb 2024)", "linkedin": "https://www.linkedin.com/in/johnmurdock/", "source_url": "https://getfastr.com/news/fastr-appoints-new-ceo-john-murdock"},
+  {"name": "Ryan Breen", "title": "CTO", "linkedin": "", "source_url": "https://www.crunchbase.com/person/ryan-breen-95d7"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/get-fastr", "company_phone": "", "public_email": "",
+ "contact_source_url": "https://getfastr.com/contact",
+ "notes": "Domain was missing. Identified as Fastr (getfastr.com), an e-commerce frontend SaaS in Boston. This is the most likely match for the TheirStack 'Fastr' US software company with 89 staff, but the name is generic, so verify the Everhour signal matches this entity. John Murdock was named CEO in Feb 2024 (company press release). His LinkedIn URL appeared in a search result titled 'John Murdock - Fastr'. Founder Luhui Yan, per search summary. Address 320 Congress St Fl 5, Boston MA 02210 (from ZoomInfo snippet). The contact page shows a form only, with no public phone or email."}
+]

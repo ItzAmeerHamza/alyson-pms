@@ -1,0 +1,37 @@
+[
+{"company_name": "Solverminds", "confidence_score": 90,
+ "contacts": [
+  {"name": "Anthony Damian", "title": "Founder & Director", "linkedin": "", "source_url": "https://www.solverminds.com/about"},
+  {"name": "Mohit Oberoi", "title": "Founder & Director", "linkedin": "", "source_url": "https://www.solverminds.com/about"},
+  {"name": "Capt. Ritesh Sood", "title": "Director & Co-founder; MD Solverminds Singapore", "linkedin": "", "source_url": "https://www.solverminds.com/about"}],
+ "notes": "Anthony Damian (ProHance testimonial author) is still listed as Founder & Director on solverminds.com/about. Added co-founders Mohit Oberoi and Capt. Ritesh Sood. Personal LinkedIn URLs not linked on the site and not searched (budget exhausted). Existing LinkedIn page, phone (044 4202 0233) and enquiry@solverminds.com confirmed on the about page."},
+{"company_name": "SMV Software Solutions", "confidence_score": 25,
+ "contacts": [
+  {"name": "Dr. Sankar Venkat", "title": "General Manager (ProHance testimonial)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"}],
+ "notes": "No company domain in the input and none can be identified without a web search (budget exhausted), so LinkedIn, phone and email are blank. Contact is from the ProHance testimonials page only; still-in-role not verified."},
+{"company_name": "Stellarix Consultancy Services", "confidence_score": 60,
+ "contacts": [
+  {"name": "Ramraj Kumhar", "title": "Senior IT Administrator (ProHance testimonial)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"}],
+ "notes": "stellarix.com about-us and /leadership pages list no named leaders (only '250+ consulting minds'). The existing contact is an IT admin, not a decision maker; the CEO/founder needs a search (budget exhausted). Existing company LinkedIn (linkedin.com/company/stellarix), phone +91-141-4920704 and sales@stellarix.com confirmed in the site footer; HQ Atlantis Tower, Plot D-232/233, Jaipur."},
+{"company_name": "Metromax", "confidence_score": 10,
+ "contacts": [],
+ "notes": "ProHance case study only says 'a logistics conglomerate managing tech-driven companies' - no website, location or people. Without a web search (budget exhausted) the company can't be identified with confidence, so everything is blank."},
+{"company_name": "Texila American University", "confidence_score": 85,
+ "contacts": [
+  {"name": "S.P. Saju Bhaskar", "title": "Founder and President", "linkedin": "", "source_url": "https://tauedu.org/about-us/"},
+  {"name": "Vivek Kishore Verma", "title": "Group CEO - Texila American University Consortium", "linkedin": "", "source_url": "https://tauedu.org/about-us/"},
+  {"name": "Syam Kumar", "title": "Chief Executive Officer", "linkedin": "", "source_url": "https://tauedu.org/about-us/"},
+  {"name": "Sivakumar", "title": "CPO (ProHance testimonial author)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"}],
+ "company_linkedin": "https://www.linkedin.com/company/texilaguyana/", "company_phone": "+91 7397718369 (WhatsApp, general enquiries)", "public_email": "",
+ "contact_source_url": "https://tauedu.org/contact-us/",
+ "notes": "Leadership from tauedu.org/about-us (also lists EVP Chithra Lakshmi, Vice Chancellor Prof. Ajay Kumar Poddar, CAO Guyana Dr. Dheeraj Bansal). The ProHance user is likely the India office (ELCOT IT Tower, Coimbatore). Contact page has only a WhatsApp number and forms - no email. Campuses: Guyana, Zambia; offices in India, Mauritius, Plano TX."},
+{"company_name": "University of the People", "confidence_score": 90,
+ "contacts": [
+  {"name": "Shai Reshef", "title": "President", "linkedin": "", "source_url": "https://www.uopeople.edu/about/leadership/administration/"},
+  {"name": "Anand Natarajan", "title": "SVP, India Operations", "linkedin": "", "source_url": "https://www.uopeople.edu/about/leadership/administration/"},
+  {"name": "Erika Roegies", "title": "Chief Operating Officer", "linkedin": "", "source_url": "https://www.uopeople.edu/about/leadership/administration/"},
+  {"name": "Anat Mogilevsky", "title": "VP, HR", "linkedin": "", "source_url": "https://www.uopeople.edu/about/leadership/administration/"}],
+ "company_linkedin": "https://www.linkedin.com/school/university-of-the-people/", "company_phone": "+1 (626) 264-8880", "public_email": "info@uopeople.edu",
+ "contact_source_url": "https://www.uopeople.edu/contact-us/",
+ "notes": "The ProHance testimonial author Asha Rao (Associate HR Director) is NOT on the current administration page, so she was replaced. ProHance is most likely used by the India operations team, so SVP India Operations Anand Natarajan is the best entry point alongside the COO and VP HR. Phone is a recorded-message line. Partnerships email partnerships@uopeople.edu also listed. Addresses: 595 E Colorado Blvd Suite 623, Pasadena CA 91101; 221 West 10th St, Wilmington DE."}
+]

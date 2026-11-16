@@ -6,23 +6,23 @@ import {
   resolveAdjustmentDeltaSeconds,
 } from './time-adjustment.util';
 
-describe('holiday leave top-up', () => {
-  it('fills up to the 7h holiday floor when they work less', () => {
-    expect(leaveTopUpHours(2, 7)).toBe(5);
-    expect(dayHoursWithLeaveTopUp({ trackedHours: 2, leaveCreditHours: 7 })).toBe(7);
+describe('leave credit plus adjustments', () => {
+  it('adds the full leave credit on top of tracked time', () => {
+    expect(leaveTopUpHours(2, 7)).toBe(7);
+    expect(dayHoursWithLeaveTopUp({ trackedHours: 2, leaveCreditHours: 7 })).toBe(9);
   });
 
-  it('keeps extra tracked hours above the holiday floor', () => {
-    expect(leaveTopUpHours(9, 7)).toBe(0);
-    expect(dayHoursWithLeaveTopUp({ trackedHours: 9, leaveCreditHours: 7 })).toBe(9);
+  it('keeps tracked time when it is already above the leave credit', () => {
+    expect(leaveTopUpHours(9, 7)).toBe(7);
+    expect(dayHoursWithLeaveTopUp({ trackedHours: 9, leaveCreditHours: 7 })).toBe(16);
   });
 
-  it('still applies non-leave adjustments on top of the floor', () => {
+  it('adds manual adjustments on top of tracked time and leave', () => {
     expect(
       dayHoursWithLeaveTopUp({
-        trackedHours: 9,
+        trackedHours: 1,
         leaveCreditHours: 7,
-        otherAdjustmentHours: 1,
+        otherAdjustmentHours: 2,
       }),
     ).toBe(10);
   });

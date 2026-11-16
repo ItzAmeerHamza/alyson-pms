@@ -1,0 +1,45 @@
+[
+{"company_name": "CoreMind AI", "confidence_score": 70,
+ "contacts": [],
+ "notes": "Could not identify the company. The onlinejobs.ph ad (re-fetched) says only 'CoreMind AI', direct hire reporting to the owner, US PST hours, 'Time Tracking: Time Doctor'; no website, owner name or contact. Searches for 'CoreMind AI' return unrelated entities (NVIDIA-CoreMind GitHub IDE, a crypto token coremindai.tech, CoreMind AI Solutions in British Columbia, CoreMind LLC Mongolia), none tied to truck dispatch, so nothing recorded. All contact fields left blank."},
+{"company_name": "Heluna Health", "confidence_score": 90,
+ "contacts": [
+  {"name": "Christine Sow, PhD", "title": "President & CEO (effective 2026-01-20)", "linkedin": "https://www.linkedin.com/in/christine-sow-12186b15/", "source_url": "https://helunahealth.org/news/heluna-health-appoints-dr-christine-sow-as-president-and-ceo/"},
+  {"name": "Tim Seifert, JD", "title": "Chief Human Resources Officer", "linkedin": "", "source_url": "https://helunahealth.org/impact-report-2024/"},
+  {"name": "Brian Gieseler, MBA", "title": "Chief Financial Officer", "linkedin": "", "source_url": "https://helunahealth.org/impact-report-2024/"}
+ ],
+ "company_phone": "(800) 201-7320", "public_email": "hello@helunahealth.org", "contact_source_url": "https://www.helunahealth.org/contact/",
+ "employee_count": "1k (one 2026 listing says ~497)",
+ "notes": "REPLACED decision maker: Peter Dale was only interim CEO; Dr. Christine Sow became President & CEO on 2026-01-20 (Heluna press release). The LinkedIn URL for her (christine-sow-12186b15, headline 'Heluna Health') came verbatim from a search result. CHRO and CFO names come from the 2024 Impact Report via search snippet and were not re-checked for 2026. Phone and email are from the contact page; HQ is 13300 Crossroads Pkwy North, Suite 450, City of Industry, CA 91746."},
+{"company_name": "Launch Web Design", "company_domain": "launchweb.com.au", "confidence_score": 100,
+ "contacts": [
+  {"name": "Thomas Unsworth", "title": "Founder", "linkedin": "https://www.linkedin.com/in/t-unsworth/", "source_url": "https://launchweb.com.au/about/"}
+ ],
+ "company_phone": "0435 600 480 (text)", "public_email": "contact@launchweb.com.au", "contact_source_url": "https://launchweb.com.au/",
+ "hq_country": "Australia (Gold Coast, QLD)",
+ "notes": "Thomas Unsworth is still the founder and works with every client directly, per the About page. His LinkedIn URL (t-unsworth, 'Founder of Launch Web Design') came verbatim from search results. The site's pages came back empty through WebFetch, so the email and text-only phone number come from a search snippet of launchweb.com.au. It is a one-person studio, so there is no second contact, and no company LinkedIn page was found."},
+{"company_name": "Power Digital Marketing", "confidence_score": 95,
+ "contacts": [
+  {"name": "Jeff Mason", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/jeff-mason-8619958/", "source_url": "https://powerdigitalmarketing.com/meet-our-leadership-team/"},
+  {"name": "John Taumoepeau", "title": "Chief Operating Officer", "linkedin": "", "source_url": "https://powerdigitalmarketing.com/meet-our-leadership-team/"},
+  {"name": "Julie Zubak", "title": "Chief People Officer", "linkedin": "", "source_url": "https://powerdigitalmarketing.com/meet-our-leadership-team/"},
+  {"name": "Grayson Lafrenz", "title": "Founder & Chairman", "linkedin": "https://www.linkedin.com/in/graysonlafrenz/", "source_url": "https://powerdigitalmarketing.com/meet-our-leadership-team/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/powerdigitalmarketing/", "company_phone": "(619) 501-1211", "public_email": "", "contact_source_url": "https://www.bbb.org/us/ca/san-diego/profile/digital-marketing/power-digital-marketing-1126-1000108972",
+ "notes": "Decision maker is now Jeff Mason, CEO since June 2023 (PR Newswire). Grayson Lafrenz is Founder & Chairman. John Taumoepeau is still COO on the leadership page, and Albert Lee is CTO. The phone number and company LinkedIn page come from search snippets of BBB and Yelp, not from the company site; the BBB address (2251 San Diego Ave) is older than the current HQ at 9605 Scranton Rd Suite 700, San Diego. No public email on the site."},
+{"company_name": "Mapon", "confidence_score": 100,
+ "contacts": [
+  {"name": "Davis Siksnans", "title": "CEO", "linkedin": "https://www.linkedin.com/in/davissiksnans/", "source_url": "https://davissiksnans.com/"},
+  {"name": "Martin Thomsen", "title": "Co-CEO (per RivalSense; formerly founder of Danfleet, leads Copenhagen branch)", "linkedin": "", "source_url": "https://rivalsense.co/intel/mapon/"},
+  {"name": "Eugeny Solodko", "title": "COO (per RivalSense)", "linkedin": "", "source_url": "https://rivalsense.co/intel/mapon/"}
+ ],
+ "notes": "Davis Siksnans is still CEO, since 2024, per his own site; www.linkedin.com/in/davissiksnans/ appeared verbatim in search. The second contacts come from a RivalSense intel page seen only as a search snippet and were not checked on mapon.com. Ingus Rukis is described as Co-CEO in one snippet and as a CTO stepping down in another, so he was not listed. The company LinkedIn page, phone and email were already present and were kept."},
+{"company_name": "Cannon Jeffries Search Group", "confidence_score": 100,
+ "contacts": [
+  {"name": "Kristin Wilcox Henning, MBA", "title": "Vice President of Talent Acquisition", "linkedin": "https://www.linkedin.com/in/kristin-wilcox-mba-9674261a1/", "source_url": "https://cjsearchgroup.com/about-us/"},
+  {"name": "Brittany Shumate", "title": "Operations Manager", "linkedin": "https://www.linkedin.com/in/brittany-shumate-b721a4149/", "source_url": "https://cjsearchgroup.com/about-us/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/cannon-jeffries-search-group/", "company_phone": "(270) 715-5429", "public_email": "info@cjsearchgroup.com", "contact_source_url": "https://cjsearchgroup.com/contact/",
+ "employee_count": "~11 (The Org)", "hq_country": "United States (Bowling Green, KY)",
+ "notes": "Kristin Henning, the case-study interviewee, now appears as Kristin Wilcox (LinkedIn: 'Kristin Wilcox Henning, MBA') and is still VP of Talent Acquisition, the most senior person listed. The site and The Org name no owner or CEO. The site links to wsidirecthire.com, so the firm appears tied to WSI (Workforce Strategies Inc.); the parent's leadership was not confirmed. Both LinkedIn URLs came verbatim from search results. Phone, email and company LinkedIn page are from the contact page."}
+]

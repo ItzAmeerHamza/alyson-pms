@@ -1,0 +1,142 @@
+HB_NOTE = "Homebase (joinhomebase.com) is a US/Canada hourly scheduling & time clock app; TheirStack's 'homebase' detection usually comes from job-ad text such as 'homebase: <city>' / 'home base' / 'home-based'."
+def poss(notes, conf=15, **kw):
+    d = dict(status='POSSIBLE', confidence=conf,
+             status_reason='No evidence of Homebase software use beyond the TheirStack listing; likely name collision.',
+             notes=notes + ' ' + HB_NOTE)
+    d.update(kw); return d
+def dnt(reason, notes, **kw):
+    d = dict(status='DO_NOT_TARGET', confidence=5, status_reason=reason, notes=notes + ' ' + HB_NOTE)
+    d.update(kw); return d
+
+dec['PT Intrafood Singabera Indonesia'] = poss(
+  "Searched '\"Intrafood Singabera\" Homebase' and 'Intrafood Singabera lowongan \"homebase\"': nothing about Homebase software. Company is real (Solo/Sukoharjo ginger-drink maker, jobstreet profile). Indonesian job ads commonly use 'homebase' to mean work location, which is the likely trigger.", 10,
+  second_source_url='https://id.jobstreet.com/companies/pt-intrafood-singabera-indonesia-168559387734330')
+dec['PT Sinar Meadow International Indonesia'] = poss(
+  "Searched '\"Sinar Meadow\" Homebase', 'PT Sinar Meadow International Indonesia lowongan \"homebase\"', 'Sinar Meadow \"homebase\" sales job': nothing about Homebase software. Real margarine/edible-fats manufacturer (Sinar Mas JV), Jakarta. Indonesian sales job ads ('Head of Area Bogor Sukabumi' on dealls.com) typically state a 'homebase' location - likely trigger.", 10,
+  second_source_url='https://id.jobstreet.com/companies/sinar-meadow-international-indonesia-168551749059116')
+dec['PT. IMPACT POWER MANDIRI'] = poss(
+  "Searched '\"Impact Power Mandiri\" Homebase' and 'Impact Power Mandiri lowongan SPG \"homebase\"': nothing about Homebase software. Real shopper-marketing/field-staff outsourcing firm in BSD Tangerang serving 16 cities; field SPG ads use 'homebase <city>' as placement - likely trigger. Field-staff outsourcing is a workforce-tracking fit, but no tool evidence.", 10,
+  workforce_signals='Outsourced field sales promoters (SPG) across 16 Indonesian cities',
+  second_source_url='https://www.cake.me/orgs/PT.%20IMPACT%20POWER%20MANDIRI?id=3307552',
+  company_phone='+6221-3880-5005', public_email='marketing@staffinc.co',
+  contact_source_url='https://www.impactpower.id (redirects to https://azure-tiger-240092.hostingersite.com/)')
+dec['PT. IMPACT POWER MANDIRI']['notes'] += ' Outreach: impactpower.id now redirects to a Hostinger-hosted site listing phone +6221-3880-5005, email marketing@staffinc.co and a Cilandak, South Jakarta address - suggests a tie to Staffinc (Indonesian staffing platform); verify. No named director found (searched CEO/direktur/LinkedIn). Domain: impactpower.id (not in input).'
+dec['Pecado'] = poss(
+  "No domain in input. Searched 'Pecado moda Spain empleo \"homebase\"' and '\"Pecado\" Homebase': nothing linking any Spanish 'Pecado' retailer to Homebase software. Homebase does not operate in Spain.", 5)
+dec['Peekaboo'] = poss(
+  "No domain in input; name ambiguous (Peekaboo Barcelona daycare, Peekaboo School of English Gijon). Searched 'Peekaboo Spain school \"homebase\"' and '\"Peekaboo\" Homebase Spain': nothing about Homebase software. Homebase does not operate in Spain.", 5)
+dec['Skyside Aviation'] = dnt(
+  "False match: aviation job ads use 'homebase' for crew base. Skyside pilot vacancies (pilotsglobal.com) are listed with homebase Vienna; nothing about Homebase software.",
+  "Searched '\"Skyside Aviation\" homebase' and 'Skyside GmbH pilot job \"homebase\" Vienna'. Skyside GmbH is a Vienna business-jet charter operator (Schoeller Holdings). pilotsglobal page returned 403; relied on search snippets.",
+  evidence_type='Technographic signal — requires validation',
+  second_source_url='https://pilotsglobal.com/job/Falcon-2000-first-officer-skyside_aviation-AT-fl5tssohnf')
+
+dec['Photo Studio'] = poss(
+  "No domain; 'Photo Studio' (Greece, 29 staff) is a generic name that cannot be tied to a specific company. Searched '\"Photo Studio\" Greece Homebase scheduling app' and '\"Photo Studio\" Homebase Greece': nothing. Homebase does not operate in Greece.", 5)
+dec['Pimcore'] = dnt(
+  "False match: Pimcore careers text says staff may work remotely 'far from their home bases in Salzburg (AT) or Langenfeld (GER)' - 'home base' = office location, not Homebase software.",
+  "Searched 'Pimcore jobs \"homebase\"' and checked pimcore.com careers snippets. Pimcore is an Austrian open-source PIM/DXP software vendor (remote-friendly).",
+  evidence_quote="you're free to work remotely, even if you're far from their home bases in Salzburg (AT) or Langenfeld (GER)",
+  second_source_url='https://pimcore.com/de/careers-senior-hr-generalist')
+dec['Privera AG'] = poss(
+  "Searched 'Privera AG Stelle \"Homebase\"' and 'privera.ch Homebase': job ads on jobup.ch (property-management assistants incl. 'Springerorganisation mit Reisetätigkeit') mention Homeoffice but nothing about Homebase software. Swiss real-estate services firm (17 branches). Homebase does not operate in Switzerland; collision likely from 'Homebase' as Springer/home-branch wording.", 5,
+  second_source_url='https://jobup.ch/en/jobs/detail/78741417-79c6-4b0b-960b-a466b2cf7235')
+dec['ProLion'] = poss(
+  "Searched 'ProLion jobs \"homebase\" OR \"home base\"' and 'prolion.com careers Homebase': nothing about ProLion and Homebase software. ProLion is an Austrian storage-security/NetApp ransomware-protection software vendor. Homebase does not operate in Austria.", 5)
+dec['Protouch'] = poss(
+  "Searched 'Protouch skin \"homebase\"' and 'Protouch Homebase India': nothing. Protouch is an Indian beauty-tech appliance brand (founded 2021). Homebase does not operate in India; likely collision with 'at-home' / 'home-based' text.", 5)
+dec['Rail Gourmet'] = poss(
+  "Searched '\"Rail Gourmet\" Homebase' and '\"Rail Gourmet\" job \"home base\" OR \"homebase\" station': no Homebase software reference. Rail Gourmet UK (part of SSP Group) hires on-board hosts based at stations (Edinburgh, Derby, Sheffield, King's Cross) - ads assign a home station/base, likely trigger; also UK retailer 'Homebase' collision possible. Shift-based hourly workforce, but scheduling would sit with parent SSP systems.", 10,
+  workforce_signals='Hourly shift-based on-board catering hosts on UK trains (rotational shifts 5am-10pm).',
+  second_source_url='https://findajob.dwp.gov.uk/details/16752537')
+dec['Redwave'] = poss(
+  "No domain in input (company is redwave.nl / Redwave Professionals, Beverwijk NL, technical staffing for offshore/onshore energy). Searched 'Redwave Netherlands oil gas \"homebase\"' and 'redwave.nl vacature homebase offshore': nothing about Homebase software. Offshore staffing ads typically name a crew/home base port (Den Helder, Beverwijk) - likely trigger. Company status: redwave.nl now 301-redirects to tecforce.nl; Tecforce page says 'Redwave & Tecforce gaan samen verder' after TecqGroep acquired Redwave - the Redwave brand is merged into Tecforce. Outreach (from tecforce.nl): TecqGroep leaders Mark Lander, Johan Rensing, Rob Laan (titles not given; CB Insights lists Mark Lander as Redwave CEO).", 5,
+  workforce_signals='Technical staffing/secondment (detachering) of offshore & onshore workers - agency workforce on client sites.',
+  contacts=[{'name':'Mark Lander','title':'Leader, TecqGroep (Redwave/Tecforce parent); listed as Redwave CEO by CB Insights','linkedin':'','source_url':'https://tecforce.nl/'}],
+  company_linkedin='https://www.linkedin.com/company/tecforcenl/', company_phone='+31 (0)251 26 24 00', public_email='info@tecforce.nl', contact_source_url='https://tecforce.nl/')
+dec['RemeGen荣昌生物'] = poss(
+  "Searched 'RemeGen 荣昌生物 Homebase' and 'RemeGen job \"homebase\" medical sales China': nothing about Homebase software. RemeGen is a listed Yantai biopharma (HK 9995 / SH 688331); English pharma job ads often state 'homebase: <city>'. Homebase does not operate in China.", 5)
+dec['Risen Energy'] = poss(
+  "Searched 'Risen Energy Homebase' and 'Risen Energy job \"homebase\" OR \"home base\" sales manager': nothing about Homebase software; job ads (overseasjobs.com) are BESS sales roles in Italy/Kenya. Chinese PV manufacturer; Risen Energy Australia hires via Employment Hero. Homebase does not operate in China.", 5)
+
+dec['SMG Swiss Marketplace Group'] = poss(
+  "Searched '\"Swiss Marketplace Group\" Homebase' and '\"SMG Swiss Marketplace\" jobs \"homebase\" OR \"home base\"': nothing about Homebase software. SMG (SIX-listed; ImmoScout24, Homegate, AutoScout24, Ricardo, tutti) job ads mention home office/hybrid; 'Homegate' brand and home-office wording are likely collisions. Homebase does not operate in Switzerland.", 5)
+dec['SMILE DENTAL CLINIC'] = poss(
+  "No domain; 'Smile Dental Clinic' (UAE, 200) is ambiguous across many UAE clinics (Dubai Smile Dental Clinic dubaismile.com, Top Smile, Smile Avenue...). Searched '\"Smile Dental Clinic\" UAE Homebase' and '\"Smile Dental Clinic\" Dubai job \"homebase\" OR \"Homebase app\"': nothing about Homebase software. Homebase does not serve the UAE market.", 5)
+dec['SSH Communications Security'] = poss(
+  "Searched '\"SSH Communications Security\" \"homebase\" OR \"home base\" job' and 'ssh.com careers Homebase': nothing linking SSH (Helsinki-listed cybersecurity vendor) to Homebase software. Salaried software staff - not a Homebase use case.", 5)
+dec['Safran'] = poss(
+  "Searched 'Safran job \"homebase\" aircraft technician' and '\"Safran\" \"Homebase\" scheduling': nothing about Homebase software; Safran (81k-employee aerospace group) uses enterprise systems. Aviation job ads commonly specify a 'home base' (field service technicians) - likely trigger. Enterprise far outside Homebase's SMB market.", 5)
+dec['Salgado LLC'] = poss(
+  "No domain; 'Salgado LLC' (Spain, import/export, 37) cannot be tied to a specific company - searches return Rafael Salgado S.A. (Madrid oils trader), California 'Salgado' LLCs and an Indeed 'Salgado LLC' healthcare employer. Searched '\"Salgado LLC\" Spain import export' and '\"Salgado LLC\" Homebase': nothing about Homebase software.", 5)
+dec['Sanctuary Medicinals'] = poss(
+  "Searched '\"Sanctuary Medicinals\" Homebase', '\"Sanctuary Medicinals\" dispensary jobs scheduling app budtender' and '\"Sanctuary Medicinals\" \"joinhomebase\" OR \"Homebase app\"': no public evidence of Homebase software. Company is real and US-based (Massachusetts vertically integrated cannabis operator; dispensaries in Gardner, Brookline, Danvers, Woburn; Littleton HQ/cultivation bought for $4.5M) with hourly shift staff - the kind of business Homebase serves, so the TheirStack signal is plausible but unconfirmed. Not a remote/BPO team, so no contact research per spec.", 25,
+  status_reason='TheirStack signal only; US hourly-shift cannabis retailer fits Homebase profile, but no corroboration found.',
+  workforce_signals='Hourly retail/cultivation shift staff (budtenders, trimmers; day/evening shifts) across 4 MA dispensaries + Littleton cultivation.',
+  second_source_url='https://wbjournal.com/article/sanctuary-medicinals-purchases-littleton-hq-for-45m')
+dec['Scramble'] = poss(
+  "Searched 'Scramble scrambleup.com Homebase' and 'Scramble Estonia crowdfunding jobs \"home base\" OR \"homebase\"': nothing about Homebase software. Scramble is an Estonian/Lithuanian SME-debt crowdfunding platform. Homebase does not operate in the EU.", 5)
+dec['Sinergi Performa Cipta'] = poss(
+  "Searched '\"Sinergi Performa Cipta\" homebase' and 'spcgroup.co.id lowongan penempatan homebase': nothing about Homebase software. SPC is a Jakarta HR outsourcing/BPO firm (staffing, payroll, BPO, recruitment) with branches in Bandung, Yogyakarta, Surabaya, Medan, Balikpapan, Denpasar, Halmahera; its field-sales ads (e.g. 'Sales Akuisisi QRIS' Depok) use placement/'homebase' wording - likely trigger. Outreach: no named director found in searches; head-office phone from site contact page.", 10,
+  workforce_signals='HR outsourcing/BPO with outsourced field sales staff across 8 Indonesian cities - workforce-tracking fit (outsourced staff on client sites).',
+  company_linkedin='https://www.linkedin.com/company/spcindo/', company_phone='(021) 82851833',
+  contact_source_url='https://spcgroup.co.id/contact', second_source_url='https://id.indeed.com/cmp/PT-Sinergi-Performa-Cipta')
+
+dec['Smart InsurTech AG'] = poss(
+  "Searched '\"Smart InsurTech\" Homebase' and 'smartinsurtech.de Stellenangebot \"Homebase\"': nothing about Homebase software (results were the Kansas City smart-building 'Homebase'). Smart InsurTech AG (Berlin/Kiel insurance-broker software, part of Smartbroker group) hires salaried developers, some remote. Homebase does not operate in Germany.", 5)
+dec['Southwestern University'] = poss(
+  "Searched '\"Southwestern University\" PHINMA Cebu Homebase' and 'swu.edu.ph job hiring \"homebase\"': nothing about Homebase software. SWU PHINMA is a Cebu university (PHINMA Education controlled). Homebase does not operate in the Philippines; likely collision with 'homebase' wording or the Singapore proptech 'Homebase'.", 5)
+dec['Strohm'] = poss(
+  "Searched 'Strohm thermoplastic composite pipe vacancy \"homebase\" OR \"home base\"' and '\"Strohm\" Homebase IJmuiden': nothing about Homebase software. Strohm is an IJmuiden (NL) thermoplastic composite pipe manufacturer; offshore/field service roles typically state a home base - likely trigger. Homebase does not operate in the Netherlands.", 5)
+dec['Suy Sing Commercial Corporation'] = poss(
+  "Searched '\"Suy Sing\" Homebase' and 'Suy Sing Commercial job hiring \"homebase\" salesman': nothing about Homebase software. Suy Sing is a Manila grocery/FMCG distributor (founded 1946); its field sales/customer-service ads are by province, and Philippine ads often say 'homebase: <city>' - likely trigger. Homebase does not operate in the Philippines.", 5)
+dec['THG Ingenuity'] = dnt(
+  "False match: THG (The Hut Group) had a 10-year e-commerce partnership with UK retailer Homebase (home-improvement chain, defunct March 2025) - THG Ingenuity powered that retailer's online platform. Text about 'Homebase' refers to the client retailer, not Homebase scheduling software.",
+  "Searched '\"THG Ingenuity\" Homebase' and 'THG jobs \"homebase\" OR \"home base\" Manchester ICON'. THG Ingenuity was demerged from THG plc in January 2025.",
+  second_source_url='https://en.wikipedia.org/wiki/Homebase')
+dec['TechWolf'] = poss(
+  "Searched 'TechWolf Ghent jobs \"homebase\" OR \"home base\"' and '\"TechWolf\" Homebase': nothing about Homebase software. TechWolf is a Ghent (BE) skills-intelligence AI software company; jobs require Belgium base and 3 office days/week - 'based in' wording likely trigger. Homebase does not operate in Belgium.", 5)
+dec['The White Rabbit'] = poss(
+  "Searched '\"The White Rabbit\" agencia Madrid Homebase' and 'whiterabbit.es agencia publicidad empleo': nothing about Homebase software or even a clear profile for whiterabbit.es (results were other White Rabbit agencies in Brussels/Italy/UK). Homebase does not operate in Spain.", 5)
+dec['Thrift for Good'] = poss(
+  "Searched '\"Thrift for Good\" Homebase' and '\"Thrift for Good\" Dubai jobs volunteer shift \"homebase\" OR \"home base\"': nothing about Homebase software. Dubai charity thrift shops (2 stores + sorting hub) run largely by volunteers on shifts; Team Leader job (qureos) mentions shift work but no app. Homebase does not serve the UAE.", 10)
+dec['Grant Thornton Belgium'] = dnt(
+  "Garbled input record: company_name 'Grant Thornton Belgium' but domain recruitee-inbox.com (Recruitee ATS mail domain, not a company site), industry Food & Beverage and evidence text naming Tony's Chocolonely. No Homebase software evidence for either Grant Thornton Belgium (accounting firm, 7 branches) or Tony's Chocolonely (Amsterdam chocolate brand); Homebase does not operate in Belgium/NL.",
+  "Searched '\"Tony's Chocolonely\" Homebase' and '\"Grant Thornton Belgium\" Homebase': no software link (Tony's results only mention UK retailer context). Recommend the merge drop or re-key this row.")
+dec['UNITO Versand & Dienstleistungen'] = poss(
+  "No domain in input (UNITO = Otto Group's Austrian mail-order arm, Graz/Salzburg; brands otto.at, universal.at). Searched '\"UNITO Versand\" Homebase' and 'UNITO Otto Austria Graz Stellenangebot \"Homebase\" OR \"home base\"': StepStone ads mention 'Teilweise Home-Office' only; nothing about Homebase software. 'Home-Office' wording likely trigger.", 5)
+dec['Upgrade Estate'] = poss(
+  "Searched '\"Upgrade Estate\" Homebase' and 'upgrade-estate.be vacature \"homebase\" OR \"home base\"': nothing about Homebase software. Upgrade Estate is a Belgian student-housing operator (Upkot brand) hiring Upkot coaches/hosts and cleaners; 'home' wording in student-housing ads likely trigger. Homebase does not operate in Belgium.", 5)
+
+dec['VREY'] = dnt(
+  "False match: VREY job ads (arbeitnow.com, e.g. Enterprise Lead Berlin) say 'unser Büro ist unser Homebase' - 'Homebase' = the Berlin office, not Homebase software.",
+  "Searched 'VREY Energie Homebase' and 'vrey-energie.de jobs \"homebase\" OR \"home base\" Berlin'. VREY is a Berlin energy-software startup (tenant solar power / meter operation, EUR 3.3M seed). Arbeitnow page not fetched; quote taken from search snippet.",
+  evidence_quote="Du bist in Berlin (oder bereit umzuziehen) – unser Büro ist unser Homebase",
+  second_source_url='https://www.arbeitnow.com/jobs/companies/vrey/enterprise-lead-berlin-299567')
+dec['VSP Consignment'] = poss(
+  "Searched '\"VSP Consignment\" Homebase', '\"VSP Consignment\" jobs hiring schedule app' and '\"VSP Consignment\" \"joinhomebase\" OR \"apply via Homebase\"': no public evidence of Homebase software (Indeed CA listing page returned 403). Company is real and in a Homebase market: luxury consignment retailer founded 2013 by Britt Rawlinson, stores in Toronto and Calgary, hiring Product/Retail Associates and Style Specialists (hourly retail) - signal plausible but unconfirmed. Not a remote/BPO team, so no contact research per spec.", 25,
+  status_reason='TheirStack signal only; Canadian hourly-retail business fits Homebase profile, but no corroboration found.',
+  workforce_signals='Hourly retail associates across Toronto and Calgary stores.',
+  second_source_url='https://vspconsignment.com/pages/about')
+dec['Vanguard Security'] = poss(
+  "No domain; 'Vanguard Security' (Australia, 27) is ambiguous (VPG Australia retail device security, Vanguard Risk Australia Melbourne, Southern Vanguard Group, NZ Vanguard Security Services). Searched '\"Vanguard Security\" Australia Homebase' and '\"Vanguard Security\" Australia guards rostering app jobs': nothing about Homebase software; AU guard firms typically use local rostering tools (SecurityTime, Guardhouse, Connecteam).", 5)
+dec['Volvo Group'] = poss(
+  "Searched '\"Volvo Group\" \"homebase\" job' and 'Volvo Group Homebase scheduling app': nothing about Homebase software. ~100k-employee enterprise far outside Homebase's SMB market; job ads (drivers, technicians, field roles) often state a home base - likely trigger.", 5)
+dec['WWF-Philippines'] = poss(
+  "Searched '\"WWF-Philippines\" \"homebase\" OR \"home base\" job vacancy' and 'WWF Philippines project officer \"homebase\" Palawan': WWF-PH vacancies (site coordinators, Palawan Program Lead) are stated as based in project sites (Puerto Princesa, Dumaran/Araceli) - 'homebase' wording is the likely trigger. Nothing about Homebase software; Homebase does not operate in the Philippines.", 5,
+  second_source_url='https://www.wwf.org.ph/jobs/palawan_program_lead')
+dec['Welcome Hotels'] = poss(
+  "Searched '\"Welcome Hotels\" Homebase' and 'Welcome Hotels Frankfurt Stellenanzeige \"Homebase\" OR \"Home Base\"': nothing about Homebase software. German hotel group (14 hotels, 700+ staff, Frankfurt HQ; Swiss hotels are a Mews PMS customer). Homebase does not operate in Germany.", 5,
+  second_source_url='https://www.mews.com/de/kunden/welcome-hotels-schweiz')
+dec['XXXLdigital – Part of XXXL Group'] = poss(
+  "Searched '\"XXXLdigital\" \"homebase\" OR \"home base\"' and 'xxxl.digital Homebase': only 'Home-Office' wording in karriere.at/StepStone job ads; nothing about Homebase software. XXXLdigital is the Wels (AT) e-commerce/IT unit of XXXLutz (27k employees). 'Home-Office' likely trigger.", 5)
+dec['YMCA'] = poss(
+  "Searched 'YMCA España Homebase' and 'ymca.es empleo oferta \"homebase\" OR \"home base\"': nothing about Homebase software. YMCA Spain is a non-profit with 23 program centres; Homebase does not operate in Spain.", 5)
+dec['YPOG'] = poss(
+  "No domain in input (firm site ypog.law). Searched 'YPOG law firm \"Homebase\"', 'YPOG berät Homebase Finanzierungsrunde' and 'YPOG Stellenanzeige \"Homebase\" Berlin Köln Hamburg': nothing about Homebase software. YPOG is a German VC/PE law firm (180+ lawyers, Berlin/Cologne/Hamburg/Munich/Cambridge/London). Likely collision via office/'home' wording or a deal mention.", 5)
+dec['Zaptec'] = poss(
+  "Searched 'Zaptec Homebase' and 'Zaptec job \"home base\" OR \"homebase\" field service technician': nothing about Homebase software; results are about the 'Zaptec Home' / Zaptec Go home EV charger. Norwegian EV-charger maker (Stavanger); product name 'Zaptec Home' and home-charging text are likely triggers.", 5)
+dec['atrete'] = dnt(
+  "False match: atrete job ads say the 'atrete Homebase' is its Zürich Seefeld office, used by consultants alongside client and home offices - not Homebase software.",
+  "Searched 'atrete Homebase' and 'atrete ag Zürich IT Beratung Stelle \"Homebase\" OR \"Home-Base\"'. atrete ag is a Swiss independent IT consultancy (~34 staff). jobup.ch page not fetched; wording from search snippet.",
+  second_source_url='https://jobup.ch/en/jobs/detail/23d2778b-5157-4659-81a2-7e76d4df1598')

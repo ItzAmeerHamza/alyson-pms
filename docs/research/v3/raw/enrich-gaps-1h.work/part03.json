@@ -1,0 +1,37 @@
+[
+{"company_name": "General Dynamics Mission Systems",
+ "contacts": [
+  {"name": "Chris Brady", "title": "President", "linkedin": "", "source_url": "https://en.wikipedia.org/wiki/General_Dynamics_Mission_Systems"}
+ ],
+ "hq_country": "United States (Chantilly, VA)", "employee_count": "13,000+",
+ "notes": "Added the president, Chris Brady, from Wikipedia; this was not cross-checked against gdmissionsystems.com, whose leadership page returns 403 to WebFetch. No CIO/CISO, phone or email found. The web search budget was used up before this company, so no LinkedIn search was possible. This is a large defense prime: Teramind use is probably for insider-threat monitoring, and the sale would go through procurement."},
+{"company_name": "Local AC LLC",
+ "contacts": [],
+ "company_linkedin": "https://www.linkedin.com/company/local-ac/",
+ "contact_source_url": "https://local-ac.com/about-us-2/",
+ "hq_country": "United States (Orlando, FL)",
+ "notes": "Added the company LinkedIn page from the About page's social links. Phone (844) 888-0938 and service@local-ac.com were re-confirmed. The site names no owner. OpenCorporates lists LOCAL AC LLC (FL L19000023595, active; 55 W. Church St., Orlando) with Alexander Abramov as authorized agent/person. The match is probable (an Orlando HVAC firm), but his role is unclear, so he is not listed as a decision maker; check on Sunbiz before outreach. The GitHub repo LocalAC100 names no one."},
+{"company_name": "Omega Healthcare",
+ "contacts": [],
+ "notes": "Nothing new found. omegahms.com and all its subpages return 403 to WebFetch, and the ProHance case study names no Omega staff. The web search budget was used up before this company, so leadership (such as the CEO) and LinkedIn could not be checked. Retry with search."},
+{"company_name": "CADIS Healthcare Solutions",
+ "contacts": [
+  {"name": "Sriram Sridaran", "title": "Manager, Client Relations (ProHance testimonial; not re-verified)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials.php"}
+ ],
+ "notes": "Not enriched. There is no domain in the input, and the web search budget was used up before this company, so the company site, leadership and LinkedIn could not be found. The existing testimonial contact was kept but not confirmed as still in role. Retry with search."},
+{"company_name": "Credence Global Solutions",
+ "contacts": [
+  {"name": "Khozema Chhadiyal", "title": "WFM Lead (ProHance testimonial; not re-verified)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials.php"}
+ ],
+ "notes": "WARNING: credenceglobalsolutions.com now serves only a JavaScript redirect to '/lander', the usual pattern of a parked or for-sale domain, with no company content. The company may have rebranded, moved domain or shut down. Not marked DO_NOT_TARGET because no death or acquisition was confirmed (the web search budget was used up). The existing contact was kept but not confirmed. Verify the company is alive before outreach."},
+{"company_name": "BIS Colombia",
+ "contacts": [
+  {"name": "Mayra Fox", "title": "General Manager (ProHance testimonial; not re-verified)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials.php"}
+ ],
+ "notes": "Not enriched. There is no domain in the input, and the web search budget was used up before this company, so the site, phone, email and LinkedIn could not be found. The existing contact was kept but not confirmed. Retry with search."},
+{"company_name": "Svast Healthcare",
+ "contacts": [
+  {"name": "Roshan Dsouza", "title": "Deputy General Manager - Client Delivery (ProHance testimonial; not re-verified)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials.php"}
+ ],
+ "notes": "WARNING: svast.com now redirects (HTTP 307) to a GoDaddy for-sale page (forsale.godaddy.com/forsale/www.svast.com), so the domain is parked or for sale. The company may have rebranded or been acquired. Not marked DO_NOT_TARGET without confirmation (the web search budget was used up). Verify before outreach."}
+]

@@ -1,0 +1,29 @@
+{
+"3": {"confidence_score": 75, "company_domain": "manvision.net",
+ "hq_country": "Australia (Bella Vista / Sydney, NSW); offshore development centre Hyderabad, India",
+ "employee_count": "200+ (Time Champ); 51-200 (LinkedIn)",
+ "contacts": [
+  {"name": "Ram Pulipati", "title": "CEO & Managing Director", "linkedin": "", "source_url": "https://wiza.co/d/manvision-consulting/abc4/ram-pulipati"},
+  {"name": "Kalyan Chakravarthy", "title": "Director, Operations (per ZoomInfo snippet; Time Champ quote names him without title)", "linkedin": "https://www.linkedin.com/in/kalyan-chakravarthy-8688a61a/", "source_url": "https://www.timechamp.io/case-studies/manvision"}],
+ "company_linkedin": "https://www.linkedin.com/company/manvision-consulting",
+ "company_phone": "+61 1300 920 525",
+ "public_email": "info@manvision.net",
+ "contact_source_url": "https://manvision.net/about-us",
+ "notes": "Domain identified: manvision.net (ManVision Consulting Pty Ltd, founded 2008, Suite A15, 24 Lexington Drive, Bella Vista NSW 2153). Added CEO/MD Ram Pulipati as decision maker (ZoomInfo/Wiza/growjo snippets; names only). Ram's LinkedIn not found verbatim (a 'Ramu Pulipati No' profile at ManVision exists but match unclear, left blank). Kalyan's LinkedIn from search result 'Kalyan Chakravarthy - ManVision Consulting', Hyderabad-based. Kiran Pulipati also listed as Director, Operations on ZoomInfo."},
+"4": {"confidence_score": 85,
+ "contacts": [
+  {"name": "Mike Nelson", "title": "CEO", "linkedin": "https://www.linkedin.com/in/mike-nelson-1645559/", "source_url": "https://www.arrivia.com/news/arrivia-ai-innovation-travel-weekly-power-list-2026/"},
+  {"name": "Justin Skagen", "title": "VP of Revenue Integrity and Operational Compliance", "linkedin": "", "source_url": "https://www.teramind.co/case-studies/arrivia/"}],
+ "company_phone": "+1-866-871-9336; (888) 320-4234 (toll-free)",
+ "public_email": "press@arrivia.com; inquiries@arrivia.com (search snippet of an earlier arrivia contact page, page no longer resolves; not re-verified)",
+ "contact_source_url": "https://www.arrivia.com/contact/",
+ "notes": "Mike Nelson confirmed CEO in Arrivia's July 2026 press release (still in role). Current contact page lists phones only, no email; HQ 15147 N Scottsdale Rd Ste 210, Scottsdale AZ. Emails press@/inquiries@/partnerships@arrivia.com came from a search summary of an old www3.arrivia.com contact page (DNS no longer resolves). Justin Skagen not re-verified."},
+"5": {"confidence_score": 85,
+ "contacts": [
+  {"name": "Jason Leverant", "title": "President & COO", "linkedin": "https://www.linkedin.com/in/jasonleverant", "source_url": "https://www.prnewswire.com/news-releases/atwork-group-highlights-strong-momentum-through-mid2026-302821257.html"},
+  {"name": "John Hall", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/john-hall-a340b41b", "source_url": "https://www.atwork.com/blog/atwork-president-and-coo-opens-family-owned-location-in-hometown/"}],
+ "company_phone": "865-609-6911 (HQ); fax 865-573-1171",
+ "public_email": "",
+ "contact_source_url": "https://americanstaffing.net/members-directory/atwork-group-0015w00002urwndaap/",
+ "notes": "Leverant still President & COO (quoted in July 2026 PR Newswire release). John Hall founder/CEO per AtWork blog. HQ 3215 W Governor John Sevier Hwy, Knoxville TN 37920 per American Staffing Association directory. Site uses a contact form only; no public email found."}
+}

@@ -1,0 +1,243 @@
+[
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "Multiple OnlineJobs.ph postings (Sep 2026: SEO, Ads Manager, Copywriter, SEO Account Manager) by Rohring Results, a ~30-person US agency, say hours are tracked in Hubstaff against client projects and activity data is recorded.",
+  "evidence_quote": "We track hours in Hubstaff against client projects, so each client gets the time they pay for. It also records activity data",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/off-page-seo-outreach-specialist-1739997",
+  "source_publication_date": "2026-09-29",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "remote, offshore Philippines staff, agency billable client hours, activity data recorded",
+  "company_name": "Rohring Results",
+  "company_domain": "rohringresults.com",
+  "industry": "Marketing agency (SEO, paid, social)",
+  "hq_country": "United States",
+  "employee_count": "~30 (per posting)",
+  "employee_count_source_url": "https://www.onlinejobs.ph/jobseekers/job/off-page-seo-outreach-specialist-1739997",
+  "estimated_tracked_seats": "30",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 96,
+  "contacts": [
+   {
+    "name": "Brittany Rohr",
+    "title": "Founder",
+    "linkedin": "https://www.linkedin.com/in/brittany-rohr/",
+    "source_url": "https://rohringresults.com/our-team/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/rohring-results",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.yelp.com/biz/rohring-results-bradenton",
+  "pitch_angle": "30-person agency billing clients from Hubstaff project hours; Tavilo Business plan ($199/50 seats) undercuts Hubstaff per-seat pricing and keeps client-project time reports.",
+  "notes": "Bradenton FL (1201 6th Ave W). Posting explicitly says they do not use activity data punitively. Founder LinkedIn appeared in search result."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph Customer Service Representative (property management) and Assistant Community Association Manager postings (Sep-Oct 2026) by The Nabo Group require comfort working with Hubstaff, US time zone.",
+  "evidence_quote": "Comfortable working with Hubstaff.",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/customer-service-representative-with-property-management-experience-1728572",
+  "source_publication_date": "2026-10-03",
+  "status_reason": "2026-10 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "remote, offshore Philippines VA/contractors",
+  "company_name": "The Nabo Group",
+  "company_domain": "thenabogroup.com",
+  "industry": "HOA / condo property management",
+  "hq_country": "United States",
+  "employee_count": "14 (per profile)",
+  "employee_count_source_url": "https://www.bbb.org/us/me/portland/profile/property-management/the-nabo-group-0021-562116",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 92,
+  "contacts": [
+   {
+    "name": "Chelsey Kelly",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.bbb.org/us/me/portland/profile/property-management/the-nabo-group-0021-562116"
+   }
+  ],
+  "company_phone": "(866) 365-6226",
+  "contact_source_url": "https://www.bbb.org/us/me/portland/profile/property-management/the-nabo-group-0021-562116",
+  "pitch_angle": "Multi-state HOA manager with a remote management service line staffed by PH VAs on Hubstaff.",
+  "notes": "Offices Portland ME, Chevy Chase MD, Winter Park CO, Austin TX. COO name from search snippet of BBB profile."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'Remote Operations Administrator (Full-Time | Philippines | Long-Term) 1686120' (Full Time) by Site Masters Junk Removal names Hubstaff for tracking remote staff.",
+  "evidence_quote": "Comfortable using Hubstaff time tracking with screenshots",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/remote-operations-administrator-full-time-philippines-long-term-1686120",
+  "source_publication_date": "2026-09-29",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "remote PH back-office admin, payroll processing, screenshots used",
+  "company_name": "Site Masters Junk Removal",
+  "company_domain": "thesitemasters.com",
+  "industry": "Junk removal / property cleanup",
+  "hq_country": "United States",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 95,
+  "contacts": [
+   {
+    "name": "Art Reisinger",
+    "title": "Owner",
+    "linkedin": "https://www.linkedin.com/in/art-reisinger/",
+    "source_url": "https://www.linkedin.com/in/art-reisinger/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sitemastersjunkremoval",
+  "company_phone": "727-591-7483",
+  "public_email": "info@thesitemasters.com",
+  "contact_source_url": "https://thesitemasters.com/contact/",
+  "pitch_angle": "Field-service SMB with PH admin on Hubstaff screenshots; Tavilo Starter $49 covers admin plus crew leads.",
+  "notes": "Tampa Bay FL, veteran/family owned."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'Long-Term Podiatry Billing Manager VA (athenaOne) – Claims, Denials, A/R &amp; Patient Calls – US Foot &amp; Ankle Practice 1739443' (Full Time) by Balance Foot & Ankle PLLC names Hubstaff for tracking remote staff.",
+  "evidence_quote": "Hubstaff: our virtual team works through Hubstaff for time tracking",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/long-term-podiatry-billing-manager-va-athenaone-claims-denials-a-r-patient-calls-us-foot-ankle-practice-1739443",
+  "source_publication_date": "2026-09-28",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "offshore Philippines medical billing/front desk VAs",
+  "company_name": "Balance Foot & Ankle PLLC",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 95,
+  "notes": "known company: evidence only, not enriched"
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'Amazon Online Arbitrage Sourcer | 4+ Years Required | Full-Time Remote Position 1736882' (Full Time) by Sourcing Squad HQ names Hubstaff for tracking remote staff.",
+  "evidence_quote": "All VAs are tracked on Hubstaff (screenshots every 2 minutes). It keeps the whole team's time clock honest.",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/amazon-online-arbitrage-sourcer-4-years-required-full-time-remote-position-1736882",
+  "source_publication_date": "2026-09-23",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "remote VA team of 7, screenshots every 2 minutes",
+  "company_name": "Sourcing Squad HQ",
+  "company_domain": "",
+  "industry": "Amazon online arbitrage sourcing (2 seller accounts)",
+  "hq_country": "",
+  "employee_count": "7 (remote team, per posting)",
+  "estimated_tracked_seats": "7",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 95,
+  "contacts": [],
+  "pitch_angle": "7-VA Amazon sourcing team on Hubstaff screenshots; Tavilo Starter flat $49.",
+  "notes": "Not the same as Sourcing Squad Ltd (sourcingsquad.co, Yiwu/UK). No website found; not enriched."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph Call Center Manager / Dialing Team Lead posting (Sep 2026) by OHC Pharmacy (Houston) says the manager reviews Hubstaff clock-in and productivity data for agents.",
+  "evidence_quote": "Hubstaff — Time tracking. You review clock-in and productivity data.",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/call-center-manager-dialing-team-lead-1613443",
+  "source_publication_date": "2026-09-24",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "offshore Philippines call center / dialing team, productivity review",
+  "company_name": "Optimistic Healthcare Solutions (OHC Pharmacy)",
+  "company_domain": "optimistichealthcare.com",
+  "industry": "Pharmacy / DME supplier",
+  "hq_country": "United States",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 95,
+  "contacts": [
+   {
+    "name": "Deshavonna Jasmine",
+    "title": "Authorized official (NPI registry)",
+    "linkedin": "",
+    "source_url": "https://www.npino.org/npi/optimistic-healthcare-solutions-llc-1952177800.html"
+   }
+  ],
+  "company_phone": "(800) 674-4440",
+  "contact_source_url": "https://optimistichealthcare.com/",
+  "pitch_angle": "Pharmacy running an offshore dialing team managed on Hubstaff productivity data; Tavilo gives same agent productivity scoring cheaper.",
+  "notes": "14520 Memorial Drive Houston TX 77079. Title of contact not stated as owner/CEO."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'SaaS Sales Team Lead – SMB Market (B2B North America) 487842' (Full Time) by TrustAnalytica names Hubstaff for tracking remote staff.",
+  "evidence_quote": "Experience with the following tools is an advantage: LinkedIn Sales Navigator | Asana | Hubstaff | Slack",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/saas-sales-team-lead-smb-market-b2b-north-america-487842",
+  "source_publication_date": "2026-09-30",
+  "status_reason": "Hubstaff listed in their tool stack as an advantage (Sep 2026), not an explicit requirement.",
+  "workforce_signals": "Philippines SDR team, remote then on-site office",
+  "company_name": "TrustAnalytica",
+  "company_domain": "trustanalytica.com",
+  "industry": "SaaS for small businesses (reputation, payments, booking)",
+  "hq_country": "Canada",
+  "vendor": "Hubstaff",
+  "status": "POSSIBLE",
+  "confidence_score": 55,
+  "contacts": [
+   {
+    "name": "Andrew Us",
+    "title": "CEO",
+    "linkedin": "",
+    "source_url": "https://www.zoominfo.com/c/trustanalytica/481502392"
+   }
+  ],
+  "company_linkedin": "https://ca.linkedin.com/company/trustanalytica",
+  "contact_source_url": "https://www.bbb.org/ca/bc/vancouver/profile/customer-relationship-management/trustanalytica-0037-2413617",
+  "pitch_angle": "Building a PH sales team; Tavilo for SDR activity tracking.",
+  "notes": "Vancouver BC."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'Operations Manager - (Pathway to Director of Operations) 1738435' (Part Time) by Nelson Finance-Life LLC names Hubstaff for tracking remote staff.",
+  "evidence_quote": "Tech Stack | Google Workspace, Slack, QuickBooks, Zapier, Hubstaff, Zoom, ChatGPT",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/operations-manager-pathway-to-director-of-operations-1738435",
+  "source_publication_date": "2026-09-26",
+  "status_reason": "Sep 2026 posting lists Hubstaff in the company's tech stack.",
+  "workforce_signals": "remote, offshore Philippines VA/contractors",
+  "company_name": "Nelson Finance-Life LLC",
+  "company_domain": "nelsonfinance-life.com",
+  "industry": "Financial consulting & government compliance",
+  "hq_country": "United States",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 85,
+  "contacts": [
+   {
+    "name": "Shaquana Nelson",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://nelsonfinance-life.com/about-us/"
+   }
+  ],
+  "company_phone": "914-500-8794",
+  "public_email": "operations@nelsonfinance-life.com",
+  "contact_source_url": "https://nelsonfinance-life.com/about-us/",
+  "pitch_angle": "Compliance/payroll-audit firm with remote ops team on Hubstaff; Tavilo payroll-ready timesheets.",
+  "notes": "Orlando FL. Contact details from search snippet."
+ },
+ {
+  "evidence_type": "Current job posting",
+  "evidence_summary": "OnlineJobs.ph posting 'E-commerce Operations Specialist – Amazon, Shopify &amp;amp; Fulfilment 1736160' (Full Time) by Baie Botanique names Hubstaff for tracking remote staff.",
+  "evidence_quote": "Comfortable tracking working time using Hubstaff.",
+  "source_url": "https://www.onlinejobs.ph/jobseekers/job/e-commerce-operations-specialist-amazon-shopify-fulfilment-1736160",
+  "source_publication_date": "2026-09-22",
+  "status_reason": "2026-09 OnlineJobs.ph posting names Hubstaff for remote staff time tracking.",
+  "workforce_signals": "offshore Philippines e-commerce ops (UK hours overlap)",
+  "company_name": "Baie Botanique",
+  "company_domain": "baiebotanique.com",
+  "industry": "Skincare brand / e-commerce",
+  "hq_country": "United Kingdom",
+  "vendor": "Hubstaff",
+  "status": "CURRENT",
+  "confidence_score": 92,
+  "contacts": [
+   {
+    "name": "Sophie Oliver",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://www.baiebotanique.com/blogs/baie-blog/11-years-of-beautiful-skin-a-letter-from-our-founder"
+   }
+  ],
+  "company_linkedin": "https://uk.linkedin.com/company/baie-botanique",
+  "contact_source_url": "https://www.baiebotanique.com/about/",
+  "pitch_angle": "UK DTC brand with PH ops staff on Hubstaff; Tavilo Starter.",
+  "notes": "London, founded 2014."
+ }
+]

@@ -3,6 +3,8 @@
  * Cognito's default AdminCreateUser email is suppressed; this is what employees get.
  */
 
+import { taviloEmailBrandLockup } from '../common/tavilo-email-brand';
+
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -35,7 +37,7 @@ export function buildInviteEmail(input: {
   const downloadUrl = `${appUrl}${DEFAULT_PULSE_DOWNLOAD_PATH}`;
   const appHost = appUrl.replace(/^https?:\/\//i, '');
 
-  const subject = 'Welcome to Alyson Pulse — activate your account';
+  const subject = 'Welcome to Tavilo Time — activate your account';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -46,7 +48,7 @@ export function buildInviteEmail(input: {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
         <tr>
           <td style="background:#173b67;padding:20px 24px;">
-            <div style="font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9fb4d1;">Alyson Pulse</div>
+            ${taviloEmailBrandLockup()}
             <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">Activate your account</div>
           </td>
         </tr>
@@ -54,7 +56,7 @@ export function buildInviteEmail(input: {
           <td style="padding:24px;">
             <p style="margin:0 0 16px;font-size:15px;color:#262626;line-height:1.5;">Hi ${escapeHtml(firstName)},</p>
             <p style="margin:0 0 20px;font-size:15px;color:#434343;line-height:1.55;">
-              You have been invited to Alyson Pulse. Follow these steps to activate your account and start tracking time.
+              You have been invited to Tavilo Time. Follow these steps to activate your account and start tracking time.
             </p>
 
             <div style="margin:0 0 20px;padding:14px 16px;background:#f5f7fa;border-radius:6px;border:1px solid #e8e8e8;">
@@ -64,13 +66,13 @@ export function buildInviteEmail(input: {
             </div>
 
             <ol style="margin:0 0 20px;padding-left:20px;color:#262626;font-size:15px;line-height:1.6;">
-              <li style="margin-bottom:10px;">Sign in with the email and temporary password above on <a href="${escapeHtml(signInUrl)}" style="color:#173b67;font-weight:600;">${escapeHtml(appHost)}</a> or in the <strong>Alyson Time Doctor</strong> desktop app.</li>
+              <li style="margin-bottom:10px;">Sign in with the email and temporary password above on <a href="${escapeHtml(signInUrl)}" style="color:#173b67;font-weight:600;">${escapeHtml(appHost)}</a> or in the <strong>Tavilo Time</strong> desktop app.</li>
               <li style="margin-bottom:10px;">You will be asked to <strong>set a new password</strong>. Choose one you will remember — the temporary password only works once.</li>
               <li>After your new password is saved, use the same email and password on both the web app and the desktop app.</li>
             </ol>
 
             <p style="margin:0 0 16px;">
-              <a href="${escapeHtml(signInUrl)}" style="display:inline-block;background:#173b67;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:6px;">Open Alyson Pulse</a>
+              <a href="${escapeHtml(signInUrl)}" style="display:inline-block;background:#173b67;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:6px;">Open Tavilo Time</a>
             </p>
             <p style="margin:0;font-size:13px;color:#8c8c8c;line-height:1.5;">
               Desktop app: <a href="${escapeHtml(downloadUrl)}" style="color:#173b67;">${escapeHtml(downloadUrl)}</a>
@@ -79,7 +81,7 @@ export function buildInviteEmail(input: {
         </tr>
         <tr>
           <td style="padding:16px 24px;background:#fafafa;border-top:1px solid #f0f0f0;font-size:12px;color:#8c8c8c;">
-            Sent from Alyson Pulse · If you were not expecting this invite, you can ignore this email.
+            Sent from Tavilo Time · If you were not expecting this invite, you can ignore this email.
           </td>
         </tr>
       </table>
@@ -91,9 +93,9 @@ export function buildInviteEmail(input: {
   const text = [
     `Hi ${firstName},`,
     '',
-    'You have been invited to Alyson Pulse. Activate your account:',
+    'You have been invited to Tavilo Time. Activate your account:',
     '',
-    `1. Sign in on ${signInUrl} or in the Alyson Time Doctor desktop app with:`,
+    `1. Sign in on ${signInUrl} or in the Tavilo Time desktop app with:`,
     `   Email: ${email}`,
     `   Temporary password: ${password}`,
     '2. You will be asked to set a new password. The temporary password only works once.',

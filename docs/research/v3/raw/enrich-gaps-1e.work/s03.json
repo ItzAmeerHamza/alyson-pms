@@ -1,0 +1,30 @@
+[
+{"company_name": "Young Decade", "company_domain": "youngdecade.com", "vendor": "Time Champ", "confidence_score": 90,
+ "employee_count": "50+", "hq_country": "India (Indore, Madhya Pradesh)",
+ "contacts": [
+  {"name": "Prabal Ravekar", "title": "Director", "linkedin": "", "source_url": "https://www.timechamp.io/case-studies/youngdecade"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/young-decade", "company_phone": "+91 7987611372; US +1 496-514-1316",
+ "public_email": "info@youngdecade.com", "contact_source_url": "https://www.youngdecade.com/contact-us",
+ "notes": "Full name: Young Decade IT Software Solution, Indore, founded 2014. Decision maker: Prabal Ravekar, quoted as Director in the Time Champ case study. Could not confirm he is still in role or find his LinkedIn: the session's web-search budget ran out at this company, and the site's team/about pages do not render names. Phones, email and company LinkedIn are from the official site. The site also lists offices in Richardson TX and Riyadh."},
+{"company_name": "Thakeham", "company_domain": "thakeham.com", "vendor": "Teramind", "confidence_score": 85,
+ "employee_count": "~253", "hq_country": "UK",
+ "contacts": [
+  {"name": "Rob Boughton", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/rob-boughton-4a1882156/", "source_url": "https://thakeham.com/about-us/executive-management/"},
+  {"name": "Andrew Satchwell", "title": "IT Director / Head of IT", "linkedin": "", "source_url": "https://www.youtube.com/watch?v=cR3_nnA8Bgg"},
+  {"name": "Paul Kimber", "title": "Chief Operations & Financial Officer", "linkedin": "", "source_url": "https://thakeham.com/about-us/executive-management/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/thakeham", "company_phone": "01403 787 300 (general); 01403 787 323 (home sales)",
+ "public_email": "info@thakeham.com; media@thakeham.com", "contact_source_url": "https://thakeham.com/contact/",
+ "notes": "Still in role: Rob Boughton is listed as Founder and CEO on the current executive page. Andrew Satchwell (the IT lead in the Teramind video) is not on the executive page, which lists only execs and NEDs, so he could not be re-confirmed. Added Paul Kimber (Chief Operations & Financial Officer) from the executive page. Phones and emails were extracted from the official contact page HTML; customer care is 01403 787 459."},
+{"company_name": "QBSS (Firstsource)", "company_domain": "firstsource.com", "vendor": "Time Champ", "confidence_score": 80,
+ "employee_count": "2,000+ (QBSS unit per Time Champ); Firstsource group much larger", "hq_country": "India (Chennai/Coimbatore/Bangalore ops; Firstsource HQ Mumbai)",
+ "contacts": [
+  {"name": "Ritesh Idnani", "title": "MD & CEO, Firstsource", "linkedin": "", "source_url": "https://www.firstsource.com/leadership"},
+  {"name": "Scott Schrader", "title": "Head, Healthcare Provider (RCM business unit)", "linkedin": "", "source_url": "https://www.firstsource.com/leadership"},
+  {"name": "Shamita Mukherjee", "title": "Chief Human Resources Officer", "linkedin": "", "source_url": "https://www.firstsource.com/leadership"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/firstsource-solutions-limited", "company_phone": "+91 22 6666 0888 (corporate, Mumbai)",
+ "public_email": "investor.relations@firstsource.com (IR only; no general/sales email published)", "contact_source_url": "https://www.firstsource.com/investor-relations/investor-contact",
+ "notes": "The Time Champ case study names the company 'Firstsource (QBSS)': healthcare RCM with hubs in Chennai, Coimbatore and Bangalore, 2,000+ staff. Its only named person is Prithvi Ram Raj Garga (Assistant Manager), not a decision maker. No standalone QBSS site was found (qbss.in, qbss.com etc. did not resolve), so contacts are Firstsource group leadership. Scott Schrader, head of the healthcare provider (RCM) unit, is the most relevant buyer. Domain set to firstsource.com. Firstsource's contact page lists only addresses and forms. The phone is the company secretary line from the investor-contact page. No personal LinkedIn URLs were verified (search budget exhausted)."}
+]

@@ -1,0 +1,43 @@
+[
+{"company_name": "adesso Spain", "company_domain": "adesso.es", "vendor": "Clockify", "confidence_score": 90,
+ "employee_count": "86 (Spain unit; parent adesso Group 10,000+)", "hq_country": "Spain",
+ "contacts": [
+  {"name": "Marc Carreras", "title": "Managing Director & COO", "linkedin": "https://www.linkedin.com/in/marc-carreras-617b0b27/", "source_url": "https://clockify.me/customer-stories/adesso-spain"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/adesso-spain", "company_phone": "+34 935 638 250",
+ "public_email": "marketing@adesso.es", "contact_source_url": "https://www.adesso.es/",
+ "notes": "Second contact still missing. The adesso.es 'Sobre adesso' page names no managers, and the Clockify story names only Marc Carreras (COO). Phone, email and company LinkedIn re-confirmed in the adesso.es footer HTML. Could not re-confirm Carreras is still in role (search budget exhausted)."},
+{"company_name": "Zlurad", "company_domain": "zlurad.me", "vendor": "Clockify", "confidence_score": 90,
+ "employee_count": "11-50", "hq_country": "Montenegro",
+ "contacts": [
+  {"name": "Bojan Cincur", "title": "Founder & CEO", "linkedin": "https://www.linkedin.com/in/bojancincur/", "source_url": "https://clockify.me/customer-stories/zlurad"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/zlurad", "company_phone": "", "public_email": "hello@zlurad.me",
+ "contact_source_url": "https://zlurad.me/contact-us",
+ "notes": "The site (home, about, contact) names no team members and lists no phone or address, only hello@zlurad.me and a company LinkedIn link. No second contact or phone found."},
+{"company_name": "BI Estudio (Bourdieu, Incardona y Asoc.)", "company_domain": "biestudio.com", "vendor": "Clockify", "confidence_score": 90,
+ "employee_count": "30", "hq_country": "Argentina",
+ "contacts": [
+  {"name": "Hernán Bourdieu", "title": "Socio fundador (Founding Partner)", "linkedin": "https://www.linkedin.com/in/hernan-bourdieu-24876985/", "source_url": "https://www.biestudio.com/quienes-somos"},
+  {"name": "Javier Incardona", "title": "Partner", "linkedin": "https://www.linkedin.com/in/javier-incardona-358711a/", "source_url": "https://clockify.me/customer-stories/bi-estudio"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/bourdieu-incardona-y-asoc.", "company_phone": "+54 11 3360 2009 (WhatsApp)",
+ "public_email": "", "contact_source_url": "https://www.biestudio.com/contacto",
+ "notes": "Still in role: Hernán Bourdieu is shown as 'Socio fundador' on the current Quienes Somos page. The phone is the WhatsApp link (api.whatsapp.com/send?phone=541133602009) on the official contact page. The site publishes no email or street address, only a contact form."},
+{"company_name": "R1 RCM", "company_domain": "r1rcm.com", "vendor": "ProHance", "confidence_score": 80,
+ "employee_count": "23k-30k (~30,000 in 2023 per Wikipedia)", "hq_country": "United States (Murray, Utah)",
+ "contacts": [],
+ "company_linkedin": "", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "Nothing filled. r1rcm.com returns 403 to both fetch and curl, and web search was exhausted. Wikipedia's infobox still lists Joe Flanagan as CEO, but its own text says the CEO departed in 2023, so the infobox is stale and no name was recorded. Taken private in Nov 2024 by TowerBrook and CD&R ($8.9B), still operating. Needs a later pass for CEO/COO/CHRO, company LinkedIn and phone."},
+{"company_name": "Shreve Memorial Library", "company_domain": "shreve-lib.org", "vendor": "Replicon", "confidence_score": 85,
+ "employee_count": "201", "hq_country": "United States (Shreveport, LA)",
+ "contacts": [
+  {"name": "Lynette Roberson", "title": "Executive Director", "linkedin": "", "source_url": "https://www.shreve-lib.org/directory"},
+  {"name": "Gena Box", "title": "Chief of Administration, Business & Technology", "linkedin": "", "source_url": "https://www.shreve-lib.org/directory"},
+  {"name": "Susan Fortenberry", "title": "Chief Financial Officer", "linkedin": "", "source_url": "https://www.shreve-lib.org/directory"},
+  {"name": "Greg Frith", "title": "Information Technology Supervisor", "linkedin": "", "source_url": "https://www.shreve-lib.org/directory"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/shreve-memorial-library", "company_phone": "318-212-1011 (main, Support Services Center)",
+ "public_email": "", "contact_source_url": "https://www.shreve-lib.org/",
+ "notes": "Leaders are from the library's official staff directory (CivicEngage). Executive Director phone: 318-226-5872. The directory also publishes gbox@shreve-lib.org for Gena Box, the admin/business/technology chief and the likely buyer for timekeeping. No general mailbox found. Main phone and Support Services Center address (885 Bert Kouns Ind. Loop, Shreveport LA 71118) are from the homepage footer. Public-sector buyer, so procurement rules apply."}
+]

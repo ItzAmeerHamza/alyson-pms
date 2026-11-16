@@ -1,0 +1,1336 @@
+[
+ {
+  "company_name": "A.G.E.S. Learning Solutions",
+  "company_domain": "ageslearningsolutions.com",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "200+ (Time Champ case study); 51-200 (Glassdoor)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Pradeesh Thomas",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/pradeeshthomas",
+    "source_url": "https://ageslearningsolutions.com/our-leadership-team/"
+   },
+   {
+    "name": "Pradeep N",
+    "title": "VP - Global Operations",
+    "linkedin": "",
+    "source_url": "https://ageslearningsolutions.com/our-leadership-team/"
+   },
+   {
+    "name": "Emmylou Santos",
+    "title": "Co-Founder & Chief Behavioral Officer",
+    "linkedin": "",
+    "source_url": "https://ageslearningsolutions.com/our-leadership-team/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/a-g-e-s--learning-solutions-inc-/",
+  "company_phone": "+1-866-375-2437; 408-947-9573",
+  "public_email": "agesadmin@ageslearningsolutions.com",
+  "contact_source_url": "https://ageslearningsolutions.com/privacy-policy/",
+  "notes": "Still in role: leadership page (fetched 2026-10) lists Pradeesh Thomas as CEO and Pradeep N as VP - Global Operations. Added co-founder Emmylou Santos. Email agesadmin@ is from the company's own privacy policy; info@/hr@ seen only in data-broker snippets and not used. HQ address on contact page: 910 Campisi Way, Suite 1A, Campbell, CA 95008."
+ },
+ {
+  "company_name": "Jumpfactor Marketing",
+  "company_domain": "jumpfactor.net",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "101 (TheirStack); 105+ (company claim per earlier list)",
+  "hq_country": "Canada (North York, ON)",
+  "contacts": [
+   {
+    "name": "Zamir Javer",
+    "title": "Founder & CEO",
+    "linkedin": "https://ca.linkedin.com/in/zamirjaver",
+    "source_url": "https://www.jumpfactor.net/the-team/"
+   },
+   {
+    "name": "Danny Zecevic",
+    "title": "Director of Operations",
+    "linkedin": "https://www.linkedin.com/in/dannyz/",
+    "source_url": "https://www.jumpfactor.net/the-team/"
+   },
+   {
+    "name": "Miranda Edrees",
+    "title": "HR Recruiter & Culture Manager",
+    "linkedin": "",
+    "source_url": "https://www.jumpfactor.net/the-team/"
+   }
+  ],
+  "company_linkedin": "https://ca.linkedin.com/company/jump-factor-digital-agency",
+  "company_phone": "(855) 529-5867",
+  "public_email": "",
+  "contact_source_url": "https://www.jumpfactor.net/contact/",
+  "notes": "Still in role: team page lists Zamir Javer as CEO. Second contact Danny Zecevic, Director of Operations (team page); LinkedIn /in/dannyz/ appeared in search titled 'Danny Zecevic - Jumpfactor Marketing'. Public email: privacy policy has a Cloudflare-obfuscated address that could not be decoded (site returns 403 to scripts); info@ seen only in data-broker snippets, so left blank. Team page says 100+ staff across North America, India and Philippines."
+ },
+ {
+  "company_name": "Young Publisher",
+  "company_domain": "youngpublisher.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "50+ team members (company About/home page)",
+  "hq_country": "Netherlands (founders Dutch; global remote team) - not confirmed",
+  "contacts": [
+   {
+    "name": "Thijmen Young (likely Thijmen de Jong)",
+    "title": "Founder / Operations",
+    "linkedin": "",
+    "source_url": "https://youngpublisher.com/about/"
+   },
+   {
+    "name": "Robin Bouwman",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": "https://youngpublisher.com/about/"
+   },
+   {
+    "name": "Petya Natcheva",
+    "title": "HR Manager",
+    "linkedin": "https://www.linkedin.com/in/petyanatcheva/",
+    "source_url": "https://youngpublisher.com/about/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://youngpublisher.com/about/",
+  "notes": "About page still lists Robin Bouwman (Founder) and Thijmen Young (Founder / Operations); one search summary calls him 'Thijmen de Jong' (Dutch 'jong' = young), so the surname on the site may be a pseudonym. No LinkedIn found for either founder. HR Manager Petya Natcheva has a LinkedIn linked from the About page. No email, phone or company LinkedIn page published (no privacy policy page; 404). Hires Filipino remote staff since 2020."
+ },
+ {
+  "company_name": "Eufonie",
+  "company_domain": "eufonie.fr",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "101-500 (Time Doctor); ~300 (search snippet)",
+  "hq_country": "Madagascar (also Mauritius; French market)",
+  "contacts": [
+   {
+    "name": "Johan Le Bail",
+    "title": "Co-founder, Commercial Director",
+    "linkedin": "https://www.linkedin.com/in/johanlb/",
+    "source_url": "https://www.eufonie.fr/qui-sommes-nous/"
+   },
+   {
+    "name": "Damien Saldo",
+    "title": "Co-founder, Marketing Director (LinkedIn: Associate Director / Co-founder)",
+    "linkedin": "https://www.linkedin.com/in/damiensaldo/",
+    "source_url": "https://www.eufonie.fr/qui-sommes-nous/"
+   },
+   {
+    "name": "Niry Tina Andriamanday",
+    "title": "General Manager / Finance Director",
+    "linkedin": "",
+    "source_url": "https://www.eufonie.fr/qui-sommes-nous/"
+   },
+   {
+    "name": "Anna Martine Vololonirina",
+    "title": "Production Director",
+    "linkedin": "",
+    "source_url": "https://www.eufonie.fr/qui-sommes-nous/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/eufonie",
+  "company_phone": "+33 9 80 80 16 31; +261 32 05 648 49; Mauritius +230 5 7979 360",
+  "public_email": "commercial@eufonie.fr",
+  "contact_source_url": "https://www.eufonie.fr/",
+  "notes": "Still in role: 'Qui sommes-nous' page lists Johan Le Bail as co-founder & commercial director. Added co-founder Damien Saldo (LinkedIn found in search, titled Eufonie co-founder) and GM/Finance Director Niry Tina Andriamanday plus Production Director (ops owner). Added Mauritius phone from homepage."
+ },
+ {
+  "company_name": "Tasks Everyday",
+  "company_domain": "taskseveryday.com",
+  "vendor": "EmpMonitor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "250+ virtual assistants (Outsource Accelerator); 51-200 (Crunchbase)",
+  "hq_country": "US (ops India/Philippines)",
+  "contacts": [
+   {
+    "name": "Suvidh Marwaha",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/suvidhmarwaha/",
+    "source_url": "https://www.crunchbase.com/person/suvidh-marwaha"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/tasks-everyday",
+  "company_phone": "US 1-888-670-4882; UK 0808 120 3657; AU 1800447187",
+  "public_email": "",
+  "contact_source_url": "https://www.taskseveryday.com/contact-us/",
+  "notes": "Suvidh Marwaha still listed as CEO (Crunchbase, Outsource Accelerator). LinkedIn /in/suvidhmarwaha/ appeared in search titled 'Suvidh Marwaha - TasksEveryday.com'. Company LinkedIn from Outsource Accelerator profile. Phones from company contact page (offices San Francisco, Mumbai, Cebu, Sharjah UAE). No public email on contact page or privacy policy. No second decision maker found."
+ },
+ {
+  "company_name": "Cloud Humans",
+  "company_domain": "cloudhumans.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "26-50 staff (Time Doctor) plus freelance pros",
+  "hq_country": "Brazil (Sao Paulo)",
+  "contacts": [
+   {
+    "name": "Ian Kraskoff",
+    "title": "Co-founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/iankraskoff/",
+    "source_url": "https://www.linkedin.com/in/iankraskoff/"
+   },
+   {
+    "name": "Bruno Cecatto",
+    "title": "Co-founder",
+    "linkedin": "https://www.linkedin.com/in/bruno-cecatto/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/cloud-humans/",
+  "company_phone": "+55 (11) 2227-5353 (Brazilian CNPJ registry listing, not on company site)",
+  "public_email": "sales@cloudhumans.com",
+  "contact_source_url": "https://www.cloudhumans.com/",
+  "notes": "CEO LinkedIn /in/iankraskoff/ appeared in search titled 'Ian Kraskoff - cloud humans' (Sao Paulo, YC alum). Company LinkedIn and sales@ confirmed in homepage source. Site has no phone; phone comes from the public CNPJ registry for Cloud Humans Tecnologia Ltda (CNPJ 38.284.517/0001-22) via cnpj.biz/38284517000122, which may be the accountant's number. Bruno Cecatto's title is carried over from the input and was not re-verified."
+ },
+ {
+  "company_name": "JLL (Jones Lang LaSalle)",
+  "company_domain": "jll.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "105k",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Martin Edgerton",
+    "title": "Former Global Head - JLL Service Centers (LinkedIn now shows Self-employed)",
+    "linkedin": "https://www.linkedin.com/in/martin-edgerton-bb828627/",
+    "source_url": "https://www.prohance.ai/testimonials"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/jll/",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.jll.com/en-us/contact-us",
+  "notes": "STILL-IN-ROLE CHECK FAILED: the ProHance testimonial still names Martin Edgerton as Global Head - JLL Service Centers, but his LinkedIn (/in/martin-edgerton-bb828627/, London) now shows 'Self-employed'. He has probably left JLL. A replacement head of JLL Business Services (JBS, about 6,000 staff) could not be found before the web-search budget ran out; it needs a manual search. Company LinkedIn is from the jll.com contact page. The contact page lists no phone or email, so those are blank. Enterprise account, so go through the JBS/GCC leadership."
+ },
+ {
+  "company_name": "JiBe ERP (JiBe Development Services)",
+  "company_domain": "jibe.solutions",
+  "vendor": "Teramind",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "501-1,000 (LinkedIn company page)",
+  "hq_country": "Singapore (offices incl. Miami, India, Cyprus)",
+  "contacts": [
+   {
+    "name": "Yariv Zghoul",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/yariv-zghoul/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/jibe-erp",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.linkedin.com/company/jibe-erp",
+  "notes": "jibe.solutions returned HTTP 522 (origin down) on every attempt, so no phone, email or team page could be fetched; jibe.com.sg (the site linked from LinkedIn) timed out. The LinkedIn company page lists HQ as 58 NE 44th St, Miami, FL 33137, 501-1,000 employees, and says 'Our employees are not visible on social media as part of our policies'. CEO not re-verified. No second contact found."
+ },
+ {
+  "company_name": "My Biz Niche",
+  "company_domain": "mybizniche.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "59 (Hubstaff case study); 50 (TheirStack)",
+  "hq_country": "United States (Scottsdale, AZ); globally distributed remote team",
+  "contacts": [
+   {
+    "name": "Shawn Byrne",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/shawn-byrne/",
+    "source_url": ""
+   },
+   {
+    "name": "Lauren Klesser",
+    "title": "(from input; not re-verified)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/my-biz-niche",
+  "company_phone": "US 602-737-3192 / 602-737-2583; UK 0161-850-3959",
+  "public_email": "info@mybizniche.com",
+  "contact_source_url": "https://www.mybizniche.com/",
+  "notes": "Company LinkedIn, phones and info@ are from the mybizniche.com footer and contact block (rendered via r.jina.ai because the site blocks direct fetch). Address: 16100 N. Greenway-Hayden Loop, Suite F150, Scottsdale, AZ 85260. The homepage and About page do not name staff, so Shawn Byrne / Lauren Klesser could not be re-checked as still in role."
+ },
+ {
+  "company_name": "Maxx Solutions (MaxxSolutions)",
+  "company_domain": "",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "51-200",
+  "hq_country": "India (Gurugram)",
+  "contacts": [
+   {
+    "name": "Mayank Grover",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Surabhi Sharma",
+    "title": "(from input; not re-verified)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://in.linkedin.com/company/maxxsolutions",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "No company domain in input and the web-search budget was exhausted before this record, so the company site could not be found. Nothing new added; decision maker LinkedIn, phone and email still missing. Needs a manual search."
+ },
+ {
+  "company_name": "Jezweb",
+  "company_domain": "jezweb.com",
+  "vendor": "Apploye",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "30+ team (jezweb.com/about); case study says 50-100; prospeo lists 21-50",
+  "hq_country": "Australia (Wallsend, Newcastle NSW)",
+  "contacts": [
+   {
+    "name": "Jeremy (Jez) Dawes",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/jeremydawes/",
+    "source_url": "https://www.jezweb.com.au/about"
+   },
+   {
+    "name": "Marianne Boughton",
+    "title": "Business Manager",
+    "linkedin": "",
+    "source_url": "https://www.jezweb.com.au/about"
+   },
+   {
+    "name": "Karen Irvine",
+    "title": "Sales Manager",
+    "linkedin": "",
+    "source_url": "https://www.jezweb.com.au/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "1300 024 766",
+  "public_email": "help@jezweb.net",
+  "contact_source_url": "https://www.jezweb.com.au/contact",
+  "notes": "Still in role: About page shows Jeremy (Jez) Dawes as Founder & CEO. Second contact is Business Manager Marianne Boughton (runs ops/support requests per page). Footer: Jezweb Pty Ltd, ABN 88 127 346 730, 5 Cowper St, Wallsend NSW 2287. The site has no LinkedIn company link, so company_linkedin stays blank. Site warns of scam emails from Gmail addresses posing as Jeremy Dawes."
+ },
+ {
+  "company_name": "FatCat Coders (FatCat Remote)",
+  "company_domain": "fatcatremote.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "25+ (Insightful case study); 150+ placed talents",
+  "hq_country": "Serbia (Belgrade)",
+  "contacts": [
+   {
+    "name": "Zoran Lazic",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/puhna/",
+    "source_url": "https://fatcatremote.com/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/fatcatremote/",
+  "company_phone": "",
+  "public_email": "operations@fatcatcoders.com",
+  "contact_source_url": "https://fatcatremote.com/about-us",
+  "notes": "Still in role: About page says FatCat Coders was founded by Zoran Lazic, 'our CEO'. The company LinkedIn linked from the site footer is now /company/fatcatremote (the input had rs.linkedin.com/company/fatcat-coders). operations@fatcatcoders.com is on the About page (as the contact for an equipment donation drive). No phone on the site; the privacy policy points to a contact form. No second leader is named on the site."
+ },
+ {
+  "company_name": "IGENIEUX",
+  "company_domain": "igenieux.org",
+  "vendor": "WebWork Time Tracker",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "30-50 (WebWork story); hires 3-5 per week",
+  "hq_country": "Philippines (Cebu City)",
+  "contacts": [
+   {
+    "name": "Karen Mae Beniabon",
+    "title": "HR Officer (quoted in WebWork case study)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/igenieux/",
+  "company_phone": "Toll free +1 888 245-9098; US +1 (346) 200-9225; US +1 (904) 870-8050; UK 0 (203) 951-3770",
+  "public_email": "info@igenieux.org",
+  "contact_source_url": "https://igenieux.org/contact-us/",
+  "notes": "Contact page lists toll-free 1 888 245-9098 (the input had 1-888-682-6625, not seen on the current site), plus US and UK numbers and info@igenieux.org. Company LinkedIn is linked from the homepage. The About page names no executives, and the search budget was exhausted, so no CEO/founder found. Karen Mae Beniabon not re-verified."
+ },
+ {
+  "company_name": "ASG Platform",
+  "company_domain": "asgplatform.com",
+  "vendor": "Jibble",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "26",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Ray Bolouri",
+    "title": "Founder",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/asg-platform-page",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://asgplatform.com/",
+  "notes": "Company LinkedIn is from the asgplatform.com homepage HTML. The site (an AI customer-service automation product) shows no phone, email, team or contact page (/contact and /contact-us return 404 or are empty). Founder not re-verified, and no founder LinkedIn found (search budget exhausted). Note: ASG Platform sells an automation product; check it is a Jibble customer, not a partner."
+ },
+ {
+  "company_name": "Antino (Antino Labs)",
+  "company_domain": "antino.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "201-500 (LinkedIn/search); 55 at time of DeskTime story",
+  "hq_country": "India",
+  "contacts": [
+   {
+    "name": "Vinay Krishna Gupta",
+    "title": "Co-Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/vinaykrishnagupta/",
+    "source_url": "https://www.antino.com/about-us"
+   },
+   {
+    "name": "Rajesh Kumar",
+    "title": "Co-Founder & COO (heads global delivery)",
+    "linkedin": "",
+    "source_url": "https://www.antino.com/about-us"
+   },
+   {
+    "name": "Radhakanth Kodukula",
+    "title": "CTO",
+    "linkedin": "",
+    "source_url": "https://www.antino.com/about-us"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+91 88007 93934; UAE +971 58 501 0075",
+  "public_email": "info@antino.com",
+  "contact_source_url": "https://www.antino.com/",
+  "notes": "Still in role: About page lists Vinay Krishna Gupta as Co-Founder & CEO. Added Co-Founder & COO Rajesh Kumar (heads global delivery, the natural owner of time tracking) and CTO. Added UAE phone from the homepage tel: links. The site does not link a company LinkedIn page, so it stays blank."
+ },
+ {
+  "company_name": "Metaviz (Metaviz Pro)",
+  "company_domain": "metaviz.io",
+  "vendor": "WebWork Time Tracker",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "40+ (WebWork case study)",
+  "hq_country": "Pakistan (Lahore delivery center) + US office",
+  "contacts": [
+   {
+    "name": "Sajid Jameel",
+    "title": "Co-Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/sajid-jameel/",
+    "source_url": ""
+   },
+   {
+    "name": "Zain Ali",
+    "title": "(from input)",
+    "linkedin": "https://www.linkedin.com/in/zain-ali-372621168/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/metaviz-io",
+  "company_phone": "+92 311 410 0233; US +1 810 678 6615",
+  "public_email": "general.inquiry@metaviz.io; info@metaviz.pro",
+  "contact_source_url": "https://metaviz.io/contact-us",
+  "notes": "Company LinkedIn /company/metaviz-io and info@metaviz.pro (Cloudflare-protected) are from the metaviz.io homepage and contact page; the phones on the site match the input. Contacts not re-verified (the site has no team page)."
+ },
+ {
+  "company_name": "RYZE Claim Solutions",
+  "company_domain": "ryzeclaims.com",
+  "vendor": "ActivTrak",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~1,000",
+  "hq_country": "USA (Noblesville, Indiana; Tampa, FL office)",
+  "contacts": [
+   {
+    "name": "Walter Leddy",
+    "title": "Chief Executive Officer (appointed 2025-09-10)",
+    "linkedin": "",
+    "source_url": "https://ryzeclaims.com/news-updates/ryze-claim-solutions-appoints-walter-leddy-as-chief-executive-officer/"
+   },
+   {
+    "name": "Tony Grippa",
+    "title": "Executive Chairman",
+    "linkedin": "",
+    "source_url": "https://ryzeclaims.com/news-updates/ryze-claim-solutions-appoints-walter-leddy-as-chief-executive-officer/"
+   },
+   {
+    "name": "Scott St. John",
+    "title": "(from input; not re-verified)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/ryze-claim-solutions/",
+  "company_phone": "(813) 689-5513",
+  "public_email": "",
+  "contact_source_url": "https://ryzeclaims.com/contact-us/",
+  "notes": "Still in role: a company news post (Business Wire, 2025-09-10) announces Walter Leddy as CEO (ex-Davies US Field Services CEO) and quotes Executive Chairman Tony Grippa. Company LinkedIn is from the site's contact page; office is 4830 W Kennedy Blvd #225, Tampa, FL 33609. The contact page shows no public email (form only). No personal LinkedIn URLs found."
+ },
+ {
+  "company_name": "Spinwise",
+  "company_domain": "spinwise.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~124-126 (RocketReach/LeadIQ 2026); LinkedIn 51-200",
+  "hq_country": "Estonia (Tallinn); most staff in Latvia",
+  "contacts": [
+   {
+    "name": "Alvis Ledskalnins",
+    "title": "Founder & Board Member",
+    "linkedin": "https://www.linkedin.com/in/alvis-ledskalni%C5%86%C5%A1-8a674259/",
+    "source_url": ""
+   },
+   {
+    "name": "Peter Kovisars",
+    "title": "(from input)",
+    "linkedin": "https://cy.linkedin.com/in/pkovisars",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/spinwise-com",
+  "company_phone": "",
+  "public_email": "hey@spinwise.com",
+  "contact_source_url": "https://spinwise.com/",
+  "notes": "hey@spinwise.com and the company LinkedIn are on the spinwise.com homepage. The homepage also lists affiliate-manager mailboxes (not decision makers, so not recorded). No phone on the site. Contacts not re-verified (no team page)."
+ },
+ {
+  "company_name": "Reboot Monkey (Reboot Monkeys B.V.)",
+  "company_domain": "rebootmonkey.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "27 (TheirStack)",
+  "hq_country": "Netherlands (Haarlem)",
+  "contacts": [
+   {
+    "name": "Alexander Michel El Miligi (Michel)",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/michel-e-679963206/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/rebootmonkey/",
+  "company_phone": "",
+  "public_email": "sales@rebootmonkey.com; recruitment@rebootmonkey.com",
+  "contact_source_url": "https://www.rebootmonkey.com/contact-us/",
+  "notes": "Both emails confirmed on the rebootmonkey.com/contact-us page. The contact page has a 'Phone Number' heading but no number is rendered, so phone stays blank. No About/team page with named staff, so there is no second contact and the CEO was not re-verified."
+ },
+ {
+  "company_name": "ManVision Consulting",
+  "company_domain": "manvision.net",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "200+ (Time Champ)",
+  "hq_country": "Australia (offshore centre Hyderabad, India)",
+  "contacts": [
+   {
+    "name": "Ram Pulipati",
+    "title": "CEO & Managing Director",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/manvision-consulting",
+  "company_phone": "+61 1300 920 525",
+  "public_email": "info@manvision.net",
+  "contact_source_url": "https://manvision.net/contact-us/",
+  "notes": "Site now brands itself 'Manvision Technologies', a managed services provider based in Australia with bases in the US, Canada and India. The phone, email and company LinkedIn on the site match the input. The About page names no executives, so the CEO was not re-verified and no second contact or LinkedIn was found."
+ },
+ {
+  "company_name": "Appetiser Apps",
+  "company_domain": "appetiser.com.au",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~135 (TheirStack); 175 (Starter Story interview)",
+  "hq_country": "Australia (Melbourne); team largely in Philippines",
+  "contacts": [
+   {
+    "name": "Michael MacRae",
+    "title": "CEO (Director & Founder)",
+    "linkedin": "https://www.linkedin.com/in/michael-macrae",
+    "source_url": "https://appetiser.com.au/about-us/"
+   },
+   {
+    "name": "Jamie Shostak",
+    "title": "(from input; not re-verified)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/appetiserapps/",
+  "company_phone": "(03) 9000 0618; mobiles +61 482 079 195 / +61 483 905 535 / +61 483 922 123",
+  "public_email": "contact@appetiser.com.au; info@appetiser.com.au",
+  "contact_source_url": "https://appetiser.com.au/contact-us/",
+  "notes": "Still in role: About page shows Michael MacRae as CEO. Emails come from the homepage and contact page (contact@ was Cloudflare-encoded and decoded). Extra mobile numbers are tel: links on the contact page."
+ },
+ {
+  "company_name": "Phoenix Virtual Solutions",
+  "company_domain": "phoenixvirtualstaff.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "101-500",
+  "hq_country": "United States + Philippines",
+  "contacts": [
+   {
+    "name": "Melba (Mel) Rebong Militante",
+    "title": "CEO / Founder",
+    "linkedin": "https://www.linkedin.com/in/melrebong/",
+    "source_url": "https://www.phoenixvirtualstaff.com/"
+   },
+   {
+    "name": "Ericka Louise Dizon",
+    "title": "Client Success Manager",
+    "linkedin": "https://www.linkedin.com/in/ericka-louise-dizon-clsswb-753604248/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://ph.linkedin.com/company/phoenix-virtual-solutions",
+  "company_phone": "(714) 676 8488",
+  "public_email": "sales@phoenixvirtualstaff.com; staffing@phoenixvirtualstaff.com (careers, per earlier snippet)",
+  "contact_source_url": "https://www.phoenixvirtualstaff.com/contact-us",
+  "notes": "Phone (714) 676 8488 and sales@ are from the contact page. The homepage describes the founder/CEO (a woman with 20+ years in US health systems who also owns a hospice agency), which fits Mel Rebong; the name is not printed in the rendered text. The company LinkedIn on the site is the ph.linkedin.com version of the same page."
+ },
+ {
+  "company_name": "Premier Admin Services",
+  "company_domain": "premieradminservices.com",
+  "vendor": "Harvest",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "5 listed (founder + 4 VAs)",
+  "hq_country": "United Kingdom",
+  "contacts": [
+   {
+    "name": "Zoe Hill",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/zoehilladminservices/",
+    "source_url": "https://www.premieradminservices.com/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "zoe@premieradminservices.com",
+  "contact_source_url": "https://www.premieradminservices.com/about",
+  "notes": "Still in role: About page lists Zoe Hill as Founder & CEO, linking her LinkedIn. The rest of the team is 4 Virtual Assistants (Leanne Benge, Lois Shafier, Jessica Lock, Elspeth Coppock) and no other decision maker, so second contact is left blank. The site shows no phone and no company LinkedIn page. Very small (founder plus 4 VAs), so a low-seat prospect."
+ },
+ {
+  "company_name": "Slash Staffing",
+  "company_domain": "slashstaffing.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "Not published (remote contractors in 20+ countries)",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Samuel Mezei",
+    "title": "CEO & Founder",
+    "linkedin": "https://www.linkedin.com/in/samuel-mezei-690717203/",
+    "source_url": ""
+   },
+   {
+    "name": "Ben Jury",
+    "title": "COO",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/slash-staffing/",
+  "company_phone": "+1 (732) 616-9778",
+  "public_email": "info@slashstaffing.com",
+  "contact_source_url": "https://www.slashstaffing.com/",
+  "notes": "Company LinkedIn /company/slash-staffing/ is linked from the slashstaffing.com homepage; phone and email there match the input. Contacts not re-verified."
+ },
+ {
+  "company_name": "Axiz",
+  "company_domain": "axiz.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~500 (Insightful)",
+  "hq_country": "South Africa (Johannesburg)",
+  "contacts": [
+   {
+    "name": "Craig Brunsden",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://info.axiz.com/about/"
+   },
+   {
+    "name": "Robert Nkuna",
+    "title": "Human Resources Director",
+    "linkedin": "",
+    "source_url": "https://info.axiz.com/about/"
+   },
+   {
+    "name": "Andrew Li",
+    "title": "Chief Financial Officer",
+    "linkedin": "",
+    "source_url": "https://info.axiz.com/about/"
+   },
+   {
+    "name": "Magda Bekker",
+    "title": "Business Systems Process & Project Manager (Insightful project owner)",
+    "linkedin": "https://www.linkedin.com/in/magda-bekker-a1210b49/",
+    "source_url": "https://www.insightful.io/customer/axiz"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/axiz",
+  "company_phone": "+27 (0)11 237 7000",
+  "public_email": "sales@axiz.com",
+  "contact_source_url": "https://info.axiz.com/contact/",
+  "notes": "Still in role: the Axiz About page (info.axiz.com/about/) lists Craig Brunsden as CEO (20+ years at Axiz) and HR Director Robert Nkuna and CFO Andrew Li. The phone and company LinkedIn come from the axiz.com homepage, and sales@axiz.com from the contact page. That page also lists many named staff mailboxes, which were not recorded. No CEO LinkedIn found (search budget exhausted)."
+ },
+ {
+  "company_name": "TRG",
+  "company_domain": "",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "200+",
+  "hq_country": "Australia",
+  "contacts": [
+   {
+    "name": "Jean Mae Quimada",
+    "title": "Chief Operating Officer",
+    "linkedin": "",
+    "source_url": "https://www.insightful.io/customer/trg"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "",
+  "notes": "The Insightful case study (re-fetched) still quotes Jean Mae Quimada, COO, but gives no full company name or website. 'TRG' is ambiguous, and without web search the company site could not be identified, so LinkedIn, phone and email remain blank. Needs a manual search, e.g. the TRG education company in Australia with a Philippine COO."
+ },
+ {
+  "company_name": "Gonito",
+  "company_domain": "goni.to",
+  "vendor": "TimeCamp",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "51-200 (LinkedIn company page)",
+  "hq_country": "Poland",
+  "contacts": [
+   {
+    "name": "Damian Wiszowaty",
+    "title": "Vice President of Marketplace (company site); CEO per input",
+    "linkedin": "https://pl.linkedin.com/in/damian-wiszowaty/en",
+    "source_url": "https://goni.to/kontakt"
+   },
+   {
+    "name": "Mateusz Westwalewicz",
+    "title": "COO (quoted in TimeCamp story)",
+    "linkedin": "",
+    "source_url": "https://www.timecamp.com/customer-stories/gonito/"
+   },
+   {
+    "name": "Pawel Borowik",
+    "title": "Head of Sales",
+    "linkedin": "",
+    "source_url": "https://goni.to/kontakt"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/gonito/",
+  "company_phone": "+48 797 944 654",
+  "public_email": "hello@gonito.pl",
+  "contact_source_url": "https://goni.to/en/contact",
+  "notes": "Website goni.to was found via the company's LinkedIn page (HQ Aleja Zwyciestwa 96/98, Gdynia-Redlowo). The site now shows Damian Wiszowaty as 'Vice President of Marketplace', not CEO; his LinkedIn URL is listed on the Gonito LinkedIn company page. The TimeCamp story quotes COO Mateusz Westwalewicz (the operational owner of the time tracking), added as a contact. Phone and email are from the goni.to contact page."
+ },
+ {
+  "company_name": "Assuaged Foundation",
+  "company_domain": "assuagedfoundation.org",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "50-200",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Thane Stewart Murphy",
+    "title": "Co-founder & President",
+    "linkedin": "https://www.linkedin.com/in/thane-murphy-assuaged/",
+    "source_url": "https://assuagedfoundation.org/pages/our-team"
+   },
+   {
+    "name": "Cynthia Cherise Murphy",
+    "title": "Co-founder & Vice President (oversees internship program)",
+    "linkedin": "https://www.linkedin.com/in/cynthia-cherise/",
+    "source_url": "https://assuagedfoundation.org/pages/our-team"
+   },
+   {
+    "name": "Craig Dumnich",
+    "title": "Treasurer",
+    "linkedin": "https://www.linkedin.com/in/craigdumnich/",
+    "source_url": "https://assuagedfoundation.org/pages/our-team"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/assuaged/",
+  "company_phone": "650 538 6633",
+  "public_email": "hello@assuaged.com",
+  "contact_source_url": "https://assuagedfoundation.org/",
+  "notes": "Still in role: the Our Team page lists Cynthia Cherise Murphy as Vice President, overseeing the internship program (the people tracked in Clockify), and her co-founder Thane Stewart Murphy as President. Both LinkedIn URLs are linked from that page. Treasurer added. A 501c3 nonprofit whose workforce is mostly student interns, so a small budget."
+ },
+ {
+  "company_name": "Pexly",
+  "company_domain": "pexly.com",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "500+ (per Insightful)",
+  "hq_country": "Netherlands (Zaanstad/Amsterdam); delivery in Eastern Europe & elsewhere",
+  "contacts": [
+   {
+    "name": "Michel Mertens",
+    "title": "Managing Director",
+    "linkedin": "https://www.linkedin.com/in/michel-mertens-a8778517/",
+    "source_url": "https://pexly.com/pexly-team-2/"
+   },
+   {
+    "name": "Jeroen Rijnen",
+    "title": "Co-founder & Managing Partner",
+    "linkedin": "https://www.linkedin.com/in/jeroendaxx/",
+    "source_url": "https://pexly.com/pexly-team-2/"
+   },
+   {
+    "name": "Bart Kuyper",
+    "title": "Co-founder & Managing Partner",
+    "linkedin": "https://www.linkedin.com/in/bart-kuyper-30318b1/",
+    "source_url": "https://pexly.com/pexly-team-2/"
+   },
+   {
+    "name": "Mykhailo Pleskun",
+    "title": "Head of Operations Department",
+    "linkedin": "",
+    "source_url": "https://pexly.com/pexly-team-2/"
+   },
+   {
+    "name": "Aleksei Iazov",
+    "title": "Head of HR Department",
+    "linkedin": "",
+    "source_url": "https://pexly.com/pexly-team-2/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/pexly/",
+  "company_phone": "+31 75 808 0275",
+  "public_email": "hello@pexly.com",
+  "contact_source_url": "https://pexly.com/pexly-team-2/",
+  "notes": "Still in role: the Pexly team page lists Michel Mertens as Managing Director, with his LinkedIn linked there. Added co-founder Bart Kuyper (LinkedIn from the team page), the Head of Operations and the Head of HR. hello@pexly.com was Cloudflare-encoded on the site and has been decoded."
+ },
+ {
+  "company_name": "The Human Capital (THC)",
+  "company_domain": "thehuman.capital",
+  "vendor": "We360.ai",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "Conflicting: We360 says 3,000; ZoomInfo estimates ~10 staff; company says 'hundreds' of VAs placed",
+  "hq_country": "United Kingdom / United States (founder in Colorado; offices in US, UK, UAE, AU)",
+  "contacts": [
+   {
+    "name": "Piyoosh Rai",
+    "title": "Founder and CEO",
+    "linkedin": "https://www.linkedin.com/in/piyooshrai/",
+    "source_url": "https://thehuman.capital/about"
+   }
+  ],
+  "company_linkedin": "https://linkedin.com/company/thehumancapital",
+  "company_phone": "+1 (813) 761-8268",
+  "public_email": "info@thehuman.capital",
+  "contact_source_url": "https://thehuman.capital/contact",
+  "notes": "Still in role: the About page shows 'Piyoosh Rai, Founder and CEO'. Company LinkedIn and info@ are from the contact page. The site names no other leader, so there is no second contact."
+ },
+ {
+  "company_name": "LinkUp Studio (Linkup ST)",
+  "company_domain": "linkupst.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "60-90+ (case study 60+; company bio 90+)",
+  "hq_country": "Ukraine (Lviv, Ternopil) + US representative office",
+  "contacts": [
+   {
+    "name": "Andriy Sambir",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/andriy-sambir/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/linkupst",
+  "company_phone": "",
+  "public_email": "info@linkupst.com; career@linkupst.com",
+  "contact_source_url": "https://linkupst.com/contact",
+  "notes": "Company LinkedIn /company/linkupst is linked in the site footer; the contact page also links /company/linkup-studio/, which may be a second or older page. Emails are from the contact and about pages. The named people and LinkedIns on the site are client testimonials, not staff, so they were not recorded. No phone on the site. CEO not re-verified, and no second contact found."
+ },
+ {
+  "company_name": "Fields Group (Fields Data Recovery)",
+  "company_domain": "fields-data-recovery.co.uk",
+  "vendor": "Insightful",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "70 (Insightful case study)",
+  "hq_country": "United Kingdom (Pencoed, Bridgend, Wales) + Thailand + US",
+  "contacts": [
+   {
+    "name": "Arron James Evans",
+    "title": "Director (Companies House, appointed 2025-05-16)",
+    "linkedin": "",
+    "source_url": ""
+   },
+   {
+    "name": "Jonathan Latchem-Smith",
+    "title": "(from input)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/fields-data-recovery/",
+  "company_phone": "0800 083 7891 (+44 800 083 7891)",
+  "public_email": "enquiries@fields-data-recovery.co.uk",
+  "contact_source_url": "https://www.fields-data-recovery.co.uk/about-us.html",
+  "notes": "Phone and company LinkedIn on the site match the input. The site names no directors, and the director's LinkedIn needs a web search (budget exhausted), so it is still missing."
+ },
+ {
+  "company_name": "Purity Products",
+  "company_domain": "purityproducts.com",
+  "vendor": "Time Doctor",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "100+ (company 'Our Story' page)",
+  "hq_country": "United States (Plainview, NY)",
+  "contacts": [
+   {
+    "name": "Jahn Levin",
+    "title": "Founder, President & CEO",
+    "linkedin": "https://www.linkedin.com/in/jahnlevin/",
+    "source_url": "https://www.purityproducts.com/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/purity-products",
+  "company_phone": "516-767-1967 (corporate); customer care 1-800-256-6102; 1-888-769-7873",
+  "public_email": "customercare@purityproducts.com",
+  "contact_source_url": "https://www.purityproducts.com/contact-us",
+  "notes": "Still in role: the About page has a letter 'From the founder, Jahn Levin, President & CEO'. 516-767-1967 is now confirmed on the contact page. No other executive is named on the site, so there is no second contact."
+ },
+ {
+  "company_name": "Brainlabs",
+  "company_domain": "brainlabsdigital.com",
+  "vendor": "Clockify",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "900+ (story); tracks 1,000+ employees",
+  "hq_country": "UK",
+  "contacts": [
+   {
+    "name": "Dan Gilbert",
+    "title": "Founder & CEO",
+    "linkedin": "",
+    "source_url": "https://www.brainlabsdigital.com/about-us/"
+   },
+   {
+    "name": "Ali Reed",
+    "title": "Chief Growth Officer, UK",
+    "linkedin": "",
+    "source_url": "https://www.brainlabsdigital.com/contact/"
+   },
+   {
+    "name": "David Maundrell",
+    "title": "Senior Manager (Clockify story interviewee; not a top decision maker)",
+    "linkedin": "https://www.linkedin.com/in/david-maundrell-35831b105/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/brainlabs-digital/",
+  "company_phone": "",
+  "public_email": "",
+  "contact_source_url": "https://www.brainlabsdigital.com/contact/",
+  "notes": "Decision maker added: Dan Gilbert, Founder & CEO (About page; backed by Falfurrias Capital Partners since 2023). The contact page lists regional growth leads (Ali Reed, Chief Growth Officer UK; Adam Potashnick, President NAMER). Company LinkedIn is from the homepage footer. The site shows no phone or email (contact forms only). Large agency, so the Clockify use may be team-level."
+ },
+ {
+  "company_name": "Sleek Consulting",
+  "company_domain": "sleekconsulting.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "26-50 (Toggl case study)",
+  "hq_country": "United States (Kingston, NH)",
+  "contacts": [
+   {
+    "name": "Sabre Leek",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/sabre-leek-4848912/",
+    "source_url": ""
+   },
+   {
+    "name": "Amanda Viehman",
+    "title": "(from input)",
+    "linkedin": "https://www.linkedin.com/in/amandaviehman/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/sleekconsulting",
+  "company_phone": "(603) 642-5594",
+  "public_email": "",
+  "contact_source_url": "https://sleekconsulting.com/About-us/",
+  "notes": "sleekconsulting.com loads its content with JavaScript, and neither a direct fetch nor a rendered fetch showed any email, phone or team text. Public email still missing, and contacts not re-verified. Existing phone and LinkedIn are kept from the input."
+ },
+ {
+  "company_name": "Wire2Air (TXTImpact)",
+  "company_domain": "wire2air.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "~50",
+  "hq_country": "United States (New York)",
+  "contacts": [
+   {
+    "name": "Suman Rajpal",
+    "title": "Principal Co-founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/suman-rajpal-75283b15/",
+    "source_url": ""
+   },
+   {
+    "name": "Mamta Arun",
+    "title": "(from input)",
+    "linkedin": "https://www.linkedin.com/in/mamtaarun/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/wire2air",
+  "company_phone": "(800) 605-0280",
+  "public_email": "sales@wire2air.com; support@wire2air.com",
+  "contact_source_url": "https://wire2air.com/contact/",
+  "notes": "sales@ and support@ are on the wire2air.com/contact page (support@ also in the privacy policy). Phone (800)-605-0280 confirmed on the site. Contacts not re-verified (the About page names no one)."
+ },
+ {
+  "company_name": "PlanetArt",
+  "company_domain": "planetart.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "834",
+  "hq_country": "United States",
+  "contacts": [
+   {
+    "name": "Roger Bloxberg",
+    "title": "CEO & Co-Founder",
+    "linkedin": "https://www.linkedin.com/in/roger-bloxberg-2914832/",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "",
+  "public_email": "privacy@planetart.com (privacy contact only)",
+  "contact_source_url": "https://www.planetart.com/privacy-policy",
+  "notes": "The planetart.com About and Contact pages name no executives and show no phone or general email. The only published address is privacy@planetart.com, from the privacy policy, which also gives the postal address 23801 Calabasas Road, Calabasas, CA 91302 (Legal Department). The site does not link a company LinkedIn page. CEO not re-verified and no second contact found (search budget exhausted)."
+ },
+ {
+  "company_name": "Knack RCM (Knack Global)",
+  "company_domain": "knackrcm.com",
+  "vendor": "Time Champ",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "3,000+ (Time Champ); ~1,075 (ContactOut)",
+  "hq_country": "United States (NJ) / India (Mohali)",
+  "contacts": [
+   {
+    "name": "Gautam Barai",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://knackrcm.com/about/"
+   },
+   {
+    "name": "Shahnaz Soans",
+    "title": "Chief People Officer",
+    "linkedin": "",
+    "source_url": "https://knackrcm.com/about/"
+   },
+   {
+    "name": "Rohit Puri",
+    "title": "Chief Administrative Officer",
+    "linkedin": "",
+    "source_url": "https://knackrcm.com/about/"
+   },
+   {
+    "name": "Anurag Pandey",
+    "title": "Chief Transformation Officer",
+    "linkedin": "",
+    "source_url": "https://knackrcm.com/about/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/knack-global/",
+  "company_phone": "US (Woodbridge NJ) 732-596-0110 ext. 216 / 732-596-0114; India Mohali +91 0172-4933611-13",
+  "public_email": "hello@knackrcm.com",
+  "contact_source_url": "https://www.knackrcm.com/contact/",
+  "notes": "Still in role: the About page lists Gautam Barai as CEO. Arvind Ramakrishnan (second contact in the input) is NOT on the current leadership list and may have left, so he was replaced with the Chief People Officer (HR, owner of time tracking) and the Chief Administrative Officer. The site footer now links the company LinkedIn as /company/knack-global/ (the input had /company/knack-rcm). Phone and email are from the contact page, which also lists offices in Mumbai, Hyderabad and Jaipur."
+ },
+ {
+  "company_name": "The A Career",
+  "company_domain": "theacareer.com",
+  "vendor": "Hubstaff",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "48 (TheirStack)",
+  "hq_country": "United States (New York per snippet); LatAm workforce",
+  "contacts": [],
+  "company_linkedin": "https://www.linkedin.com/company/theacareer",
+  "company_phone": "",
+  "public_email": "payments@theacareer.com (payments only)",
+  "contact_source_url": "https://theacareer.com/contacto/",
+  "notes": "The A Career is a Spanish-language online education and remote-placement platform for LatAm architects, engineers and accountants. Its About and Contact pages name no founder or staff and give no phone. Payment instructions there also show a personal Gmail for Binance payments (not recorded). Decision maker still missing; needs a web search."
+ },
+ {
+  "company_name": "DWS Wind Turbine Service",
+  "company_domain": "dwsservice.pl",
+  "vendor": "TimeCamp",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "51-200 (LinkedIn company page)",
+  "hq_country": "Poland",
+  "contacts": [
+   {
+    "name": "Wojciech Sadowski",
+    "title": "President of the Board (Prezes Zarzadu)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/dws-wind-turbine-service",
+  "company_phone": "+48 503 490 468",
+  "public_email": "kontakt@dwsservice.pl; jobs@dwsservice.pl",
+  "contact_source_url": "https://www.dwsservice.pl/en/contact/",
+  "notes": "Website dwsservice.pl was found through the company's LinkedIn page (HQ Stradomno 92, 14-200 Ilawa, Poland; founded 2012). The contact page gives the legal name DWS WIND TURBINE SERVICE SP. Z O.O., NIP 892-148-16-59, phone and emails. The site names no managers, so the board president was not re-verified and has no LinkedIn."
+ },
+ {
+  "company_name": "GoTeam",
+  "company_domain": "go.team",
+  "vendor": "Teramind",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "501-1,000",
+  "hq_country": "Philippines (AU-owned)",
+  "contacts": [
+   {
+    "name": "Fiona Kesby",
+    "title": "CEO",
+    "linkedin": "https://ph.linkedin.com/in/fionakesby",
+    "source_url": "https://go.team/our-team/"
+   },
+   {
+    "name": "Matt Kesby",
+    "title": "Leadership team, leads GoTeam's technology division",
+    "linkedin": "",
+    "source_url": "https://go.team/our-team/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/goteamph/",
+  "company_phone": "US +1 302 207 2767; AU +61 2 7227 8809; PH +63 32 238 7448",
+  "public_email": "sales@go.team; success@go.team",
+  "contact_source_url": "https://go.team/",
+  "notes": "Still in role: the 'Our Leadership' page shows Fiona Kesby, CEO (in Cebu since 2015), and Matt Kesby, who leads the technology division (AI apps) and has been outsourcing since 2008; that fits an owner of monitoring and tooling. AU and PH phones and success@ were added from the homepage. Office: 9th Flr, i1 Building, IT Park Apas, Cebu City."
+ },
+ {
+  "company_name": "SoftSages Technology",
+  "company_domain": "softsages.com",
+  "vendor": "ProHance",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "350-450 (site schema)",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Rajnikant (Raj) Patel",
+    "title": "Founder & CEO",
+    "linkedin": "https://www.linkedin.com/in/rajnikantjpatel/",
+    "source_url": "https://www.softsages.com/leadership/"
+   },
+   {
+    "name": "Jiraj Ruparelia",
+    "title": "VP Finance",
+    "linkedin": "https://www.linkedin.com/in/jiraj-ruparelia-805201a3",
+    "source_url": "https://www.softsages.com/leadership/"
+   },
+   {
+    "name": "Mayank Jain",
+    "title": "Advisor - Cyber Security & Operations",
+    "linkedin": "https://www.linkedin.com/in/mayankjainphila",
+    "source_url": "https://www.softsages.com/leadership/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/softsages-technology/",
+  "company_phone": "(484) 321-8314",
+  "public_email": "info@softsages.com; sales@softsages.com; support@softsages.com",
+  "contact_source_url": "https://www.softsages.com/",
+  "notes": "Still in role: the leadership page has 'Meet Our CEO - Raj Patel'. Second contact is VP Finance Jiraj Ruparelia, the only other executive (the rest are advisors); his LinkedIn is linked on the page. Added sales@ and support@ from the homepage and About page."
+ },
+ {
+  "company_name": "GUS Education Philippines (GUS Education Business Process Solutions and Services Philippines, Inc.)",
+  "company_domain": "gusphilippines.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "400+",
+  "hq_country": "Philippines",
+  "contacts": [
+   {
+    "name": "Maria Suzanne Comagon (Ma. Suzanne Obando-Comagon)",
+    "title": "Head of Corporate Services (company site); Country Manager per input",
+    "linkedin": "",
+    "source_url": "https://www.gusphilippines.com/our-team"
+   },
+   {
+    "name": "Rafael Mendiola",
+    "title": "Partnership and Service Delivery Manager",
+    "linkedin": "",
+    "source_url": "https://www.gusphilippines.com/our-team"
+   },
+   {
+    "name": "Lino Roy Suarez",
+    "title": "IT Technical Support Manager",
+    "linkedin": "",
+    "source_url": "https://www.gusphilippines.com/our-team"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/gus-philippines",
+  "company_phone": "+63 917 828 6085 (listed in privacy policy, data-protection contact)",
+  "public_email": "DPOPH@gus.global (data protection officer)",
+  "contact_source_url": "https://www.gusphilippines.com/privacy-policy",
+  "notes": "The Our Team page now lists Maria Suzanne Comagon as Head of Corporate Services (the input had Country Manager), leading corporate services and people. Added the service-delivery and IT managers (IT owns the monitoring tool). The site footer links the parent Global University Systems LinkedIn (/company/global-university-systems/), not a GUS Philippines page, so the input's company_linkedin is kept. The only phone and email published are the DPO contacts in the privacy policy. Office: 9th floor, Robinsons Zeta Tower, Bridgetowne, Quezon City."
+ },
+ {
+  "company_name": "Hire Live Support",
+  "company_domain": "hirelivesupport.com",
+  "vendor": "DeskTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "100+ (DeskTime case study)",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Steve Martin",
+    "title": "CEO",
+    "linkedin": "https://www.linkedin.com/in/steve-martin-64a44123/",
+    "source_url": ""
+   },
+   {
+    "name": "Sam Davis",
+    "title": "(from input)",
+    "linkedin": "",
+    "source_url": ""
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/hirelivesupportinc",
+  "company_phone": "US +1 (888) 774-4909; UK +44 (800) 088-4422",
+  "public_email": "support@hirelivesupport.com",
+  "contact_source_url": "https://www.hirelivesupport.com/policies/privacy-policy",
+  "notes": "support@hirelivesupport.com is from the site's privacy policy, and the company LinkedIn is in the site footer. The About page names no staff, so the CEO was not re-verified."
+ },
+ {
+  "company_name": "netguru",
+  "company_domain": "netguru.com",
+  "vendor": "Toggl Track",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "740 (TheirStack)",
+  "hq_country": "Poland",
+  "contacts": [
+   {
+    "name": "Kuba Filipowski",
+    "title": "Chief Executive Officer & Co-Founder, Board Member",
+    "linkedin": "https://www.linkedin.com/in/kubafilipowski/",
+    "source_url": "https://www.netguru.com/about-us"
+   },
+   {
+    "name": "Robert Scholz",
+    "title": "Head of Delivery, Board Member",
+    "linkedin": "https://www.linkedin.com/in/r-scholz/",
+    "source_url": "https://www.netguru.com/about-us"
+   },
+   {
+    "name": "Katarzyna Roj",
+    "title": "Head of Talent",
+    "linkedin": "https://www.linkedin.com/in/katarzynaroj/",
+    "source_url": "https://www.netguru.com/about-us"
+   },
+   {
+    "name": "Wiktor Schmidt",
+    "title": "Executive Chairman & Co-Founder",
+    "linkedin": "https://www.linkedin.com/in/wiktorschmidt/",
+    "source_url": "https://www.netguru.com/about-us"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/netguru",
+  "company_phone": "+48 534 205 209",
+  "public_email": "hello@netguru.com",
+  "contact_source_url": "https://www.netguru.com/about-us",
+  "notes": "Still in role: the About page lists Kuba Filipowski as CEO & Co-Founder, with his LinkedIn linked there. Second contacts are Head of Delivery Robert Scholz (owns delivery and time tracking) and Head of Talent; all LinkedIns are linked from the About page. The phone is from the site's schema.org data and hello@ from the contact and About pages. The site links the company LinkedIn as /company/netguru (the input had /company/netguru-)."
+ }
+]

@@ -1,0 +1,36 @@
+[
+{"company_name": "Caprae Capital / Destroy Drive",
+ "contacts": [
+  {"name": "Raymond (Ray) Zielke", "title": "Chief Executive Officer (since 2024-10-14)", "linkedin": "https://www.linkedin.com/in/raymond-zielke-9422a2a7/", "source_url": "https://www.prnewswire.com/news-releases/destroy-drive-onboards-ray-zielke-as-new-ceo-to-drive-global-expansion-302277090.html"},
+  {"name": "Dag Adamson", "title": "Founder (& President per earlier sources)", "linkedin": "", "source_url": "https://www.itadsummit.com/index.php/dag-adamson/"}
+ ],
+ "hq_country": "United States (Tampa, FL)",
+ "notes": "REPLACED decision maker. Zackary Beckham, the Director of Service Delivery from the case study, now has a LinkedIn headline at ITSco - Integrated Technical Services (linkedin.com/in/zackarybeckham), so he has probably left. Ray Zielke has been CEO since Oct 2024 (PR Newswire); his LinkedIn URL ('Chief Executive Officer - Destroy Drive') came verbatim from a search result. Dag Adamson is the founder; his LinkedIn URL did not appear verbatim. The destroydrive.com/about-team-2 page holds template placeholder names (David Parker, Jane Moon and so on) and was ignored. The company LinkedIn page, phone +1 (727) 297-2313 and info@destroydrive.com were re-confirmed on the homepage. Web search budget ran out partway through this batch."},
+{"company_name": "SmartBuyGlasses (SmartBuyGlasses Optical Group)",
+ "contacts": [
+  {"name": "David Menning", "title": "Co-founder & Co-CEO", "linkedin": "https://www.linkedin.com/in/mdavid2/", "source_url": "https://www.crunchbase.com/person/david-menning"},
+  {"name": "Tony Zhuang", "title": "Co-founder, SmartBuyGlasses Optical Group", "linkedin": "https://www.linkedin.com/in/tonyzhuang/", "source_url": "https://resources.timedoctor.com/case-studies/smartbuyglasses-enhanced-team-productivity/"}
+ ],
+ "company_phone": "+1 (888) 979-2177", "public_email": "customerservice@smartbuyglasses.com", "contact_source_url": "https://www.smartbuyglasses.com/help",
+ "notes": "David Menning is still co-founder and Co-CEO; he also leads VisionDirect Optical Group and Motion Global. His LinkedIn URL (mdavid2, 'David Menning - SmartBuyGlasses Optical Group') came verbatim from a search result. The phone and email are customer-service lines from a search summary of the Help page and third-party listings; a Canada line, 833-666-0288 / customerservice@smartbuyglasses.ca, also exists. HQ is 1/F Cheung Hing Industrial Building, 12P Smithfield Road, Western, Hong Kong. No company LinkedIn URL appeared verbatim, so it is left blank. The third co-founder is Doron Kalinko."},
+{"company_name": "Western Reserve Area Agency on Aging",
+ "contacts": [
+  {"name": "E. Douglas Beach, PhD", "title": "Chief Executive Officer", "linkedin": "", "source_url": "https://theorg.com/org/western-reserve-area-agency-on-aging/org-chart/douglas-beach"},
+  {"name": "Mark Davidson", "title": "Chief Information Officer", "linkedin": "https://www.linkedin.com/in/markdavidsontech/", "source_url": "https://theorg.com/org/western-reserve-area-agency-on-aging/org-chart/mark-davidson"}
+ ],
+ "company_phone": "800-626-7277; 216-621-0303", "public_email": "", "contact_source_url": "https://www.areaagingsolutions.org/contact-us/",
+ "notes": "Both contacts are still in role. Douglas Beach has been CEO since Oct 2014, per a podcast and The Org. Mark Davidson has been CIO since Apr 2017; his LinkedIn URL ('Mark Davidson - Western Reserve Area Agency on Aging') came verbatim from a search result. The contact page uses a form and lists no email, so public_email is still blank. Address: 25300 Al Moen Drive Suite 300, North Olmsted, OH 44070."},
+{"company_name": "Friedman Vartolo LLP",
+ "contacts": [
+  {"name": "Adam J. Friedman", "title": "Managing Partner", "linkedin": "https://www.linkedin.com/in/adamjfriedman/", "source_url": "https://friedmanvartolo.com/team/adam-friedman/"},
+  {"name": "Ralph Vartolo", "title": "Managing Partner", "linkedin": "https://www.linkedin.com/in/ralph-vartolo-bb85702a/", "source_url": "https://friedmanvartolo.com/type/partners/"},
+  {"name": "Michael P. DeRosa", "title": "Partner & Chief Legal Officer", "linkedin": "", "source_url": "https://friedmanvartolo.com/type/partners/"}
+ ],
+ "public_email": "reception@friedmanvartolo.com", "contact_source_url": "https://friedmanvartolo.com/contact/",
+ "notes": "Adam Friedman is still Managing Partner, now over the Garden City, Jersey City and Philadelphia offices; Ralph Vartolo is the other Managing Partner. Both LinkedIn URLs ('Adam J. Friedman - Friedman Vartolo LLP'; 'Ralph Vartolo', which shows only a New York location, so it is a likely rather than certain match) came verbatim from search results. The email is from the contact page; the privacy policy also lists Compliance@friedmanvartolo.com. A personal address seen in a broker snippet was not used. Principal office: 1325 Franklin Avenue, Suite 160, Garden City, NY 11530."},
+{"company_name": "Day After Maria",
+ "contacts": [
+  {"name": "Dawn (surname not published)", "title": "Owner / main contact", "linkedin": "", "source_url": "https://dayaftermaria.com/"}
+ ],
+ "notes": "Could not find more. The site and its about page name no founder, only dawn@dayaftermaria.com and (424) 478-9255, both kept. The site's LinkedIn link is malformed (http://linkedin.com/dayaftermaria, with no /company/ path), so company_linkedin was left blank rather than guessed. Instagram is instagram.com/dayaftermaria. One web search for the founder's surname found nothing, and the session's web search budget then ran out."}
+]

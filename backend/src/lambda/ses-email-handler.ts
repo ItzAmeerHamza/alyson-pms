@@ -1,5 +1,6 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { buildSesRawMime } from '../common/ses-raw-mime';
+import { ensureTaviloLogoAttachment } from '../common/tavilo-email-brand';
 
 /**
  * Non-VPC Lambda: send mail via public SES API.
@@ -14,6 +15,8 @@ export type SesEmailAttachmentPayload = {
   contentType: string;
   /** base64-encoded file bytes */
   contentBase64: string;
+  /** Inline image id, matched by cid: in the HTML. */
+  contentId?: string;
 };
 
 export type SesEmailEvent = {
@@ -49,7 +52,7 @@ function getClient(): SESv2Client {
 }
 
 function defaultFrom(): string {
-  return (process.env.EMAIL_FROM || '').trim() || 'hamza@cintara.ai';
+  return (process.env.EMAIL_FROM || '').trim() || 'support@tavilo.ai';
 }
 
 export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => {
@@ -72,8 +75,10 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
       filename: String(a?.filename || '').trim(),
       contentType: String(a?.contentType || 'application/octet-stream').trim(),
       contentBase64: String(a?.contentBase64 || '').trim(),
+      contentId: String(a?.contentId || '').trim() || undefined,
     }))
     .filter((a) => a.filename && a.contentBase64);
+  const withLogo = ensureTaviloLogoAttachment(html, attachments);
 
   if (!to.length || !subject || !html || !from) {
     return {
@@ -84,7 +89,7 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
   }
 
   try {
-    const useRaw = attachments.length > 0;
+    const useRaw = withLogo.length > 0;
     const result = await getClient().send(
       new SendEmailCommand(
         useRaw
@@ -103,10 +108,11 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
                     subject,
                     html,
                     text: event.text,
-                    attachments: attachments.map((a) => ({
+                    attachments: withLogo.map((a) => ({
                       filename: a.filename,
                       contentType: a.contentType,
                       content: Buffer.from(a.contentBase64, 'base64'),
+                      contentId: a.contentId,
                     })),
                   }),
                 },
@@ -135,7 +141,7 @@ export const handler = async (event: SesEmailEvent): Promise<SesEmailResult> => 
     const messageId = result.MessageId || '';
     console.log(
       `ses-email send ok to=${to.join(',')}${cc.length ? ` cc=${cc.join(',')}` : ''}${
-        attachments.length ? ` attachments=${attachments.length}` : ''
+        withLogo.length ? ` attachments=${withLogo.length}` : ''
       } messageId=${messageId}`,
     );
     return { ok: true, messageId };

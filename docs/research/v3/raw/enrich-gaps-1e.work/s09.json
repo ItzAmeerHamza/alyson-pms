@@ -1,0 +1,51 @@
+[
+{"company_name": "Upsource", "company_domain": "weareupsource.co.uk", "vendor": "Clockify", "confidence_score": 90,
+ "employee_count": "18", "hq_country": "UK",
+ "contacts": [
+  {"name": "Caroline Marshall", "title": "Founder", "linkedin": "https://www.linkedin.com/in/carolinepooley/", "source_url": "https://weareupsource.co.uk/about"}
+ ],
+ "company_linkedin": "", "company_phone": "", "public_email": "caroline@weareupsource.co.uk", "contact_source_url": "https://weareupsource.co.uk/contact",
+ "notes": "Still in role: the About page says Upsource was founded by Caroline Marshall. Home, about and contact pages name no other team members, list no phone and have no company LinkedIn link. Second contact, phone and company LinkedIn still missing."},
+{"company_name": "Bright Bridge Web", "company_domain": "brightbridgeweb.com", "vendor": "Hubstaff", "confidence_score": 65,
+ "employee_count": "~20", "hq_country": "USA (Provo, Utah)",
+ "contacts": [
+  {"name": "Austin Carly", "title": "General Manager", "linkedin": "https://www.linkedin.com/in/austin-carly-21a58b1b4/", "source_url": ""},
+  {"name": "Matthew Christiansen", "title": "Founder (former CEO/CTO)", "linkedin": "https://www.linkedin.com/in/matthewbchristiansen/", "source_url": ""}
+ ],
+ "company_linkedin": "", "company_phone": "(801) 800-8591", "public_email": "services@brightbridgeweb.com",
+ "contact_source_url": "https://brightbridgeweb.com/contact",
+ "notes": "Only the company LinkedIn was missing; the site has no LinkedIn link, so it is still blank. Phone and email re-confirmed on the official site. Contacts carried from the input; not re-confirmed and the input gave no source URL."},
+{"company_name": "Hundred Hands Learning Lab (H2L2)", "company_domain": "h2l2.io", "vendor": "Hubstaff", "confidence_score": 90,
+ "employee_count": "Small (contractors + core team)", "hq_country": "United States (San Diego)",
+ "contacts": [
+  {"name": "Patrick Yurick", "title": "Co-founder", "linkedin": "https://www.linkedin.com/in/patrickyurick/", "source_url": "https://hubstaff.com/customers/h2l2"},
+  {"name": "Luke Piedad", "title": "Co-founder", "linkedin": "", "source_url": "https://hubstaff.com/customers/h2l2"}
+ ],
+ "company_linkedin": "", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "Not filled. h2l2.io returns Cloudflare 403 to both fetch and curl, and web search was exhausted. Company LinkedIn, phone and email still missing."},
+{"company_name": "MedRisk", "company_domain": "medrisknet.com", "vendor": "ActivTrak", "confidence_score": 100,
+ "employee_count": "3,200+ (ENTERPRISE, per ActivTrak)", "hq_country": "United States (King of Prussia, PA)",
+ "contacts": [
+  {"name": "Sri Sridharan", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/srivatsansridharan/", "source_url": "https://www.medrisknet.com/about-us/our-leadership/"},
+  {"name": "Satish Narayanan", "title": "Chief Data and Information Officer", "linkedin": "https://www.linkedin.com/in/satish-t-narayanan/", "source_url": "https://www.medrisknet.com/about-us/our-leadership/"},
+  {"name": "Mary O'Donoghue", "title": "Chief Operations Officer", "linkedin": "https://www.linkedin.com/in/mary-o-donoghue-a2812612/", "source_url": "https://www.medrisknet.com/about-us/our-leadership/"},
+  {"name": "Jeff Ericson", "title": "SVP Infrastructure & CISO (ActivTrak project owner)", "linkedin": "", "source_url": "https://www.activtrak.com/customers/medrisk/"}
+ ],
+ "company_linkedin": "https://www.linkedin.com/company/medrisk-inc-/", "company_phone": "(800) 225-9675",
+ "public_email": "customersupport@medrisknet.com; marketingsupport@medrisknet.com", "contact_source_url": "https://www.medrisknet.com/contact/",
+ "notes": "Still in role: Sri Sridharan is CEO on the official leadership page, which links each leader's LinkedIn. LinkedIn-to-person mapping was checked in the HTML order (name, title, then link). Satish Narayanan now leads technology, enterprise data and AI, so he is likely the IT owner above the CISO. Jeff Ericson (the ActivTrak case-study owner) is not on the exec page; kept but unverified. Also listed: Mike Ryan (Executive Chairman), Shelley Boyce (Founder) and Tom Weir (CFO). Phone is from the homepage. Emails are from the official contact page."},
+{"company_name": "BrandMojo", "company_domain": "", "vendor": "Apploye", "confidence_score": 90,
+ "employee_count": "10-50 (Apploye); ~7 staff (Tracxn) plus VAs/freelancers", "hq_country": "India (Bengaluru)",
+ "contacts": [
+  {"name": "Kiran N", "title": "Founder & Chief Creative Officer", "linkedin": "https://www.linkedin.com/in/kirangrafix/", "source_url": "https://apploye.com/customer-stories/brandmojo"}
+ ],
+ "company_linkedin": "", "company_phone": "", "public_email": "", "contact_source_url": "",
+ "notes": "Not filled. The Apploye story gives no website. brandmojo.in does not resolve, brandmojo.co is an unrelated AI product (Branderiser), and brandmojo.com returns nothing, so the domain is still unknown. The search budget was exhausted, so no company LinkedIn, phone or email."},
+{"company_name": "Reef Technologies", "company_domain": "reef-technologies.com", "vendor": "Hubstaff", "confidence_score": 95,
+ "employee_count": "~10 (TechBehemoths/Crunchbase snippet; senior-only team)", "hq_country": "Poland (Warsaw)",
+ "contacts": [
+  {"name": "Paweł Polewicz", "title": "CEO", "linkedin": "https://pl.linkedin.com/in/reefiasty", "source_url": "https://reef-technologies.com/"}
+ ],
+ "company_linkedin": "", "company_phone": "", "public_email": "", "contact_source_url": "https://reef-technologies.com/",
+ "notes": "Still in role: the homepage quotes 'Paweł Polewicz, Reef Technologies CEO'. Footer imprint: Reef Technologies sp. z o.o., ul. Puławska 39 lok. 40, 02-508 Warsaw; VAT PL5213951727; KRS 0000943523. The site has a 'drop us a note' form but no email, phone or company LinkedIn link. The public GitHub handbook mentions a COO (equipment purchases, agreements) but never names them, so no second contact."}
+]

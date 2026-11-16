@@ -1,0 +1,40 @@
+[
+{"company_name": "Euronet Worldwide", "confidence_score": 75, "hq_country": "US (Leawood, Kansas)",
+ "contacts": [
+  {"name": "Michael J. Brown", "title": "Chairman, President and CEO", "linkedin": "", "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"},
+  {"name": "Kevin J. Caponecchi", "title": "EVP and CEO, epay, Software and EFT Asia Pacific Division", "linkedin": "", "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"},
+  {"name": "Dr. Martin L. Brückner", "title": "SVP and Chief Technology Officer", "linkedin": "", "source_url": "https://ir.euronetworldwide.com/corporate-governance/executive-management"}],
+ "company_linkedin": "https://www.linkedin.com/company/euronet-worldwide/", "company_phone": "+1-913-327-4200", "public_email": "",
+ "contact_source_url": "https://www.euronetworldwide.com/contact-us/",
+ "notes": "Executives from Euronet's IR executive-management page. The ProHance case study does not say which Euronet unit uses it (only 'a financial technology company specializing in electronic payment services'); probably an India/APAC software or ops centre, so the APAC division CEO (Caponecchi) is included as the most relevant second contact. HQ 11400 Tomahawk Creek Parkway Suite 300, Leawood, KS 66211 (phone from site footer). No public email on the site. Large enterprise: a site-level ops or WFM lead would be a better entry point but needs a search."},
+{"company_name": "Tata Digital", "company_domain": "tatadigital.com", "confidence_score": 20, "hq_country": "India (Mumbai)",
+ "contacts": [],
+ "notes": "tatadigital.com, tataneu.com and tata.com all returned 403 to fetch, and the ProHance case-study page names no people (only '43% reduction in vendor headcount'). Leadership, LinkedIn, phone and email are all blank: they need a web search (budget exhausted)."},
+{"company_name": "HBC", "status": "DO_NOT_TARGET", "status_reason": "Hudson's Bay Company filed for creditor protection in March 2025, closed all stores by June 2025, sold its IP to Canadian Tire and was renamed 1242939 B.C. Unlimited Liability Co. in August 2025. Only 8 staff remained by Feb 2026 (Wikipedia). thebay.com now redirects to canadiantire.ca.",
+ "confidence_score": 85, "hq_country": "Canada",
+ "contacts": [
+  {"name": "Mohith Mohan", "title": "Divisional Vice President and Site Head (per ProHance testimonial; likely no longer with HBC)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"}],
+ "contact_source_url": "https://en.wikipedia.org/wiki/Hudson%27s_Bay_Company",
+ "notes": "The testimonial is from HBC's India GCC (site head). HBC spun its US assets into Saks Global in Nov 2024; if the Bengaluru centre moved to Saks Global, that would be a separate prospect to research - not checked."},
+{"company_name": "Tesco Business Services", "company_domain": "tescobengaluru.com", "confidence_score": 85, "hq_country": "India (Bengaluru) / UK",
+ "contacts": [
+  {"name": "Dr. Sumit Mitra", "title": "CEO, Tesco Business Solutions", "linkedin": "https://www.linkedin.com/in/drsumitmitra/", "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"},
+  {"name": "James Glavey", "title": "Chief Operating Officer, Tesco Business Solutions", "linkedin": "https://www.linkedin.com/in/james-glavey-6a1533121/", "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"},
+  {"name": "Somnath Baishya", "title": "Director - People, Tesco Business Solutions and Tesco India; Site Head - Bengaluru", "linkedin": "https://www.linkedin.com/in/somnathbaishya/", "source_url": "https://www.tescobengaluru.com/tesco-business-solutions-leadership/"}],
+ "company_linkedin": "https://www.linkedin.com/company/tesco-bengaluru/", "company_phone": "", "public_email": "",
+ "contact_source_url": "https://www.tescobengaluru.com/contact/",
+ "notes": "Unit is now called Tesco Business Solutions (part of Tesco Bengaluru). The ProHance testimonial author Altaf Patel (Director, Business Transformation) is NOT on the current leadership page, so he may have moved on; replaced with CEO, COO and People/site head. LinkedIn URLs are linked on the leadership page itself. Contact page gives the address (Tesco Main Campus, 81 & 82 EPIP, Whitefield, Bengaluru) and only candidatecare@tesco.com (recruitment-fraud reporting - not a sales email); no phone."},
+{"company_name": "Sutherland", "company_domain": "sutherlandglobal.com", "confidence_score": 80, "hq_country": "US (Rochester, NY) / global BPO",
+ "contacts": [
+  {"name": "Dilip R. Vellodi", "title": "Founder, Chairman and CEO", "linkedin": "", "source_url": "https://www.sutherlandglobal.com/about-us/leadership"},
+  {"name": "Eric Tinch", "title": "Chief People Officer", "linkedin": "", "source_url": "https://www.sutherlandglobal.com/about-us/leadership"},
+  {"name": "N Muthuraman", "title": "Sr. Director (ProHance testimonial author)", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"},
+  {"name": "Doug Gilbert", "title": "Chief Information Officer and Chief Digital Officer", "linkedin": "", "source_url": "https://www.sutherlandglobal.com/about-us/leadership"}],
+ "company_linkedin": "https://www.linkedin.com/company/sutherland-global-services/", "company_phone": "", "public_email": "",
+ "contact_source_url": "https://www.sutherlandglobal.com/contact-us",
+ "notes": "Leadership from sutherlandglobal.com/about-us/leadership. ProHance testimonial is by N Muthuraman, Sr. Director (still-in-role not verifiable without search). Contact page has forms only - no phone/email found. Large BPO (tens of thousands of agents) - big seat potential but likely enterprise WFM procurement."},
+{"company_name": "Catapult", "confidence_score": 40,
+ "contacts": [
+  {"name": "Gopipati DK", "title": "Country Manager, Philippines & Director Strategic Initiatives", "linkedin": "", "source_url": "https://www.prohance.ai/testimonials"}],
+ "notes": "ProHance testimonial names Gopipati DK of Catapult (Philippines operations). The case-study page does not give industry, location or website, so the exact 'Catapult' entity (many companies share the name) could not be confirmed without a search; domain, company LinkedIn, phone and email left blank. Full case study is behind a ProHance lead form (not bypassed)."}
+]

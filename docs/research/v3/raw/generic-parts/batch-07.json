@@ -1,0 +1,9 @@
+[
+{"input_index":12,"status":"DO_NOT_TARGET","status_reason":"'Time Cop' collision: Modus Create is a Ruby/JS dev consultancy — the match is almost certainly the Ruby `timecop` test gem in developer job ads, not the Time Cop app (timecop.app).","confidence_score":2,"source_url":"https://github.com/travisjeffery/timecop"},
+{"input_index":13,"status":"DO_NOT_TARGET","status_reason":"'Time Cop' collision: Social Impact (gov/international-development consultancy with dev teams) — likely Ruby `timecop` gem in engineering job ads; Time Cop app has ~9 tiny users.","confidence_score":2},
+{"input_index":14,"status":"DO_NOT_TARGET","status_reason":"JOIN (join.com) is a free job-posting/ATS platform hosting other companies' ads — RescueTime match comes from a hosted customer job, not JOIN's own use.","confidence_score":2},
+{"input_index":37,"status":"DO_NOT_TARGET","status_reason":"Instaffo is a German recruiting marketplace that posts jobs for client companies — clockodo mention likely in a client job ad, not Instaffo's own stack.","confidence_score":5},
+{"input_index":18,"status":"POSSIBLE","status_reason":"TheirStack clockodo hit only; Ambrosys (German AI/data R&D, 38) — clockodo is a distinctive German tool, plausible; unconfirmed.","confidence_score":40,"company_linkedin":"https://www.linkedin.com/company/ambrosys/"},
+{"input_index":75,"status":"POSSIBLE","status_reason":"TheirStack clockodo hit only; Altruan GmbH (hygiene products wholesaler) — unconfirmed.","confidence_score":35},
+{"input_index":570,"status":"POSSIBLE","status_reason":"TheirStack clockodo hit only; Online Rebellion (German media production, 16) — unconfirmed.","confidence_score":35}
+]

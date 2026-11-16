@@ -1,5 +1,9 @@
 import { ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import {
+  applyPulseWorkspaceContext,
+  pulseWorkspaceFromRequest,
+} from '../database/time-doctor-sql';
 import { PulseController } from './pulse.controller';
 
 const admin = { id: '1', role: 'admin', organization_id: '10' };
@@ -19,6 +23,9 @@ function makeController(opts?: { delegated?: boolean }) {
       end,
       userId: userId ?? null,
     })),
+    getActivitySummary: vi.fn(async () => ({ employees: [] })),
+    getProjectHours: vi.fn(async () => ({ projects: [] })),
+    getDashboard: vi.fn(async () => ({ active_users: 2 })),
     hasDelegatedAccess: vi.fn(async () => opts?.delegated === true),
   };
   const pacing = {};
@@ -78,6 +85,53 @@ describe('PulseController daily-hours', () => {
       controller.dailyHours({ user: superAdmin }, '2026-08-01', '2026-08-31'),
     ).rejects.toMatchObject({ message: 'Select a company' });
     expect(pulse.getDailyHours).not.toHaveBeenCalled();
+  });
+
+  it('loads the home-company dashboard when a super-admin sends no company header', async () => {
+    const home = applyPulseWorkspaceContext(
+      {
+        id: '9',
+        role: 'admin',
+        email: 'hamza@cintara.ai',
+        is_super_admin: true,
+        organization_id: '511',
+      },
+      pulseWorkspaceFromRequest({}, {}),
+    );
+    const { controller, pulse } = makeController();
+    const start = '2026-10-15';
+    const end = '2026-10-15';
+
+    await controller.dailyHours({ user: home }, start, end);
+    await controller.activitySummary({ user: home }, start, end);
+    await controller.projectHours({ user: home }, start, end);
+    await controller.dashboard({ user: home }, '1');
+
+    expect(home.organization_id).toBe('511');
+    expect(pulse.getDailyHours).toHaveBeenCalledWith(home, start, end);
+    expect(pulse.getActivitySummary).toHaveBeenCalledWith(home, start, end);
+    expect(pulse.getProjectHours).toHaveBeenCalledWith(home, start, end);
+    expect(pulse.getDashboard).toHaveBeenCalledWith(home, 1);
+  });
+
+  it('loads a different company only when the companies page names it', async () => {
+    const switched = applyPulseWorkspaceContext(
+      {
+        id: '9',
+        role: 'admin',
+        is_super_admin: true,
+        organization_id: '511',
+      },
+      pulseWorkspaceFromRequest({ 'x-pulse-workspace-id': '99' }, {}),
+    );
+    const { controller, pulse } = makeController();
+    await controller.dailyHours({ user: switched }, '2026-10-15', '2026-10-15');
+    expect(switched.organization_id).toBe('99');
+    expect(pulse.getDailyHours).toHaveBeenCalledWith(
+      switched,
+      '2026-10-15',
+      '2026-10-15',
+    );
   });
 });
 

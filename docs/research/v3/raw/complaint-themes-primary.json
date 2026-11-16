@@ -1,0 +1,1107 @@
+[
+ {
+  "vendor": "Time Doctor",
+  "themes": [
+   {
+    "theme": "Billing after cancellation / refund refusals / hard-to-cancel",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2026-09-07",
+      "paraphrase": "Could not close account after 2 weeks and 6+ emails to support."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2026-08-27",
+      "paraphrase": "Cancellation process described as intentionally broken; product buggy and confusing."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-12-16",
+      "paraphrase": "Repeated cancellation requests ignored, charges continued; user deletion broken."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-07-18",
+      "paraphrase": "Trial cancellation ignored, then charged and refund refused; tickets unanswered."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-04-02",
+      "paraphrase": "Charged after cancelling; refund denied; had to cancel card."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2024-03-20",
+      "paraphrase": "Unexpected second charge without notice or consent."
+     }
+    ]
+   },
+   {
+    "theme": "Unauthorized plan changes, seat overcharges and price increases",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-11-18",
+      "paraphrase": "Upgraded from monthly single user to annual 4-user plan without consent."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-05-16",
+      "paraphrase": "Fee increased without written notice; refund refused."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-07-27",
+      "paraphrase": "High per-user cost for low-quality software; billing persisted after termination."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2024-03-27",
+      "paraphrase": "Quoted about $100, charged about $300 - called bait-and-switch."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2023-11-25",
+      "paraphrase": "Billed for 5 premium users when buying 4 basic."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2022-01-24",
+      "paraphrase": "Hard to remove users; reviewer felt policy encourages paying for unused seats."
+     }
+    ]
+   },
+   {
+    "theme": "Account security / billing data exposure",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2026-02-19",
+      "paraphrase": "Unknown person gained access to account with invoices and financial data."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-03-12",
+      "paraphrase": "Stranger accessed billing/invoice data; support refused accountability."
+     }
+    ]
+   },
+   {
+    "theme": "Bugs, crashes and lost tracking",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2026-06-17",
+      "paraphrase": "Screenshot viewer stuck on perpetual loading."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2024-12-04",
+      "paraphrase": "App crashes silently mid-work; issue unresolved for months."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-04-18",
+      "paraphrase": "User permission settings would not save; support acknowledged bug with no fix."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2022-01-05",
+      "paraphrase": "Time Doctor 2 had fewer features than TD1 and broken integrations."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2019-09-23",
+      "paraphrase": "Jira integration breaks frequently, forcing manual time logging."
+     }
+    ]
+   },
+   {
+    "theme": "Invasive surveillance / privacy",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2025-08-05",
+      "paraphrase": "Auto-tracking ran despite being disabled and captured private conversations."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?stars=1&stars=2",
+      "date": "2024-10-07",
+      "paraphrase": "Extreme surveillance with screenshots and webcam photos."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timedoctor.com?page=2&stars=1&stars=2",
+      "date": "2023-10-20",
+      "paraphrase": "Invasive monitoring hurt productivity and morale."
+     }
+    ]
+   },
+   {
+    "theme": "Missing features vs competitors (switch reasons on Hubstaff comparison page)",
+    "examples": [
+     {
+      "url": "https://hubstaff.com/timedoctor-alternative",
+      "date": "",
+      "paraphrase": "E-commerce team (15 users) left because Time Doctor lacked PTO/time-off tracking."
+     },
+     {
+      "url": "https://hubstaff.com/timedoctor-alternative",
+      "date": "",
+      "paraphrase": "Healthcare org (50 users) left because the Time Doctor API was too complex and unreliable."
+     },
+     {
+      "url": "https://hubstaff.com/timedoctor-alternative",
+      "date": "",
+      "paraphrase": "TalentPop had to convert Time Doctor hours into payroll manually."
+     },
+     {
+      "url": "https://hubstaff.com/blog/remote-workforce-strategy/",
+      "date": "2025-05-27",
+      "paraphrase": "BPO cycled through Time Doctor, ActivTrak and DeskTime before Hubstaff."
+     },
+     {
+      "url": "https://www.capterra.com/p/129984/Time-Doctor/reviews/",
+      "date": "2026-04-10",
+      "paraphrase": "Consultant: billed for Executive Dashboard despite restriction under 20 users; screenshots fail on RDP; keystroke detection misses work."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Hubstaff",
+  "themes": [
+   {
+    "theme": "Annual-plan lock-in, no refunds, surprise charges",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-09",
+      "paraphrase": "Refused refund and disabled account access over a billing dispute."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-07-30",
+      "paraphrase": "Deceptive billing with unexpected charges and broken support promises."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-06-02",
+      "paraphrase": "Billed annually after being promised a monthly switch."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2025-12-15",
+      "paraphrase": "Charged a full year and refused refund on cancellation after years of use (business signed review)."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2025-08-06",
+      "paraphrase": "Refused to switch yearly to monthly; account locked."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-03-10",
+      "paraphrase": "Charged after cancellation; had to pay just to access account settings."
+     }
+    ]
+   },
+   {
+    "theme": "Nickel-and-dime add-ons and seat billing",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-06-10",
+      "paraphrase": "Auto-enrolled into paid VIP support without consent."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-05-08",
+      "paraphrase": "Two add-ons activated automatically without authorization."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-04-06",
+      "paraphrase": "Excessive per-feature charges."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2026-01-14",
+      "paraphrase": "Undisclosed per-seat billing charged for viewer accounts."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-01-19",
+      "paraphrase": "Add-on costs not transparent; slow support."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=3&stars=1&stars=2",
+      "date": "2024-06-17",
+      "paraphrase": "New features gated behind paid upgrades; features removed from plans."
+     }
+    ]
+   },
+   {
+    "theme": "Support: AI chatbot gatekeeping, no onboarding, no phone",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2026-01-06",
+      "paraphrase": "Business got no onboarding; AI chatbot looped; human only appeared when typing 'cancel'; refused Zoom call."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-01-29",
+      "paraphrase": "Support agent refused to read issue details or screenshots."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2025-06-13",
+      "paraphrase": "Advertised live demo did not exist; no phone support."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=2&stars=1&stars=2",
+      "date": "2025-09-05",
+      "paraphrase": "48-hour support lag."
+     }
+    ]
+   },
+   {
+    "theme": "Tracking inaccuracy and integration bugs",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2025-12-14",
+      "paraphrase": "Business said a year of wrong timelogs, lost clock-ins and mixed projects forced an extra employee to follow up."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-09-27",
+      "paraphrase": "Failed to record hours despite hours of use."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?stars=1&stars=2",
+      "date": "2026-04-29",
+      "paraphrase": "GitLab integration unfixed for over two years."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=3&stars=1&stars=2",
+      "date": "2023-11-06",
+      "paraphrase": "ClickUp integration bug unresolved for 2 months."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=4&stars=1&stars=2",
+      "date": "2023-07-04",
+      "paraphrase": "Buggy Jira integration."
+     },
+     {
+      "url": "https://www.webwork-tracker.com/customers/metaviz",
+      "date": "",
+      "paraphrase": "Software firm left Hubstaff over Windows/Mac sync problems, time-zone errors and constant manual verification, plus cost."
+     },
+     {
+      "url": "https://www.webwork-tracker.com/customers/mid-construction",
+      "date": "",
+      "paraphrase": "Construction firm left because Hubstaff timers kept running when staff went off duty, inflating hours."
+     }
+    ]
+   },
+   {
+    "theme": "Employee morale / surveillance",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=3&stars=1&stars=2",
+      "date": "2024-08-23",
+      "paraphrase": "Surveillance tool reportedly causing employee resignations."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/hubstaff.com?page=4&stars=1&stars=2",
+      "date": "2023-07-07",
+      "paraphrase": "Invasive monitoring with forced screenshots."
+     },
+     {
+      "url": "https://en.wikipedia.org/wiki/Hubstaff",
+      "date": "2020-04",
+      "paraphrase": "WSJ and NPR coverage of employee discomfort; NPR reported Hubstaff 'destroyed morale' at one company."
+     },
+     {
+      "url": "https://www.yahoo.com/news/elon-musks-xai-pressed-employees-092601003.html",
+      "date": "2025-07",
+      "paraphrase": "AI lab told tutors to install Hubstaff on personal computers; pushback and a public resignation calling it 'surveillance disguised as productivity'."
+     }
+    ]
+   },
+   {
+    "theme": "Price too high at scale (switch to cheaper tools)",
+    "examples": [
+     {
+      "url": "https://apploye.com/customer-stories/grammar-electrical",
+      "date": "",
+      "paraphrase": "Electrical firm on Hubstaff 5 years with 44 users (~$396/mo) switched to a tool at half the cost; 'features were fine, but the price became more than what we wanted to be spending'."
+     },
+     {
+      "url": "https://apploye.com/hubstaff-alternatives",
+      "date": "",
+      "paraphrase": "Fintech CEO: dropped Traqq and Hubstaff before choosing another tool."
+     },
+     {
+      "url": "https://apploye.com/hubstaff-alternatives",
+      "date": "",
+      "paraphrase": "HR reviewer (marketing/advertising) switched off Hubstaff for a simpler tool at a 20% lower price."
+     },
+     {
+      "url": "https://www.webwork-tracker.com/customers/metaviz",
+      "date": "",
+      "paraphrase": "Software firm cut tool spend 15-20% by leaving Hubstaff."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "ActivTrak",
+  "themes": [
+   {
+    "theme": "Auto-renewal traps, surprise annual charges, hard cancellation (TrustScore 1.5 / 153)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2026-07-30",
+      "paraphrase": "Retail business says ActivTrak charged its business card a large renewal without notice; refund refused without 30-day written notice; no phone support."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2026-03-09",
+      "paraphrase": "Locks customers into auto-renewal and charges another full year."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2026-01-31",
+      "paraphrase": "Cancellation requires a 30-day approval period; support unresponsive."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2025-09-04",
+      "paraphrase": "Auto-billed for 5 years on an account an employee created, though the system was not used."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2025-06-10",
+      "paraphrase": "Reviewer reports an unexpected charge of about GBP 6,700."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2025-01-10",
+      "paraphrase": "Cancellation form rejects non-US phone numbers; email cancellation refused."
+     },
+     {
+      "url": "https://www.capterra.com/p/135366/ActivTrak/reviews/",
+      "date": "2026-03-09",
+      "paraphrase": "CFO (publishing) 1-star: auto-renewal lock-in, canned support replies; switching away."
+     }
+    ]
+   },
+   {
+    "theme": "Pricing: 5-seat minimum, annual-only billing, paid add-ons",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2023-03-03",
+      "paraphrase": "$10/user advertised but $50 minimum with annual billing; refund refused."
+     },
+     {
+      "url": "https://www.trustradius.com/products/activtrak/pricing",
+      "date": "2026",
+      "paraphrase": "Annual-only billing with 5-user minimum; advanced reporting and integrations cost extra."
+     },
+     {
+      "url": "https://www.capterra.com/p/135366/ActivTrak/reviews/",
+      "date": "2023-10-10",
+      "paraphrase": "BI director: slow/unreliable, repetitive URL classification, expensive add-ons, poor service; left despite contract."
+     },
+     {
+      "url": "https://hubstaff.com/hubstaff-vs-activtrak",
+      "date": "",
+      "paraphrase": "Marketing team (150 users) left ActivTrak: annual billing made it hard to adjust as team changed; onboarding/offboarding difficult."
+     }
+    ]
+   },
+   {
+    "theme": "Agent reliability / data loss",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2025-05-27",
+      "paraphrase": "Data lost through an account mix-up; charges continued."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?page=2&stars=1&stars=2",
+      "date": "2022-01-31",
+      "paraphrase": "Product failed to sync; cancellation refused mid-contract after 5 months of non-use."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?page=2&stars=1&stars=2",
+      "date": "2018-03-23",
+      "paraphrase": "Agents stopped working, no screenshot reports, server failure lost tracking."
+     }
+    ]
+   },
+   {
+    "theme": "Employee surveillance backlash",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/activtrak.com?stars=1&stars=2",
+      "date": "2025-04-04",
+      "paraphrase": "Reviewer criticizes employers using surveillance software as micromanagement."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Insightful",
+  "themes": [
+   {
+    "theme": "Billing: phantom/auto-created users and overcharges (TrustScore 4.1 / 68)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2025-07-30",
+      "paraphrase": "Active Directory sync randomly created users with no disable option; charged for unused seats."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2025-04-28",
+      "paraphrase": "Confusing user management led to a wrongful $691 charge; refund refused citing terms."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2024-10-31",
+      "paraphrase": "Consistently overcharges; mysterious new users appear on account."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2026-04-14",
+      "paraphrase": "Called pricing a 'total rip-off'."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2024-05-21",
+      "paraphrase": "Billing continued after cancellation."
+     }
+    ]
+   },
+   {
+    "theme": "Support / onboarding gaps",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2026-02-05",
+      "paraphrase": "Trial lacked phone support for proper evaluation."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2025-12-23",
+      "paraphrase": "Customer service described as nonexistent; AI assistant unhelpful."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2025-11-30",
+      "paraphrase": "Automated replies claim issues resolved when they are not."
+     },
+     {
+      "url": "https://www.capterra.com/p/142813/Workpuls/reviews/",
+      "date": "2022-08-31",
+      "paraphrase": "Owner: support phone line disconnects without help."
+     }
+    ]
+   },
+   {
+    "theme": "Accuracy and missing features",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2025-07-25",
+      "paraphrase": "Shift tracking inflated hours; no break feature; refund refused."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/insightful.io?stars=1&stars=2",
+      "date": "2026-02-27",
+      "paraphrase": "Publisher: video recording has no AI analysis, manual review impractical; pricier than rivals."
+     },
+     {
+      "url": "https://www.capterra.com/p/142813/Workpuls/reviews/",
+      "date": "2026-03-02",
+      "paraphrase": "Time-zone management hard for multi-timezone teams."
+     },
+     {
+      "url": "https://www.capterra.com/p/142813/Workpuls/reviews/",
+      "date": "2026-05-11",
+      "paraphrase": "Logistics ops manager: high price, unintuitive navigation; cheaper tools do the same."
+     }
+    ]
+   },
+   {
+    "theme": "Privacy concerns from monitored staff",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/142813/Workpuls/reviews/",
+      "date": "2026-06-02",
+      "paraphrase": "QC reviewer uneasy about periodic screenshots and computer-access permissions."
+     },
+     {
+      "url": "https://www.business-humanrights.org/en/latest-news/usa-ai-startup-mercor-sued-over-hiring-practices-and-contractors-data-handling/",
+      "date": "2026-04-22",
+      "paraphrase": "AI contractor platform sued after a breach exposed contractor screenshots captured by Insightful on personal devices; claims of monitoring without proper consent."
+     },
+     {
+      "url": "https://www.lazywork.xyz/articles/how-to-bypass-insightful-time-tracker-formerly-workpuls-complete-guide",
+      "date": "2026",
+      "paraphrase": "Bypass guides for Insightful circulate, showing worker resistance/gaming."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "DeskTime",
+  "themes": [
+   {
+    "theme": "Price increases on renewal (TrustScore 4.5 / 44)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/desktime.com?stars=1&stars=2",
+      "date": "2025-09-19",
+      "paraphrase": "Unauthorized annual renewal with a 67% price increase; refund refused."
+     },
+     {
+      "url": "https://www.capterra.com/p/168660/DeskTime/reviews/",
+      "date": "",
+      "paraphrase": "Pricey for teams larger than ~10 members."
+     }
+    ]
+   },
+   {
+    "theme": "Slow support",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/desktime.com?stars=1&stars=2",
+      "date": "2023-11-29",
+      "paraphrase": "Support replies take 5.5 hours; 5-day wait for a call."
+     }
+    ]
+   },
+   {
+    "theme": "Reliability, Linux gaps, classification and tamper issues",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/168660/DeskTime/reviews/",
+      "date": "",
+      "paraphrase": "Auto-start on Windows boot unreliable; app slow; reports slow to download."
+     },
+     {
+      "url": "https://www.capterra.com/p/168660/DeskTime/reviews/",
+      "date": "",
+      "paraphrase": "Weak Linux support; mis-tags apps as unproductive; no offline access."
+     },
+     {
+      "url": "https://www.capterra.com/p/168660/DeskTime/reviews/",
+      "date": "",
+      "paraphrase": "Users can stop or uninstall the app without a password; screenshot privacy concerns."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/desktime.com?stars=1&stars=2",
+      "date": "2019-11-27",
+      "paraphrase": "Employee calls it a 'time sucker' that captures everything."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Time Champ",
+  "themes": [
+   {
+    "theme": "Limited public negative reviews; privacy of random screenshots",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timechamp.io",
+      "date": "2026-10",
+      "paraphrase": "No Trustpilot reviews; Capterra almost all 5-star (possible review solicitation)."
+     },
+     {
+      "url": "https://www.techjockey.com/detail/timechamp",
+      "date": "",
+      "paraphrase": "User feedback notes random screenshots can expose personal information on screen."
+     },
+     {
+      "url": "https://www.we360.ai/alternative/timechamp/",
+      "date": "",
+      "paraphrase": "Competitor claims employees feel micromanaged because every app, site and idle minute is tracked."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "WebWork",
+  "themes": [
+   {
+    "theme": "Screenshots/tracking failures and gaming (TrustScore 4.6 / 102)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2025-10-05",
+      "paraphrase": "Tool failed to take screenshots."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2025-09-18",
+      "paraphrase": "Screenshot capture fails; developers could game the system."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2024-08-07",
+      "paraphrase": "Software broke after an update; support could not fix."
+     },
+     {
+      "url": "https://www.capterra.com/p/151338/WebWork-Time-Tracker/",
+      "date": "",
+      "paraphrase": "Break/pause buttons unreliable, auto-stops in meetings; limited offline tracking; buggy mobile app."
+     }
+    ]
+   },
+   {
+    "theme": "Billing and support",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2025-09-25",
+      "paraphrase": "Monthly invoices hard to verify; trust questioned."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2025-09-16",
+      "paraphrase": "Reviewer calls them scammers after a charge."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2023-08-11",
+      "paraphrase": "Almost no response from support."
+     },
+     {
+      "url": "https://www.capterra.com/p/151338/WebWork-Time-Tracker/",
+      "date": "",
+      "paraphrase": "No live chat support."
+     }
+    ]
+   },
+   {
+    "theme": "Employee morale",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2026-02-11",
+      "paraphrase": "Constant pressure to look productive undermines real motivation."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/webwork-tracker.com?stars=1&stars=2",
+      "date": "2025-11-28",
+      "paraphrase": "Tool hurts productivity and signals insecure management."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "We360.ai",
+  "themes": [
+   {
+    "theme": "Product reliability and support",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/we360.ai",
+      "date": "2026-07-28",
+      "paraphrase": "Tester called it the worst software they had tried, 'total scam'."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/we360.ai",
+      "date": "2023-10-05",
+      "paraphrase": "Persistent malfunctions with 2-3 week fixes, unresponsive management, refund unresolved after 2 years."
+     },
+     {
+      "url": "https://www.capterra.com/p/211680/We360-ai/reviews/",
+      "date": "",
+      "paraphrase": "Support could not understand issues; an employee could not log in to attendance for 3+ months."
+     },
+     {
+      "url": "https://www.g2.com/products/we360-ai/reviews",
+      "date": "",
+      "paraphrase": "Data latency - wait until end of day; new features under-documented."
+     }
+    ]
+   },
+   {
+    "theme": "Missing features",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/211680/We360-ai/reviews/",
+      "date": "",
+      "paraphrase": "No iOS app; limited graphs."
+     },
+     {
+      "url": "https://www.workstatus.io/reviews/we360.ai",
+      "date": "",
+      "paraphrase": "Not project-specific, no task-level workload, no billing integration (competitor review)."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Teramind",
+  "themes": [
+   {
+    "theme": "Support unresponsive, product breaks (TrustScore 2.7 / 7)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/teramind.co?stars=1&stars=2",
+      "date": "2026-08-10",
+      "paraphrase": "Unresponsive support; silent installer issues during trial."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/teramind.co?stars=1&stars=2",
+      "date": "2026-07-31",
+      "paraphrase": "No human tech support; cannot add new employees."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/teramind.co?stars=1&stars=2",
+      "date": "2026-03-30",
+      "paraphrase": "Slows computers; poor support; billing continued unresolved."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/teramind.co?stars=1&stars=2",
+      "date": "2026-03-19",
+      "paraphrase": "Stops working; ~$1,000 cost; inadequate support."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/teramind.co?stars=1&stars=2",
+      "date": "2025-07-19",
+      "paraphrase": "Recordings stopped working after paying; support unresponsive."
+     },
+     {
+      "url": "https://www.capterra.com/p/172645/Teramind/reviews/",
+      "date": "",
+      "paraphrase": "Support ticket open a month with no fix."
+     }
+    ]
+   },
+   {
+    "theme": "Expensive",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/172645/Teramind/reviews/",
+      "date": "",
+      "paraphrase": "'$25 per user per month was a little painful' (small company manager); 'Price! Expensive!'."
+     }
+    ]
+   },
+   {
+    "theme": "Covert surveillance backlash / legal risk",
+    "examples": [
+     {
+      "url": "https://kotaku.com/mindseye-build-a-rocket-boy-union-teramind-surveillance-software-iwgb-2000689327",
+      "date": "2026-04-21",
+      "paraphrase": "Game studio staff union says Teramind was installed without knowledge (keystrokes, screen, microphone); removed after grievance, legal action filed."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Controlio",
+  "themes": [
+   {
+    "theme": "Steep learning curve, PC-only, weak time tracking",
+    "examples": [
+     {
+      "url": "https://www.g2.com/products/controlio/reviews?qs=pros-and-cons",
+      "date": "",
+      "paraphrase": "Steep learning curve for non-technical users; PC only, no mobile; low live-stream quality."
+     },
+     {
+      "url": "https://www.employee-monitoring.net/blog/best-controlio-alternatives",
+      "date": "",
+      "paraphrase": "Lacks built-in time tracking, attendance and project billing (competitor article)."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/controlio.net",
+      "date": "2026-10",
+      "paraphrase": "No Trustpilot reviews; G2 rating 4.9 suggests solicited reviews."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Monitask",
+  "themes": [
+   {
+    "theme": "Cancellation / billing and support",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/monitask.com?stars=1&stars=2",
+      "date": "2025-04-10",
+      "paraphrase": "Hard to cancel; free trial may auto-convert to paid; support unresponsive."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/monitask.com?stars=1&stars=2",
+      "date": "2025-05-31",
+      "paraphrase": "Inadequate service, disrespectful staff."
+     }
+    ]
+   },
+   {
+    "theme": "Data-safety concern and missing features",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/163622/Monitask/reviews/",
+      "date": "",
+      "paraphrase": "Concern about data safety due to Russian origin; unexpected Russian text in app."
+     },
+     {
+      "url": "https://www.capterra.com/p/163622/Monitask/reviews/",
+      "date": "",
+      "paraphrase": "Only ~2 weeks of log history; no shifts/payroll; no client access or non-billable hours; task selection glitches."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "ProHance",
+  "themes": [
+   {
+    "theme": "Micro-monitoring backlash at enterprise BPO/IT",
+    "examples": [
+     {
+      "url": "https://www.businesstoday.in/technology/news/story/cognizant-says-its-employee-laptop-tracking-tool-isnt-for-performance-evaluation-502676-2025-11-19",
+      "date": "2025-11-19",
+      "paraphrase": "Reports that ProHance marks staff idle after 5 minutes and away after 15 at a large IT firm; company forced to clarify."
+     }
+    ]
+   },
+   {
+    "theme": "Complex dashboards, gameable, learning curve",
+    "examples": [
+     {
+      "url": "https://www.g2.com/products/prohance/reviews",
+      "date": "",
+      "paraphrase": "Too many reports/dashboards; users can game time-away; steep learning curve."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Prodoscore",
+  "themes": [
+   {
+    "theme": "Usability and score accuracy",
+    "examples": [
+     {
+      "url": "https://www.g2.com/products/prodoscore/reviews",
+      "date": "",
+      "paraphrase": "UI not intuitive; logic hard to follow, prohibitive to adoption; admin/manager UX needs overhaul."
+     },
+     {
+      "url": "https://www.capterra.com/p/159439/Prodoscore/",
+      "date": "",
+      "paraphrase": "Sometimes gives no points even while working; hard to explain to staff why a monitoring tool was introduced."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Kickidler",
+  "themes": [
+   {
+    "theme": "Performance, setup and platform limits",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/172028/Employee-Monitoring-Software-and-Time-Tracking-Solution/reviews/",
+      "date": "",
+      "paraphrase": "Confusing setup needing a standalone server; interface overwhelming and slow with large data."
+     },
+     {
+      "url": "https://www.capterra.com/p/172028/Employee-Monitoring-Software-and-Time-Tracking-Solution/reviews/",
+      "date": "",
+      "paraphrase": "Recording playback slow, freezes or goes black; screenshot export freezes."
+     },
+     {
+      "url": "https://www.capterra.com/p/172028/Employee-Monitoring-Software-and-Time-Tracking-Solution/reviews/",
+      "date": "",
+      "paraphrase": "Limited macOS/Linux support; pricing steep for small teams."
+     }
+    ]
+   },
+   {
+    "theme": "Data loss and price increases (Russian review sites)",
+    "examples": [
+     {
+      "url": "https://crmindex.ru/services/kickidler",
+      "date": "2026-02-20",
+      "paraphrase": "Customer says Oct-Dec 2025 employee statistics were irreversibly deleted despite continuous payment (30-day non-payment purge policy cited)."
+     },
+     {
+      "url": "https://crmindex.ru/services/kickidler",
+      "date": "2024-10-03",
+      "paraphrase": "Price rose; vendor refused discount."
+     },
+     {
+      "url": "https://www.tbank.ru/reviews/company/kickidler/147584/",
+      "date": "",
+      "paraphrase": "Reviews mention poor setup support, crashes when the PC user changes, and 'my employees hate this program'."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Veriato",
+  "themes": [
+   {
+    "theme": "Deployment failures, crashes and refund refusals (Trustpilot 100% 1-star / 6)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/veriato.com",
+      "date": "2024-07-16",
+      "paraphrase": "Onboarding promised but vendor unresponsive after payment; training only for extra fee."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/veriato.com",
+      "date": "2021-04-06",
+      "paraphrase": "Paid $1,800 for a product installers could not deploy."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/veriato.com",
+      "date": "2020-08-26",
+      "paraphrase": "System crashes across ~100 employee computers after install; refund refused."
+     },
+     {
+      "url": "https://www.capterra.com/p/161116/Veriato/",
+      "date": "",
+      "paraphrase": "Resource-heavy, tedious deployment, antivirus conflicts, large disk usage."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "TimeCamp",
+  "themes": [
+   {
+    "theme": "Plan downgrades and sales spam",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/timecamp.com",
+      "date": "2025-12-08",
+      "paraphrase": "Daily unsolicited sales calls after registration, continuing after account deletion."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/timecamp.com",
+      "date": "2021-02-27",
+      "paraphrase": "Reporting features silently removed from the free plan."
+     }
+    ]
+   },
+   {
+    "theme": "Bugs / web app freezing (churn case)",
+    "examples": [
+     {
+      "url": "https://desktime.com/case-studies/on-the-map-marketing",
+      "date": "2019",
+      "paraphrase": "50-person agency left TimeCamp after 2 years: overly complicated, many bugs, web version freezing constantly."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Apploye",
+  "themes": [
+   {
+    "theme": "Tracking accuracy (churn case)",
+    "examples": [
+     {
+      "url": "https://hubstaff.com/customers/simple-biz",
+      "date": "",
+      "paraphrase": "700-person agency left Apploye over inaccurate totals, inconsistent recorded hours and tracker stopping unexpectedly."
+     },
+     {
+      "url": "https://www.capterra.com/p/239423/Apploye/reviews",
+      "date": "",
+      "paraphrase": "Limited offline, few report customizations, crowded dashboard, weaker mobile app."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "vendor": "Traqq",
+  "themes": [
+   {
+    "theme": "Support and data retention (TrustScore 3.3 / 54)",
+    "examples": [
+     {
+      "url": "https://www.trustpilot.com/review/traqq.com?stars=1&stars=2",
+      "date": "2026-01-09",
+      "paraphrase": "Tracking data auto-deleted after one year."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/traqq.com?stars=1&stars=2",
+      "date": "2026-01-06",
+      "paraphrase": "Support asks for info already given."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/traqq.com?stars=1&stars=2",
+      "date": "2025-01-09",
+      "paraphrase": "Install issue unresolved 3 months after yearly payment."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/traqq.com?stars=1&stars=2",
+      "date": "2024-10-17",
+      "paraphrase": "Staff earnings report glitch unsolved after a month."
+     },
+     {
+      "url": "https://www.trustpilot.com/review/traqq.com?stars=1&stars=2",
+      "date": "2023-11-15",
+      "paraphrase": "Customer support does not exist."
+     }
+    ]
+   },
+   {
+    "theme": "Missing features",
+    "examples": [
+     {
+      "url": "https://www.capterra.com/p/230726/Traqq/reviews/",
+      "date": "",
+      "paraphrase": "Few integrations, no mobile app, no GPS, Mac gaps; screenshots catch non-work activity."
+     }
+    ]
+   },
+   {
+    "theme": "Dropped by growing teams",
+    "examples": [
+     {
+      "url": "https://apploye.com/hubstaff-alternatives",
+      "date": "",
+      "paraphrase": "Fintech (300-600 staff) dropped Traqq and Hubstaff before settling on another tool."
+     }
+    ]
+   }
+  ]
+ }
+]

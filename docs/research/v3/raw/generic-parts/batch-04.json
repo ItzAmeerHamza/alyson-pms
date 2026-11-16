@@ -1,0 +1,21 @@
+[
+{"input_index":36,"status":"POSSIBLE","status_reason":"'My Hours' is a common phrase (likely generic job-ad text); Hammerjack (accounting, billable time) is a plausible product user but search found no link. Low priority.","confidence_score":20},
+{"input_index":38,"status":"POSSIBLE","status_reason":"'My Hours' likely generic phrase; Iversoft (Ottawa app dev agency) plausible product user but no confirmation found. Low priority.","confidence_score":20},
+{"input_index":72,"status":"DO_NOT_TARGET","status_reason":"'My Hours' is a generic phrase; Afterpay (Block subsidiary fintech) — no evidence of myhours.com; also appears under Time Analytics (another generic match).","confidence_score":5},
+{"input_index":77,"status":"POSSIBLE","status_reason":"'My Hours' likely generic phrase; BRSA (Brazil branding agency) plausible but unconfirmed. Low priority.","confidence_score":20},
+{"input_index":79,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; Banner (US real-estate tech) — no product evidence.","confidence_score":5},
+{"input_index":80,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; Banner Ltd (UK apparel retail) — no product evidence; retail shift work.","confidence_score":5},
+{"input_index":84,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; vacation-rental operator, hourly shift staff — no product evidence.","confidence_score":5},
+{"input_index":86,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; UK charity (Business in the Community) — no product evidence.","confidence_score":5},
+{"input_index":88,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; California state agency (ca.gov) — no product evidence; government.","confidence_score":2},
+{"input_index":94,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; UK retail/garden centre — no product evidence.","confidence_score":5},
+{"input_index":111,"status":"POSSIBLE","status_reason":"'My Hours' likely generic (tutors 'log my hours'); Language Trainers uses freelance tutors so a time tool is plausible, but no myhours.com link found. Low priority.","confidence_score":20,"workforce_signals":"Freelance remote language tutors."},
+{"input_index":112,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; Legal Monkeys job ads state fixed hours (M-F 8-5) — matches ordinary schedule text, no product evidence.","confidence_score":5,"source_url":"https://builtin.com/job/records-specialist/7478676"},
+{"input_index":123,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; YMCA branch — no product evidence.","confidence_score":2},
+{"input_index":131,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; Australian local council — no product evidence; government.","confidence_score":2},
+{"input_index":140,"status":"POSSIBLE","status_reason":"'My Hours' likely generic phrase; Tailster (UK pet-care marketplace) — no confirmation. Low priority.","confidence_score":15},
+{"input_index":146,"status":"DO_NOT_TARGET","status_reason":"'My Hours' generic phrase; Turtle Bay restaurant chain shift jobs — no product evidence.","confidence_score":2},
+{"input_index":151,"status":"POSSIBLE","status_reason":"'My Hours' likely generic; gunnercooke (UK law firm of self-employed partners) — search found no link. Low priority.","confidence_score":15},
+{"input_index":574,"status":"POSSIBLE","status_reason":"'My Hours' likely generic phrase; small psychology practice — unconfirmed. Low priority.","confidence_score":15},
+{"input_index":580,"status":"POSSIBLE","status_reason":"'My Hours' likely generic phrase; speech-therapy centre (hourly clinicians) — unconfirmed. Low priority.","confidence_score":15}
+]

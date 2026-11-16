@@ -1,0 +1,149 @@
+##### 0 PricingOne https://myhours.com/case-study-pricingone __STATUS 200 https://myhours.com/case-study-pricingone
+LINKS: ['https://allhours.com/', 'https://documenter.getpostman.com/view/8879268/TVmV4YYU#intro', 'https://www.linkedin.com/showcase/my-hours-team/posts/?feedView=all']
+
+##### 1 Rancho Biosciences https://beebole.com/customer-cases/rancho-biosciences __STATUS 200 https://beebole.com/customer-cases/rancho-biosciences
+LINKS: ['https://a.storyblok.com/f/146241/132x25/97abb3b6f6/logo_redesign.svg', 'https://ranchobiosciences.com/']
+
+##### 2 Connery Consulting https://www.deltek.com/customers/connery/ __STATUS 200 https://www.deltek.com/customers/connery/
+LINKS: ['https://app.smartsheet.com/b/form/f016544333304a6eab253d6efcfde099', 'https://p.typekit.net', 'https://use.typekit.net/iez7stt.css']
+
+##### 3 Hasan & Partners (Hasan & Co group) https://www.timely.com/case-studies/hasan-co/ __STATUS 200 https://www.timely.com/case-studies/hasan-co/
+LINKS: ['https://hasanpartners.fi/', 'https://hasanpartnersdesign.fi/', 'https://play.vidyard.com', 'https://www.franklypartners.fi', 'https://www.perfectfools.com/']
+
+##### 4 Wunderkind https://www.timely.com/wunderkind-case-study/ __STATUS 200 https://www.timely.com/wunderkind-case-study/
+LINKS: ['https://play.vidyard.com']
+
+##### 5 Allison Worldwide (formerly Allison+Partners) https://www.clicktime.com/case-studies/how-allisonpartners-used-flexible-billing-models-to-take-on-new-clients __STATUS 200 https://www.clicktime.com/case-studies/how-allisonpartners-used-flexible-billing-models-to-take-on-new-clients
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co', 'https://www.allisonworldwide.com/']
+
+##### 6 Opgevallen https://www.paymoapp.com/opgevallen/ __STATUS 200 https://www.paymoapp.com/opgevallen/
+LINKS: ['https://www.opgevallen.nl']
+
+##### 7 Trowbridge Custom Floors https://timeero.com/testimonial-stories/trowbridge-custom-floors __STATUS 200 https://timeero.com/testimonial-stories/trowbridge-custom-floors
+LINKS: ['https://unpkg.com/tippy.js@4/themes/light-border.css']
+
+##### 8 Precision Women's Care https://www.onlinejobs.ph/jobseekers/job/sales-patient-acquisition-lead-1-000-month-potential-us-hours-1714402 __STATUS 200 https://www.onlinejobs.ph/jobseekers/job/sales-patient-acquisition-lead-1-000-month-potential-us-hours-1714402
+LINKS: ['https://use.fontawesome.com/releases/v5.0.13/css/all.css']
+
+##### 9 Sentry View Systems https://www.currentware.com/customers/sentry-view-systems/ __STATUS 200 https://www.currentware.com/customers/sentry-view-systems/
+LINKS: ['https://forms.zohopublic.com']
+
+##### 10 EHOB https://www.currentware.com/customers/ehob/ __STATUS 200 https://www.currentware.com/customers/ehob/
+LINKS: ['https://forms.zohopublic.com', 'https://www.code42.com/resources/reports/2024-data-exposure', 'https://www.ehob.com/', 'https://www.salary.com/chronicles/wasting-time-at-work-2012/', 'https://www3.weforum.org/docs/WEF_The_Global_Risks_Report_2022.pdf']
+
+##### 11 SABIS Educational Systems https://www.currentware.com/customers/sabis-educational-systems/ __STATUS 200 https://www.currentware.com/customers/sabis-educational-systems/
+LINKS: ['https://forms.zohopublic.com']
+
+##### 12 Allied Mineral Products https://www.currentware.com/customers/allied-mineral-products/ __STATUS 200 https://www.currentware.com/customers/allied-mineral-products/
+LINKS: ['https://forms.zohopublic.com']
+
+##### 13 Metromont https://www.currentware.com/customers/metromont/ __STATUS 200 https://www.currentware.com/customers/metromont/
+LINKS: ['https://forms.zohopublic.com', 'https://www.metromont.com/']
+
+##### 14 KWI (Kenneth Wade Inc.) https://www.clicktime.com/case-studies/how-kwi-used-clicktimes-resource-management-to-enable-rapid-growth __STATUS 200 https://www.clicktime.com/case-studies/how-kwi-used-clicktimes-resource-management-to-enable-rapid-growth
+LINKS: ['http://www.kwicomm.com/', 'https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 15 LightPole https://www.clicktime.com/case-studies/entertainment-lightpole __STATUS 200 https://www.clicktime.com/case-studies/entertainment-lightpole
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 16 Girls Empowerment Network https://www.clicktime.com/case-studies/girls-empowerment-network-uses-clicktime-to-pass-grant-reviews-and-audits __STATUS 200 https://www.clicktime.com/case-studies/girls-empowerment-network-uses-clicktime-to-pass-grant-reviews-and-audits
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 17 Horn Group https://www.clicktime.com/case-studies/horn-group __STATUS 200 https://www.clicktime.com/case-studies/horn-group
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 18 MMI Agency https://www.clicktime.com/case-studies/mmi-pr-improves-operations-by-switching-to-clicktime __STATUS 200 https://www.clicktime.com/case-studies/mmi-pr-improves-operations-by-switching-to-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 19 Michigan Society of Association Executives (MSAE) https://www.clicktime.com/case-studies/msae-delivers-best-in-class-program-management-with-clicktime __STATUS 200 https://www.clicktime.com/case-studies/msae-delivers-best-in-class-program-management-with-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 20 Eastwick Communications https://www.clicktime.com/case-studies/pr-agency-eastwick __STATUS 200 https://www.clicktime.com/case-studies/pr-agency-eastwick
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co', 'https://www.businesswire.com/news/home/20160929006427/en/Hotwire-PR-Acquires-Eastwick-Communications-to-Strengthen-US-Presence-and-Secure-its-Position-as-Top-Ten-Technology-Agency-in-North-America']
+
+##### 21 Nectar Communications https://www.clicktime.com/case-studies/pr-agency-timesheet-nectar __STATUS 200 https://www.clicktime.com/case-studies/pr-agency-timesheet-nectar
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 22 Salt Branding https://www.clicktime.com/case-studies/renowned-brand-and-digital-agency-manages-productivity-with-clicktime __STATUS 200 https://www.clicktime.com/case-studies/renowned-brand-and-digital-agency-manages-productivity-with-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 23 Wildfire PR https://www.clicktime.com/case-studies/top-uk-tech-pr-agency-wildfire-exceeds-customer-expectations-with-clicktime __STATUS 200 https://www.clicktime.com/case-studies/top-uk-tech-pr-agency-wildfire-exceeds-customer-expectations-with-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 24 Born Digital https://www.paymoapp.com/born-digital/ __STATUS 200 https://www.paymoapp.com/born-digital/
+LINKS: ['https://borndigital.be/']
+
+##### 25 Galvez Gil E-Commerce Consulting https://www.paymoapp.com/galvez-gil/ __STATUS 200 https://www.paymoapp.com/galvez-gil/
+LINKS: ['https://www.galvezgil.com/']
+
+##### 26 Robot House Creative https://www.paymoapp.com/robot-house/ __STATUS 200 https://www.paymoapp.com/robot-house/
+LINKS: ['https://robothousecreative.com/', 'https://www.secondwindonline.com/']
+
+##### 27 Digite https://flowace.ai/case-studies/digite-employee-monitoring-case-studies/ __STATUS 200 https://flowace.ai/case-studies/digite-employee-monitoring-case-studies/
+LINKS: ['https://forms.hsforms.com', 'https://js.hsforms.net']
+
+##### 28 Gravitas Legal https://flowace.ai/case-studies/gravitas-legal-employee-monitoring-case-studies/ __STATUS 200 https://flowace.ai/case-studies/gravitas-legal-employee-monitoring-case-studies/
+LINKS: ['https://forms.hsforms.com', 'https://js.hsforms.net']
+
+##### 29 LaFrance Masonry LLC https://www.onlinejobs.ph/jobseekers/job/construction-project-admin-administrator-1499383 __STATUS 200 https://www.onlinejobs.ph/jobseekers/job/construction-project-admin-administrator-1499383
+LINKS: ['https://use.fontawesome.com/releases/v5.0.13/css/all.css']
+
+##### 30 Fortitude Family Office https://www.timely.com/fortitude-case-study/ __STATUS 200 https://www.timely.com/fortitude-case-study/
+LINKS: ['https://play.vidyard.com']
+
+##### 31 Estonian Business School https://myhours.com/case-study-estonian-business-school __STATUS 200 https://myhours.com/case-study-estonian-business-school
+LINKS: ['https://allhours.com/', 'https://documenter.getpostman.com/view/8879268/TVmV4YYU#intro', 'https://www.linkedin.com/showcase/my-hours-team/posts/?feedView=all']
+
+##### 32 Umanova https://beebole.com/customer-cases/umanova __STATUS 200 https://beebole.com/customer-cases/umanova
+LINKS: ['https://a.storyblok.com/f/146241/132x25/97abb3b6f6/logo_redesign.svg', 'https://umanova.com/']
+
+##### 33 Cevotec https://beebole.com/customer-cases/cevotec __STATUS 200 https://beebole.com/customer-cases/cevotec
+LINKS: ['https://a.storyblok.com/f/146241/132x25/97abb3b6f6/logo_redesign.svg', 'https://www.cevotec.com/']
+
+##### 34 Crest Contracting https://timeero.com/testimonial-stories/crest-contracting __STATUS 200 https://timeero.com/testimonial-stories/crest-contracting
+LINKS: ['https://unpkg.com/tippy.js@4/themes/light-border.css']
+
+##### 35 O.H.S.O. Brewery & Distillery https://timeero.com/testimonial-stories/ohso __STATUS 200 https://timeero.com/testimonial-stories/ohso
+LINKS: ['https://unpkg.com/tippy.js@4/themes/light-border.css']
+
+##### 36 A Pineywoods Home Health Care https://timeero.com/testimonial-stories/a-pineywoods-home-health-care __STATUS 200 https://timeero.com/testimonial-stories/a-pineywoods-home-health-care
+LINKS: ['https://unpkg.com/tippy.js@4/themes/light-border.css']
+
+##### 37 Kultindex https://timeero.com/testimonial-stories/kultindex __STATUS 200 https://timeero.com/testimonial-stories/kultindex
+LINKS: ['https://unpkg.com/tippy.js@4/themes/light-border.css']
+
+##### 38 The Chartered Institute of Export & International Trade https://www.timely.com/the-chartered-institute-of-export-international-trade-case-study/ __STATUS 200 https://www.timely.com/the-chartered-institute-of-export-international-trade-case-study/
+LINKS: ['https://play.vidyard.com']
+
+##### 39 Taptu https://beebole.com/customer-cases/taptu __STATUS 200 https://beebole.com/customer-cases/taptu
+LINKS: ['https://a.storyblok.com/f/146241/132x25/97abb3b6f6/logo_redesign.svg']
+
+##### 40 HungaroTrial https://beebole.com/customer-cases/hungaro-trial __STATUS 200 https://beebole.com/customer-cases/hungaro-trial
+LINKS: ['https://a.storyblok.com/f/146241/132x25/97abb3b6f6/logo_redesign.svg', 'https://hungarotrial.com/']
+
+##### 41 Retrospec Films https://www.timely.com/case-studies/retrospec-films/ __STATUS 200 https://www.timely.com/case-studies/retrospec-films/
+LINKS: ['https://play.vidyard.com', 'https://retrospecfilms.com/']
+
+##### 42 CY Architecture https://www.timely.com/case-studies/cy-architecture/ __STATUS 200 https://www.timely.com/case-studies/cy-architecture/
+LINKS: ['https://cy-architecture.com/', 'https://play.vidyard.com']
+
+##### 43 Teach For All https://www.clicktime.com/case-studies/teach-for-all-maintains-grant-compliance-clicktime __STATUS 200 https://www.clicktime.com/case-studies/teach-for-all-maintains-grant-compliance-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co', 'https://teachforall.org/']
+
+##### 44 Merlin RAMco https://www.clicktime.com/case-studies/aerospace-merlin-ramco __STATUS 200 https://www.clicktime.com/case-studies/aerospace-merlin-ramco
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co', 'https://www.merlinglobal.com/index.html']
+
+##### 45 Suarez-Kuehne Architecture https://www.clicktime.com/case-studies/case-studies-architecture-suarez-kuehne __STATUS 200 https://www.clicktime.com/case-studies/case-studies-architecture-suarez-kuehne
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 46 COPE Health Solutions https://www.clicktime.com/case-studies/cope-health-solutions-reduces-costs-with-resource-planning __STATUS 200 https://www.clicktime.com/case-studies/cope-health-solutions-reduces-costs-with-resource-planning
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 47 Demattei Wong Architecture https://www.clicktime.com/case-studies/demattei-wong-architecture __STATUS 200 https://www.clicktime.com/case-studies/demattei-wong-architecture
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 48 Inspire Communities https://www.clicktime.com/case-studies/inspire-communities-improves-operations-with-clicktime __STATUS 200 https://www.clicktime.com/case-studies/inspire-communities-improves-operations-with-clicktime
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']
+
+##### 49 Near East Foundation https://www.clicktime.com/case-studies/near-east-foundation __STATUS 200 https://www.clicktime.com/case-studies/near-east-foundation
+LINKS: ['https://117503255.intellimizeio.com', 'https://api.intellimize.co', 'https://log.intellimize.co']

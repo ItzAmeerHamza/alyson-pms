@@ -1,0 +1,51 @@
+[
+{"company_name": "Avahi",
+ "contacts": [
+  {"name": "Jack Singh", "title": "Founder & CEO", "linkedin": "", "source_url": "https://avahi.ai/company/about-us/"},
+  {"name": "Shweta Bajaj", "title": "Head of Operations", "linkedin": "", "source_url": "https://avahi.ai/company/about-us/"},
+  {"name": "Penny Sidhu", "title": "Senior HR Manager", "linkedin": "", "source_url": "https://avahi.ai/company/about-us/"}
+ ],
+ "public_email": "info@avahi.ai; sales@avahi.ai", "contact_source_url": "https://avahi.ai/contact/",
+ "notes": "Jack Singh is still Founder & CEO on the About page. Marc Hermes, previously listed as President, is NOT on the current leadership page, so he was dropped as second contact. Shweta Bajaj (Head of Operations) and Penny Sidhu (Senior HR Manager) were added. Others listed: Ricky Bajaj CRO, Brandon Pierce CTO, Eduardo Goya CFO. The page has no LinkedIn links, and the search budget was exhausted, so no personal LinkedIn was found. Phone +1 (415) 429-8280 and the company LinkedIn page were kept; the phone was re-confirmed on the contact page."},
+{"company_name": "Sweat+Co (formerly Mister Sweat)", "company_domain": "sweatandco.com",
+ "contacts": [
+  {"name": "Dax Kimbrough", "title": "Business Consultant (case-study interviewee; not re-verified)", "linkedin": "", "source_url": "https://toggl.com/customers/mister-sweat"}
+ ],
+ "hq_country": "US (Los Angeles, CA)",
+ "notes": "The Toggl case study gives the website as sweatandco.com and the location as Los Angeles. Both sweatandco.com and www.sweatandco.com return HTTP 404 to WebFetch, so the site may be down. No founder, phone, email or LinkedIn could be found without search. Check that the firm is still operating."},
+{"company_name": "Turnstyle",
+ "contacts": [
+  {"name": "Matt Diefenbach", "title": "Principal / Business Director (co-founder)", "linkedin": "", "source_url": "https://turnstyle.studio/overview"},
+  {"name": "Steve Watson", "title": "Principal / Creative Director (co-founder)", "linkedin": "", "source_url": "https://turnstyle.studio/overview"},
+  {"name": "Ben Graham", "title": "Principal / Creative Director", "linkedin": "", "source_url": "https://turnstyle.studio/overview"}
+ ],
+ "company_phone": "206-297-7350", "contact_source_url": "https://turnstyle.studio/contact",
+ "hq_country": "US (Seattle, WA)",
+ "notes": "All three principals are still listed on the studio overview page. The phone and the address (114 NW Canal St, Suite 200, Seattle, WA 98107) are from the contact page, and the company LinkedIn page and info@turnstyle.studio were re-confirmed there. The site has no personal LinkedIn links, and the search budget was exhausted."},
+{"company_name": "Vhedia",
+ "contacts": [
+  {"name": "Ben (surname not published)", "title": "Founder (quoted on About page)", "linkedin": "", "source_url": "https://vhedia.com.au/about/"}
+ ],
+ "hq_country": "Australia (Balcatta, WA)",
+ "notes": "The entity is Vhedia PTY LTD (ABN 28 651 227 379); the address is Unit 8/17 Foley St, Balcatta WA 6021. The About page quotes only a founder called 'Ben'. The ABN Lookup and ASIC registers don't give director names for free. No public email is listed (the contact page uses a form), and the site links no LinkedIn, only Facebook, Instagram (vhedia_vehicle_media) and YouTube. Phone 1800 293 061 was re-confirmed."},
+{"company_name": "Baie Botanique",
+ "contacts": [
+  {"name": "Sophie Noelle Oliver", "title": "Founder & Director", "linkedin": "", "source_url": "https://find-and-update.company-information.service.gov.uk/company/09454442/officers"}
+ ],
+ "company_phone": "+44 203 370 2953; US 310-349-3112", "public_email": "info@baiebotanique.com; support@baiebotanique.com", "contact_source_url": "https://www.baiebotanique.com/contact/",
+ "notes": "Companies House shows BAIE BOTANIQUE LTD (09454442) as active, with Sophie Noelle Oliver as its only active director (appointed 2015-02-24); the secretary is the corporate firm Tayler Bradshaw Limited. No second business decision maker exists in the registry. The phones and emails are from the contact page, which also lists press@ and wholesale@ addresses. The company LinkedIn page linked from the site matches the existing one. The search budget was exhausted, so no personal LinkedIn."},
+{"company_name": "Zeres (The Zeres Group / Zeres Land)",
+ "contacts": [
+  {"name": "Lenny Poliziani III", "title": "Partner & CEO, The Zeres Group", "linkedin": "https://www.linkedin.com/in/lenny-poliziani-iii-09850864/", "source_url": "https://www.zeresgroup.com/"}
+ ],
+ "notes": "zeresgroup.com, zeresland.com and its about-us page list no names, titles, emails or LinkedIn links, only the phone (844) 407-4584 and offices at 1910 N Ola Ave, Tampa, FL 33602 and 10130 Perimeter Pkwy, Charlotte, NC 28216. Testimonials mention a 'Lenny', which fits the existing CEO contact, so he was kept. Divisions: Zeres Land, Carolina Land Buyers, Zeres Homes. No second contact, public email or company LinkedIn page was found without search."},
+{"company_name": "Blue Mantis",
+ "contacts": [
+  {"name": "Joshua (Josh) Dinneen", "title": "Chief Executive Officer", "linkedin": "https://www.linkedin.com/in/joshua-dinneen-32a4a13/", "source_url": "https://www.bluemantis.com/leadership/"},
+  {"name": "Jason Bernstein", "title": "Chief Operating Officer", "linkedin": "https://www.linkedin.com/in/jason-bernstein-71b8136", "source_url": "https://www.bluemantis.com/leadership/"},
+  {"name": "Meg De Keukelaere", "title": "Chief People Officer", "linkedin": "https://www.linkedin.com/in/megdk/", "source_url": "https://www.bluemantis.com/leadership/"},
+  {"name": "Richard Amos", "title": "Chief Information Officer", "linkedin": "https://www.linkedin.com/in/richardkamos/", "source_url": "https://www.bluemantis.com/leadership/"}
+ ],
+ "company_phone": "800-989-2989", "contact_source_url": "https://www.bluemantis.com/contact-us/",
+ "notes": "Josh Dinneen is still CEO. Jason Bernstein, the case-study interviewee, has been PROMOTED from VP of Sales Operations to COO. All LinkedIn URLs are linked directly from the leadership page. The phone is from the contact page, which uses a form and lists no public email. HQ: Two International Drive, Suite #260, Portsmouth, NH 03801."}
+]

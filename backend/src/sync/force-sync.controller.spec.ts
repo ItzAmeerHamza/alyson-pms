@@ -3,6 +3,7 @@ import { ForceSyncController } from './force-sync.controller';
 import {
   AUTHORIZED_CUT_END_SQL,
   COMPLETED_ROW_KEEPS_END_SQL,
+  stopRetryKeepsEndSql,
   updateTimeLogEndSql,
   updateTimeLogLastAliveSql,
 } from '../lib/time-log-update-sql';
@@ -17,6 +18,7 @@ function makeController() {
     {} as never,
     {} as never,
     {} as never,
+    { recordFirstSignIn: vi.fn(async () => false) } as never,
   );
   return { controller, query };
 }
@@ -91,6 +93,28 @@ describe('ForceSyncController update_time_log', () => {
     expect(params[1]).toBe(frozenEnd);
   });
 
+  it.each([
+    ['frozen_end', { frozen_end: true }],
+    ['authorized_idle_cut', { authorized_idle_cut: true }],
+    ['plain update', {}],
+  ])('%s binds exactly the placeholders its SQL uses', async (_label, flags) => {
+    const { controller, query } = makeController();
+    const stopAt = '2026-10-14T19:44:07.352Z';
+
+    await controller.desktopAction({
+      action: 'update_time_log',
+      data: {
+        id: '4b2ebd54-0000-4000-8000-000000000001',
+        updates: { end_time: stopAt, status: 'completed', last_alive_at: stopAt, ...flags },
+      },
+    });
+
+    const [sql, params] = query.mock.calls[0] as unknown as [string, unknown[]];
+    const used = new Set([...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+    expect(used.size).toBe(params.length);
+    expect(Math.max(...used)).toBe(params.length);
+  });
+
   it('a follow-up without the flag does not use the authorized-cut end SQL', async () => {
     const { controller, query } = makeController();
 
@@ -130,6 +154,38 @@ describe('ForceSyncController close_active_sessions', () => {
     expect(closeCall).toBeTruthy();
     const [, params] = closeCall;
     expect(params).toContain('090c3598-4505-4d58-b3c9-5cabca29d649');
+  });
+
+  it('spares rows started after started_before (Start landing mid-sweep)', async () => {
+    const { controller, query } = makeController();
+
+    await controller.desktopAction({
+      action: 'close_active_sessions',
+      data: {
+        user_id: 1201,
+        device_id: 'e6c006db-5ac9-4358-812f-e8393eb5ef2f',
+        close_at_own_liveness: true,
+        reason: 'pending_recovery',
+        started_before: '2026-10-12T11:48:40.987Z',
+      },
+    });
+
+    const killCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes('UPDATE time_doctor.time_logs t'),
+    ) as unknown as [string, unknown[]];
+    expect(killCall[0]).toMatch(/AND t\.start_time < \$3::timestamptz/);
+    expect(killCall[1][2]).toBe('2026-10-12T11:48:40.987Z');
+  });
+
+  it('rejects a started_before that is not a timestamp', async () => {
+    const { controller } = makeController();
+
+    await expect(
+      controller.desktopAction({
+        action: 'close_active_sessions',
+        data: { user_id: 1201, close_at_own_liveness: true, started_before: 'yesterday' },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 
   it('rejects desktop sync when the Pulse user is paused', async () => {
@@ -230,10 +286,48 @@ describe('ForceSyncController create_time_log conflict', () => {
       },
     });
 
-    const insertSql = query.mock.calls.find(([sql]) =>
+    const insertCall = query.mock.calls.find(([sql]) =>
       String(sql).includes(COMPLETED_ROW_KEEPS_END_SQL),
-    )?.[0];
-    expect(insertSql).toContain(COMPLETED_ROW_KEEPS_END_SQL);
+    ) as unknown as [string, unknown[]];
+    expect(insertCall[0]).toContain(stopRetryKeepsEndSql('$9'));
+    expect(insertCall[1]).toHaveLength(9);
+    expect(insertCall[1][8]).toBe(false);
+  });
+
+  it.each([
+    ['create_time_log', '$9', 8],
+    ['upsert_time_log', '$12', 11],
+  ] as const)('%s retry of a frozen Stop binds the flag the swept-row rule reads', async (action, placeholder, index) => {
+    const { controller, query } = makeController();
+    query.mockImplementation(async (sql: string) =>
+      String(sql).includes('workspace_id FROM')
+        ? { rowCount: 1, rows: [{ workspace_id: 511 }] }
+        : { rowCount: 1, rows: [{ id: 'd63a2160-9cdf-4b7e-a165-fabf2fffbe67', paused_at: null }] },
+    );
+
+    await controller.desktopAction({
+      action,
+      data: {
+        log: {
+          id: 'd63a2160-9cdf-4b7e-a165-fabf2fffbe67',
+          user_id: 1201,
+          start_time: '2026-10-12T11:48:41.099Z',
+          end_time: '2026-10-12T12:40:49.000Z',
+          status: 'completed',
+          device_id: 'e6c006db-5ac9-4358-812f-e8393eb5ef2f',
+          frozen_end: true,
+        },
+      },
+    });
+
+    const insertCall = query.mock.calls.find(([sql]) =>
+      String(sql).includes('ON CONFLICT (id) DO UPDATE'),
+    ) as unknown as [string, unknown[]];
+    expect(insertCall[0]).toContain(stopRetryKeepsEndSql(placeholder));
+    expect(insertCall[1]).toHaveLength(index + 1);
+    expect(insertCall[1][index]).toBe(true);
+    const used = new Set([...insertCall[0].matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+    expect(Math.max(...used)).toBe(insertCall[1].length);
   });
 });
 
@@ -250,6 +344,7 @@ describe('ForceSyncController DB unavailable', () => {
       {} as never,
       {} as never,
       {} as never,
+      { recordFirstSignIn: vi.fn(async () => false) } as never,
     );
 
     await expect(
@@ -275,6 +370,7 @@ describe('ForceSyncController DB unavailable', () => {
       {} as never,
       {} as never,
       {} as never,
+      { recordFirstSignIn: vi.fn(async () => false) } as never,
     );
 
     await expect(
@@ -286,5 +382,51 @@ describe('ForceSyncController DB unavailable', () => {
         },
       }),
     ).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe('ForceSyncController screenshot_upload_complete activity', () => {
+  const s3Key = 'screenshots/1195/2026-10-09/shot-1.jpg';
+
+  async function insertParams(metadata: Record<string, unknown>) {
+    const query = vi.fn(async (sql: string) =>
+      sql.includes('INSERT INTO time_doctor.screenshots')
+        ? { rowCount: 1, rows: [{ id: 'shot-1' }] }
+        : { rowCount: 0, rows: [] },
+    );
+    const controller = new ForceSyncController(
+      { query } as never,
+      { isValidScreenshotObjectKey: () => true } as never,
+      { enqueueAfterUpload: vi.fn(async () => undefined) } as never,
+      {} as never,
+      { recordFirstSignIn: vi.fn(async () => false) } as never,
+    );
+    vi.spyOn(controller as never, 'resolveWorkspaceId').mockResolvedValue(7 as never);
+    vi.spyOn(controller as never, 'resolveTimeLogId').mockResolvedValue(null as never);
+
+    await controller.desktopAction({
+      action: 'screenshot_upload_complete',
+      data: { metadata: { id: 'shot-1', user_id: '1195', s3_key: s3Key, ...metadata } },
+    });
+
+    const insert = query.mock.calls.find(([sql]) => sql.includes('INSERT INTO time_doctor.screenshots'));
+    expect(insert).toBeDefined();
+    const params = insert![1] as unknown[];
+    return { activity: params[8], focus: params[9], clicks: params[10] };
+  }
+
+  it('stores unknown activity (no input source) as NULL, not 0%', async () => {
+    await expect(
+      insertParams({ activity_percent: null, focus_percent: null, mouse_clicks: 0 }),
+    ).resolves.toEqual({ activity: null, focus: null, clicks: 0 });
+  });
+
+  it('keeps measured activity and the 0 default for older agents', async () => {
+    await expect(insertParams({ activity_percent: 42.6, focus_percent: 0 })).resolves.toEqual({
+      activity: 43,
+      focus: 0,
+      clicks: 0,
+    });
+    await expect(insertParams({})).resolves.toEqual({ activity: 0, focus: 0, clicks: 0 });
   });
 });

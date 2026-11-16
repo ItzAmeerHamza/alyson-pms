@@ -1,0 +1,53 @@
+{
+"10": {"contacts": [
+  {"name": "Olivier Novasque", "title": "Founder", "linkedin": "", "source_url": "https://fr.wikipedia.org/wiki/Sidetrade"},
+  {"name": "Hesham Zaki", "title": "Global VP of Projects (Toggl story contact)", "linkedin": "", "source_url": ""}],
+ "hq_country": "France (Boulogne-Billancourt); US office Houston, TX",
+ "notes": "Added the founder, Olivier Novasque (French Wikipedia), as the top contact. sidetrade.com returns 403 to both fetch and curl, so its contact page, phone, email and LinkedIn could not be read. Hesham Zaki is carried over; his in-role status was not checked because the web search budget ran out. Company LinkedIn, phone and email were not found."},
+"11": {"contacts": [
+  {"name": "Tania Treiss", "title": "Co-Owner & Principal", "linkedin": "", "source_url": ""},
+  {"name": "Susanne Heim", "title": "Co-Owner & Principal", "linkedin": "", "source_url": ""}],
+ "company_phone": "(650) 373-1200; (650) 373-1211",
+ "public_email": "info@panoramaenv.com",
+ "contact_source_url": "https://www.panoramaenv.com/",
+ "hq_country": "US (717 Market Street, Suite 400, San Francisco, CA 94103)",
+ "notes": "Homepage (fetched) says Panorama Environmental has joined Spheros Environmental. The site says the team and leadership stay the same, but buying decisions may now sit with Spheros. Check before outreach. Phone numbers and the email (decoded from a Cloudflare-protected mailto) come from the homepage footer. The About page returned HTTP 500, so the principals could not be re-confirmed. No personal LinkedIn found."},
+"12": {"contacts": [
+  {"name": "Marta Kephart", "title": "President + CEO", "linkedin": "", "source_url": "https://ranacohabitat.com/about"},
+  {"name": "Paul Kephart", "title": "Founder, Principal Ecologist + Designer", "linkedin": "", "source_url": "https://ranacohabitat.com/about"}],
+ "contact_source_url": "https://ranacohabitat.com/about",
+ "hq_country": "US (27875 Berwick Drive, Carmel-by-the-Sea, CA 93923; offices San Francisco, Los Angeles)",
+ "notes": "About page (fetched) confirms Marta Kephart is still President + CEO. Added founder Paul Kephart as second contact. Matt Yurus (Principal Landscape Architect) is also listed. The site has no phone or email, and /contact returns 404. No personal LinkedIn found."},
+"13": {"contacts": [
+  {"name": "James A. (Jim) Evans", "title": "CEO & Founder", "linkedin": "https://www.linkedin.com/in/jim-evans-65983318", "source_url": "https://sevan.com/leadership/"},
+  {"name": "Aaron Becker, CFA", "title": "President & Chief Operations Officer", "linkedin": "https://www.linkedin.com/in/aaron-becker-cfa/", "source_url": "https://sevan.com/leadership/"},
+  {"name": "Chris Galazka", "title": "Chief People Officer", "linkedin": "https://www.linkedin.com/in/chris-galazka", "source_url": "https://sevan.com/leadership/"}],
+ "company_linkedin": "https://www.linkedin.com/company/sevan-multi-site-solutions",
+ "company_phone": "+1 312.756.7778",
+ "public_email": "",
+ "contact_source_url": "https://sevan.com/",
+ "hq_country": "United States (3025 Highland Parkway, Suite 850, Downers Grove, IL 60515)",
+ "notes": "Leadership page (fetched) confirms Jim Evans is still CEO & Founder and links personal LinkedIns for each leader. The input's second contact, John Schneider (VP Finance & Risk), is no longer on the leadership page; replaced with President/COO Aaron Becker and Chief People Officer Chris Galazka. Phone and company LinkedIn from the homepage. No public email on the site."},
+"14": {"notes": "Homepage (fetched) shows only hello@freedup.life. No phone, LinkedIn links or team names. Co-founders Aaron Hayslip and Scott Frazier are carried over; their in-role status was not re-checked because the search budget ran out. Company LinkedIn and personal LinkedIns not found."},
+"15": {"public_email": "support.coordinator@chelsongordon.com",
+ "contact_source_url": "https://chelsongordon.com/contact/",
+ "notes": "Contact page (scraped) lists support.coordinator@chelsongordon.com and phones +61 499 994 530, +66 62 174 4994, +91 7980490067 and +91 9903918416, matching the input. No LinkedIn links on the site; company and personal LinkedIn not found. Contacts are carried over and were not re-checked."},
+"16": {"contacts": [
+  {"name": "Ross Edward Davies", "title": "Director (sole officer since 2012-04-11)", "linkedin": "", "source_url": "https://find-and-update.company-information.service.gov.uk/company/08025198/officers"}],
+ "hq_country": "United Kingdom (Unit D, Acorn Business Park, Ling Road, Poole, Dorset BH12 4NZ)",
+ "contact_source_url": "https://find-and-update.company-information.service.gov.uk/company/08025198",
+ "notes": "Companies House: KOIN LIMITED (08025198) is active. Ross Edward Davies is the only officer (director since 2012) and still in role. koinlimited.co.uk shows only 'Big changes are coming...'. The Koin Club shop (thekoinclub.com) offers live chat only, with no phone or email in its policies. worldchallengecoins.com refused connection. No phone, public email or personal LinkedIn found; no second officer exists."},
+"17": {"notes": "WARNING: bokdoc.com has no DNS records (no A or NS) as of 2026-10-05, though WHOIS shows it registered until 2027-08 (GoDaddy). The website is offline, so the company may be inactive. Verify before outreach; DO_NOT_TARGET is not set because it is unconfirmed. Founder/CEO Dr. Ahmed Elawady is carried over and was not re-checked because the search budget ran out. No phone, email or second contact found."},
+"18": {"contacts": [
+  {"name": "Anil K. Motwani", "title": "Partner (registered agent of Tractic Marketing LLC)", "linkedin": "", "source_url": ""}],
+ "contact_source_url": "https://buzzdigitalagency.com/about-us/",
+ "hq_country": "US (1535 West Loop S. Ste 450, Houston, TX 77027)",
+ "notes": "About page (fetched) confirms info@buzzdigitalagency.com, (888) 234-5100 and the Houston address, but names no people. Motwani is carried over and not re-checked. No second contact or personal LinkedIn found."},
+"19": {"contacts": [
+  {"name": "Marlon Lockyear", "title": "Founder", "linkedin": "", "source_url": "https://genghisdigital.com.au/"}],
+ "company_phone": "+61 8 7665 9888",
+ "public_email": "info@genghisdigital.com.au",
+ "contact_source_url": "https://genghisdigital.com.au/",
+ "hq_country": "Australia (Perth)",
+ "notes": "Homepage (fetched and scraped) names 'Marlon' as Founder and gives phone tel:+61876659888 and info@ email. The site has no LinkedIn links, and no company or personal LinkedIn was found. No other team members are named."}
+}

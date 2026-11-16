@@ -1,6 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AccountActivationService } from '../common/account-activation.service';
 import { DatabaseService } from '../database/database.service';
 import {
   applyPulseWorkspaceContext,
@@ -80,6 +81,7 @@ export class AuthService {
     private databaseService: DatabaseService,
     private cognitoService: CognitoService,
     private jwtService: JwtService,
+    private accountActivation: AccountActivationService,
   ) {}
 
   async getAuthProfile(
@@ -353,18 +355,13 @@ export class AuthService {
     return user ? requiredRoles.includes(user.role) : false;
   }
 
-  /** First successful auth flips Invited → Active. Never fail login if the stamp errors. */
+  /**
+   * First successful auth flips Invited → Active and sends the "account activated"
+   * email. Never fail login if the stamp or the email errors.
+   */
   private async markSignedIn(userId: string): Promise<void> {
     try {
-      const uid = parseTenantUserId(userId);
-      await this.databaseService.query(
-        `UPDATE time_doctor.user_extensions
-         SET signed_in_at = COALESCE(signed_in_at, NOW()),
-             updated_at = NOW()
-         WHERE user_id = $1
-           AND signed_in_at IS NULL`,
-        [uid],
-      );
+      await this.accountActivation.recordFirstSignIn(parseTenantUserId(userId));
     } catch (error) {
       this.logger.warn(
         `signed_in_at stamp skipped: ${error instanceof Error ? error.message : String(error)}`,

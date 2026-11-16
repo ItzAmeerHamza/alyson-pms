@@ -110,14 +110,14 @@ fi
 echo "==> Lambda VPC endpoint subnet: ${LAMBDA_ENDPOINT_SUBNET_ID} (Private DNS disabled; SDK-only)"
 
 # Bare address only — SAM --parameter-overrides splits on spaces/<> and truncates display names.
-DEFAULT_EMAIL_FROM='hamza@cintara.ai'
+DEFAULT_EMAIL_FROM='support@tavilo.ai'
 EMAIL_FROM_PARAM="${EMAIL_FROM:-$DEFAULT_EMAIL_FROM}"
 if [[ "$EMAIL_FROM_PARAM" == *" "* || "$EMAIL_FROM_PARAM" == *"<"* ]]; then
   echo "WARN: EMAIL_FROM contains spaces or <>; using bare address for SAM params."
   EMAIL_FROM_PARAM="$(echo "$EMAIL_FROM_PARAM" | sed -n 's/.*<\([^>]*\)>.*/\1/p')"
-  EMAIL_FROM_PARAM="${EMAIL_FROM_PARAM:-hamza@cintara.ai}"
+  EMAIL_FROM_PARAM="${EMAIL_FROM_PARAM:-support@tavilo.ai}"
 fi
-EMAIL_SENDERS_PARAM="${EMAIL_SENDERS:-hamza@cintara.ai,mohita@cintara.ai}"
+EMAIL_SENDERS_PARAM="${EMAIL_SENDERS:-support@tavilo.ai,hamza@cintara.ai,mohita@cintara.ai}"
 # Strip spaces so SAM --parameter-overrides does not split the list.
 EMAIL_SENDERS_PARAM="${EMAIL_SENDERS_PARAM// /}"
 echo "==> EMAIL_FROM: ${EMAIL_FROM_PARAM}"
@@ -184,7 +184,13 @@ sam deploy \
     "GoogleDwdSubject=${GOOGLE_DWD_SUBJECT:-people-ops@cintara.ai}" \
     "LeaveCreditHoursPerDay=${LEAVE_CREDIT_HOURS_PER_DAY:-7}" \
     "LeaveScanApiBaseUrl=${LEAVE_SCAN_API_BASE_URL:-https://rxbi86aui3.execute-api.us-west-2.amazonaws.com}" \
+    "LeaveScheduledScanEnabled=${LEAVE_SCHEDULED_SCAN_ENABLED:-false}" \
+    "LeaveScheduledWorkspaceIds=${LEAVE_SCHEDULED_WORKSPACE_IDS:-0}" \
+    "LeaveScheduledScanActorUserId=${LEAVE_SCHEDULED_SCAN_ACTOR_USER_ID:-0}" \
+    "LeaveScheduledScanPeriod=${LEAVE_SCHEDULED_SCAN_PERIOD:-7d}" \
+    "LeaveScheduledScanCron=${LEAVE_SCHEDULED_SCAN_CRON:-'cron(0 19 * * ? *)'}" \
     "ScreenshotAiEnabled=${SCREENSHOT_AI_ENABLED:-false}" \
+    "ScreenshotAiBackfillEnabled=${SCREENSHOT_AI_BACKFILL_ENABLED:-false}" \
     "ScreenshotAiBackfillBatchSize=${SCREENSHOT_AI_BACKFILL_BATCH_SIZE:-100}" \
     "ScreenshotOcrProvider=${SCREENSHOT_OCR_PROVIDER:-tesseract}" \
     "EnvironmentName=${ENVIRONMENT_NAME:-dev}" \

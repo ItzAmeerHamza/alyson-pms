@@ -87,11 +87,37 @@ Parameters:
     Type: String
     Default: ''
     Description: Public HTTP API base URL for leave-scan worker ingest callbacks (avoids CFN cycle with HttpApi)
+  LeaveScheduledScanEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: EventBridge nightly people-ops leave inbox scan (same pipeline as POST /pulse/leave/scan)
+  LeaveScheduledWorkspaceIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated Pulse workspace ids (e.g. 511) to scan each night
+  LeaveScheduledScanActorUserId:
+    Type: String
+    Default: ''
+    Description: tenant.user id recorded as created_by / audit actor for scheduled scans (org admin)
+  LeaveScheduledScanPeriod:
+    Type: String
+    Default: '7d'
+    Description: Gmail lookback for nightly scan (7d recommended; 30d for manual catch-up)
+  LeaveScheduledScanCron:
+    Type: String
+    Default: 'cron(0 19 * * ? *)'
+    Description: EventBridge cron (UTC) for leave scan — default 19:00 UTC = midnight PKT/IST
   ScreenshotAiEnabled:
     Type: String
     Default: 'false'
     AllowedValues: ['true', 'false']
-    Description: Enable SQS enqueue on upload and scheduled backfill
+    Description: Enable SQS enqueue when a screenshot upload completes
+  ScreenshotAiBackfillEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Also enqueue older pending screenshots every 5 minutes. Leave false so new uploads are not stuck behind a backlog.
   ScreenshotAiBackfillBatchSize:
     Type: String
     Default: '100'
@@ -114,11 +140,11 @@ Parameters:
     Description: Subnet for the Lambda interface VPC endpoint (PrivateDnsEnabled stays false). Used so the API can Invoke the Cognito admin worker without NAT.
   EmailFrom:
     Type: String
-    Default: hamza@cintara.ai
+    Default: support@tavilo.ai
     Description: Default SES From address (bare email; no display-name — SAM param parsing)
   EmailSenders:
     Type: String
-    Default: hamza@cintara.ai,mohita@cintara.ai
+    Default: support@tavilo.ai,hamza@cintara.ai,mohita@cintara.ai
     Description: Comma-separated allowlisted SES From addresses for Email Reporting picker
   ScreenshotThumbCdnHmacSecret:
     Type: String
@@ -128,7 +154,11 @@ Parameters:
 
 Conditions:
   ScreenshotAiEnabled: !Equals [!Ref ScreenshotAiEnabled, 'true']
+  RunScreenshotAiBackfill: !And
+    - !Condition ScreenshotAiEnabled
+    - !Equals [!Ref ScreenshotAiBackfillEnabled, 'true']
   ThumbCdnEnabled: !Not [!Equals [!Ref ScreenshotThumbCdnHmacSecret, '']]
+  LeaveScheduledScanOn: !Equals [!Ref LeaveScheduledScanEnabled, 'true']
 
 Globals:
   Function:
@@ -338,6 +368,43 @@ Resources:
                 - lambda:InvokeFunction
               Resource: !GetAtt OpenRouterFunction.Arn
 
+  # Nightly people-ops Gmail scan → leave-scan worker → ingest-batch (leave credits + holidays).
+  LeaveScheduledScanFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'alyson-time-doctor-leave-scheduled-scan-${EnvironmentName}'
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      ImageConfig:
+        Command:
+          - dist/src/lambda/leave-scheduled-scan-handler.handler
+      Timeout: 60
+      MemorySize: 256
+      Tags:
+        team: Alyson PM
+      Environment:
+        Variables:
+          NODE_ENV: production
+          LEAVE_SCAN_FUNCTION_NAME: !Sub 'alyson-time-doctor-leave-scan-${EnvironmentName}'
+          LEAVE_SCHEDULED_WORKSPACE_IDS: !Ref LeaveScheduledWorkspaceIds
+          LEAVE_SCHEDULED_SCAN_ACTOR_USER_ID: !Ref LeaveScheduledScanActorUserId
+          LEAVE_SCHEDULED_SCAN_PERIOD: !Ref LeaveScheduledScanPeriod
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt LeaveScanWorkerFunction.Arn
+      Events:
+        LeaveScheduledScanEvent:
+          Type: Schedule
+          Properties:
+            Name: !Sub 'alyson-time-doctor-leave-scheduled-scan-${EnvironmentName}'
+            Schedule: !Ref LeaveScheduledScanCron
+            Enabled: !If [LeaveScheduledScanOn, true, false]
+            Description: Alyson Pulse — nightly people-ops leave inbox scan
+
   ScreenshotAiDLQ:
     Type: AWS::SQS::Queue
     Properties:
@@ -354,7 +421,7 @@ Resources:
       VisibilityTimeout: 360
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ScreenshotAiDLQ.Arn
-        maxReceiveCount: 3
+        maxReceiveCount: 8
       Tags:
         - Key: team
           Value: Alyson PM
@@ -393,7 +460,7 @@ Resources:
             BatchSize: 1
             Enabled: true
             ScalingConfig:
-              MaximumConcurrency: 5
+              MaximumConcurrency: 2
 
   ScreenshotAiBackfillFunction:
     Type: AWS::Serverless::Function
@@ -442,7 +509,7 @@ Resources:
           Properties:
             Name: !Sub 'alyson-time-doctor-screenshot-ai-backfill-schedule-${EnvironmentName}'
             Schedule: rate(5 minutes)
-            Enabled: !If [ScreenshotAiEnabled, true, false]
+            Enabled: !If [RunScreenshotAiBackfill, true, false]
             Description: Alyson Time Doctor - enqueue pending screenshots for AI analysis
 
   # BILLING SAFETY NET: close sessions whose agent stopped proving it was alive.

@@ -58,6 +58,21 @@ export function intervalContains(ms: number, intervals: TimeInterval[]): boolean
   return intervals.some((iv) => ms >= iv.startMs && ms < iv.endMs);
 }
 
+/** The parts of `source` that fall inside any of `windows` (e.g. tracked sessions). */
+export function intersectIntervals(source: TimeInterval, windows: TimeInterval[]): TimeInterval[] {
+  const out: TimeInterval[] = [];
+  for (const w of [...windows].sort((a, b) => a.startMs - b.startMs)) {
+    const startMs = Math.max(source.startMs, w.startMs);
+    const endMs = Math.min(source.endMs, w.endMs);
+    if (endMs > startMs) {
+      const last = out[out.length - 1];
+      if (last && startMs <= last.endMs) last.endMs = Math.max(last.endMs, endMs);
+      else out.push({ startMs, endMs });
+    }
+  }
+  return out;
+}
+
 /** Remaining idle after removing meeting overlap. */
 export function subtractIntervals(source: TimeInterval, cuts: TimeInterval[]): TimeInterval[] {
   let pieces = [source];

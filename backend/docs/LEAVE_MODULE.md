@@ -9,7 +9,7 @@ Postgres leave ledger + People Ops Gmail intake (AlysonHR product rules), adapte
 | S3 `leave/data.json` | Postgres `time_doctor.leave_*` |
 | Clerk Super Access | Cognito admin (`canAdjustPulseTime`) |
 | Asia/Kolkata dates | **Company work TZ** (`workspace_settings.timezone`) |
-| Leave credit in pacing | Ledger → pacing at **8h**/day; Team Time adjustments still **7h**/day |
+| Leave credit in pacing | Personal leave → pacing at **8h**/day. A public holiday lowers required hours instead of crediting the team. |
 
 ## Migrations
 
@@ -62,6 +62,18 @@ Workspace Admin: authorize SA **Client ID** for `https://www.googleapis.com/auth
 
 API Lambda has **no NAT**. Gmail + OpenRouter run on non-VPC `LeaveScanWorkerFunction`;
 `POST /pulse/leave/scan` Event-invokes that worker, which POSTs `/pulse/leave/internal/ingest-batch`.
+
+## Nightly schedule (production)
+
+EventBridge runs `LeaveScheduledScanFunction` (default **`cron(0 19 * * ? *)` UTC** ≈ midnight PKT/IST). It async-invokes the same leave-scan worker with a **7d** lookback (configurable). Approved leave and public holidays still flow through ingest → `time_adjustments` credits when `LEAVE_EMAIL_HR_REVIEW_ENABLED` is not `true`.
+
+SAM parameters (see `infra/sam/deploy.env.example`):
+
+- `LeaveScheduledScanEnabled` — `true` to enable the rule
+- `LeaveScheduledWorkspaceIds` — e.g. `511`
+- `LeaveScheduledScanActorUserId` — org admin `tenant.user` id for audit / `created_by`
+- `LeaveScheduledScanPeriod` — default `7d`
+- `LeaveScheduledScanCron` — UTC cron (e.g. `cron(0 19 * * ? *)` for midnight PKT/IST)
 
 ## API
 

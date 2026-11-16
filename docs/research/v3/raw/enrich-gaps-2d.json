@@ -1,0 +1,282 @@
+[
+ {
+  "company_name": "Nylon Technology",
+  "company_domain": "nylontechnology.com",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Jim Curran",
+    "title": "Partner & Co-founder (oversees business operations)",
+    "linkedin": "",
+    "source_url": "https://nylontechnology.com/about"
+   },
+   {
+    "name": "Steve Grushcow",
+    "title": "Partner & Co-founder (systems, growth strategy)",
+    "linkedin": "",
+    "source_url": "https://nylontechnology.com/about"
+   },
+   {
+    "name": "Jed Freeman",
+    "title": "Operations & Security Director",
+    "linkedin": "",
+    "source_url": "https://nylontechnology.com/about"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 212-691-1134",
+  "public_email": "",
+  "contact_source_url": "https://nylontechnology.com/contact",
+  "notes": "Domain confirmed: nylontechnology.com (founded 1997, custom software dev, matches case study). Case-study contact Simon Horwith (CTO) is NOT on the current team page - treated as departed; replaced with co-founders. Contact page: 'Please call Jim Curran at 212-691-1134'; says team is fully remote, US-based (a good Tavilo angle). No public email (contact form only), no company LinkedIn link and no personal LinkedIn URLs on site. Team page lists ~10 people. ClickTime case study is old (ColdFusion-era)."
+ },
+ {
+  "company_name": "OIM Consulting",
+  "company_domain": "oimconsulting.com",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "South Africa",
+  "contacts": [
+   {
+    "name": "Arjen de Bruin",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://oimconsulting.com/about-us/"
+   },
+   {
+    "name": "Ben Nel",
+    "title": "Managing Director",
+    "linkedin": "",
+    "source_url": "https://oimconsulting.com/about-us/"
+   },
+   {
+    "name": "Yogesh Ramjattan",
+    "title": "Head: Operations",
+    "linkedin": "",
+    "source_url": "https://oimconsulting.com/about-us/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/oimconsulting/",
+  "company_phone": "+27 21 913 8814",
+  "public_email": "info@oimconsulting.com",
+  "contact_source_url": "https://oimconsulting.com/contact/",
+  "notes": "Domain oimconsulting.com - management/supervisory-development consultancy focused on mining & manufacturing, consistent with the case study (consultants, sister companies, Xero + BambooHR; ClickTime tags it Engineering and Manufacturing). HQ corrected from US to South Africa: OIM Consulting (Pty) Ltd, reg. 1985/005524/07, Welgemoed, Cape Town; also OIM Consulting Australia (+61 493 732 867, Maroochydore QLD). Case-study contact Carmelle Venter (Accountant) not on leadership page; not recorded (not a decision maker). Leadership also lists Marli van der Merwe (Head: Support Services, talent mgmt). No personal LinkedIn URLs on site. Australia email on site is a named person's address, so only the generic info@ is recorded."
+ },
+ {
+  "company_name": "Rebuilding Together Saratoga County",
+  "company_domain": "rtsaratoga.org",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Michelle Larkin",
+    "title": "Executive Director (co-founder)",
+    "linkedin": "",
+    "source_url": "https://rtsaratoga.org/about-us/"
+   },
+   {
+    "name": "Mary Lawrence",
+    "title": "Director of Operations",
+    "linkedin": "",
+    "source_url": "https://rtsaratoga.org/about-us/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 518-587-3315",
+  "public_email": "info@rtsaratoga.org",
+  "contact_source_url": "https://rtsaratoga.org/contact-us/",
+  "notes": "Domain rtsaratoga.org (rebuildingtogethersaratoga.org serves the same site). Saratoga Springs, NY nonprofit. Mary Lawrence (Grant Administrator in the ClickTime case study) is still on staff, now Director of Operations - still in role, promoted. Staff page lists ~15 staff plus Alexa Cretti (Operations Manager). Site links Facebook/Instagram/X but no company LinkedIn; no personal LinkedIn URLs found."
+ },
+ {
+  "company_name": "Shook Kelley",
+  "company_domain": "shookkelley.com",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Henry Stepp",
+    "title": "Partner / CTO",
+    "linkedin": "",
+    "source_url": "https://shookkelley.com/our-team"
+   },
+   {
+    "name": "Terry Shook",
+    "title": "Founding Partner and Principal",
+    "linkedin": "",
+    "source_url": "https://shookkelley.com/our-team"
+   },
+   {
+    "name": "Kevin E. Kelley",
+    "title": "Founding Partner and Principal (Los Angeles)",
+    "linkedin": "",
+    "source_url": "https://shookkelley.com/our-team"
+   },
+   {
+    "name": "Sabrina Fan",
+    "title": "Managing Principal",
+    "linkedin": "",
+    "source_url": "https://shookkelley.com/our-team"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/shook-kelley-inc-",
+  "company_phone": "+1 704-377-0661; +1 310-659-9482 (Los Angeles)",
+  "public_email": "hello@shookkelley.com",
+  "contact_source_url": "https://shookkelley.com/contact",
+  "notes": "Henry Stepp, the CTO quoted in the ClickTime case study, is still listed as Partner / CTO - still in role; he is the obvious buyer for timesheet tooling. Offices: Charlotte NC (1545 West Trade St) and Los Angeles. Emails on contact page are Cloudflare-obfuscated; decoded hello@, charlotte@ and losangeles@shookkelley.com. Company LinkedIn linked from footer. No personal LinkedIn URLs."
+ },
+ {
+  "company_name": "Children's Advocacy Centers of Texas",
+  "company_domain": "cactx.org",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Joy Hughes Rauls",
+    "title": "Chief Executive Officer",
+    "linkedin": "",
+    "source_url": "https://cactx.org/who-we-are-page/"
+   },
+   {
+    "name": "Justin Joyner",
+    "title": "Chief Operations Officer",
+    "linkedin": "",
+    "source_url": "https://cactx.org/who-we-are-page/"
+   },
+   {
+    "name": "Natasha King",
+    "title": "Chief Financial Officer",
+    "linkedin": "",
+    "source_url": "https://cactx.org/who-we-are-page/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/cactx/",
+  "company_phone": "+1 512-258-9920",
+  "public_email": "",
+  "contact_source_url": "https://cactx.org/contact-us/",
+  "notes": "Domain cactx.org (Austin, TX; 1501 W. Anderson Lane). Leadership from Our Leadership page; also Ellen Morrissey (Chief Innovation Officer), Catherine Bass (CSO/EVP). No general public email for CACTX itself (contact form only; mailto links on the homepage belong to local CACs). WARNING: the ClickTime source_url now redirects to/serves a Teach For All case study, so the original CACTX case study could not be re-read this pass - evidence should be re-checked. A Grants Administrator opening is posted (grant-compliance time tracking is the likely use)."
+ },
+ {
+  "company_name": "Control Gap",
+  "company_domain": "cgvantage.com",
+  "vendor": "ClickTime",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Harmeet Singh",
+    "title": "Chief Executive Officer, CGVantage",
+    "linkedin": "https://www.linkedin.com/in/harmeet1",
+    "source_url": "https://cgvantage.com/about/"
+   },
+   {
+    "name": "Neetu Jindal",
+    "title": "Chief Human Resources Officer, CGVantage",
+    "linkedin": "https://www.linkedin.com/in/neetu-jindal-0148552",
+    "source_url": "https://cgvantage.com/about/"
+   },
+   {
+    "name": "Jeni Bahr",
+    "title": "Chief Financial Officer, CGVantage",
+    "linkedin": "https://www.linkedin.com/in/jennifer-bahr-9260957",
+    "source_url": "https://cgvantage.com/about/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/cyberguardcompliance/",
+  "company_phone": "+1 866-480-9485",
+  "public_email": "contactus@cgvantage.com",
+  "contact_source_url": "https://cgvantage.com/talk-to-an-expert/",
+  "notes": "controlgap.com now 301-redirects to cgvantage.com; site banner: 'CyberGuard Advantage and Control Gap are now CGVantage'. Company is merged, not dead, so status left blank - but the ClickTime relationship belongs to pre-merger Control Gap and the merged firm (US-based CyberGuard side, CPA alternative practice structure; Canadian PIPEDA notice on privacy page) may have consolidated tools; re-validate. Leadership and LinkedIn URLs are linked verbatim from the CGVantage About page next to each name. The company LinkedIn linked from the site is the legacy CyberGuard page. Also listed: Dylan Anderson (CRO), Corey Shelson (Director, PCI; ca.linkedin.com URL, possibly legacy Control Gap PCI practice - unverified). Case-study contact Drithal Kala (Project Manager) not on leadership page. HQ country of the merged entity unclear (left as Canada from input)."
+ },
+ {
+  "company_name": "MAMMOTH XR",
+  "company_domain": "mammothxr.com",
+  "vendor": "Paymo",
+  "evidence_type": "Contact enrichment",
+  "status": "DO_NOT_TARGET",
+  "confidence_score": 0,
+  "employee_count": "8",
+  "hq_country": "Canada",
+  "contacts": [
+   {
+    "name": "Matt Wright",
+    "title": "Founder & CXO (per Paymo case study; not re-verified)",
+    "linkedin": "",
+    "source_url": "https://www.paymoapp.com/mammothxr/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/mammothxr/",
+  "company_phone": "+1 403-718-2220",
+  "public_email": "",
+  "contact_source_url": "https://web.archive.org/web/20220828200646/https://mammothxr.com/",
+  "notes": "Paymo case study links mammothxr.com (Calgary, AB). Wayback CDX: real studio site through 2022; 2023-Jan 2025 site rebranded as Lion Gaming Group portfolio company (web3, iGaming, NFT; c/o Work Nicer coworking, 1206 20 Ave SE Calgary); Aug 2025 domain hijacked by spam; Feb 2026 404. Phone and company LinkedIn are from the 2022 archived site and may be stale. OpenCorporates Alberta search for 'mammoth xr' returned 0. Could not verify Matt Wright's current role without search.",
+  "status_reason": "Appears defunct: mammothxr.com now returns an S3 NoSuchBucket 404, and by Aug 2025 the domain served a gambling spam page. Last genuine site (Jan 2025 archive) had pivoted to web3/iGaming as part of 'Lion Gaming Group'."
+ },
+ {
+  "company_name": "Strongway Webstudio",
+  "company_domain": "strongway.com.br",
+  "vendor": "Paymo",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "4",
+  "hq_country": "Brazil",
+  "contacts": [
+   {
+    "name": "Leonardo Baptista Lopes",
+    "title": "Founder (per Paymo case study; not named on company site)",
+    "linkedin": "",
+    "source_url": "https://www.paymoapp.com/strongway/"
+   }
+  ],
+  "company_linkedin": "https://www.linkedin.com/company/strongway-webstudio/",
+  "company_phone": "+55 47 99668-1254 (also WhatsApp)",
+  "public_email": "comercial@strongway.com.br",
+  "contact_source_url": "https://strongway.com.br/quem-somos/",
+  "notes": "Domain from Paymo case-study link; site live (web/e-commerce studio, Tray 'Parceiro Diamante'). Address: Rua 1500, 1258, sala 303, Centro, Balneário Camboriú - SC. Site names no people (About page, privacy policy checked), so founder could not be re-confirmed as still in role; no personal LinkedIn found. Company LinkedIn linked from site. Very small (4 staff per case study) - low seat potential."
+ },
+ {
+  "company_name": "KDA",
+  "company_domain": "kda.nyc",
+  "vendor": "Paymo",
+  "evidence_type": "Contact enrichment",
+  "status": "",
+  "confidence_score": 0,
+  "employee_count": "3",
+  "hq_country": "US",
+  "contacts": [
+   {
+    "name": "Tom Klaber",
+    "title": "Founding Principal",
+    "linkedin": "",
+    "source_url": "https://kda.nyc/firm/"
+   }
+  ],
+  "company_linkedin": "",
+  "company_phone": "+1 646-450-8545",
+  "public_email": "hello@kda.nyc",
+  "contact_source_url": "https://kda.nyc/contact/",
+  "notes": "Domain kda.nyc linked from the Paymo case study (Tom Klaber, Principal). Firm page confirms Tom Klaber, Founding Principal (founded 2017) - still in role. Office 68 Jay St #423, Brooklyn, NY 11201. Hiring an Architect/Interior Designer (growing); staff use laptops and work from sites/office. No second leader named on site; no company or personal LinkedIn linked (Instagram only)."
+ }
+]

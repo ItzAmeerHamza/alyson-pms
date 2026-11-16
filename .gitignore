@@ -214,3 +214,6 @@ production-test/
 *.mov
 *.mp4
 frames/
+
+# Throwaway Postgres from backend/test/integration/local-db.sh
+.tmp-pgtest/

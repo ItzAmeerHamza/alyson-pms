@@ -101,13 +101,31 @@ describe('applyPulseWorkspaceContext', () => {
     expect(applyPulseWorkspaceContext(superAdmin, '99').organization_id).toBe('99');
   });
 
-  it('clears organization_id when a super-admin has no header', () => {
-    expect(
-      applyPulseWorkspaceContext(
-        { ...superAdmin, organization_id: '511' },
-        undefined,
-      ).organization_id,
-    ).toBeNull();
+  it('keeps the super-admin home company when no header is sent', () => {
+    const home = { ...superAdmin, role: 'admin', organization_id: '511' };
+    for (const header of [undefined, null, '', '   ', '0']) {
+      const user = applyPulseWorkspaceContext(home, header);
+      expect(user.organization_id).toBe('511');
+      expect(canAccessPulseTeamReports(user)).toBe(true);
+      expect(pulseTenantForbiddenMessage(user)).toBeNull();
+    }
+  });
+
+  it('still asks a super-admin with no home company to pick one', () => {
+    const user = applyPulseWorkspaceContext(superAdmin, undefined);
+    expect(user.organization_id).toBeUndefined();
+    expect(canAccessPulseTeamReports(user)).toBe(false);
+    expect(pulseTenantForbiddenMessage(user)).toBe('Select a company');
+  });
+
+  it('lets a companies-page header replace the home company', () => {
+    const home = { ...superAdmin, organization_id: '511' };
+    const switched = applyPulseWorkspaceContext(
+      home,
+      pulseWorkspaceFromRequest({ 'x-pulse-workspace-id': '99' }, {}),
+    );
+    expect(switched.organization_id).toBe('99');
+    expect(canAccessPulseTeamReports(switched)).toBe(true);
   });
 
   it('reads pulseWorkspaceId from the query when the header is missing', () => {

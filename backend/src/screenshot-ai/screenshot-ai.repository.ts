@@ -122,6 +122,37 @@ export class ScreenshotAiRepository {
     return result.rows;
   }
 
+  /**
+   * Put recent unfinished screenshots back on the queue. Does not touch older rows.
+   * Retry count is cleared so a rate-limit failure can run again.
+   */
+  async requeueRecent(startDate: string, limit: number): Promise<ScreenshotRowForAnalysis[]> {
+    const batch = Math.max(1, Math.min(limit, 500));
+    const result = await this.db.query<ScreenshotRowForAnalysis>(
+      `UPDATE time_doctor.screenshots s
+       SET ai_analysis_status = 'queued',
+           ai_queued_at = NOW(),
+           ai_retry_count = 0,
+           ai_error_message = NULL
+       WHERE s.id IN (
+         SELECT id FROM time_doctor.screenshots
+         WHERE captured_at >= $1::timestamptz
+           AND ai_analysis_status IN ('pending', 'queued', 'processing')
+           AND s3_key IS NOT NULL
+           AND btrim(s3_key) <> ''
+           AND length(btrim(s3_key)) >= 12
+           AND btrim(s3_key) LIKE '%/%'
+         ORDER BY captured_at DESC
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING s.id, s.user_id, s.workspace_id, s.s3_key, s.captured_at,
+                 s.app_name, s.window_title, s.ai_analysis_status, s.ai_retry_count`,
+      [startDate, batch],
+    );
+    return result.rows;
+  }
+
   /** Worker crashed mid-job — return to pending for a new claim/enqueue cycle. */
   async resetStaleProcessing(limit = 100, workspaceId?: number): Promise<number> {
     const batch = Math.max(1, Math.min(limit, 1000));

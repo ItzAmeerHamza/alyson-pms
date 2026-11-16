@@ -9,6 +9,7 @@ import {
   matchesTeamLeave,
   matchesTeamLocation,
   parseLeaveDateKey,
+  publicHolidayDateKeys,
   TEAM_LEAVE_ALL_TEAMS,
   textLooksLikeOfficeHoliday,
 } from './leave-days';
@@ -33,6 +34,41 @@ describe('leave-days', () => {
       '2026-08-11',
       '2026-08-12',
     ]);
+  });
+
+  it('public holiday weekdays follow country and skip weekends', () => {
+    const days = publicHolidayDateKeys({
+      employeeCountry: 'India',
+      holidays: [
+        {
+          country: 'India',
+          location: 'India',
+          team: TEAM_LEAVE_ALL_TEAMS,
+          startDate: '2026-10-02',
+          endDate: '2026-10-02',
+        },
+        {
+          country: 'Pakistan',
+          location: 'Pakistan',
+          team: TEAM_LEAVE_ALL_TEAMS,
+          startDate: '2026-10-02',
+          endDate: '2026-10-02',
+        },
+      ],
+    });
+    expect(days).toEqual(['2026-10-02']);
+    expect(
+      publicHolidayDateKeys({
+        employeeCountry: 'India',
+        holidays: [
+          {
+            country: 'India',
+            startDate: '2026-08-15',
+            endDate: '2026-08-15',
+          },
+        ],
+      }),
+    ).toEqual([]);
   });
 
   it('matches country-wide holidays and keeps location team leave', () => {

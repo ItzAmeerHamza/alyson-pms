@@ -183,6 +183,63 @@ export function extractLeaveDateKeysFromText(
   return found;
 }
 
+export type PublicHolidayWindow = {
+  country?: unknown;
+  location?: unknown;
+  team?: unknown;
+  startDate: string;
+  endDate: string;
+};
+
+/**
+ * Weekdays a public holiday removes from this employee's required hours.
+ * Personal leave is not included. Hours they track on these days still count.
+ */
+export function publicHolidayDateKeys(input: {
+  employeeCountry?: unknown;
+  employeeLocation?: unknown;
+  employeeTeam?: unknown;
+  holidays: PublicHolidayWindow[];
+  rangeStart?: string;
+  rangeEnd?: string;
+}): string[] {
+  const found = new Set<string>();
+  const rangeStart = input.rangeStart?.slice(0, 10);
+  const rangeEnd = input.rangeEnd?.slice(0, 10);
+  for (const holiday of input.holidays) {
+    if (
+      !matchesTeamLeave({
+        employeeCountry: input.employeeCountry,
+        employeeLocation: input.employeeLocation,
+        employeeTeam: input.employeeTeam,
+        leaveCountry: holiday.country,
+        leaveLocation: holiday.location,
+        leaveTeam: holiday.team,
+      })
+    ) {
+      continue;
+    }
+    for (const day of leaveWeekdayKeys(holiday.startDate, holiday.endDate)) {
+      if (rangeStart && day < rangeStart) continue;
+      if (rangeEnd && day > rangeEnd) continue;
+      found.add(day);
+    }
+  }
+  return [...found].sort();
+}
+
+/**
+ * `time_adjustments` alias `a`. Active public-holiday credits are not an equal
+ * hour award — the day drops out of the target instead.
+ */
+export const EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL = `NOT EXISTS (
+  SELECT 1
+    FROM time_doctor.team_leave_events h
+   WHERE h.id = a.source_id
+     AND h.leave_type = 'holiday'
+     AND h.status = 'active'
+)`;
+
 /** Office-closed / public-holiday copy, including notices sent a few days ahead. */
 export function textLooksLikeOfficeHoliday(text: unknown): boolean {
   const blob = String(text || '');

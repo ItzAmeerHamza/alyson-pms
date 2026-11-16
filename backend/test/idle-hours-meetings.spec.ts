@@ -27,7 +27,7 @@ describe('idleHoursFromIdleLogs meeting exclusion', () => {
     expect(byUser.get('1196')?.get('2026-08-24') ?? 0).toBe(0);
   });
 
-  it('keeps AFK idle of 10+ minutes even if old leftover Meet shots were floored to 50%', () => {
+  it('keeps a 10+ minute quiet stretch inside a call as effective', () => {
     const meetStart = Date.parse('2026-08-24T12:00:00Z');
     const meetings = new Map<string, TimeInterval[]>([
       ['1196', [{ startMs: meetStart, endMs: meetStart + 60 * 60 * 1000 }]],
@@ -46,7 +46,29 @@ describe('idleHoursFromIdleLogs meeting exclusion', () => {
       meetings,
     );
 
-    expect(byUser.get('1196')?.get('2026-08-24')).toBeCloseTo(40 / 60, 5);
+    expect(byUser.get('1196')?.get('2026-08-24') ?? 0).toBe(0);
+  });
+
+  it('counts only the part of a long idle that falls outside the call', () => {
+    const meetStart = Date.parse('2026-08-24T12:00:00Z');
+    const meetings = new Map<string, TimeInterval[]>([
+      ['1196', [{ startMs: meetStart, endMs: meetStart + 60 * 60 * 1000 }]],
+    ]);
+
+    const byUser = svc.idleHoursFromIdleLogs(
+      [
+        {
+          user_id: '1196',
+          idle_start: '2026-08-24T12:40:00Z',
+          idle_end: '2026-08-24T13:20:00Z',
+          duration_seconds: 40 * 60,
+        },
+      ],
+      'America/Chicago',
+      meetings,
+    );
+
+    expect(byUser.get('1196')?.get('2026-08-24')).toBeCloseTo(20 / 60, 5);
   });
 
   it('keeps idle that is outside the meeting and at least 5 minutes', () => {

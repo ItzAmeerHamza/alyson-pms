@@ -3,6 +3,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { randomUUID } from 'crypto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 import { DatabaseService } from '../database/database.service';
+import { AccountActivationService } from '../common/account-activation.service';
 import { S3Service } from '../common/s3.service';
 import { ScreenshotAiBackfillService } from '../screenshot-ai/screenshot-ai-backfill.service';
 import { EffectiveTimeService } from '../pulse/effective-time.service';
@@ -13,9 +14,10 @@ import {
   parseTenantUserId as parseTenantUserIdStrict,
   parseWorkspaceId,
 } from '../database/time-doctor-sql';
+import { EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL } from '../leave/leave-days';
 import {
-  COMPLETED_ROW_KEEPS_END_SQL,
   LAST_PROOF_OF_LIFE_SQL,
+  stopRetryKeepsEndSql,
   updateTimeLogEndSql,
   updateTimeLogLastAliveSql,
 } from '../lib/time-log-update-sql';
@@ -49,6 +51,7 @@ export class ForceSyncController {
     private readonly s3: S3Service,
     private readonly screenshotAi: ScreenshotAiBackfillService,
     private readonly effectiveTime: EffectiveTimeService,
+    private readonly accountActivation: AccountActivationService,
   ) {}
 
   private async resolveWorkspaceId(userId: unknown, provided?: unknown): Promise<number | null> {
@@ -93,6 +96,7 @@ export class ForceSyncController {
       `SELECT a.work_date::text AS work_date,
               COALESCE(SUM(a.delta_seconds) FILTER (
                 WHERE a.source_type IN ('leave', 'leave_void')
+                  AND ${EXCLUDE_PUBLIC_HOLIDAY_LEAVE_SQL}
               ), 0)::bigint AS leave_seconds,
               COALESCE(SUM(a.delta_seconds) FILTER (
                 WHERE a.source_type IS NULL
@@ -122,6 +126,11 @@ export class ForceSyncController {
     const n = Number(value);
     if (!Number.isFinite(n)) return fallback;
     return Math.round(n);
+  }
+
+  /** Explicit null = the agent had no input source; Pulse must not read it as 0% (idle). */
+  private toScreenshotPercent(value: unknown): number | null {
+    return value === null ? null : this.toScreenshotInt(value, 0);
   }
 
   /** Cap on time deducted per deleted screenshot — mirrors the desktop agent. */
@@ -813,14 +822,7 @@ export class ForceSyncController {
       if (paused.rows[0]?.paused_at) {
         throw new HttpException('User account is inactive', HttpStatus.FORBIDDEN);
       }
-      await this.db.query(
-        `UPDATE time_doctor.user_extensions
-         SET signed_in_at = COALESCE(signed_in_at, NOW()),
-             updated_at = NOW()
-         WHERE user_id = $1
-           AND signed_in_at IS NULL`,
-        [userId],
-      ).catch(() => undefined);
+      await this.accountActivation.recordFirstSignIn(userId).catch(() => undefined);
     }
   }
 
@@ -1052,7 +1054,7 @@ export class ForceSyncController {
            ON CONFLICT (id) DO UPDATE SET
              project_id = COALESCE(EXCLUDED.project_id, time_doctor.time_logs.project_id),
              start_time = LEAST(time_doctor.time_logs.start_time, EXCLUDED.start_time),
-             end_time = ${COMPLETED_ROW_KEEPS_END_SQL},
+             end_time = ${stopRetryKeepsEndSql('$12')},
              status = CASE
                WHEN EXCLUDED.status = 'completed' OR time_doctor.time_logs.status = 'completed'
                  THEN 'completed'
@@ -1082,6 +1084,7 @@ export class ForceSyncController {
             workspaceId,
             payload.device_id || null,
             payload.agent_version ? String(payload.agent_version).slice(0, 64) : null,
+            payload.frozen_end === true || payload.authorized_idle_cut === true,
           ],
         );
         return { success: true, id: payload.id };
@@ -1103,6 +1106,18 @@ export class ForceSyncController {
         // last_alive / heartbeats undid every 10m cut (Garima 31 Aug).
         const endTimeSql = updateTimeLogEndSql(authorizedIdleCut);
         const lastAliveSql = updateTimeLogLastAliveSql(authorizedIdleCut);
+        const params: unknown[] = [
+          id,
+          clientEnd,
+          updates.status || null,
+          updates.idle_seconds ?? null,
+          updates.deducted_seconds ?? null,
+        ];
+        // The authorized-cut SQL never reads $6, and Postgres rejects a bind
+        // that carries more values than the statement uses (08P01).
+        if (!authorizedIdleCut) {
+          params.push(updates.last_alive_at || data?.last_alive_at || null);
+        }
         const result = await this.db.query<{ id: string; end_time: Date | string | null }>(
           `UPDATE time_doctor.time_logs t
            SET end_time = ${endTimeSql},
@@ -1124,14 +1139,7 @@ export class ForceSyncController {
                updated_at = NOW()
            WHERE t.id = $1
            RETURNING t.id, t.end_time`,
-          [
-            id,
-            clientEnd,
-            updates.status || null,
-            updates.idle_seconds ?? null,
-            updates.deducted_seconds ?? null,
-            updates.last_alive_at || data?.last_alive_at || null,
-          ],
+          params,
         );
         const rowCount = Number(result?.rowCount || 0);
         if (rowCount === 0) {
@@ -1196,7 +1204,7 @@ export class ForceSyncController {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
            ON CONFLICT (id) DO UPDATE SET
              updated_at = NOW(),
-             end_time = ${COMPLETED_ROW_KEEPS_END_SQL},
+             end_time = ${stopRetryKeepsEndSql('$9')},
              status = CASE
                WHEN time_doctor.time_logs.status = 'completed' THEN 'completed'
                WHEN EXCLUDED.status = 'completed' THEN 'completed'
@@ -1212,6 +1220,7 @@ export class ForceSyncController {
             log.status || 'active',
             log.device_id || null,
             workspaceId,
+            log.frozen_end === true || log.authorized_idle_cut === true,
           ],
         );
         const row = result.rows[0];
@@ -1246,6 +1255,17 @@ export class ForceSyncController {
           if (exceptId) {
             p.push(String(exceptId));
             extraClause += ` AND t.id <> $${p.length}::uuid`;
+          }
+          // Leftover sweeps only: rows started before the sweep was decided.
+          // A Start whose insert lands while the sweep is in flight has no id
+          // to except yet, but its start is never earlier than this.
+          if (data?.started_before != null) {
+            const startedBefore = new Date(String(data.started_before));
+            if (Number.isNaN(startedBefore.getTime())) {
+              throw new HttpException('started_before must be an ISO timestamp', HttpStatus.BAD_REQUEST);
+            }
+            p.push(startedBefore.toISOString());
+            extraClause += ` AND t.start_time < $${p.length}::timestamptz`;
           }
           const killed = await this.db.query<{ id: string; end_time: Date | string }>(
             `UPDATE time_doctor.time_logs t
@@ -1713,8 +1733,10 @@ export class ForceSyncController {
             end_time: string | null;
             status: string;
             idle_seconds: number | null;
+            last_alive_at: string | null;
+            deducted_seconds: number | null;
           }>(
-            `SELECT id, start_time, end_time, status, idle_seconds
+            `SELECT id, start_time, end_time, status, idle_seconds, last_alive_at, deducted_seconds
              FROM time_doctor.time_logs
              WHERE user_id = $1
                AND start_time < $3::timestamptz
@@ -2014,8 +2036,8 @@ export class ForceSyncController {
             s3Key,
             thumbS3Key,
             meta.captured_at || new Date().toISOString(),
-            this.toScreenshotInt(meta.activity_percent, 0),
-            this.toScreenshotInt(meta.focus_percent, 0),
+            this.toScreenshotPercent(meta.activity_percent),
+            this.toScreenshotPercent(meta.focus_percent),
             this.toScreenshotInt(meta.mouse_clicks, 0),
             this.toScreenshotInt(meta.keystrokes, 0),
             this.toScreenshotInt(meta.mouse_movements, 0),
@@ -2065,13 +2087,19 @@ export class ForceSyncController {
         await this.s3.deleteObject(screenshot.thumb_s3_key);
 
         // Deduct the owned interval from the parent session's tracked time.
+        // The session's start tells the desktop which work day the deduction
+        // lands on (Pulse charges the session-start day).
+        let timeLogStartTime: string | null = null;
         if (screenshot.time_log_id && deductedSeconds > 0) {
-          await this.db.query(
+          const updated = await this.db.query<{ start_time: Date | string | null }>(
             `UPDATE time_doctor.time_logs
              SET deducted_seconds = COALESCE(deducted_seconds, 0) + $1, updated_at = NOW()
-             WHERE id = $2`,
+             WHERE id = $2
+             RETURNING start_time`,
             [deductedSeconds, screenshot.time_log_id],
           );
+          const start = updated.rows[0]?.start_time;
+          if (start) timeLogStartTime = new Date(start).toISOString();
         }
 
         await this.db.query('DELETE FROM time_doctor.screenshots WHERE id = $1', [screenshot.id]);
@@ -2079,7 +2107,12 @@ export class ForceSyncController {
         this.logger.log(
           `delete_screenshot: id=${screenshot.id} user=${screenshot.user_id} deducted=${deductedSeconds}s`,
         );
-        return { success: true, deductedSeconds, timeLogId: screenshot.time_log_id };
+        return {
+          success: true,
+          deductedSeconds,
+          timeLogId: screenshot.time_log_id,
+          timeLogStartTime,
+        };
       }
       case 'upload_screenshot': {
         throw new HttpException(
