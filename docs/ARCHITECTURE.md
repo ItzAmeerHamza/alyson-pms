@@ -1,7 +1,9 @@
 # Alyson Pulse / Alyson PM — General Architecture (Research Doc)
 
+> **Current architecture:** [../ARCHITECTURE.md](../ARCHITECTURE.md). This file is a research snapshot through desktop **v1.0.224**. Do not treat its paths, version, or Supabase leftovers as the live system.
+>
 > **Audience:** Feed this to an LLM / researcher investigating time-tracking bugs (silent time loss, effective vs tracked mismatches, sync failures).
-> **Repo:** `alyson-time-doctor` (npm name `alyson-pulse`). Product desktop app: **Alyson PM**.
+> **Repo:** [revcloud/alyson-pms-src](https://github.com/revcloud/alyson-pms-src). Product desktop app: **Tavilo Time**.
 > **As-of:** Desktop agent lineage through **v1.0.224**. Treat `system-architecture.md` at repo root as **stale** (pre–Nest/Cognito cutover).
 
 ---

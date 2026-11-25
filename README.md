@@ -9,8 +9,10 @@ Cognito login        ──────────►         │
                                          └── optional SQS → screenshot AI workers
 ```
 
-**GitHub:** [revcloud/alyson-pms](https://github.com/revcloud/alyson-pms)  
-**Product name:** Alyson PM · **appId:** `com.alyson.work-time-agent` (do not change)
+**Source:** [revcloud/alyson-pms-src](https://github.com/revcloud/alyson-pms-src) (private)  
+**Desktop installers:** [revcloud/alyson-td-releases](https://github.com/revcloud/alyson-td-releases)  
+**Pulse UI:** [revcloud/Palisade-web](https://github.com/revcloud/Palisade-web)  
+**Product name:** Tavilo Time (desktop) · Alyson Pulse (dashboard) · **appId:** `com.alyson.work-time-agent` (do not change)
 
 ---
 
@@ -210,7 +212,7 @@ Stacks: `alyson-time-doctor-api-dev` / `-prod`. See [infra/sam/README.md](infra/
 
 ## Desktop releases
 
-Channel: GitHub Releases on **[`revcloud/alyson-td-releases`](https://github.com/revcloud/alyson-td-releases)** (public). Source stays on private `revcloud/alyson-pms`.
+Channel: GitHub Releases on **[`revcloud/alyson-td-releases`](https://github.com/revcloud/alyson-td-releases)** (public). Source stays on private [`revcloud/alyson-pms-src`](https://github.com/revcloud/alyson-pms-src).
 
 ```bash
 # After pushing main
@@ -281,7 +283,12 @@ Desktop build embeds config with `desktop-agent/generate-env-config.js` → `env
 | [docs/RELEASE.md](docs/RELEASE.md) | Unsigned GitHub release one-pager |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Privacy, multi-device, stage vs prod |
 | [docs/PULSE_UI.md](docs/PULSE_UI.md) | How to add a Pulse page |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Auth split, desktop recording, idle cut, offline queues |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Current runtime: clients, API, database, AWS |
+| [SECURITY.md](SECURITY.md) | Auth, secrets, S3, desktop permissions |
+| [KNOWN_ISSUES.md](KNOWN_ISSUES.md) | Limits and stale docs |
+| [ROADMAP.md](ROADMAP.md) | Follow-ups already visible in the repo |
+| [CHANGELOG.md](CHANGELOG.md) | Recent desktop releases |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Older research notes (through desktop v1.0.224) |
 | [docs/BACKEND_PIPELINE.md](docs/BACKEND_PIPELINE.md) | Sync actions, screenshot deduction, Pulse formulas |
 | [docs/DB_SCHEMA.md](docs/DB_SCHEMA.md) | Tables, indexes, migrations |
 | [backend/API.md](backend/API.md) | REST routes |
