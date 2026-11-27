@@ -3221,10 +3221,24 @@ export class PulseService {
     const from = this.sesEmail.resolveFrom(body.from);
     const wsId = this.workspaceId(user);
 
+    // API Gateway + Lambda hard-stop at ~29s. Stop starting new sends before that
+    // so a 20+ batch returns partial results instead of a hard timeout with no body.
+    const sendDeadlineMs = Date.now() + 22_000;
+    let deferRemaining = false;
+
     const sent = await this.mapWithConcurrency(
       recipients,
-      6,
+      3,
       async (emp) => {
+        if (deferRemaining || Date.now() >= sendDeadlineMs) {
+          deferRemaining = true;
+          return {
+            employee_id: String(emp.employee_id),
+            email: emp.email,
+            status: 'deferred_timeout',
+          };
+        }
+
         const expectedHours = Number(emp.expected_hours ?? lowHours.expected_hours);
         const holidayDays: string[] = emp.public_holiday_days || [];
         const periodStart = String((lowHours as any).period_start || lowHours.week_start);
@@ -3289,11 +3303,14 @@ export class PulseService {
             : {}),
         });
 
-        // Always CC ops; also CC manager when notify_manager is on.
+        // Always CC ops admins; also CC manager when notify_manager is on.
         const toEmail = String(emp.email || '').trim().toLowerCase();
         const ccList = [
           'alysonclient@cintara.ai',
           'mohita@cintara.ai',
+          'hamza@cintara.ai',
+          'aditya@cintara.ai',
+          'vinit@cintara.ai',
           ...(body.notify_manager && emp.manager_email
             ? [String(emp.manager_email).trim().toLowerCase()]
             : []),
@@ -3301,7 +3318,7 @@ export class PulseService {
 
         let status = 'logged';
         if (this.sesEmail.isEnabled() && emp.email) {
-          const result = await this.sesEmail.send({
+          const result = await this.sendEmailWithRetry({
             to: emp.email,
             ...(ccList.length ? { cc: ccList } : {}),
             subject: employeeMail.subject,
@@ -3339,7 +3356,20 @@ export class PulseService {
     );
 
     const sentOk = sent.filter((row) => row.status === 'sent').length;
-    const failed = sent.filter((row) => row.status !== 'sent' && row.status !== 'logged');
+    const deferred = sent.filter((row) => row.status === 'deferred_timeout');
+    const failed = sent.filter(
+      (row) =>
+        row.status !== 'sent' &&
+        row.status !== 'logged' &&
+        row.status !== 'deferred_timeout',
+    );
+    const remainingEmployeeIds = deferred.map((row) => row.employee_id);
+
+    if (remainingEmployeeIds.length) {
+      this.logger.warn(
+        `low-hours send hit API time budget: sent_ok=${sentOk} deferred=${remainingEmployeeIds.length} failed=${failed.length}`,
+      );
+    }
 
     return {
       period: lowHours.period,
@@ -3353,9 +3383,39 @@ export class PulseService {
       sent_count: sent.length,
       sent_ok_count: sentOk,
       failed_count: failed.length,
+      deferred_count: deferred.length,
+      remaining_employee_ids: remainingEmployeeIds,
       missing_employee_ids: missingEmployeeIds,
       results: sent,
     };
+  }
+
+  /** Retry transient SES / worker failures (throttle, cold start). */
+  private async sendEmailWithRetry(input: {
+    to: string | string[];
+    cc?: string | string[];
+    subject: string;
+    html: string;
+    text?: string;
+    from?: string;
+  }) {
+    let last: { ok: boolean; code?: string; message?: string; messageId?: string } = {
+      ok: false,
+      code: 'ERROR',
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      last = await this.sesEmail.send(input);
+      if (last.ok) return last;
+      const code = String(last.code || '');
+      const retryable =
+        code === 'SEND_FAILED' ||
+        code === 'WORKER_ERROR' ||
+        code === 'INVOKE_FAILED' ||
+        code === 'ERROR';
+      if (!retryable || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
+    return last;
   }
 
   /** Limited parallelism — API Lambda + API Gateway cap at ~29s. */

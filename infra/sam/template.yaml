@@ -649,7 +649,7 @@ Resources:
           SES_EMAIL_FUNCTION_NAME: !Ref SesEmailFunction
           EMAIL_FROM: !Ref EmailFrom
           EMAIL_SENDERS: !Ref EmailSenders
-          # PACING_DIGEST_TO omitted — defaults in PacingService (hamza, mohita, alysonclient)
+          # PACING_DIGEST_TO omitted — defaults in PacingService (hamza, mohita, alysonclient, aditya, vinit)
           # to stay under Lambda 4KB env limit.
           LAMBDA_VPC_ENDPOINT_URL: !Join
             - ''

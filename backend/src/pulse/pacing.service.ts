@@ -81,7 +81,7 @@ export class PacingService {
   private digestRecipients(requested?: string | string[] | null): string[] {
     const defaults = (
       (this.config.get<string>('PACING_DIGEST_TO') || '').trim() ||
-      'hamza@cintara.ai,mohita@cintara.ai,alysonclient@cintara.ai'
+      'hamza@cintara.ai,mohita@cintara.ai,alysonclient@cintara.ai,aditya@cintara.ai,vinit@cintara.ai'
     )
       .split(',')
       .map((s) => s.trim().toLowerCase())
@@ -681,7 +681,7 @@ export class PacingService {
 
   /**
    * Email selected weekly/monthly pacing rows to HR
-   * (default hamza@, mohita@, alysonclient@).
+   * (default hamza@, mohita@, alysonclient@, aditya@, vinit@).
    * One digest message — not per-employee notices.
    */
   async sendPacingDigest(

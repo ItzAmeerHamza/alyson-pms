@@ -485,7 +485,7 @@ export class PulseController {
 
   /**
    * Email selected pacing rows to HR
-   * (default hamza@, mohita@, alysonclient@).
+   * (default hamza@, mohita@, alysonclient@, aditya@, vinit@).
    * Body: { mode: 'weekly'|'monthly', day?, month?, employee_ids: string[], to?, from? }
    */
   @Post('pacing/send')
